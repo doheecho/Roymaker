@@ -353,13 +353,15 @@ main {
 }
 
 .bus-stop-marker {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transform: translateY(-11px);
+  position: relative;
+  width: 0;
+  height: 0;
 }
 .bus-badge {
-  flex: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -373,8 +375,13 @@ main {
   justify-content: center;
   border: 2px solid #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  z-index: 1;
 }
 .bus-label {
+  position: absolute;
+  left: 15px;
+  top: 0;
+  transform: translateY(-50%);
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--line);
   padding: 2px 7px;

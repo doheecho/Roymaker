@@ -43,8 +43,6 @@ const BUS_FARE = 450;
 const SUBWAY_FARE = 450;
 const TRANSIT_M_PER_MIN = 220;
 const TRANSIT_RIDE_MS = 1800;
-const BUS_MAX_STOP_DISTANCE_M = 2000;
-const SUBWAY_MAX_STATION_DISTANCE_M = 6000;
 
 const SCHOOL_STRESS = 10;
 const ACADEMY_STRESS = 18;
@@ -258,8 +256,6 @@ function createBusStopOverlay(map, position, name, title) {
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
-    yAnchor: 0.5,
-    xAnchor: 0,
     content: el,
   });
 }
@@ -284,6 +280,11 @@ function showDpad(visible) {
   }
 }
 
+function nearbyStationId(list) {
+  const nearest = nearestStation(state.charPos, list);
+  return nearest && nearest.dist <= ARRIVAL_RADIUS_M ? nearest.id : null;
+}
+
 function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
   return new Promise((resolve, reject) => {
     state.walkModeActive = true;
@@ -293,9 +294,50 @@ function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
     let last = performance.now();
     let confirmingHome = false;
     let hasLeftHome = !allowEarlyHome || distanceMeters(state.charPos, state.positions.home) > ARRIVAL_RADIUS_M;
+    let suppressedBusStopId = nearbyStationId(state.stations.bus);
+    let suppressedSubwayId = nearbyStationId(state.stations.subway);
+    let boarding = false;
+
+    function boardAt(kind, currentStation) {
+      boarding = true;
+      state.walkModeActive = false;
+      showDpad(false);
+      const stations = kind === "bus" ? state.stations.bus : state.stations.subway;
+      const modeLabel = kind === "bus" ? "버스" : "지하철";
+      const fare = kind === "bus" ? BUS_FARE : SUBWAY_FARE;
+
+      chooseRideDestination(kind, currentStation, stations).then((dest) => {
+        if (!dest) {
+          if (kind === "bus") suppressedBusStopId = currentStation.id;
+          else suppressedSubwayId = currentStation.id;
+          boarding = false;
+          state.walkModeActive = true;
+          showDpad(true);
+          last = performance.now();
+          requestAnimationFrame(frame);
+          return;
+        }
+
+        state.character.wallet -= fare;
+        renderStats(state.character);
+        logLine(`${modeLabel} 요금 ${fare}원 지불 (잔액 ${state.character.wallet}원)`);
+
+        rideTransit(dest.pos, clock, `${modeLabel}로 ${dest.name}까지 이동`).then((endClock) => {
+          clock = endClock;
+          logLine(`${minutesToClock(clock)} ${dest.name} 도착`);
+          suppressedBusStopId = kind === "bus" ? dest.id : suppressedBusStopId;
+          suppressedSubwayId = kind === "subway" ? dest.id : suppressedSubwayId;
+          boarding = false;
+          state.walkModeActive = true;
+          showDpad(true);
+          last = performance.now();
+          requestAnimationFrame(frame);
+        });
+      });
+    }
 
     function frame(now) {
-      if (confirmingHome) return;
+      if (confirmingHome || boarding) return;
 
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
@@ -355,6 +397,22 @@ function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
         }
       }
 
+      const nearBus = nearestStation(state.charPos, state.stations.bus);
+      if (nearBus && nearBus.dist <= ARRIVAL_RADIUS_M && nearBus.id !== suppressedBusStopId) {
+        logLine(`${minutesToClock(clock)} ${nearBus.name} 도착`);
+        boardAt("bus", nearBus);
+        return;
+      }
+      if (!nearBus || nearBus.dist > ARRIVAL_RADIUS_M) suppressedBusStopId = null;
+
+      const nearSubway = nearestStation(state.charPos, state.stations.subway);
+      if (nearSubway && nearSubway.dist <= ARRIVAL_RADIUS_M && nearSubway.id !== suppressedSubwayId) {
+        logLine(`${minutesToClock(clock)} ${nearSubway.name} 도착`);
+        boardAt("subway", nearSubway);
+        return;
+      }
+      if (!nearSubway || nearSubway.dist > ARRIVAL_RADIUS_M) suppressedSubwayId = null;
+
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -369,35 +427,39 @@ async function waitUntil(startClock, endClock, label) {
   setStatus(`${minutesToClock(endClock)} · ${label}`);
 }
 
-function chooseTransportMode({ allowWalk, legLabel, busFeasible, subwayFeasible }) {
+function chooseRideDestination(kind, currentStation, stations) {
   return new Promise((resolve) => {
     const panel = document.getElementById("transport-choice");
     panel.hidden = false;
     panel.innerHTML = "";
 
+    const modeLabel = kind === "bus" ? "버스를" : "지하철을";
+    const fare = kind === "bus" ? BUS_FARE : SUBWAY_FARE;
+
     const heading = document.createElement("p");
-    heading.textContent = `${legLabel}(으)로 이동 — 이동수단을 선택하세요`;
+    heading.textContent = `${currentStation.name} 도착 — ${modeLabel} 타고 어디로 갈까요?`;
     panel.appendChild(heading);
 
     const row = document.createElement("div");
     row.className = "chip-row";
 
-    function addOption(mode, label, disabled) {
+    function addOption(label, value, disabled) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "transport-btn";
       btn.textContent = label;
-      btn.disabled = disabled;
+      btn.disabled = !!disabled;
       btn.addEventListener("click", () => {
         panel.hidden = true;
-        resolve(mode);
+        resolve(value);
       });
       row.appendChild(btn);
     }
 
-    if (allowWalk) addOption("walk", "도보로 직접 이동", false);
-    addOption("bus", `버스 타기 (${BUS_FARE}원)`, !busFeasible || state.character.wallet < BUS_FARE);
-    addOption("subway", `지하철 타기 (${SUBWAY_FARE}원)`, !subwayFeasible || state.character.wallet < SUBWAY_FARE);
+    addOption("그냥 걷기", null, false);
+    stations
+      .filter((s) => s.id !== currentStation.id)
+      .forEach((s) => addOption(`${s.name} (${fare}원)`, s, state.character.wallet < fare));
 
     panel.appendChild(row);
   });
@@ -488,44 +550,9 @@ async function rideTransit(target, startClock, label) {
   return endClock;
 }
 
-async function travelByTransit(mode, target, startClock, placeName, destStation, allowEarlyHome) {
-  const stations = mode === "bus" ? state.stations.bus : state.stations.subway;
-  const modeLabel = mode === "bus" ? "버스" : "지하철";
-  const originStation = nearestStation(state.charPos, stations);
-
-  let clock = startClock;
-  logLine(`${minutesToClock(clock)} ${originStation.name}(으)로 이동 시작`);
-  clock = await walkTo(originStation.pos, clock, `${originStation.name}(으)로 이동 중`, { allowEarlyHome });
-  logLine(`${minutesToClock(clock)} ${originStation.name} 도착`);
-
-  const fare = mode === "bus" ? BUS_FARE : SUBWAY_FARE;
-  state.character.wallet -= fare;
-  renderStats(state.character);
-  logLine(`${modeLabel} 요금 ${fare}원 지불 (잔액 ${state.character.wallet}원)`);
-
-  if (destStation.id !== originStation.id) {
-    clock = await rideTransit(destStation.pos, clock, `${modeLabel}로 ${destStation.name}까지 이동`);
-    logLine(`${minutesToClock(clock)} ${destStation.name} 도착`);
-  }
-
-  logLine(`${minutesToClock(clock)} ${placeName}(으)로 걸어서 마무리 이동 시작`);
-  clock = await walkTo(target, clock, `${placeName}(으)로 이동 중`, { allowEarlyHome });
-  return clock;
-}
-
-async function travelTo(target, startClock, placeName, allowWalk) {
+function travelTo(target, startClock, placeName) {
   const allowEarlyHome = target !== state.positions.home;
-  const nearestBus = nearestStation(target, state.stations.bus);
-  const nearestSubway = nearestStation(target, state.stations.subway);
-  const busFeasible = !!nearestBus && nearestBus.dist <= BUS_MAX_STOP_DISTANCE_M;
-  const subwayFeasible = !!nearestSubway && nearestSubway.dist <= SUBWAY_MAX_STATION_DISTANCE_M;
-
-  const mode = await chooseTransportMode({ allowWalk, legLabel: placeName, busFeasible, subwayFeasible });
-  if (mode === "walk") {
-    return walkTo(target, startClock, `${placeName}(으)로 이동 중`, { allowEarlyHome });
-  }
-  const destStation = mode === "bus" ? nearestBus : nearestSubway;
-  return travelByTransit(mode, target, startClock, placeName, destStation, allowEarlyHome);
+  return walkTo(target, startClock, `${placeName}(으)로 이동 중`, { allowEarlyHome });
 }
 
 async function renderMap(character, academies, activities, stations) {
@@ -678,7 +705,7 @@ function renderActivityInfo() {
   state.activities.forEach((activity) => {
     const hoursText = activity.hours ? `운영 ${activity.hours.open}~${activity.hours.close}` : "시간 제한 없음";
     const locationText = activity.location === "home" ? "집" : activity.address ?? "위치 미정";
-    const modeTag = activity.location !== "home" && activity.mode === "transit" ? " · 버스/지하철 전용" : "";
+    const modeTag = activity.location !== "home" && activity.mode === "transit" ? " · 버스/지하철 권장(도보는 멀어요)" : "";
 
     const li = document.createElement("li");
     li.innerHTML = `
@@ -871,7 +898,7 @@ function renderPalette() {
     .filter((a) => a.location.etaMinFromHome != null)
     .forEach((academy) => {
       const category = state.categoryMap[academy.categoryId];
-      const suffix = academy.location.mode === "walk" ? "" : " · 버스/지하철 전용";
+      const suffix = academy.location.mode === "walk" ? "" : " · 버스/지하철 권장(도보는 멀어요)";
       el.appendChild(
         createChip(
           category.icon ?? "🏫",
@@ -1013,7 +1040,6 @@ async function runDay(blocks) {
   let atHome = true;
   let hadSchool = false;
   let schoolWasLate = false;
-  let lastAllowWalk = true;
   let gotSick = false;
   let cancelledEarly = false;
 
@@ -1037,18 +1063,12 @@ async function runDay(blocks) {
         ? state.positions.activities[activity.id]
         : state.positions.academies[block.academyId];
       const placeName = isSchool ? "학교" : isActivity ? activity.name : academy.name;
-      const allowWalk = isSchool
-        ? true
-        : isActivity
-        ? isHomeActivity || activity.mode === "walk"
-        : academy.location.mode === "walk";
 
       if (isHomeActivity && atHome) {
         logLine(`${minutesToClock(clock)} 집에서 ${placeName} 시작`);
       } else {
-        lastAllowWalk = allowWalk;
         logLine(`${minutesToClock(clock)} ${placeName}(으)로 이동 시작`);
-        clock = await travelTo(targetPos, clock, placeName, allowWalk);
+        clock = await travelTo(targetPos, clock, placeName);
         atHome = isHomeActivity;
 
         const late = clock > block.startMin;
@@ -1087,7 +1107,7 @@ async function runDay(blocks) {
 
   if (!atHome) {
     logLine(`${minutesToClock(clock)} 집으로 귀가 이동`);
-    clock = await travelTo(state.positions.home, clock, "집", lastAllowWalk);
+    clock = await travelTo(state.positions.home, clock, "집");
     logLine(`${minutesToClock(clock)} 집 도착`);
   }
 
