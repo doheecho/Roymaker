@@ -4,7 +4,8 @@
 
 - 설계 문서: [`docs/design.md`](docs/design.md)
 - 플랫폼: 웹 브라우저 (정적 HTML/JS, 빌드 도구 없음)
-- 지도 연동: 보류 — 지금은 `data/academies.json`의 `etaMinFromHome` 값으로 이동시간을 흉내만 냄. 추후 지도 API 선정 시 `location.lat/lng`로 교체.
+- 지도 엔진: **카카오맵 API** (JS SDK + 로컬 API 지오코딩, 확정) — 계정당 첫 앱은 카드 등록 없이 무료 쿼터 사용 가능
+- 좌표: 아직 지오코딩 전이라 `data/academies.json`은 실제 `lat/lng` 대신 `etaMinFromHome`(집에서 걸리는 분)으로 이동시간을 흉내냄
 
 ## 폴더 구조
 
