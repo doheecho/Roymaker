@@ -25,61 +25,77 @@
       </div>
       <div id="stats"></div>
       <div id="condition"></div>
+
+      <nav class="nav-buttons">
+        <button type="button" class="nav-btn active" data-view="schedule">📅 오늘 일정</button>
+        <button type="button" class="nav-btn" data-view="academy">🏫 학원정보</button>
+        <button type="button" class="nav-btn" data-view="activity">🧹 활동정보</button>
+        <button type="button" class="nav-btn" data-view="map">🗺️ 지도</button>
+        <button type="button" class="nav-btn" data-view="shop">🛍️ 상점</button>
+      </nav>
     </section>
 
-    <section id="schedule-panel" class="panel panel-wide">
-      <h2>📅 오늘 일정 짜기</h2>
-      <p class="muted">
-        아래 항목을 시간표로 끌어다 놓아서 하루 일정을 짠다. 학교는 기본으로 09:00–16:00에 놓여 있고, 블록의
-        ×를 눌러 빼거나 팔레트에서 다시 끌어다 놓을 수 있다. 다 짰으면 "일과 시작"을 누른다 — 시작하면 더는
-        바꿀 수 없다.
-      </p>
+    <section id="main-view" class="panel">
+      <div id="view-schedule" class="view">
+        <h2>📅 오늘 일정 짜기</h2>
+        <p class="muted">
+          아래 항목을 시간표로 끌어다 놓아서 하루 일정을 짠다. 학교는 기본으로 09:00–16:00에 놓여 있고, 블록의
+          ×를 눌러 빼거나 팔레트에서 다시 끌어다 놓을 수 있다. 다 짰으면 "일과 시작"을 누른다 — 시작하면 더는
+          바꿀 수 없고 화면이 지도로 바뀐다.
+        </p>
 
-      <div id="schedule-palette" class="chip-row"></div>
+        <div id="schedule-palette" class="chip-row"></div>
 
-      <div id="timetable-wrap">
-        <div id="timetable"></div>
-      </div>
-
-      <button type="button" id="start-day-btn">일과 시작</button>
-
-      <div id="day-run" hidden>
-        <div id="transport-choice" class="transport-choice" hidden></div>
-        <p id="day-status" class="day-status">—</p>
-        <ul id="day-log"></ul>
-      </div>
-
-      <p id="day-summary" class="muted" hidden></p>
-    </section>
-
-    <section id="map-panel" class="panel panel-wide">
-      <h2>🗺️ 지도</h2>
-      <p class="muted">
-        이동할 때마다 도보/버스/지하철을 고를 수 있다. 도보는 방향키(↑↓←→ / WASD)나 화면 버튼으로 직접 걷고,
-        버스·지하철은 요금을 내면 빠르게 데려다준다. 집·학교는 실제 위치, 동네 학원 4곳은 주소 미확정이라 도보
-        10분 추정 위치에, 압구정 학원은 버스/지하철로만 갈 수 있는 먼 가상 위치에 표시한다.
-      </p>
-      <div class="map-wrap">
-        <div id="map"></div>
-        <div id="dpad" class="dpad" hidden>
-          <button type="button" data-dir="up" aria-label="위로 이동">▲</button>
-          <button type="button" data-dir="left" aria-label="왼쪽으로 이동">◀</button>
-          <button type="button" data-dir="right" aria-label="오른쪽으로 이동">▶</button>
-          <button type="button" data-dir="down" aria-label="아래로 이동">▼</button>
+        <div id="timetable-wrap">
+          <div id="timetable"></div>
         </div>
+
+        <button type="button" id="start-day-btn">일과 시작</button>
       </div>
-    </section>
 
-    <section id="academy-panel" class="panel">
-      <h2>🏫 방과후 학원</h2>
-      <ul id="academies"></ul>
-    </section>
+      <div id="view-academy" class="view" hidden>
+        <h2>🏫 학원정보</h2>
+        <p class="muted">동네 학원들의 이름·운영시간·위치·성장 효과다.</p>
+        <ul id="academies"></ul>
+      </div>
 
-    <section id="shop-panel" class="panel panel-wide">
-      <h2>🛍️ 상점</h2>
-      <p class="muted">용돈으로 물건을 사면 바로 효과가 적용된다. 하루 일정이 진행 중일 때는 살 수 없다.</p>
-      <p id="shop-feedback" class="muted" hidden></p>
-      <ul id="shop-items"></ul>
+      <div id="view-activity" class="view" hidden>
+        <h2>🧹 활동정보</h2>
+        <p class="muted">집이나 동네에서 할 수 있는 방과후 활동들이다. 돈을 벌거나(집안일), 쉬면서 능력치를 올릴 수 있다(나들이).</p>
+        <ul id="activities-info"></ul>
+      </div>
+
+      <div id="view-map" class="view" hidden>
+        <h2>🗺️ 지도</h2>
+        <p class="muted">
+          이동할 때마다 도보/버스/지하철을 고를 수 있다. 도보는 방향키(↑↓←→ / WASD)나 화면 버튼으로 직접 걷고,
+          버스·지하철은 요금을 내면 빠르게 데려다준다.
+        </p>
+        <div class="map-wrap">
+          <div id="map"></div>
+          <div id="dpad" class="dpad" hidden>
+            <button type="button" data-dir="up" aria-label="위로 이동">▲</button>
+            <button type="button" data-dir="left" aria-label="왼쪽으로 이동">◀</button>
+            <button type="button" data-dir="right" aria-label="오른쪽으로 이동">▶</button>
+            <button type="button" data-dir="down" aria-label="아래로 이동">▼</button>
+          </div>
+        </div>
+
+        <div id="day-run" hidden>
+          <div id="transport-choice" class="transport-choice" hidden></div>
+          <p id="day-status" class="day-status">—</p>
+          <ul id="day-log"></ul>
+        </div>
+
+        <p id="day-summary" class="muted" hidden></p>
+      </div>
+
+      <div id="view-shop" class="view" hidden>
+        <h2>🛍️ 상점</h2>
+        <p class="muted">용돈으로 물건을 사면 바로 효과가 적용된다. 하루 일정이 진행 중일 때는 살 수 없다.</p>
+        <p id="shop-feedback" class="muted" hidden></p>
+        <ul id="shop-items"></ul>
+      </div>
     </section>
   </main>
 

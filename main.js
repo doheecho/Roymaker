@@ -17,8 +17,8 @@ const STAT_ICONS = {
 };
 
 const CONDITION_ICONS = { hunger: "🍚", staminaNow: "⚡", stress: "😵", wallet: "💰" };
+const CONDITION_LABELS = { hunger: "허기", staminaNow: "체력", stress: "스트레스", wallet: "용돈" };
 const SCHOOL_ICON = "🏫";
-const CHORE_ICON = "🧹";
 
 const HOME_FALLBACK = { lat: 37.5495, lng: 127.0203 };
 const CHILD_WALK_M_PER_MIN = 70;
@@ -36,12 +36,6 @@ const BUS_FARE = 450;
 const SUBWAY_FARE = 450;
 const TRANSIT_M_PER_MIN = 220;
 const TRANSIT_RIDE_MS = 1800;
-
-const CHORE_DURATION_MIN = 30;
-const CHORE_WAGE = 800;
-const CHORE_STRESS = 6;
-const CHORE_HUNGER_COST = 8;
-const CHORE_STAMINA_COST = 8;
 
 const SCHOOL_STRESS = 10;
 const ACADEMY_STRESS = 18;
@@ -72,9 +66,10 @@ const keys = { up: false, down: false, left: false, right: false };
 const state = {
   character: null,
   academies: [],
+  activities: [],
   items: [],
   categoryMap: {},
-  positions: { home: null, school: null, academies: {} },
+  positions: { home: null, school: null, academies: {}, activities: {} },
   charPos: null,
   charOverlay: null,
   map: null,
@@ -330,7 +325,7 @@ async function travelTo(target, startClock, label, allowWalk) {
   return rideTransit(target, startClock, `${mode === "bus" ? "버스" : "지하철"}로 ${label}`);
 }
 
-async function renderMap(character, academies) {
+async function renderMap(character, academies, activities) {
   const map = new kakao.maps.Map(document.getElementById("map"), {
     center: new kakao.maps.LatLng(HOME_FALLBACK.lat, HOME_FALLBACK.lng),
     level: MAP_ZOOM_LEVEL,
@@ -362,6 +357,19 @@ async function renderMap(character, academies) {
     const etaText = isWalk ? `도보 ${academy.location.etaMinFromHome}분` : `버스/지하철 약 ${academy.location.etaMinFromHome}분`;
     addMarker(map, pos, `<strong>${academy.name}</strong> (가상 위치)<br>${category.label} · ${etaText}`);
   });
+
+  for (const activity of activities) {
+    if (activity.location === "home") continue;
+    let pos;
+    try {
+      pos = await keywordSearch(activity.placeQuery ?? activity.name);
+    } catch (err) {
+      console.warn(err);
+      pos = offsetLatLng(homePos.lat, homePos.lng, (activity.travelMin ?? 15) * CHILD_WALK_M_PER_MIN, 200);
+    }
+    state.positions.activities[activity.id] = pos;
+    addMarker(map, pos, `<strong>${activity.name}</strong><br>${activity.address ?? ""}`);
+  }
 
   state.charPos = { ...homePos };
   state.charOverlay = createCharacterOverlay(map, homePos);
@@ -406,22 +414,26 @@ function renderAcademies(academies, categoryMap) {
     const growthText = Object.entries(category.growth)
       .map(([stat, amount]) => `${STAT_LABELS[stat] ?? stat} +${amount}`)
       .join(" · ");
+    const hoursText = academy.hours ? `운영 ${academy.hours.open}~${academy.hours.close}` : "운영시간 미정";
+    const addressText = academy.address ?? "위치 미정";
 
     const li = document.createElement("li");
     li.innerHTML = `
       <span class="item-icon">${category.icon ?? "🏫"}</span>
       <span>
         <strong>${academy.name}</strong> (${category.label})<br>
-        <span class="muted">${growthText} · 집에서 ${academy.location.mode === "walk" ? "도보" : "이동"} ${academy.location.etaMinFromHome}분</span>
+        <span class="muted">${growthText} · ${hoursText} · ${addressText} (집에서 ${academy.location.mode === "walk" ? "도보" : "이동"} ${academy.location.etaMinFromHome}분)</span>
       </span>
     `;
     el.appendChild(li);
   });
 }
 
-function applyItemEffect(effect) {
+function applyEffect(effect) {
   Object.entries(effect).forEach(([key, amount]) => {
-    if (key === "hunger" || key === "staminaNow" || key === "stress") {
+    if (key === "wallet") {
+      state.character.wallet = Math.max(0, state.character.wallet + amount);
+    } else if (key === "hunger" || key === "staminaNow" || key === "stress") {
       state.character.condition[key] = Math.min(100, Math.max(0, state.character.condition[key] + amount));
     } else {
       state.character.stats[key] = Math.min(100, Math.max(0, (state.character.stats[key] ?? 0) + amount));
@@ -433,6 +445,37 @@ function effectText(effect) {
   return Object.entries(effect)
     .map(([key, amount]) => `${STAT_LABELS[key] ?? (key === "hunger" ? "허기" : key)} +${amount}`)
     .join(" · ");
+}
+
+function signedEffectText(effect) {
+  return Object.entries(effect)
+    .map(([key, amount]) => {
+      const sign = amount >= 0 ? "+" : "";
+      if (key === "wallet") return `용돈 ${sign}${amount}원`;
+      const label = STAT_LABELS[key] ?? CONDITION_LABELS[key] ?? key;
+      return `${label} ${sign}${amount}`;
+    })
+    .join(" · ");
+}
+
+function renderActivityInfo() {
+  const el = document.getElementById("activities-info");
+  el.innerHTML = "";
+
+  state.activities.forEach((activity) => {
+    const hoursText = activity.hours ? `운영 ${activity.hours.open}~${activity.hours.close}` : "시간 제한 없음";
+    const locationText = activity.location === "home" ? "집" : activity.address ?? "위치 미정";
+
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <span class="item-icon">${activity.icon}</span>
+      <span>
+        <strong>${activity.name}</strong> (${activity.durationMin}분)<br>
+        <span class="muted">${signedEffectText(activity.effect)} · ${locationText}${activity.location === "home" ? "" : ` · ${hoursText}`}</span>
+      </span>
+    `;
+    el.appendChild(li);
+  });
 }
 
 function showShopFeedback(text) {
@@ -464,7 +507,7 @@ function renderShop() {
     buyBtn.addEventListener("click", () => {
       if (state.dayRunning || state.character.wallet < item.price) return;
       state.character.wallet -= item.price;
-      applyItemEffect(item.effect);
+      applyEffect(item.effect);
       renderStats(state.character);
       renderShop();
       showShopFeedback(`${item.icon ?? ""} ${item.name}을(를) 샀다! ${effectText(item.effect)} (잔액 ${state.character.wallet}원)`);
@@ -540,7 +583,7 @@ function makeDraggable(chipEl, spec) {
       if (spec.kind === "school") {
         return { startMin: SCHOOL_START_MIN, endMin: SCHOOL_END_MIN };
       }
-      const durationMin = spec.kind === "chore" ? CHORE_DURATION_MIN : ACADEMY_LESSON_MIN;
+      const durationMin = spec.kind === "activity" ? spec.durationMin : ACADEMY_LESSON_MIN;
       const startMin = rowToMinutes(row);
       const endMin = startMin + durationMin;
       if (endMin > DAY_TIMELINE_END_MIN) return null;
@@ -566,9 +609,10 @@ function makeDraggable(chipEl, spec) {
         return;
       }
       scheduleBlocks.push({
-        id: spec.kind === "school" ? "school" : `${spec.kind}-${spec.academyId ?? "x"}-${Date.now()}`,
+        id: spec.kind === "school" ? "school" : `${spec.kind}-${spec.academyId ?? spec.activityId ?? "x"}-${Date.now()}`,
         kind: spec.kind,
         academyId: spec.academyId,
+        activityId: spec.activityId,
         startMin: range.startMin,
         endMin: range.endMin,
       });
@@ -598,9 +642,16 @@ function renderPalette() {
     el.appendChild(createChip(SCHOOL_ICON, "학교 (09:00–16:00)", { kind: "school" }, "chip-school"));
   }
 
-  el.appendChild(
-    createChip(CHORE_ICON, `집안일 돕기 (${CHORE_DURATION_MIN}분, +${CHORE_WAGE}원)`, { kind: "chore" }, "chip-chore")
-  );
+  state.activities.forEach((activity) => {
+    el.appendChild(
+      createChip(
+        activity.icon,
+        `${activity.name} (${activity.durationMin}분)`,
+        { kind: "activity", activityId: activity.id, durationMin: activity.durationMin },
+        "chip-activity"
+      )
+    );
+  });
 
   state.academies
     .filter((a) => a.location.etaMinFromHome != null)
@@ -637,7 +688,7 @@ function renderTimetable() {
   scheduleBlocks.forEach((block) => {
     const top = minutesToRow(block.startMin) * ROW_PX;
     const height = minutesToRow(block.endMin) * ROW_PX - top;
-    const kindClass = block.kind === "school" ? "tt-school" : block.kind === "chore" ? "tt-chore" : "tt-academy";
+    const kindClass = block.kind === "school" ? "tt-school" : block.kind === "activity" ? "tt-activity" : "tt-academy";
     const div = document.createElement("div");
     div.className = `tt-block ${kindClass}`;
     div.style.top = `${top}px`;
@@ -645,9 +696,10 @@ function renderTimetable() {
 
     let icon = SCHOOL_ICON;
     let label = "학교";
-    if (block.kind === "chore") {
-      icon = CHORE_ICON;
-      label = "집안일 돕기";
+    if (block.kind === "activity") {
+      const activity = state.activities.find((a) => a.id === block.activityId);
+      icon = activity.icon;
+      label = activity.name;
     } else if (block.kind === "academy") {
       const academy = state.academies.find((a) => a.id === block.academyId);
       icon = state.categoryMap[academy.categoryId]?.icon ?? "🏫";
@@ -688,7 +740,7 @@ function setStatus(text) {
 }
 
 function addStress(amount) {
-  state.character.condition.stress = Math.min(100, state.character.condition.stress + amount);
+  state.character.condition.stress = Math.max(0, Math.min(100, state.character.condition.stress + amount));
 }
 
 function applySchoolDayEffects() {
@@ -715,14 +767,10 @@ function applyAcademyEffects(academy) {
   logLine(`${academy.name} 수업 완료 — ${growthText}`);
 }
 
-function applyChoreEffects() {
-  state.character.wallet += CHORE_WAGE;
-  state.character.stats.diligence = Math.min(100, state.character.stats.diligence + 1);
-  state.character.condition.hunger = Math.max(0, state.character.condition.hunger - CHORE_HUNGER_COST);
-  state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - CHORE_STAMINA_COST);
-  addStress(CHORE_STRESS);
+function applyActivityEffects(activity) {
+  applyEffect(activity.effect);
   renderStats(state.character);
-  logLine(`집안일을 도와 용돈 ${CHORE_WAGE}원을 받았다 — 성실성 +1`);
+  logLine(`${activity.name} 완료 — ${signedEffectText(activity.effect)}`);
 }
 
 function triggerIllness() {
@@ -760,19 +808,28 @@ async function runDay(blocks) {
 
   for (const block of blocks) {
     const isSchool = block.kind === "school";
-    const isChore = block.kind === "chore";
-    const academy = isSchool || isChore ? null : state.academies.find((a) => a.id === block.academyId);
-    const targetPos = isSchool ? state.positions.school : isChore ? state.positions.home : state.positions.academies[block.academyId];
-    const placeName = isSchool ? "학교" : isChore ? "집안일 돕기" : academy.name;
-    const allowWalk = isSchool || isChore || academy.location.mode === "walk";
+    const isActivity = block.kind === "activity";
+    const academy = isSchool || isActivity ? null : state.academies.find((a) => a.id === block.academyId);
+    const activity = isActivity ? state.activities.find((a) => a.id === block.activityId) : null;
+    const isHomeActivity = isActivity && activity.location === "home";
 
-    if (isChore && atHome) {
-      logLine(`${minutesToClock(clock)} 집에서 집안일 시작`);
+    const targetPos = isSchool
+      ? state.positions.school
+      : isHomeActivity
+      ? state.positions.home
+      : isActivity
+      ? state.positions.activities[activity.id]
+      : state.positions.academies[block.academyId];
+    const placeName = isSchool ? "학교" : isActivity ? activity.name : academy.name;
+    const allowWalk = isSchool || isActivity || academy.location.mode === "walk";
+
+    if (isHomeActivity && atHome) {
+      logLine(`${minutesToClock(clock)} 집에서 ${placeName} 시작`);
     } else {
       lastAllowWalk = allowWalk;
       logLine(`${minutesToClock(clock)} ${placeName}(으)로 이동 시작`);
       clock = await travelTo(targetPos, clock, `${placeName}로 이동 중`, allowWalk);
-      atHome = isChore;
+      atHome = isHomeActivity;
 
       const late = clock > block.startMin;
       if (isSchool) {
@@ -786,12 +843,12 @@ async function runDay(blocks) {
     await waitUntil(
       clock,
       block.endMin,
-      isSchool ? "수업 중 (점심 포함)" : isChore ? "집안일 돕는 중" : `${placeName} 수업`
+      isSchool ? "수업 중 (점심 포함)" : isActivity ? `${placeName} 중` : `${placeName} 수업`
     );
     clock = block.endMin;
 
     if (isSchool) applySchoolDayEffects();
-    else if (isChore) applyChoreEffects();
+    else if (isActivity) applyActivityEffects(activity);
     else applyAcademyEffects(academy);
 
     if (state.character.condition.stress >= STRESS_ILLNESS_THRESHOLD) {
@@ -829,12 +886,37 @@ async function runDay(blocks) {
   renderShop();
 }
 
+function showView(name) {
+  document.querySelectorAll(".view").forEach((el) => {
+    el.hidden = el.id !== `view-${name}`;
+  });
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.view === name);
+  });
+  document.getElementById("main-view").dataset.view = name;
+
+  if (name === "map" && state.map) {
+    state.map.relayout();
+    if (state.charPos) {
+      state.map.setCenter(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
+    }
+  }
+}
+
+function wireNav() {
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
+    btn.addEventListener("click", () => showView(btn.dataset.view));
+  });
+  showView("schedule");
+}
+
 function wireScheduleEditor() {
   document.getElementById("start-day-btn").addEventListener("click", () => {
     if (state.dayRunning) return;
     state.dayRunning = true;
     document.getElementById("start-day-btn").disabled = true;
     renderShop();
+    showView("map");
     const blocksForToday = scheduleBlocks.map((b) => ({ ...b }));
     runDay(blocksForToday);
   });
@@ -868,25 +950,29 @@ async function main() {
   renderClock();
   setInterval(renderClock, 1000 * 30);
 
-  const [character, academies, categories, items] = await Promise.all([
+  const [character, academies, categories, items, activities] = await Promise.all([
     loadJSON("data/character.json"),
     loadJSON("data/academies.json"),
     loadJSON("data/academy_categories.json"),
     loadJSON("data/items.json"),
+    loadJSON("data/activities.json"),
   ]);
 
   state.character = character;
   state.academies = academies;
   state.items = items;
+  state.activities = activities;
   state.categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
 
   renderStats(character);
   renderAcademies(academies, state.categoryMap);
+  renderActivityInfo();
   renderTimetable();
   renderShop();
-  await renderMap(character, academies);
+  await renderMap(character, academies, activities);
   wireScheduleEditor();
   wireMovementControls();
+  wireNav();
 }
 
 main();

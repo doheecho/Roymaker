@@ -1,0 +1,34 @@
+[
+  {
+    "id": "chore_30",
+    "name": "집안일 돕기",
+    "icon": "🧹",
+    "durationMin": 30,
+    "location": "home",
+    "hours": null,
+    "address": "집",
+    "effect": { "wallet": 800, "diligence": 1, "hunger": -8, "staminaNow": -8, "stress": 6 }
+  },
+  {
+    "id": "chore_60",
+    "name": "집안일 돕기",
+    "icon": "🧹",
+    "durationMin": 60,
+    "location": "home",
+    "hours": null,
+    "address": "집",
+    "effect": { "wallet": 2000, "diligence": 1, "hunger": -14, "staminaNow": -14, "stress": 10 }
+  },
+  {
+    "id": "butterfly_garden",
+    "name": "나비정원 다녀오기",
+    "icon": "🦋",
+    "durationMin": 180,
+    "location": "place",
+    "placeQuery": "서울숲 나비정원",
+    "travelMin": 15,
+    "hours": { "open": "10:00", "close": "17:00" },
+    "address": "서울숲 나비정원 (실제 위치는 지도에서 지오코딩)",
+    "effect": { "art": 2, "social": 2, "hunger": -20, "staminaNow": -15, "stress": -15 }
+  }
+]
