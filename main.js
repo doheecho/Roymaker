@@ -13,15 +13,34 @@ const HOME_SCHOOL_WALK_MIN = 10;
 const SCHOOL_START_MIN = 9 * 60;
 const SCHOOL_END_MIN = 16 * 60;
 const ACADEMY_LESSON_MIN = 60;
-const MOVE_MS_PER_GAME_MIN = 300;
 const WAIT_PHASE_MS = 2200;
+const MOVE_SPEED_MPS = 30;
+const GAME_MIN_PER_REAL_SEC = 0.5;
+const ARRIVAL_RADIUS_M = 20;
+const MAP_ZOOM_LEVEL = 3;
+
+const KEY_TO_DIR = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  w: "up",
+  s: "down",
+  a: "left",
+  d: "right",
+};
+
+const keys = { up: false, down: false, left: false, right: false };
 
 const state = {
   character: null,
   academies: [],
   categoryMap: {},
   positions: { home: null, school: null, academies: {} },
+  charPos: null,
   charOverlay: null,
+  map: null,
+  walkModeActive: false,
   day: 1,
 };
 
@@ -41,7 +60,7 @@ function pad2(n) {
 }
 
 function minutesToClock(min) {
-  const m = ((min % 1440) + 1440) % 1440;
+  const m = ((Math.round(min) % 1440) + 1440) % 1440;
   return `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
 }
 
@@ -62,6 +81,34 @@ function geocodeAddress(address) {
   });
 }
 
+function keywordSearch(query) {
+  return new Promise((resolve, reject) => {
+    new kakao.maps.services.Places().keywordSearch(query, (result, status) => {
+      if (status === kakao.maps.services.Status.OK && result[0]) {
+        resolve({ lat: Number(result[0].y), lng: Number(result[0].x) });
+      } else {
+        reject(new Error(`장소 검색 실패: ${query}`));
+      }
+    });
+  });
+}
+
+async function resolveHomePosition(home) {
+  if (home.buildingQuery) {
+    try {
+      return await keywordSearch(home.buildingQuery);
+    } catch (err) {
+      console.warn(err);
+    }
+  }
+  try {
+    return await geocodeAddress(home.address);
+  } catch (err) {
+    console.warn(err);
+    return HOME_FALLBACK;
+  }
+}
+
 function offsetLatLng(lat, lng, distanceM, bearingDeg) {
   const earthRadiusM = 6371000;
   const bearing = (bearingDeg * Math.PI) / 180;
@@ -69,6 +116,14 @@ function offsetLatLng(lat, lng, distanceM, bearingDeg) {
   const dLng =
     ((distanceM * Math.sin(bearing)) / (earthRadiusM * Math.cos((lat * Math.PI) / 180))) * (180 / Math.PI);
   return { lat: lat + dLat, lng: lng + dLng };
+}
+
+function distanceMeters(a, b) {
+  const metersPerDegLat = 111320;
+  const metersPerDegLng = 111320 * Math.cos((a.lat * Math.PI) / 180);
+  const dy = (b.lat - a.lat) * metersPerDegLat;
+  const dx = (b.lng - a.lng) * metersPerDegLng;
+  return Math.hypot(dx, dy);
 }
 
 function addMarker(map, position, content) {
@@ -90,14 +145,6 @@ function createCharacterOverlay(map, position) {
   });
 }
 
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
-function lerpPos(a, b, t) {
-  return { lat: lerp(a.lat, b.lat, t), lng: lerp(a.lng, b.lng, t) };
-}
-
 function animate(durationMs, onFrame) {
   return new Promise((resolve) => {
     const startedAt = performance.now();
@@ -111,36 +158,81 @@ function animate(durationMs, onFrame) {
   });
 }
 
-async function animateMove(leg, onClock) {
-  const durationMs = Math.max(400, (leg.endMin - leg.startMin) * MOVE_MS_PER_GAME_MIN);
-  await animate(durationMs, (t) => {
-    const pos = lerpPos(leg.from, leg.to, t);
-    state.charOverlay.setPosition(new kakao.maps.LatLng(pos.lat, pos.lng));
-    onClock(Math.round(lerp(leg.startMin, leg.endMin, t)));
-  });
-  onClock(leg.endMin);
+function showDpad(visible) {
+  document.getElementById("dpad").hidden = !visible;
+  if (!visible) {
+    keys.up = keys.down = keys.left = keys.right = false;
+  }
 }
 
-async function animateWait(leg, onClock) {
-  await animate(WAIT_PHASE_MS, (t) => onClock(Math.round(lerp(leg.startMin, leg.endMin, t))));
-  onClock(leg.endMin);
+function walkTo(target, startClock, label) {
+  return new Promise((resolve) => {
+    state.walkModeActive = true;
+    showDpad(true);
+
+    let clock = startClock;
+    let last = performance.now();
+
+    function frame(now) {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+
+      const dir = { x: 0, y: 0 };
+      if (keys.up) dir.y += 1;
+      if (keys.down) dir.y -= 1;
+      if (keys.left) dir.x -= 1;
+      if (keys.right) dir.x += 1;
+      const mag = Math.hypot(dir.x, dir.y);
+
+      if (mag > 0) {
+        const nx = dir.x / mag;
+        const ny = dir.y / mag;
+        const metersPerDegLat = 111320;
+        const metersPerDegLng = 111320 * Math.cos((state.charPos.lat * Math.PI) / 180);
+        const moveM = MOVE_SPEED_MPS * dt;
+        state.charPos = {
+          lat: state.charPos.lat + (ny * moveM) / metersPerDegLat,
+          lng: state.charPos.lng + (nx * moveM) / metersPerDegLng,
+        };
+        state.charOverlay.setPosition(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
+        state.map.setCenter(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
+        clock += dt * GAME_MIN_PER_REAL_SEC;
+      }
+
+      const dist = distanceMeters(state.charPos, target);
+      setStatus(`${minutesToClock(clock)} · ${label} (남은 거리 약 ${Math.round(dist)}m)`);
+
+      if (dist <= ARRIVAL_RADIUS_M) {
+        state.walkModeActive = false;
+        showDpad(false);
+        resolve(clock);
+        return;
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+async function waitUntil(startClock, endClock, label) {
+  setStatus(`${minutesToClock(startClock)} · ${label}`);
+  await animate(WAIT_PHASE_MS, (t) => {
+    setStatus(`${minutesToClock(startClock + (endClock - startClock) * t)} · ${label}`);
+  });
+  setStatus(`${minutesToClock(endClock)} · ${label}`);
 }
 
 async function renderMap(character, academies) {
   const map = new kakao.maps.Map(document.getElementById("map"), {
     center: new kakao.maps.LatLng(HOME_FALLBACK.lat, HOME_FALLBACK.lng),
-    level: 4,
+    level: MAP_ZOOM_LEVEL,
   });
+  state.map = map;
 
-  let homePos = HOME_FALLBACK;
-  try {
-    homePos = await geocodeAddress(character.home.address);
-  } catch (err) {
-    console.warn(err);
-  }
+  const homePos = await resolveHomePosition(character.home);
   state.positions.home = homePos;
   map.setCenter(new kakao.maps.LatLng(homePos.lat, homePos.lng));
-  addMarker(map, homePos, `집<br>${character.home.address}`);
+  addMarker(map, homePos, `집 — 금호파크힐스 113동<br>${character.home.address}`);
 
   try {
     state.positions.school = await geocodeAddress(character.school.address);
@@ -164,6 +256,7 @@ async function renderMap(character, academies) {
     );
   });
 
+  state.charPos = { ...homePos };
   state.charOverlay = createCharacterOverlay(map, homePos);
 }
 
@@ -225,76 +318,6 @@ function populateAcademySelect(academies) {
     });
 }
 
-function buildDayPlan(departMin, academyId) {
-  const arriveSchool = departMin + HOME_SCHOOL_WALK_MIN;
-  const isLate = arriveSchool > SCHOOL_START_MIN;
-
-  const legs = [
-    {
-      kind: "move",
-      label: "집에서 학교로 등교",
-      from: state.positions.home,
-      to: state.positions.school,
-      startMin: departMin,
-      endMin: arriveSchool,
-    },
-    {
-      kind: "wait",
-      label: isLate ? "지각 — 수업 중 (점심 포함)" : "수업 중 (점심 포함)",
-      startMin: Math.max(arriveSchool, SCHOOL_START_MIN),
-      endMin: SCHOOL_END_MIN,
-      phase: "school",
-    },
-  ];
-
-  if (academyId) {
-    const academy = state.academies.find((a) => a.id === academyId);
-    const travelMin = academy.location.etaMinFromHome;
-    const academyPos = state.positions.academies[academyId];
-    const arriveAcademy = SCHOOL_END_MIN + travelMin;
-    const leaveAcademy = arriveAcademy + ACADEMY_LESSON_MIN;
-    const arriveHome = leaveAcademy + travelMin;
-
-    legs.push(
-      {
-        kind: "move",
-        label: `${academy.name}(으)로 이동`,
-        from: state.positions.school,
-        to: academyPos,
-        startMin: SCHOOL_END_MIN,
-        endMin: arriveAcademy,
-      },
-      {
-        kind: "wait",
-        label: `${academy.name} 수업`,
-        startMin: arriveAcademy,
-        endMin: leaveAcademy,
-        phase: "academy",
-        academy,
-      },
-      {
-        kind: "move",
-        label: "집으로 귀가",
-        from: academyPos,
-        to: state.positions.home,
-        startMin: leaveAcademy,
-        endMin: arriveHome,
-      }
-    );
-  } else {
-    legs.push({
-      kind: "move",
-      label: "집으로 귀가",
-      from: state.positions.school,
-      to: state.positions.home,
-      startMin: SCHOOL_END_MIN,
-      endMin: SCHOOL_END_MIN + HOME_SCHOOL_WALK_MIN,
-    });
-  }
-
-  return { legs, isLate };
-}
-
 function logLine(text) {
   const el = document.getElementById("day-log");
   const li = document.createElement("li");
@@ -337,24 +360,46 @@ function applyEndOfDay() {
 }
 
 async function runDay(departMin, academyId) {
-  const { legs, isLate } = buildDayPlan(departMin, academyId);
-
   document.getElementById("day-run").hidden = false;
   document.getElementById("day-summary").hidden = true;
   document.getElementById("day-log").innerHTML = "";
 
-  for (const leg of legs) {
-    setStatus(`${minutesToClock(leg.startMin)} · ${leg.label}`);
-    logLine(leg.label);
-    if (leg.kind === "move") {
-      await animateMove(leg, (min) => setStatus(`${minutesToClock(min)} · ${leg.label}`));
-    } else {
-      await animateWait(leg, (min) => setStatus(`${minutesToClock(min)} · ${leg.label}`));
-      if (leg.phase === "school") applySchoolDayEffects();
-      if (leg.phase === "academy") applyAcademyEffects(leg.academy);
-    }
+  state.charPos = { ...state.positions.home };
+  state.charOverlay.setPosition(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
+
+  let clock = departMin;
+  logLine(`${minutesToClock(clock)} 집에서 출발 — 방향키/버튼으로 학교까지 이동`);
+  clock = await walkTo(state.positions.school, clock, "학교로 이동 중");
+
+  const isLate = clock > SCHOOL_START_MIN;
+  logLine(`${minutesToClock(clock)} 학교 도착${isLate ? " — 지각!" : ""}`);
+
+  clock = Math.max(clock, SCHOOL_START_MIN);
+  await waitUntil(clock, SCHOOL_END_MIN, isLate ? "지각 — 수업 중 (점심 포함)" : "수업 중 (점심 포함)");
+  clock = SCHOOL_END_MIN;
+  applySchoolDayEffects();
+
+  if (academyId) {
+    const academy = state.academies.find((a) => a.id === academyId);
+    const academyPos = state.positions.academies[academyId];
+
+    logLine(`${minutesToClock(clock)} 하교 — ${academy.name}(으)로 이동`);
+    clock = await walkTo(academyPos, clock, `${academy.name}(으)로 이동 중`);
+    logLine(`${minutesToClock(clock)} ${academy.name} 도착`);
+
+    const lessonEnd = clock + ACADEMY_LESSON_MIN;
+    await waitUntil(clock, lessonEnd, `${academy.name} 수업`);
+    clock = lessonEnd;
+    applyAcademyEffects(academy);
+
+    logLine(`${minutesToClock(clock)} 집으로 귀가 이동`);
+    clock = await walkTo(state.positions.home, clock, "집으로 귀가 중");
+  } else {
+    logLine(`${minutesToClock(clock)} 하교 — 집으로 귀가`);
+    clock = await walkTo(state.positions.home, clock, "집으로 귀가 중");
   }
 
+  logLine(`${minutesToClock(clock)} 집 도착`);
   applyEndOfDay();
 
   const summaryEl = document.getElementById("day-summary");
@@ -388,6 +433,30 @@ function wireScheduleForm() {
   });
 }
 
+function wireMovementControls() {
+  window.addEventListener("keydown", (event) => {
+    const dir = KEY_TO_DIR[event.key];
+    if (!dir) return;
+    if (state.walkModeActive) event.preventDefault();
+    keys[dir] = true;
+  });
+  window.addEventListener("keyup", (event) => {
+    const dir = KEY_TO_DIR[event.key];
+    if (dir) keys[dir] = false;
+  });
+
+  document.querySelectorAll("#dpad button").forEach((btn) => {
+    const dir = btn.dataset.dir;
+    btn.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      keys[dir] = true;
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((evt) =>
+      btn.addEventListener(evt, () => (keys[dir] = false))
+    );
+  });
+}
+
 async function main() {
   renderClock();
   setInterval(renderClock, 1000 * 30);
@@ -407,6 +476,7 @@ async function main() {
   populateAcademySelect(academies);
   await renderMap(character, academies);
   wireScheduleForm();
+  wireMovementControls();
 }
 
 main();
