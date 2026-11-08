@@ -86,10 +86,42 @@ const state = {
   walkModeActive: false,
   dayRunning: false,
   day: 1,
+  holidaySet: new Set(),
 };
 
 const SCHOOL_BLOCK_TEMPLATE = { id: "school", kind: "school", startMin: SCHOOL_START_MIN, endMin: SCHOOL_END_MIN };
 let scheduleBlocks = [{ ...SCHOOL_BLOCK_TEMPLATE }];
+
+const GAME_START_DATE_UTC = Date.UTC(2026, 2, 1); // Day 1 = 2026년 3월 1일 일요일
+const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
+function gameDateForDay(dayNumber) {
+  return new Date(GAME_START_DATE_UTC + (dayNumber - 1) * 86400000);
+}
+
+function gameDateKey(date) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatGameDate(date) {
+  return `${date.getUTCFullYear()}년 ${date.getUTCMonth() + 1}월 ${date.getUTCDate()}일 ${WEEKDAY_LABELS[date.getUTCDay()]}요일`;
+}
+
+function isSchoolDay(dayNumber) {
+  const date = gameDateForDay(dayNumber);
+  const dow = date.getUTCDay();
+  if (dow === 0 || dow === 6) return false;
+  return !state.holidaySet.has(gameDateKey(date));
+}
+
+function renderDayHeader() {
+  const date = gameDateForDay(state.day);
+  document.getElementById("game-date").textContent = formatGameDate(date);
+  document.getElementById("day-counter").textContent = `Day ${state.day}`;
+}
 
 async function loadJSON(path) {
   const res = await fetch(path);
@@ -557,7 +589,7 @@ async function renderMap(character, academies, activities, stations) {
 }
 
 function renderStats(character) {
-  document.getElementById("char-name").textContent = `${character.name} (초${character.grade})`;
+  document.getElementById("char-name").textContent = character.name;
 
   const statsEl = document.getElementById("stats");
   statsEl.innerHTML = "";
@@ -1084,9 +1116,9 @@ async function runDay(blocks) {
   summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart}${cancelPart} 허기 ${state.character.condition.hunger} · 체력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
 
   state.day += 1;
-  document.getElementById("day-counter").textContent = `Day ${state.day}`;
+  renderDayHeader();
 
-  scheduleBlocks = [{ ...SCHOOL_BLOCK_TEMPLATE }];
+  scheduleBlocks = isSchoolDay(state.day) ? [{ ...SCHOOL_BLOCK_TEMPLATE }] : [];
   renderTimetable();
 
   state.dayRunning = false;
@@ -1160,13 +1192,14 @@ async function main() {
   renderClock();
   setInterval(renderClock, 1000 * 30);
 
-  const [character, academies, categories, items, activities, stations] = await Promise.all([
+  const [character, academies, categories, items, activities, stations, holidays] = await Promise.all([
     loadJSON("data/character.json"),
     loadJSON("data/academies.json"),
     loadJSON("data/academy_categories.json"),
     loadJSON("data/items.json"),
     loadJSON("data/activities.json"),
     loadJSON("data/stations.json"),
+    loadJSON("data/holidays.json"),
   ]);
 
   state.character = character;
@@ -1174,6 +1207,10 @@ async function main() {
   state.items = items;
   state.activities = activities;
   state.categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
+  state.holidaySet = new Set(holidays.map((h) => h.date));
+
+  renderDayHeader();
+  scheduleBlocks = isSchoolDay(state.day) ? [{ ...SCHOOL_BLOCK_TEMPLATE }] : [];
 
   renderStats(character);
   renderAcademies(academies, state.categoryMap);

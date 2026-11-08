@@ -49,6 +49,12 @@ header {
 header h1 { margin: 0; font-size: 21px; color: var(--accent-ink); }
 .clock { margin: 0 0 0 auto; font-family: monospace; color: var(--muted); font-size: 12.5px; }
 
+.game-date {
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
 .day-counter {
   font-family: "Jua", sans-serif;
   font-size: 12.5px;
@@ -107,10 +113,7 @@ main {
   flex: none;
   width: 54px;
   height: 54px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
+  object-fit: cover;
   background: var(--paper);
   border: 2px solid var(--line);
   border-radius: 50%;
