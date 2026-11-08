@@ -14,6 +14,13 @@
     "staminaCost": 8
   },
   {
+    "id": "math",
+    "label": "수학",
+    "icon": "🧮",
+    "growth": { "intellect": 3 },
+    "staminaCost": 6
+  },
+  {
     "id": "essay_writing",
     "label": "논술 · 독서토론",
     "icon": "📝",

@@ -5,6 +5,7 @@
     "icon": "🧹",
     "durationMin": 30,
     "location": "home",
+    "mode": "walk",
     "hours": null,
     "address": "집",
     "effect": { "wallet": 800, "diligence": 1, "hunger": -8, "staminaNow": -8, "stress": 6 }
@@ -15,20 +16,46 @@
     "icon": "🧹",
     "durationMin": 60,
     "location": "home",
+    "mode": "walk",
     "hours": null,
     "address": "집",
     "effect": { "wallet": 2000, "diligence": 1, "hunger": -14, "staminaNow": -14, "stress": 10 }
   },
   {
+    "id": "errand_grandma_seongdong",
+    "name": "외할머니댁 심부름",
+    "icon": "🧺",
+    "durationMin": 60,
+    "location": "place",
+    "mode": "walk",
+    "placeQuery": "벽산아파트",
+    "address": "서울 성동구 무학로 50",
+    "hours": null,
+    "effect": { "wallet": 2000, "diligence": 1, "hunger": -10, "staminaNow": -10, "stress": -5 }
+  },
+  {
+    "id": "errand_junggye",
+    "name": "중계동 심부름",
+    "icon": "🧺",
+    "durationMin": 180,
+    "location": "place",
+    "mode": "transit",
+    "placeQuery": "중계동",
+    "address": "서울 노원구 섬밭로 265",
+    "hours": null,
+    "effect": { "wallet": 4000, "diligence": 1, "hunger": -20, "staminaNow": -15, "stress": -10 }
+  },
+  {
     "id": "butterfly_garden",
-    "name": "나비정원 다녀오기",
+    "name": "불암산 나비정원 다녀오기",
     "icon": "🦋",
     "durationMin": 180,
     "location": "place",
-    "placeQuery": "서울숲 나비정원",
+    "mode": "transit",
+    "placeQuery": "불암산 나비정원",
     "travelMin": 15,
+    "address": "서울 노원구 한글비석로12길 51-27",
     "hours": { "open": "10:00", "close": "17:00" },
-    "address": "서울숲 나비정원 (실제 위치는 지도에서 지오코딩)",
     "effect": { "art": 2, "social": 2, "hunger": -20, "staminaNow": -15, "stress": -15 }
   }
 ]

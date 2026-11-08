@@ -4,7 +4,7 @@
     "name": "태비KTS태권스쿨",
     "categoryId": "martial_arts",
     "region": "local",
-    "address": "가상 주소 (추후 교체)",
+    "address": "서울 성동구 난계로 32",
     "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
     "hours": { "open": "16:00", "close": "20:00" },
     "monthlyFee": null
@@ -14,17 +14,27 @@
     "name": "하이파이브미술학원 성동캠퍼스",
     "categoryId": "art",
     "region": "local",
-    "address": "가상 주소 (추후 교체)",
+    "address": "서울 성동구 행당로 84",
+    "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
+    "hours": { "open": "16:00", "close": "20:00" },
+    "monthlyFee": null
+  },
+  {
+    "id": "adam_leeds_math_seongdong",
+    "name": "아담리즈수학 성동직영센터",
+    "categoryId": "math",
+    "region": "local",
+    "address": "서울 성동구 행당로 35",
     "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
     "hours": { "open": "16:00", "close": "20:00" },
     "monthlyFee": null
   },
   {
     "id": "cna_nonsul_haengdang",
-    "name": "씨엔에이논술 행당점",
+    "name": "씨앤에이논술 행당점",
     "categoryId": "essay_writing",
     "region": "local",
-    "address": "가상 주소 (추후 교체)",
+    "address": "서울 성동구 행당로 87",
     "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
     "hours": { "open": "16:00", "close": "20:00" },
     "monthlyFee": null
@@ -34,7 +44,7 @@
     "name": "창의코딩랩 AI코딩학원",
     "categoryId": "coding",
     "region": "local",
-    "address": "가상 주소 (추후 교체)",
+    "address": "서울 성동구 행당로 108",
     "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
     "hours": { "open": "16:00", "close": "20:00" },
     "monthlyFee": null

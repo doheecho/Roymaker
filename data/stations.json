@@ -1,0 +1,14 @@
+{
+  "subway": [
+    { "id": "singeumho", "name": "신금호역 (5호선)", "address": "서울 성동구 금호로 154" },
+    { "id": "haengdang", "name": "행당역 (5호선)", "address": "서울 성동구 행당로 89" },
+    { "id": "sangwangsimni", "name": "상왕십리역 (2호선)", "address": "서울 성동구 왕십리로 374" },
+    { "id": "gangdong", "name": "강동역 (5호선)", "address": "서울 강동구 천호대로 1097" },
+    { "id": "junggye", "name": "중계역 (7호선)", "address": "서울 노원구 동일로 1308-1" }
+  ],
+  "bus": [
+    { "id": "stop_04515", "name": "금북초등학교.e편한세상금호105동", "code": "04515", "address": "서울 성동구 금호동1가 168-81" },
+    { "id": "stop_04591", "name": "논골.e편한세상금호114동", "code": "04591", "address": "서울 성동구 금호동1가 1823" },
+    { "id": "stop_04596", "name": "금호119안전센터", "code": "04596", "address": null }
+  ]
+}
