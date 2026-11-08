@@ -24,6 +24,19 @@ const SUBWAY_FARE = 450;
 const TRANSIT_M_PER_MIN = 220;
 const TRANSIT_RIDE_MS = 1800;
 
+const CHORE_DURATION_MIN = 30;
+const CHORE_WAGE = 800;
+const CHORE_STRESS = 6;
+const CHORE_HUNGER_COST = 8;
+const CHORE_STAMINA_COST = 8;
+
+const SCHOOL_STRESS = 10;
+const ACADEMY_STRESS = 18;
+const DAILY_STRESS_RECOVERY = 15;
+const NO_SCHEDULE_STRESS_RECOVERY = 30;
+const STRESS_ILLNESS_THRESHOLD = 80;
+const STRESS_ILLNESS_RELIEF = 40;
+
 const DAY_TIMELINE_START_MIN = 7 * 60;
 const DAY_TIMELINE_END_MIN = 21 * 60;
 const ROW_MIN = 30;
@@ -46,6 +59,7 @@ const keys = { up: false, down: false, left: false, right: false };
 const state = {
   character: null,
   academies: [],
+  items: [],
   categoryMap: {},
   positions: { home: null, school: null, academies: {} },
   charPos: null,
@@ -357,7 +371,12 @@ function renderStats(character) {
   });
 
   const condEl = document.getElementById("condition");
-  condEl.innerHTML = `<p class="muted">허기 ${character.condition.hunger} · 체력(현재) ${character.condition.staminaNow} · 용돈 ${character.wallet}원</p>`;
+  const stress = character.condition.stress;
+  const stressText =
+    stress >= STRESS_ILLNESS_THRESHOLD
+      ? `<span class="condition-warning">스트레스 ${stress} (위험)</span>`
+      : `스트레스 ${stress}`;
+  condEl.innerHTML = `<p class="muted">허기 ${character.condition.hunger} · 체력(현재) ${character.condition.staminaNow} · ${stressText} · 용돈 ${character.wallet}원</p>`;
 }
 
 function renderAcademies(academies, categoryMap) {
@@ -375,6 +394,59 @@ function renderAcademies(academies, categoryMap) {
       <strong>${academy.name}</strong> (${category.label})<br>
       <span class="muted">${growthText} · 집에서 ${academy.location.mode === "walk" ? "도보" : "이동"} ${academy.location.etaMinFromHome}분</span>
     `;
+    el.appendChild(li);
+  });
+}
+
+function applyItemEffect(effect) {
+  Object.entries(effect).forEach(([key, amount]) => {
+    if (key === "hunger" || key === "staminaNow" || key === "stress") {
+      state.character.condition[key] = Math.min(100, Math.max(0, state.character.condition[key] + amount));
+    } else {
+      state.character.stats[key] = Math.min(100, Math.max(0, (state.character.stats[key] ?? 0) + amount));
+    }
+  });
+}
+
+function effectText(effect) {
+  return Object.entries(effect)
+    .map(([key, amount]) => `${STAT_LABELS[key] ?? (key === "hunger" ? "허기" : key)} +${amount}`)
+    .join(" · ");
+}
+
+function showShopFeedback(text) {
+  const el = document.getElementById("shop-feedback");
+  el.hidden = false;
+  el.textContent = text;
+}
+
+function renderShop() {
+  const el = document.getElementById("shop-items");
+  el.innerHTML = "";
+
+  state.items.forEach((item) => {
+    const li = document.createElement("li");
+    const disabled = state.dayRunning || state.character.wallet < item.price;
+
+    const info = document.createElement("div");
+    info.innerHTML = `<strong>${item.name}</strong> — ${item.price}원<br><span class="muted">${item.description} (${effectText(item.effect)})</span>`;
+
+    const buyBtn = document.createElement("button");
+    buyBtn.type = "button";
+    buyBtn.className = "shop-buy-btn";
+    buyBtn.textContent = "구매";
+    buyBtn.disabled = disabled;
+    buyBtn.addEventListener("click", () => {
+      if (state.dayRunning || state.character.wallet < item.price) return;
+      state.character.wallet -= item.price;
+      applyItemEffect(item.effect);
+      renderStats(state.character);
+      renderShop();
+      showShopFeedback(`${item.name}을(를) 샀다! ${effectText(item.effect)} (잔액 ${state.character.wallet}원)`);
+    });
+
+    li.appendChild(info);
+    li.appendChild(buyBtn);
     el.appendChild(li);
   });
 }
@@ -443,8 +515,9 @@ function makeDraggable(chipEl, spec) {
       if (spec.kind === "school") {
         return { startMin: SCHOOL_START_MIN, endMin: SCHOOL_END_MIN };
       }
+      const durationMin = spec.kind === "chore" ? CHORE_DURATION_MIN : ACADEMY_LESSON_MIN;
       const startMin = rowToMinutes(row);
-      const endMin = startMin + ACADEMY_LESSON_MIN;
+      const endMin = startMin + durationMin;
       if (endMin > DAY_TIMELINE_END_MIN) return null;
       return { startMin, endMin };
     }
@@ -468,7 +541,7 @@ function makeDraggable(chipEl, spec) {
         return;
       }
       scheduleBlocks.push({
-        id: spec.kind === "school" ? "school" : `academy-${spec.academyId}-${Date.now()}`,
+        id: spec.kind === "school" ? "school" : `${spec.kind}-${spec.academyId ?? "x"}-${Date.now()}`,
         kind: spec.kind,
         academyId: spec.academyId,
         startMin: range.startMin,
@@ -500,6 +573,10 @@ function renderPalette() {
     el.appendChild(createChip("학교 (09:00–16:00)", { kind: "school" }, "chip-school"));
   }
 
+  el.appendChild(
+    createChip(`집안일 돕기 (${CHORE_DURATION_MIN}분, +${CHORE_WAGE}원)`, { kind: "chore" }, "chip-chore")
+  );
+
   state.academies
     .filter((a) => a.location.etaMinFromHome != null)
     .forEach((academy) => {
@@ -529,12 +606,18 @@ function renderTimetable() {
   scheduleBlocks.forEach((block) => {
     const top = minutesToRow(block.startMin) * ROW_PX;
     const height = minutesToRow(block.endMin) * ROW_PX - top;
+    const kindClass = block.kind === "school" ? "tt-school" : block.kind === "chore" ? "tt-chore" : "tt-academy";
     const div = document.createElement("div");
-    div.className = `tt-block ${block.kind === "school" ? "tt-school" : "tt-academy"}`;
+    div.className = `tt-block ${kindClass}`;
     div.style.top = `${top}px`;
     div.style.height = `${height}px`;
 
-    const label = block.kind === "school" ? "학교" : state.academies.find((a) => a.id === block.academyId).name;
+    const label =
+      block.kind === "school"
+        ? "학교"
+        : block.kind === "chore"
+        ? "집안일 돕기"
+        : state.academies.find((a) => a.id === block.academyId).name;
     const span = document.createElement("span");
     span.textContent = label;
     const removeBtn = document.createElement("button");
@@ -568,9 +651,14 @@ function setStatus(text) {
   document.getElementById("day-status").textContent = text;
 }
 
+function addStress(amount) {
+  state.character.condition.stress = Math.min(100, state.character.condition.stress + amount);
+}
+
 function applySchoolDayEffects() {
   state.character.condition.hunger = 80;
   state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - 10);
+  addStress(SCHOOL_STRESS);
   renderStats(state.character);
   logLine("급식을 먹고 허기를 회복했다 (허기 80)");
 }
@@ -582,6 +670,7 @@ function applyAcademyEffects(academy) {
   });
   state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - category.staminaCost);
   state.character.condition.hunger = Math.max(0, state.character.condition.hunger - 15);
+  addStress(ACADEMY_STRESS);
   renderStats(state.character);
 
   const growthText = Object.entries(category.growth)
@@ -590,9 +679,26 @@ function applyAcademyEffects(academy) {
   logLine(`${academy.name} 수업 완료 — ${growthText}`);
 }
 
-function applyEndOfDay() {
+function applyChoreEffects() {
+  state.character.wallet += CHORE_WAGE;
+  state.character.stats.diligence = Math.min(100, state.character.stats.diligence + 1);
+  state.character.condition.hunger = Math.max(0, state.character.condition.hunger - CHORE_HUNGER_COST);
+  state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - CHORE_STAMINA_COST);
+  addStress(CHORE_STRESS);
+  renderStats(state.character);
+  logLine(`집안일을 도와 용돈 ${CHORE_WAGE}원을 받았다 — 성실성 +1`);
+}
+
+function triggerIllness() {
+  state.character.condition.stress = Math.max(0, state.character.condition.stress - STRESS_ILLNESS_RELIEF);
+  renderStats(state.character);
+  logLine("스트레스가 너무 쌓여 몸살이 났다 — 나머지 일정을 취소하고 집으로 돌아갔다");
+}
+
+function applyEndOfDay(stressRecovery) {
   state.character.condition.hunger = 90;
   state.character.condition.staminaNow = Math.min(100, state.character.condition.staminaNow + 10);
+  state.character.condition.stress = Math.max(0, state.character.condition.stress - stressRecovery);
   renderStats(state.character);
   logLine("저녁밥을 먹고 하루를 마쳤다");
 }
@@ -610,6 +716,7 @@ async function runDay(blocks) {
   let hadSchool = false;
   let schoolWasLate = false;
   let lastAllowWalk = true;
+  let gotSick = false;
 
   if (blocks.length === 0) {
     logLine("오늘은 아무 일정도 없다 — 집에서 하루를 보냈다");
@@ -617,33 +724,45 @@ async function runDay(blocks) {
 
   for (const block of blocks) {
     const isSchool = block.kind === "school";
-    const academy = isSchool ? null : state.academies.find((a) => a.id === block.academyId);
-    const targetPos = isSchool ? state.positions.school : state.positions.academies[block.academyId];
-    const placeName = isSchool ? "학교" : academy.name;
-    const allowWalk = isSchool || academy.location.mode === "walk";
-    lastAllowWalk = allowWalk;
+    const isChore = block.kind === "chore";
+    const academy = isSchool || isChore ? null : state.academies.find((a) => a.id === block.academyId);
+    const targetPos = isSchool ? state.positions.school : isChore ? state.positions.home : state.positions.academies[block.academyId];
+    const placeName = isSchool ? "학교" : isChore ? "집안일 돕기" : academy.name;
+    const allowWalk = isSchool || isChore || academy.location.mode === "walk";
 
-    logLine(`${minutesToClock(clock)} ${placeName}(으)로 이동 시작`);
-    clock = await travelTo(targetPos, clock, `${placeName}로 이동 중`, allowWalk);
-    atHome = false;
+    if (isChore && atHome) {
+      logLine(`${minutesToClock(clock)} 집에서 집안일 시작`);
+    } else {
+      lastAllowWalk = allowWalk;
+      logLine(`${minutesToClock(clock)} ${placeName}(으)로 이동 시작`);
+      clock = await travelTo(targetPos, clock, `${placeName}로 이동 중`, allowWalk);
+      atHome = isChore;
 
-    const late = clock > block.startMin;
-    if (isSchool) {
-      hadSchool = true;
-      schoolWasLate = late;
+      const late = clock > block.startMin;
+      if (isSchool) {
+        hadSchool = true;
+        schoolWasLate = late;
+      }
+      logLine(`${minutesToClock(clock)} ${placeName} 도착${late ? " — 지각" : ""}`);
     }
-    logLine(`${minutesToClock(clock)} ${placeName} 도착${late ? " — 지각" : ""}`);
 
     clock = Math.max(clock, block.startMin);
     await waitUntil(
       clock,
       block.endMin,
-      isSchool ? (late ? "지각 — 수업 중 (점심 포함)" : "수업 중 (점심 포함)") : `${placeName} 수업`
+      isSchool ? "수업 중 (점심 포함)" : isChore ? "집안일 돕는 중" : `${placeName} 수업`
     );
     clock = block.endMin;
 
     if (isSchool) applySchoolDayEffects();
+    else if (isChore) applyChoreEffects();
     else applyAcademyEffects(academy);
+
+    if (state.character.condition.stress >= STRESS_ILLNESS_THRESHOLD) {
+      triggerIllness();
+      gotSick = true;
+      break;
+    }
   }
 
   if (!atHome) {
@@ -652,12 +771,14 @@ async function runDay(blocks) {
     logLine(`${minutesToClock(clock)} 집 도착`);
   }
 
-  applyEndOfDay();
+  const stressRecovery = blocks.length === 0 ? NO_SCHEDULE_STRESS_RECOVERY : DAILY_STRESS_RECOVERY;
+  applyEndOfDay(stressRecovery);
 
   const summaryEl = document.getElementById("day-summary");
   summaryEl.hidden = false;
   const schoolPart = hadSchool ? (schoolWasLate ? "학교에 지각했다." : "학교에 정시 등교했다.") : "오늘은 학교를 가지 않았다.";
-  summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart} 허기 ${state.character.condition.hunger} · 체력 ${state.character.condition.staminaNow}`;
+  const sickPart = gotSick ? " 너무 무리해서 몸살이 났다." : "";
+  summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart} 허기 ${state.character.condition.hunger} · 체력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
 
   state.day += 1;
   document.getElementById("day-counter").textContent = `Day ${state.day}`;
@@ -669,6 +790,7 @@ async function runDay(blocks) {
   const startBtn = document.getElementById("start-day-btn");
   startBtn.disabled = false;
   startBtn.textContent = "다음 날 일과 시작";
+  renderShop();
 }
 
 function wireScheduleEditor() {
@@ -676,6 +798,7 @@ function wireScheduleEditor() {
     if (state.dayRunning) return;
     state.dayRunning = true;
     document.getElementById("start-day-btn").disabled = true;
+    renderShop();
     const blocksForToday = scheduleBlocks.map((b) => ({ ...b }));
     runDay(blocksForToday);
   });
@@ -709,19 +832,22 @@ async function main() {
   renderClock();
   setInterval(renderClock, 1000 * 30);
 
-  const [character, academies, categories] = await Promise.all([
+  const [character, academies, categories, items] = await Promise.all([
     loadJSON("data/character.json"),
     loadJSON("data/academies.json"),
     loadJSON("data/academy_categories.json"),
+    loadJSON("data/items.json"),
   ]);
 
   state.character = character;
   state.academies = academies;
+  state.items = items;
   state.categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
 
   renderStats(character);
   renderAcademies(academies, state.categoryMap);
   renderTimetable();
+  renderShop();
   await renderMap(character, academies);
   wireScheduleEditor();
   wireMovementControls();

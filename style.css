@@ -6,6 +6,7 @@
   --line: #D7DEE8;
   --accent: #E0862B;
   --accent2: #3B6FA0;
+  --accent3: #4C8C5B;
   --bad: #C94B4B;
   --good: #3F9A5C;
 }
@@ -112,6 +113,7 @@ main {
 }
 .chip:active { cursor: grabbing; }
 .chip.chip-school { border-color: var(--accent); color: var(--accent); }
+.chip.chip-chore { border-color: var(--accent3); color: var(--accent3); }
 
 .drag-ghost {
   position: fixed;
@@ -168,6 +170,7 @@ main {
 }
 .tt-school { background: var(--accent); }
 .tt-academy { background: var(--accent2); }
+.tt-chore { background: var(--accent3); }
 .tt-block .tt-remove {
   border: none;
   background: rgba(255, 255, 255, 0.25);
@@ -245,3 +248,30 @@ li:last-child { border-bottom: none; }
 .stat-row .bar { flex: 1; height: 8px; background: var(--paper); border-radius: 999px; overflow: hidden; }
 .stat-row .bar span { display: block; height: 100%; background: var(--accent); }
 .stat-row .value { width: 28px; text-align: right; font-family: monospace; }
+
+.condition-warning { color: var(--bad); font-weight: 600; }
+
+#shop-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+#shop-items li {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shop-buy-btn {
+  font: inherit;
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--accent3);
+  color: #fff;
+  cursor: pointer;
+}
+.shop-buy-btn:disabled { opacity: 0.4; cursor: default; background: var(--muted); }

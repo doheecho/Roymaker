@@ -1,0 +1,44 @@
+[
+  {
+    "id": "storybook",
+    "name": "동화책",
+    "price": 1500,
+    "effect": { "intellect": 2 },
+    "description": "책을 읽으면 지력이 조금 오른다"
+  },
+  {
+    "id": "sneakers",
+    "name": "운동화",
+    "price": 2000,
+    "effect": { "power": 2, "stamina": 1 },
+    "description": "튼튼한 운동화로 더 잘 뛸 수 있다"
+  },
+  {
+    "id": "sketchbook",
+    "name": "스케치북 세트",
+    "price": 1200,
+    "effect": { "art": 2 },
+    "description": "그림을 그리면 감성이 자란다"
+  },
+  {
+    "id": "jumprope",
+    "name": "줄넘기",
+    "price": 800,
+    "effect": { "stamina": 1, "diligence": 1 },
+    "description": "매일 연습하면 체력과 성실성이 는다"
+  },
+  {
+    "id": "snack_set",
+    "name": "간식 세트",
+    "price": 1000,
+    "effect": { "hunger": 30 },
+    "description": "허기를 바로 채워주는 간식"
+  },
+  {
+    "id": "comic_set",
+    "name": "만화책 세트",
+    "price": 900,
+    "effect": { "social": 2 },
+    "description": "친구들이랑 돌려 보며 이야기할 거리가 생긴다"
+  }
+]
