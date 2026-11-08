@@ -1,0 +1,52 @@
+[
+  {
+    "id": "taebi_kts_taekwonschool",
+    "name": "태비KTS태권스쿨",
+    "categoryId": "martial_arts",
+    "region": "local",
+    "address": "가상 주소 (추후 교체)",
+    "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
+    "hours": { "open": "16:00", "close": "20:00" },
+    "monthlyFee": null
+  },
+  {
+    "id": "hi5_art_seongdong",
+    "name": "하이파이브미술학원 성동캠퍼스",
+    "categoryId": "art",
+    "region": "local",
+    "address": "가상 주소 (추후 교체)",
+    "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
+    "hours": { "open": "16:00", "close": "20:00" },
+    "monthlyFee": null
+  },
+  {
+    "id": "cna_nonsul_haengdang",
+    "name": "씨엔에이논술 행당점",
+    "categoryId": "essay_writing",
+    "region": "local",
+    "address": "가상 주소 (추후 교체)",
+    "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
+    "hours": { "open": "16:00", "close": "20:00" },
+    "monthlyFee": null
+  },
+  {
+    "id": "creative_coding_lab",
+    "name": "창의코딩랩 AI코딩학원",
+    "categoryId": "coding",
+    "region": "local",
+    "address": "가상 주소 (추후 교체)",
+    "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
+    "hours": { "open": "16:00", "close": "20:00" },
+    "monthlyFee": null
+  },
+  {
+    "id": "tbd_apgujeong_premium",
+    "name": "(미정) 압구정 프리미엄 아카데미",
+    "categoryId": "premium_academic",
+    "region": "apgujeong",
+    "address": null,
+    "location": { "lat": null, "lng": null, "etaMinFromHome": 35, "mode": "transit" },
+    "hours": { "open": "17:00", "close": "21:00" },
+    "monthlyFee": null
+  }
+]

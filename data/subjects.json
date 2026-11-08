@@ -1,0 +1,27 @@
+[
+  {
+    "id": "korean",
+    "label": "국어",
+    "growth": { "intellect": 2, "social": 1 }
+  },
+  {
+    "id": "math",
+    "label": "수학",
+    "growth": { "intellect": 3 }
+  },
+  {
+    "id": "integrated_studies",
+    "label": "통합교과 (봄·여름·가을·겨울)",
+    "growth": { "intellect": 1, "art": 1 }
+  },
+  {
+    "id": "arts_pe",
+    "label": "즐거운생활 (음악·미술·체육)",
+    "growth": { "art": 2, "stamina": 1 }
+  },
+  {
+    "id": "creative_activity",
+    "label": "창의적 체험활동",
+    "growth": { "social": 2, "diligence": 1 }
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "id": "iroi",
+  "name": "이로이",
+  "grade": 2,
+  "home": { "address": "서울 성동구 금호로 140, 금호파크힐스 113동", "lat": null, "lng": null },
+  "school": { "name": "서울금북초등학교", "address": "서울 성동구 행당로1길 13", "lat": null, "lng": null },
+  "stats": {
+    "intellect": 10,
+    "stamina": 10,
+    "power": 10,
+    "art": 10,
+    "social": 10,
+    "diligence": 10
+  },
+  "condition": { "hunger": 80, "staminaNow": 80 }
+}

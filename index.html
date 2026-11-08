@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>이로이의 하루</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>이로이의 하루</h1>
+    <p id="clock" class="clock">—</p>
+  </header>
+
+  <main>
+    <section id="map-panel" class="panel">
+      <h2>지도 (연동 전)</h2>
+      <p class="muted">지도 API 미연동 상태 — 집/학교/학원 위치를 목록으로만 표시한다.</p>
+      <ul id="places"></ul>
+    </section>
+
+    <section id="stats-panel" class="panel">
+      <h2 id="char-name">—</h2>
+      <div id="stats"></div>
+      <div id="condition"></div>
+    </section>
+
+    <section id="academy-panel" class="panel">
+      <h2>방과후 학원</h2>
+      <ul id="academies"></ul>
+    </section>
+  </main>
+
+  <script src="main.js"></script>
+</body>
+</html>
