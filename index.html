@@ -16,31 +16,19 @@
   <main>
     <section id="schedule-panel" class="panel panel-wide">
       <h2>오늘 일정 짜기</h2>
-      <p class="muted">하루를 시작하기 전에 등교 시각과 방과후 학원을 먼저 정한다. 시작하면 더는 바꿀 수 없다.</p>
+      <p class="muted">
+        아래 항목을 시간표로 끌어다 놓아서 하루 일정을 짠다. 학교는 기본으로 09:00–16:00에 놓여 있고, 블록의
+        ×를 눌러 빼거나 팔레트에서 다시 끌어다 놓을 수 있다. 다 짰으면 "일과 시작"을 누른다 — 시작하면 더는
+        바꿀 수 없다.
+      </p>
 
-      <form id="schedule-form">
-        <label>
-          등교 출발 시각
-          <select id="depart-select">
-            <option value="07:30">07:30</option>
-            <option value="07:40">07:40</option>
-            <option value="07:50">07:50</option>
-            <option value="08:00">08:00</option>
-            <option value="08:10">08:10</option>
-            <option value="08:20">08:20</option>
-            <option value="08:30" selected>08:30</option>
-            <option value="08:40">08:40</option>
-            <option value="08:50">08:50</option>
-          </select>
-        </label>
+      <div id="schedule-palette" class="chip-row"></div>
 
-        <label>
-          방과후 일정
-          <select id="academy-select"></select>
-        </label>
+      <div id="timetable-wrap">
+        <div id="timetable"></div>
+      </div>
 
-        <button type="submit" id="start-day-btn">하루 시작</button>
-      </form>
+      <button type="button" id="start-day-btn">일과 시작</button>
 
       <div id="day-run" hidden>
         <p id="day-status" class="day-status">—</p>

@@ -19,6 +19,12 @@ const GAME_MIN_PER_REAL_SEC = 0.5;
 const ARRIVAL_RADIUS_M = 20;
 const MAP_ZOOM_LEVEL = 3;
 
+const DAY_TIMELINE_START_MIN = 7 * 60;
+const DAY_TIMELINE_END_MIN = 21 * 60;
+const ROW_MIN = 30;
+const ROW_PX = 30;
+const TOTAL_ROWS = (DAY_TIMELINE_END_MIN - DAY_TIMELINE_START_MIN) / ROW_MIN;
+
 const KEY_TO_DIR = {
   ArrowUp: "up",
   ArrowDown: "down",
@@ -41,8 +47,12 @@ const state = {
   charOverlay: null,
   map: null,
   walkModeActive: false,
+  dayRunning: false,
   day: 1,
 };
+
+const SCHOOL_BLOCK_TEMPLATE = { id: "school", kind: "school", startMin: SCHOOL_START_MIN, endMin: SCHOOL_END_MIN };
+let scheduleBlocks = [{ ...SCHOOL_BLOCK_TEMPLATE }];
 
 async function loadJSON(path) {
   const res = await fetch(path);
@@ -62,11 +72,6 @@ function pad2(n) {
 function minutesToClock(min) {
   const m = ((Math.round(min) % 1440) + 1440) % 1440;
   return `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
-}
-
-function parseTimeToMinutes(hhmm) {
-  const [h, m] = hhmm.split(":").map(Number);
-  return h * 60 + m;
 }
 
 function geocodeAddress(address) {
@@ -299,23 +304,178 @@ function renderAcademies(academies, categoryMap) {
   });
 }
 
-function populateAcademySelect(academies) {
-  const el = document.getElementById("academy-select");
+function minutesToRow(min) {
+  return (min - DAY_TIMELINE_START_MIN) / ROW_MIN;
+}
+
+function rowToMinutes(row) {
+  return DAY_TIMELINE_START_MIN + row * ROW_MIN;
+}
+
+function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+function rowFromPoint(clientX, clientY) {
+  const rect = document.getElementById("timetable").getBoundingClientRect();
+  if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
+  const row = Math.floor((clientY - rect.top) / ROW_PX);
+  return Math.min(Math.max(row, 0), TOTAL_ROWS - 1);
+}
+
+function flashReject() {
+  const el = document.getElementById("timetable-wrap");
+  el.classList.add("tt-reject");
+  setTimeout(() => el.classList.remove("tt-reject"), 350);
+}
+
+let previewEl = null;
+function updatePreview(range) {
+  clearPreview();
+  if (!range) return;
+  const conflict = scheduleBlocks.some((b) => rangesOverlap(b.startMin, b.endMin, range.startMin, range.endMin));
+  previewEl = document.createElement("div");
+  previewEl.className = `tt-preview ${conflict ? "tt-preview-bad" : "tt-preview-ok"}`;
+  previewEl.style.top = `${minutesToRow(range.startMin) * ROW_PX}px`;
+  previewEl.style.height = `${(minutesToRow(range.endMin) - minutesToRow(range.startMin)) * ROW_PX}px`;
+  document.getElementById("timetable").appendChild(previewEl);
+}
+function clearPreview() {
+  if (previewEl) {
+    previewEl.remove();
+    previewEl = null;
+  }
+}
+
+function moveGhostTo(el, x, y) {
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+}
+
+function makeDraggable(chipEl, spec) {
+  chipEl.addEventListener("pointerdown", (event) => {
+    if (state.dayRunning) return;
+    event.preventDefault();
+
+    const ghost = chipEl.cloneNode(true);
+    ghost.classList.add("drag-ghost");
+    document.body.appendChild(ghost);
+    moveGhostTo(ghost, event.clientX, event.clientY);
+
+    function computeRange(clientX, clientY) {
+      const row = rowFromPoint(clientX, clientY);
+      if (row == null) return null;
+      if (spec.kind === "school") {
+        return { startMin: SCHOOL_START_MIN, endMin: SCHOOL_END_MIN };
+      }
+      const startMin = rowToMinutes(row);
+      const endMin = startMin + ACADEMY_LESSON_MIN;
+      if (endMin > DAY_TIMELINE_END_MIN) return null;
+      return { startMin, endMin };
+    }
+
+    function onMove(ev) {
+      moveGhostTo(ghost, ev.clientX, ev.clientY);
+      updatePreview(computeRange(ev.clientX, ev.clientY));
+    }
+
+    function onUp(ev) {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      ghost.remove();
+      clearPreview();
+
+      const range = computeRange(ev.clientX, ev.clientY);
+      if (!range) return;
+      const conflict = scheduleBlocks.some((b) => rangesOverlap(b.startMin, b.endMin, range.startMin, range.endMin));
+      if (conflict) {
+        flashReject();
+        return;
+      }
+      scheduleBlocks.push({
+        id: spec.kind === "school" ? "school" : `academy-${spec.academyId}-${Date.now()}`,
+        kind: spec.kind,
+        academyId: spec.academyId,
+        startMin: range.startMin,
+        endMin: range.endMin,
+      });
+      scheduleBlocks.sort((a, b) => a.startMin - b.startMin);
+      renderTimetable();
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+
+function createChip(label, spec, extraClass) {
+  const chip = document.createElement("div");
+  chip.className = `chip${extraClass ? ` ${extraClass}` : ""}`;
+  chip.textContent = label;
+  makeDraggable(chip, spec);
+  return chip;
+}
+
+function renderPalette() {
+  const el = document.getElementById("schedule-palette");
   el.innerHTML = "";
 
-  const homeOpt = document.createElement("option");
-  homeOpt.value = "";
-  homeOpt.textContent = "바로 귀가";
-  el.appendChild(homeOpt);
+  const hasSchool = scheduleBlocks.some((b) => b.kind === "school");
+  if (!hasSchool) {
+    el.appendChild(createChip("학교 (09:00–16:00)", { kind: "school" }, "chip-school"));
+  }
 
-  academies
+  state.academies
     .filter((a) => a.location.mode === "walk")
     .forEach((academy) => {
-      const opt = document.createElement("option");
-      opt.value = academy.id;
-      opt.textContent = `${academy.name} (도보 ${academy.location.etaMinFromHome}분)`;
-      el.appendChild(opt);
+      el.appendChild(createChip(`${academy.name} (${ACADEMY_LESSON_MIN}분)`, { kind: "academy", academyId: academy.id }));
     });
+}
+
+function renderTimetable() {
+  const el = document.getElementById("timetable");
+  el.innerHTML = "";
+  el.style.height = `${TOTAL_ROWS * ROW_PX}px`;
+
+  for (let row = 0; row <= TOTAL_ROWS; row++) {
+    const min = rowToMinutes(row);
+    if (min % 60 === 0) {
+      const line = document.createElement("div");
+      line.className = "tt-hour-line";
+      line.style.top = `${row * ROW_PX}px`;
+      line.textContent = minutesToClock(min);
+      el.appendChild(line);
+    }
+  }
+
+  scheduleBlocks.forEach((block) => {
+    const top = minutesToRow(block.startMin) * ROW_PX;
+    const height = minutesToRow(block.endMin) * ROW_PX - top;
+    const div = document.createElement("div");
+    div.className = `tt-block ${block.kind === "school" ? "tt-school" : "tt-academy"}`;
+    div.style.top = `${top}px`;
+    div.style.height = `${height}px`;
+
+    const label = block.kind === "school" ? "학교" : state.academies.find((a) => a.id === block.academyId).name;
+    const span = document.createElement("span");
+    span.textContent = label;
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "tt-remove";
+    removeBtn.setAttribute("aria-label", "일정 삭제");
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", () => {
+      if (state.dayRunning) return;
+      scheduleBlocks = scheduleBlocks.filter((b) => b.id !== block.id);
+      renderTimetable();
+    });
+
+    div.appendChild(span);
+    div.appendChild(removeBtn);
+    el.appendChild(div);
+  });
+
+  renderPalette();
 }
 
 function logLine(text) {
@@ -359,7 +519,7 @@ function applyEndOfDay() {
   logLine("저녁밥을 먹고 하루를 마쳤다");
 }
 
-async function runDay(departMin, academyId) {
+async function runDay(blocks) {
   document.getElementById("day-run").hidden = false;
   document.getElementById("day-summary").hidden = true;
   document.getElementById("day-log").innerHTML = "";
@@ -367,69 +527,76 @@ async function runDay(departMin, academyId) {
   state.charPos = { ...state.positions.home };
   state.charOverlay.setPosition(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
 
-  let clock = departMin;
-  logLine(`${minutesToClock(clock)} 집에서 출발 — 방향키/버튼으로 학교까지 이동`);
-  clock = await walkTo(state.positions.school, clock, "학교로 이동 중");
+  let clock = DAY_TIMELINE_START_MIN;
+  let atHome = true;
+  let hadSchool = false;
+  let schoolWasLate = false;
 
-  const isLate = clock > SCHOOL_START_MIN;
-  logLine(`${minutesToClock(clock)} 학교 도착${isLate ? " — 지각!" : ""}`);
-
-  clock = Math.max(clock, SCHOOL_START_MIN);
-  await waitUntil(clock, SCHOOL_END_MIN, isLate ? "지각 — 수업 중 (점심 포함)" : "수업 중 (점심 포함)");
-  clock = SCHOOL_END_MIN;
-  applySchoolDayEffects();
-
-  if (academyId) {
-    const academy = state.academies.find((a) => a.id === academyId);
-    const academyPos = state.positions.academies[academyId];
-
-    logLine(`${minutesToClock(clock)} 하교 — ${academy.name}(으)로 이동`);
-    clock = await walkTo(academyPos, clock, `${academy.name}(으)로 이동 중`);
-    logLine(`${minutesToClock(clock)} ${academy.name} 도착`);
-
-    const lessonEnd = clock + ACADEMY_LESSON_MIN;
-    await waitUntil(clock, lessonEnd, `${academy.name} 수업`);
-    clock = lessonEnd;
-    applyAcademyEffects(academy);
-
-    logLine(`${minutesToClock(clock)} 집으로 귀가 이동`);
-    clock = await walkTo(state.positions.home, clock, "집으로 귀가 중");
-  } else {
-    logLine(`${minutesToClock(clock)} 하교 — 집으로 귀가`);
-    clock = await walkTo(state.positions.home, clock, "집으로 귀가 중");
+  if (blocks.length === 0) {
+    logLine("오늘은 아무 일정도 없다 — 집에서 하루를 보냈다");
   }
 
-  logLine(`${minutesToClock(clock)} 집 도착`);
+  for (const block of blocks) {
+    const isSchool = block.kind === "school";
+    const academy = isSchool ? null : state.academies.find((a) => a.id === block.academyId);
+    const targetPos = isSchool ? state.positions.school : state.positions.academies[block.academyId];
+    const placeName = isSchool ? "학교" : academy.name;
+
+    logLine(`${minutesToClock(clock)} ${placeName}(으)로 이동 시작`);
+    clock = await walkTo(targetPos, clock, `${placeName}로 이동 중`);
+    atHome = false;
+
+    const late = clock > block.startMin;
+    if (isSchool) {
+      hadSchool = true;
+      schoolWasLate = late;
+    }
+    logLine(`${minutesToClock(clock)} ${placeName} 도착${late ? " — 지각" : ""}`);
+
+    clock = Math.max(clock, block.startMin);
+    await waitUntil(
+      clock,
+      block.endMin,
+      isSchool ? (late ? "지각 — 수업 중 (점심 포함)" : "수업 중 (점심 포함)") : `${placeName} 수업`
+    );
+    clock = block.endMin;
+
+    if (isSchool) applySchoolDayEffects();
+    else applyAcademyEffects(academy);
+  }
+
+  if (!atHome) {
+    logLine(`${minutesToClock(clock)} 집으로 귀가 이동`);
+    clock = await walkTo(state.positions.home, clock, "집으로 귀가 중");
+    logLine(`${minutesToClock(clock)} 집 도착`);
+  }
+
   applyEndOfDay();
 
   const summaryEl = document.getElementById("day-summary");
   summaryEl.hidden = false;
-  summaryEl.textContent = `Day ${state.day} 완료 — ${isLate ? "오늘은 지각했다." : "정시에 등교했다."} 허기 ${
-    state.character.condition.hunger
-  } · 체력 ${state.character.condition.staminaNow}`;
+  const schoolPart = hadSchool ? (schoolWasLate ? "학교에 지각했다." : "학교에 정시 등교했다.") : "오늘은 학교를 가지 않았다.";
+  summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart} 허기 ${state.character.condition.hunger} · 체력 ${state.character.condition.staminaNow}`;
 
   state.day += 1;
   document.getElementById("day-counter").textContent = `Day ${state.day}`;
 
+  scheduleBlocks = [{ ...SCHOOL_BLOCK_TEMPLATE }];
+  renderTimetable();
+
+  state.dayRunning = false;
   const startBtn = document.getElementById("start-day-btn");
   startBtn.disabled = false;
-  startBtn.textContent = "다음 날 시작";
-  document.getElementById("depart-select").disabled = false;
-  document.getElementById("academy-select").disabled = false;
+  startBtn.textContent = "다음 날 일과 시작";
 }
 
-function wireScheduleForm() {
-  const form = document.getElementById("schedule-form");
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const departMin = parseTimeToMinutes(document.getElementById("depart-select").value);
-    const academyId = document.getElementById("academy-select").value || null;
-
+function wireScheduleEditor() {
+  document.getElementById("start-day-btn").addEventListener("click", () => {
+    if (state.dayRunning) return;
+    state.dayRunning = true;
     document.getElementById("start-day-btn").disabled = true;
-    document.getElementById("depart-select").disabled = true;
-    document.getElementById("academy-select").disabled = true;
-
-    runDay(departMin, academyId);
+    const blocksForToday = scheduleBlocks.map((b) => ({ ...b }));
+    runDay(blocksForToday);
   });
 }
 
@@ -473,9 +640,9 @@ async function main() {
 
   renderStats(character);
   renderAcademies(academies, state.categoryMap);
-  populateAcademySelect(academies);
+  renderTimetable();
   await renderMap(character, academies);
-  wireScheduleForm();
+  wireScheduleEditor();
   wireMovementControls();
 }
 

@@ -5,6 +5,9 @@
   --muted: #5B6B80;
   --line: #D7DEE8;
   --accent: #E0862B;
+  --accent2: #3B6FA0;
+  --bad: #C94B4B;
+  --good: #3F9A5C;
 }
 
 * { box-sizing: border-box; }
@@ -91,30 +94,106 @@ main {
   padding: 2px 10px;
 }
 
-#schedule-form {
+.chip-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 16px;
+  gap: 8px;
   margin-top: 12px;
 }
-#schedule-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-#schedule-form select {
-  font: inherit;
-  padding: 7px 8px;
+.chip {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--ink);
+  font-size: 12.5px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
-#schedule-form button {
+.chip:active { cursor: grabbing; }
+.chip.chip-school { border-color: var(--accent); color: var(--accent); }
+
+.drag-ghost {
+  position: fixed;
+  z-index: 2000;
+  pointer-events: none;
+  opacity: 0.9;
+  transform: translate(-8px, -8px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+#timetable-wrap {
+  position: relative;
+  margin-top: 14px;
+  max-height: 480px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 0;
+}
+#timetable-wrap.tt-reject { animation: tt-shake 0.3s; }
+@keyframes tt-shake {
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #timetable-wrap.tt-reject { animation: none; }
+}
+
+#timetable { position: relative; }
+
+.tt-hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--line);
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+  padding-left: 6px;
+}
+
+.tt-block {
+  position: absolute;
+  left: 56px;
+  right: 8px;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12.5px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+}
+.tt-school { background: var(--accent); }
+.tt-academy { background: var(--accent2); }
+.tt-block .tt-remove {
+  border: none;
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border-radius: 999px;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+
+.tt-preview {
+  position: absolute;
+  left: 56px;
+  right: 8px;
+  border-radius: 6px;
+  border: 2px dashed;
+  pointer-events: none;
+}
+.tt-preview-ok { border-color: var(--good); background: rgba(63, 154, 92, 0.15); }
+.tt-preview-bad { border-color: var(--bad); background: rgba(201, 75, 75, 0.15); }
+
+#start-day-btn {
   font: inherit;
+  margin-top: 14px;
   padding: 9px 18px;
   border: none;
   border-radius: 6px;
@@ -122,7 +201,7 @@ main {
   color: #fff;
   cursor: pointer;
 }
-#schedule-form button:disabled { opacity: 0.5; cursor: default; }
+#start-day-btn:disabled { opacity: 0.5; cursor: default; }
 
 #day-run { margin-top: 16px; }
 .day-status { font-weight: 600; font-family: monospace; margin: 0 0 8px; }
