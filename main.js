@@ -7,6 +7,19 @@ const STAT_LABELS = {
   diligence: "성실성",
 };
 
+const STAT_ICONS = {
+  intellect: "📖",
+  stamina: "❤️",
+  power: "💪",
+  art: "🎨",
+  social: "🗣️",
+  diligence: "✍️",
+};
+
+const CONDITION_ICONS = { hunger: "🍚", staminaNow: "⚡", stress: "😵", wallet: "💰" };
+const SCHOOL_ICON = "🏫";
+const CHORE_ICON = "🧹";
+
 const HOME_FALLBACK = { lat: 37.5495, lng: 127.0203 };
 const CHILD_WALK_M_PER_MIN = 70;
 const HOME_SCHOOL_WALK_MIN = 10;
@@ -363,6 +376,7 @@ function renderStats(character) {
     const row = document.createElement("div");
     row.className = "stat-row";
     row.innerHTML = `
+      <span class="icon">${STAT_ICONS[key] ?? ""}</span>
       <span class="label">${STAT_LABELS[key] ?? key}</span>
       <span class="bar"><span style="width:${Math.min(value, 100)}%"></span></span>
       <span class="value">${value}</span>
@@ -372,11 +386,15 @@ function renderStats(character) {
 
   const condEl = document.getElementById("condition");
   const stress = character.condition.stress;
-  const stressText =
-    stress >= STRESS_ILLNESS_THRESHOLD
-      ? `<span class="condition-warning">스트레스 ${stress} (위험)</span>`
-      : `스트레스 ${stress}`;
-  condEl.innerHTML = `<p class="muted">허기 ${character.condition.hunger} · 체력(현재) ${character.condition.staminaNow} · ${stressText} · 용돈 ${character.wallet}원</p>`;
+  const stressWarning = stress >= STRESS_ILLNESS_THRESHOLD;
+  condEl.innerHTML = `
+    <div class="condition-row">
+      <span class="condition-badge">${CONDITION_ICONS.hunger} 허기 ${character.condition.hunger}</span>
+      <span class="condition-badge">${CONDITION_ICONS.staminaNow} 체력 ${character.condition.staminaNow}</span>
+      <span class="condition-badge${stressWarning ? " warning" : ""}">${CONDITION_ICONS.stress} 스트레스 ${stress}</span>
+      <span class="condition-badge">${CONDITION_ICONS.wallet} ${character.wallet}원</span>
+    </div>
+  `;
 }
 
 function renderAcademies(academies, categoryMap) {
@@ -391,8 +409,11 @@ function renderAcademies(academies, categoryMap) {
 
     const li = document.createElement("li");
     li.innerHTML = `
-      <strong>${academy.name}</strong> (${category.label})<br>
-      <span class="muted">${growthText} · 집에서 ${academy.location.mode === "walk" ? "도보" : "이동"} ${academy.location.etaMinFromHome}분</span>
+      <span class="item-icon">${category.icon ?? "🏫"}</span>
+      <span>
+        <strong>${academy.name}</strong> (${category.label})<br>
+        <span class="muted">${growthText} · 집에서 ${academy.location.mode === "walk" ? "도보" : "이동"} ${academy.location.etaMinFromHome}분</span>
+      </span>
     `;
     el.appendChild(li);
   });
@@ -428,8 +449,12 @@ function renderShop() {
     const li = document.createElement("li");
     const disabled = state.dayRunning || state.character.wallet < item.price;
 
-    const info = document.createElement("div");
-    info.innerHTML = `<strong>${item.name}</strong> — ${item.price}원<br><span class="muted">${item.description} (${effectText(item.effect)})</span>`;
+    const itemRow = document.createElement("div");
+    itemRow.className = "item-row";
+    itemRow.innerHTML = `
+      <span class="item-icon">${item.icon ?? "🎁"}</span>
+      <span><strong>${item.name}</strong> — ${item.price}원<br><span class="muted">${item.description} (${effectText(item.effect)})</span></span>
+    `;
 
     const buyBtn = document.createElement("button");
     buyBtn.type = "button";
@@ -442,10 +467,10 @@ function renderShop() {
       applyItemEffect(item.effect);
       renderStats(state.character);
       renderShop();
-      showShopFeedback(`${item.name}을(를) 샀다! ${effectText(item.effect)} (잔액 ${state.character.wallet}원)`);
+      showShopFeedback(`${item.icon ?? ""} ${item.name}을(를) 샀다! ${effectText(item.effect)} (잔액 ${state.character.wallet}원)`);
     });
 
-    li.appendChild(info);
+    li.appendChild(itemRow);
     li.appendChild(buyBtn);
     el.appendChild(li);
   });
@@ -556,10 +581,10 @@ function makeDraggable(chipEl, spec) {
   });
 }
 
-function createChip(label, spec, extraClass) {
+function createChip(icon, label, spec, extraClass) {
   const chip = document.createElement("div");
   chip.className = `chip${extraClass ? ` ${extraClass}` : ""}`;
-  chip.textContent = label;
+  chip.innerHTML = `<span class="chip-icon">${icon}</span><span>${label}</span>`;
   makeDraggable(chip, spec);
   return chip;
 }
@@ -570,19 +595,25 @@ function renderPalette() {
 
   const hasSchool = scheduleBlocks.some((b) => b.kind === "school");
   if (!hasSchool) {
-    el.appendChild(createChip("학교 (09:00–16:00)", { kind: "school" }, "chip-school"));
+    el.appendChild(createChip(SCHOOL_ICON, "학교 (09:00–16:00)", { kind: "school" }, "chip-school"));
   }
 
   el.appendChild(
-    createChip(`집안일 돕기 (${CHORE_DURATION_MIN}분, +${CHORE_WAGE}원)`, { kind: "chore" }, "chip-chore")
+    createChip(CHORE_ICON, `집안일 돕기 (${CHORE_DURATION_MIN}분, +${CHORE_WAGE}원)`, { kind: "chore" }, "chip-chore")
   );
 
   state.academies
     .filter((a) => a.location.etaMinFromHome != null)
     .forEach((academy) => {
+      const category = state.categoryMap[academy.categoryId];
       const suffix = academy.location.mode === "walk" ? "" : " · 버스/지하철 전용";
       el.appendChild(
-        createChip(`${academy.name} (${ACADEMY_LESSON_MIN}분${suffix})`, { kind: "academy", academyId: academy.id })
+        createChip(
+          category.icon ?? "🏫",
+          `${academy.name} (${ACADEMY_LESSON_MIN}분${suffix})`,
+          { kind: "academy", academyId: academy.id },
+          "chip-academy"
+        )
       );
     });
 }
@@ -612,14 +643,19 @@ function renderTimetable() {
     div.style.top = `${top}px`;
     div.style.height = `${height}px`;
 
-    const label =
-      block.kind === "school"
-        ? "학교"
-        : block.kind === "chore"
-        ? "집안일 돕기"
-        : state.academies.find((a) => a.id === block.academyId).name;
+    let icon = SCHOOL_ICON;
+    let label = "학교";
+    if (block.kind === "chore") {
+      icon = CHORE_ICON;
+      label = "집안일 돕기";
+    } else if (block.kind === "academy") {
+      const academy = state.academies.find((a) => a.id === block.academyId);
+      icon = state.categoryMap[academy.categoryId]?.icon ?? "🏫";
+      label = academy.name;
+    }
     const span = document.createElement("span");
-    span.textContent = label;
+    span.className = "tt-label";
+    span.innerHTML = `<span>${icon}</span><span>${label}</span>`;
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "tt-remove";

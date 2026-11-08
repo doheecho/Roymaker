@@ -2,36 +2,42 @@
   {
     "id": "martial_arts",
     "label": "무도",
+    "icon": "🥋",
     "growth": { "power": 3, "diligence": 1 },
     "staminaCost": 15
   },
   {
     "id": "art",
     "label": "미술",
+    "icon": "🖌️",
     "growth": { "art": 3 },
     "staminaCost": 8
   },
   {
     "id": "essay_writing",
     "label": "논술 · 독서토론",
+    "icon": "📝",
     "growth": { "intellect": 2, "social": 1 },
     "staminaCost": 6
   },
   {
     "id": "coding",
     "label": "코딩 · STEAM",
+    "icon": "💻",
     "growth": { "intellect": 2, "art": 1 },
     "staminaCost": 8
   },
   {
     "id": "ball_sports",
     "label": "구기 운동",
+    "icon": "⚽",
     "growth": { "power": 2, "social": 2 },
     "staminaCost": 18
   },
   {
     "id": "premium_academic",
     "label": "프리미엄 교육 (압구정)",
+    "icon": "✨",
     "growth": { "intellect": 4, "art": 2 },
     "staminaCost": 10
   }

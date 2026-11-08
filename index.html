@@ -4,18 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>이로이의 하루</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header>
+    <span class="header-badge">🎒</span>
     <h1>이로이의 하루</h1>
     <span id="day-counter" class="day-counter">Day 1</span>
     <p id="clock" class="clock">—</p>
   </header>
 
   <main>
+    <section id="stats-panel" class="panel">
+      <div class="char-card-head">
+        <span class="char-avatar">🧒</span>
+        <h2 id="char-name">—</h2>
+      </div>
+      <div id="stats"></div>
+      <div id="condition"></div>
+    </section>
+
     <section id="schedule-panel" class="panel panel-wide">
-      <h2>오늘 일정 짜기</h2>
+      <h2>📅 오늘 일정 짜기</h2>
       <p class="muted">
         아래 항목을 시간표로 끌어다 놓아서 하루 일정을 짠다. 학교는 기본으로 09:00–16:00에 놓여 있고, 블록의
         ×를 눌러 빼거나 팔레트에서 다시 끌어다 놓을 수 있다. 다 짰으면 "일과 시작"을 누른다 — 시작하면 더는
@@ -40,7 +53,7 @@
     </section>
 
     <section id="map-panel" class="panel panel-wide">
-      <h2>지도</h2>
+      <h2>🗺️ 지도</h2>
       <p class="muted">
         이동할 때마다 도보/버스/지하철을 고를 수 있다. 도보는 방향키(↑↓←→ / WASD)나 화면 버튼으로 직접 걷고,
         버스·지하철은 요금을 내면 빠르게 데려다준다. 집·학교는 실제 위치, 동네 학원 4곳은 주소 미확정이라 도보
@@ -57,19 +70,13 @@
       </div>
     </section>
 
-    <section id="stats-panel" class="panel">
-      <h2 id="char-name">—</h2>
-      <div id="stats"></div>
-      <div id="condition"></div>
-    </section>
-
     <section id="academy-panel" class="panel">
-      <h2>방과후 학원</h2>
+      <h2>🏫 방과후 학원</h2>
       <ul id="academies"></ul>
     </section>
 
     <section id="shop-panel" class="panel panel-wide">
-      <h2>상점</h2>
+      <h2>🛍️ 상점</h2>
       <p class="muted">용돈으로 물건을 사면 바로 효과가 적용된다. 하루 일정이 진행 중일 때는 살 수 없다.</p>
       <p id="shop-feedback" class="muted" hidden></p>
       <ul id="shop-items"></ul>
