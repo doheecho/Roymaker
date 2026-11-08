@@ -32,6 +32,13 @@ const GAME_MIN_PER_REAL_SEC = 1.0;
 const ARRIVAL_RADIUS_M = 20;
 const MAP_ZOOM_LEVEL = 3;
 
+class DayCancelledEarly extends Error {
+  constructor(clock) {
+    super("cancelled");
+    this.clock = clock;
+  }
+}
+
 const BUS_FARE = 450;
 const SUBWAY_FARE = 450;
 const TRANSIT_M_PER_MIN = 220;
@@ -211,6 +218,20 @@ function createCharacterOverlay(map, position) {
   });
 }
 
+function createBusStopOverlay(map, position, name, title) {
+  const el = document.createElement("div");
+  el.className = "bus-stop-marker";
+  el.title = title ?? name;
+  el.innerHTML = `<span class="bus-badge">B</span><span class="bus-label">${name}</span>`;
+  return new kakao.maps.CustomOverlay({
+    map,
+    position: new kakao.maps.LatLng(position.lat, position.lng),
+    yAnchor: 0.5,
+    xAnchor: 0,
+    content: el,
+  });
+}
+
 function animate(durationMs, onFrame) {
   return new Promise((resolve) => {
     const startedAt = performance.now();
@@ -231,15 +252,19 @@ function showDpad(visible) {
   }
 }
 
-function walkTo(target, startClock, label) {
-  return new Promise((resolve) => {
+function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
+  return new Promise((resolve, reject) => {
     state.walkModeActive = true;
     showDpad(true);
 
     let clock = startClock;
     let last = performance.now();
+    let confirmingHome = false;
+    let hasLeftHome = !allowEarlyHome || distanceMeters(state.charPos, state.positions.home) > ARRIVAL_RADIUS_M;
 
     function frame(now) {
+      if (confirmingHome) return;
+
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
 
@@ -274,6 +299,30 @@ function walkTo(target, startClock, label) {
         resolve(clock);
         return;
       }
+
+      if (allowEarlyHome) {
+        const homeDist = distanceMeters(state.charPos, state.positions.home);
+        if (!hasLeftHome && homeDist > ARRIVAL_RADIUS_M) hasLeftHome = true;
+        if (hasLeftHome && homeDist <= ARRIVAL_RADIUS_M) {
+          confirmingHome = true;
+          state.walkModeActive = false;
+          showDpad(false);
+          confirmGoHomeEarly().then((yes) => {
+            if (yes) {
+              reject(new DayCancelledEarly(clock));
+              return;
+            }
+            confirmingHome = false;
+            hasLeftHome = false;
+            state.walkModeActive = true;
+            showDpad(true);
+            last = performance.now();
+            requestAnimationFrame(frame);
+          });
+          return;
+        }
+      }
+
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -322,6 +371,70 @@ function chooseTransportMode({ allowWalk, legLabel, busFeasible, subwayFeasible 
   });
 }
 
+function confirmGoHomeEarly() {
+  return new Promise((resolve) => {
+    const panel = document.getElementById("home-confirm");
+    panel.hidden = false;
+    panel.innerHTML = "";
+
+    const heading = document.createElement("p");
+    heading.textContent = "일정을 취소하고 집에 들어갑니다";
+    panel.appendChild(heading);
+
+    const row = document.createElement("div");
+    row.className = "chip-row";
+
+    function addOption(label, value) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "transport-btn";
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        panel.hidden = true;
+        resolve(value);
+      });
+      row.appendChild(btn);
+    }
+
+    addOption("예", true);
+    addOption("아니오", false);
+
+    panel.appendChild(row);
+  });
+}
+
+function chooseHomeActivity(homeActivities) {
+  return new Promise((resolve) => {
+    const panel = document.getElementById("home-confirm");
+    panel.hidden = false;
+    panel.innerHTML = "";
+
+    const heading = document.createElement("p");
+    heading.textContent = "집에서 무엇을 할까요?";
+    panel.appendChild(heading);
+
+    const row = document.createElement("div");
+    row.className = "chip-row";
+
+    function addOption(label, value) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "transport-btn";
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        panel.hidden = true;
+        resolve(value);
+      });
+      row.appendChild(btn);
+    }
+
+    homeActivities.forEach((activity) => addOption(activity.name, activity));
+    addOption("그냥 쉬기", null);
+
+    panel.appendChild(row);
+  });
+}
+
 async function rideTransit(target, startClock, label) {
   const dist = distanceMeters(state.charPos, target);
   const gameMinutes = Math.max(5, Math.round(dist / TRANSIT_M_PER_MIN));
@@ -343,14 +456,14 @@ async function rideTransit(target, startClock, label) {
   return endClock;
 }
 
-async function travelByTransit(mode, target, startClock, placeName, destStation) {
+async function travelByTransit(mode, target, startClock, placeName, destStation, allowEarlyHome) {
   const stations = mode === "bus" ? state.stations.bus : state.stations.subway;
   const modeLabel = mode === "bus" ? "버스" : "지하철";
   const originStation = nearestStation(state.charPos, stations);
 
   let clock = startClock;
   logLine(`${minutesToClock(clock)} ${originStation.name}(으)로 이동 시작`);
-  clock = await walkTo(originStation.pos, clock, `${originStation.name}(으)로 이동 중`);
+  clock = await walkTo(originStation.pos, clock, `${originStation.name}(으)로 이동 중`, { allowEarlyHome });
   logLine(`${minutesToClock(clock)} ${originStation.name} 도착`);
 
   const fare = mode === "bus" ? BUS_FARE : SUBWAY_FARE;
@@ -364,11 +477,12 @@ async function travelByTransit(mode, target, startClock, placeName, destStation)
   }
 
   logLine(`${minutesToClock(clock)} ${placeName}(으)로 걸어서 마무리 이동 시작`);
-  clock = await walkTo(target, clock, `${placeName}(으)로 이동 중`);
+  clock = await walkTo(target, clock, `${placeName}(으)로 이동 중`, { allowEarlyHome });
   return clock;
 }
 
 async function travelTo(target, startClock, placeName, allowWalk) {
+  const allowEarlyHome = target !== state.positions.home;
   const nearestBus = nearestStation(target, state.stations.bus);
   const nearestSubway = nearestStation(target, state.stations.subway);
   const busFeasible = !!nearestBus && nearestBus.dist <= BUS_MAX_STOP_DISTANCE_M;
@@ -376,10 +490,10 @@ async function travelTo(target, startClock, placeName, allowWalk) {
 
   const mode = await chooseTransportMode({ allowWalk, legLabel: placeName, busFeasible, subwayFeasible });
   if (mode === "walk") {
-    return walkTo(target, startClock, `${placeName}(으)로 이동 중`);
+    return walkTo(target, startClock, `${placeName}(으)로 이동 중`, { allowEarlyHome });
   }
   const destStation = mode === "bus" ? nearestBus : nearestSubway;
-  return travelByTransit(mode, target, startClock, placeName, destStation);
+  return travelByTransit(mode, target, startClock, placeName, destStation, allowEarlyHome);
 }
 
 async function renderMap(character, academies, activities, stations) {
@@ -435,7 +549,7 @@ async function renderMap(character, academies, activities, stations) {
     const pos = await resolvePlace(stop.address, null, fallbackPos);
     state.stations.bus.push({ ...stop, pos });
     const note = stop.address ? "" : " (가상 위치)";
-    addMarker(map, pos, `🚌 ${stop.name}${note}<br>정류장 코드 ${stop.code}`);
+    createBusStopOverlay(map, pos, stop.name, `정류장 코드 ${stop.code}${note}`);
   }
 
   state.charPos = { ...homePos };
@@ -869,71 +983,94 @@ async function runDay(blocks) {
   let schoolWasLate = false;
   let lastAllowWalk = true;
   let gotSick = false;
+  let cancelledEarly = false;
 
   if (blocks.length === 0) {
     logLine("오늘은 아무 일정도 없다 — 집에서 하루를 보냈다");
   }
 
-  for (const block of blocks) {
-    const isSchool = block.kind === "school";
-    const isActivity = block.kind === "activity";
-    const academy = isSchool || isActivity ? null : state.academies.find((a) => a.id === block.academyId);
-    const activity = isActivity ? state.activities.find((a) => a.id === block.activityId) : null;
-    const isHomeActivity = isActivity && activity.location === "home";
+  try {
+    for (const block of blocks) {
+      const isSchool = block.kind === "school";
+      const isActivity = block.kind === "activity";
+      const academy = isSchool || isActivity ? null : state.academies.find((a) => a.id === block.academyId);
+      const activity = isActivity ? state.activities.find((a) => a.id === block.activityId) : null;
+      const isHomeActivity = isActivity && activity.location === "home";
 
-    const targetPos = isSchool
-      ? state.positions.school
-      : isHomeActivity
-      ? state.positions.home
-      : isActivity
-      ? state.positions.activities[activity.id]
-      : state.positions.academies[block.academyId];
-    const placeName = isSchool ? "학교" : isActivity ? activity.name : academy.name;
-    const allowWalk = isSchool
-      ? true
-      : isActivity
-      ? isHomeActivity || activity.mode === "walk"
-      : academy.location.mode === "walk";
+      const targetPos = isSchool
+        ? state.positions.school
+        : isHomeActivity
+        ? state.positions.home
+        : isActivity
+        ? state.positions.activities[activity.id]
+        : state.positions.academies[block.academyId];
+      const placeName = isSchool ? "학교" : isActivity ? activity.name : academy.name;
+      const allowWalk = isSchool
+        ? true
+        : isActivity
+        ? isHomeActivity || activity.mode === "walk"
+        : academy.location.mode === "walk";
 
-    if (isHomeActivity && atHome) {
-      logLine(`${minutesToClock(clock)} 집에서 ${placeName} 시작`);
-    } else {
-      lastAllowWalk = allowWalk;
-      logLine(`${minutesToClock(clock)} ${placeName}(으)로 이동 시작`);
-      clock = await travelTo(targetPos, clock, placeName, allowWalk);
-      atHome = isHomeActivity;
+      if (isHomeActivity && atHome) {
+        logLine(`${minutesToClock(clock)} 집에서 ${placeName} 시작`);
+      } else {
+        lastAllowWalk = allowWalk;
+        logLine(`${minutesToClock(clock)} ${placeName}(으)로 이동 시작`);
+        clock = await travelTo(targetPos, clock, placeName, allowWalk);
+        atHome = isHomeActivity;
 
-      const late = clock > block.startMin;
-      if (isSchool) {
-        hadSchool = true;
-        schoolWasLate = late;
+        const late = clock > block.startMin;
+        if (isSchool) {
+          hadSchool = true;
+          schoolWasLate = late;
+        }
+        logLine(`${minutesToClock(clock)} ${placeName} 도착${late ? " — 지각" : ""}`);
       }
-      logLine(`${minutesToClock(clock)} ${placeName} 도착${late ? " — 지각" : ""}`);
+
+      clock = Math.max(clock, block.startMin);
+      await waitUntil(
+        clock,
+        block.endMin,
+        isSchool ? "수업 중 (점심 포함)" : isActivity ? `${placeName} 중` : `${placeName} 수업`
+      );
+      clock = block.endMin;
+
+      if (isSchool) applySchoolDayEffects();
+      else if (isActivity) applyActivityEffects(activity);
+      else applyAcademyEffects(academy);
+
+      if (state.character.condition.stress >= STRESS_ILLNESS_THRESHOLD) {
+        triggerIllness();
+        gotSick = true;
+        break;
+      }
     }
-
-    clock = Math.max(clock, block.startMin);
-    await waitUntil(
-      clock,
-      block.endMin,
-      isSchool ? "수업 중 (점심 포함)" : isActivity ? `${placeName} 중` : `${placeName} 수업`
-    );
-    clock = block.endMin;
-
-    if (isSchool) applySchoolDayEffects();
-    else if (isActivity) applyActivityEffects(activity);
-    else applyAcademyEffects(academy);
-
-    if (state.character.condition.stress >= STRESS_ILLNESS_THRESHOLD) {
-      triggerIllness();
-      gotSick = true;
-      break;
-    }
+  } catch (err) {
+    if (!(err instanceof DayCancelledEarly)) throw err;
+    cancelledEarly = true;
+    clock = err.clock;
+    atHome = true;
+    logLine(`${minutesToClock(clock)} 일정을 취소하고 집으로 돌아왔다`);
   }
 
   if (!atHome) {
     logLine(`${minutesToClock(clock)} 집으로 귀가 이동`);
     clock = await travelTo(state.positions.home, clock, "집", lastAllowWalk);
     logLine(`${minutesToClock(clock)} 집 도착`);
+  }
+
+  if (cancelledEarly) {
+    const homeActivities = state.activities.filter((a) => a.location === "home");
+    const choice = await chooseHomeActivity(homeActivities);
+    if (choice) {
+      logLine(`${minutesToClock(clock)} 집에서 ${choice.name} 시작`);
+      const endClock = clock + choice.durationMin;
+      await waitUntil(clock, endClock, `${choice.name} 중`);
+      clock = endClock;
+      applyActivityEffects(choice);
+    } else {
+      logLine(`${minutesToClock(clock)} 그냥 쉬었다`);
+    }
   }
 
   const stressRecovery = blocks.length === 0 ? NO_SCHEDULE_STRESS_RECOVERY : DAILY_STRESS_RECOVERY;
@@ -943,7 +1080,8 @@ async function runDay(blocks) {
   summaryEl.hidden = false;
   const schoolPart = hadSchool ? (schoolWasLate ? "학교에 지각했다." : "학교에 정시 등교했다.") : "오늘은 학교를 가지 않았다.";
   const sickPart = gotSick ? " 너무 무리해서 몸살이 났다." : "";
-  summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart} 허기 ${state.character.condition.hunger} · 체력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
+  const cancelPart = cancelledEarly ? " 도중에 일정을 취소하고 집에 돌아왔다." : "";
+  summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart}${cancelPart} 허기 ${state.character.condition.hunger} · 체력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
 
   state.day += 1;
   document.getElementById("day-counter").textContent = `Day ${state.day}`;
