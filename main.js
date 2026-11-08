@@ -14,10 +14,15 @@ const SCHOOL_START_MIN = 9 * 60;
 const SCHOOL_END_MIN = 16 * 60;
 const ACADEMY_LESSON_MIN = 60;
 const WAIT_PHASE_MS = 2200;
-const MOVE_SPEED_MPS = 30;
-const GAME_MIN_PER_REAL_SEC = 0.5;
+const MOVE_SPEED_MPS = 60;
+const GAME_MIN_PER_REAL_SEC = 1.0;
 const ARRIVAL_RADIUS_M = 20;
 const MAP_ZOOM_LEVEL = 3;
+
+const BUS_FARE = 450;
+const SUBWAY_FARE = 450;
+const TRANSIT_M_PER_MIN = 220;
+const TRANSIT_RIDE_MS = 1800;
 
 const DAY_TIMELINE_START_MIN = 7 * 60;
 const DAY_TIMELINE_END_MIN = 21 * 60;
@@ -121,6 +126,10 @@ function offsetLatLng(lat, lng, distanceM, bearingDeg) {
   const dLng =
     ((distanceM * Math.sin(bearing)) / (earthRadiusM * Math.cos((lat * Math.PI) / 180))) * (180 / Math.PI);
   return { lat: lat + dLat, lng: lng + dLng };
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
 }
 
 function distanceMeters(a, b) {
@@ -227,6 +236,73 @@ async function waitUntil(startClock, endClock, label) {
   setStatus(`${minutesToClock(endClock)} · ${label}`);
 }
 
+function chooseTransportMode({ allowWalk, legLabel }) {
+  return new Promise((resolve) => {
+    const panel = document.getElementById("transport-choice");
+    panel.hidden = false;
+    panel.innerHTML = "";
+
+    const heading = document.createElement("p");
+    heading.textContent = `${legLabel} — 이동수단을 선택하세요`;
+    panel.appendChild(heading);
+
+    const row = document.createElement("div");
+    row.className = "chip-row";
+
+    function addOption(mode, label, disabled) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "transport-btn";
+      btn.textContent = label;
+      btn.disabled = disabled;
+      btn.addEventListener("click", () => {
+        panel.hidden = true;
+        resolve(mode);
+      });
+      row.appendChild(btn);
+    }
+
+    if (allowWalk) addOption("walk", "도보로 직접 이동", false);
+    addOption("bus", `버스 타기 (${BUS_FARE}원)`, state.character.wallet < BUS_FARE);
+    addOption("subway", `지하철 타기 (${SUBWAY_FARE}원)`, state.character.wallet < SUBWAY_FARE);
+
+    panel.appendChild(row);
+  });
+}
+
+async function rideTransit(target, startClock, label) {
+  const dist = distanceMeters(state.charPos, target);
+  const gameMinutes = Math.max(5, Math.round(dist / TRANSIT_M_PER_MIN));
+  const endClock = startClock + gameMinutes;
+  const fromPos = { ...state.charPos };
+
+  await animate(TRANSIT_RIDE_MS, (t) => {
+    const lat = lerp(fromPos.lat, target.lat, t);
+    const lng = lerp(fromPos.lng, target.lng, t);
+    state.charPos = { lat, lng };
+    state.charOverlay.setPosition(new kakao.maps.LatLng(lat, lng));
+    state.map.setCenter(new kakao.maps.LatLng(lat, lng));
+    setStatus(`${minutesToClock(lerp(startClock, endClock, t))} · ${label}`);
+  });
+
+  state.charPos = { ...target };
+  state.charOverlay.setPosition(new kakao.maps.LatLng(target.lat, target.lng));
+  setStatus(`${minutesToClock(endClock)} · ${label}`);
+  return endClock;
+}
+
+async function travelTo(target, startClock, label, allowWalk) {
+  const mode = await chooseTransportMode({ allowWalk, legLabel: label });
+  if (mode === "walk") {
+    return walkTo(target, startClock, label);
+  }
+  const fare = mode === "bus" ? BUS_FARE : SUBWAY_FARE;
+  state.character.wallet -= fare;
+  renderStats(state.character);
+  logLine(`${mode === "bus" ? "버스" : "지하철"} 요금 ${fare}원 지불 (잔액 ${state.character.wallet}원)`);
+  return rideTransit(target, startClock, `${mode === "bus" ? "버스" : "지하철"}로 ${label}`);
+}
+
 async function renderMap(character, academies) {
   const map = new kakao.maps.Map(document.getElementById("map"), {
     center: new kakao.maps.LatLng(HOME_FALLBACK.lat, HOME_FALLBACK.lng),
@@ -247,18 +323,17 @@ async function renderMap(character, academies) {
   }
   addMarker(map, state.positions.school, `학교 — ${character.school.name}<br>${character.school.address}`);
 
-  const localAcademies = academies.filter((a) => a.location.mode === "walk" && a.location.etaMinFromHome != null);
-  localAcademies.forEach((academy, i) => {
-    const bearingDeg = (360 / localAcademies.length) * i;
-    const distanceM = academy.location.etaMinFromHome * CHILD_WALK_M_PER_MIN;
+  const placeableAcademies = academies.filter((a) => a.location.etaMinFromHome != null);
+  placeableAcademies.forEach((academy, i) => {
+    const bearingDeg = (360 / placeableAcademies.length) * i;
+    const isWalk = academy.location.mode === "walk";
+    const mPerMin = isWalk ? CHILD_WALK_M_PER_MIN : TRANSIT_M_PER_MIN;
+    const distanceM = academy.location.etaMinFromHome * mPerMin;
     const pos = offsetLatLng(homePos.lat, homePos.lng, distanceM, bearingDeg);
     state.positions.academies[academy.id] = pos;
     const category = state.categoryMap[academy.categoryId];
-    addMarker(
-      map,
-      pos,
-      `<strong>${academy.name}</strong> (가상 위치)<br>${category.label} · 도보 ${academy.location.etaMinFromHome}분`
-    );
+    const etaText = isWalk ? `도보 ${academy.location.etaMinFromHome}분` : `버스/지하철 약 ${academy.location.etaMinFromHome}분`;
+    addMarker(map, pos, `<strong>${academy.name}</strong> (가상 위치)<br>${category.label} · ${etaText}`);
   });
 
   state.charPos = { ...homePos };
@@ -282,7 +357,7 @@ function renderStats(character) {
   });
 
   const condEl = document.getElementById("condition");
-  condEl.innerHTML = `<p class="muted">허기 ${character.condition.hunger} · 체력(현재) ${character.condition.staminaNow}</p>`;
+  condEl.innerHTML = `<p class="muted">허기 ${character.condition.hunger} · 체력(현재) ${character.condition.staminaNow} · 용돈 ${character.wallet}원</p>`;
 }
 
 function renderAcademies(academies, categoryMap) {
@@ -426,9 +501,12 @@ function renderPalette() {
   }
 
   state.academies
-    .filter((a) => a.location.mode === "walk")
+    .filter((a) => a.location.etaMinFromHome != null)
     .forEach((academy) => {
-      el.appendChild(createChip(`${academy.name} (${ACADEMY_LESSON_MIN}분)`, { kind: "academy", academyId: academy.id }));
+      const suffix = academy.location.mode === "walk" ? "" : " · 버스/지하철 전용";
+      el.appendChild(
+        createChip(`${academy.name} (${ACADEMY_LESSON_MIN}분${suffix})`, { kind: "academy", academyId: academy.id })
+      );
     });
 }
 
@@ -531,6 +609,7 @@ async function runDay(blocks) {
   let atHome = true;
   let hadSchool = false;
   let schoolWasLate = false;
+  let lastAllowWalk = true;
 
   if (blocks.length === 0) {
     logLine("오늘은 아무 일정도 없다 — 집에서 하루를 보냈다");
@@ -541,9 +620,11 @@ async function runDay(blocks) {
     const academy = isSchool ? null : state.academies.find((a) => a.id === block.academyId);
     const targetPos = isSchool ? state.positions.school : state.positions.academies[block.academyId];
     const placeName = isSchool ? "학교" : academy.name;
+    const allowWalk = isSchool || academy.location.mode === "walk";
+    lastAllowWalk = allowWalk;
 
     logLine(`${minutesToClock(clock)} ${placeName}(으)로 이동 시작`);
-    clock = await walkTo(targetPos, clock, `${placeName}로 이동 중`);
+    clock = await travelTo(targetPos, clock, `${placeName}로 이동 중`, allowWalk);
     atHome = false;
 
     const late = clock > block.startMin;
@@ -567,7 +648,7 @@ async function runDay(blocks) {
 
   if (!atHome) {
     logLine(`${minutesToClock(clock)} 집으로 귀가 이동`);
-    clock = await walkTo(state.positions.home, clock, "집으로 귀가 중");
+    clock = await travelTo(state.positions.home, clock, "집으로 귀가 중", lastAllowWalk);
     logLine(`${minutesToClock(clock)} 집 도착`);
   }
 

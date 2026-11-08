@@ -17,5 +17,6 @@
     "social": 10,
     "diligence": 10
   },
-  "condition": { "hunger": 80, "staminaNow": 80 }
+  "condition": { "hunger": 80, "staminaNow": 80 },
+  "wallet": 5000
 }

@@ -31,6 +31,7 @@
       <button type="button" id="start-day-btn">일과 시작</button>
 
       <div id="day-run" hidden>
+        <div id="transport-choice" class="transport-choice" hidden></div>
         <p id="day-status" class="day-status">—</p>
         <ul id="day-log"></ul>
       </div>
@@ -40,7 +41,11 @@
 
     <section id="map-panel" class="panel panel-wide">
       <h2>지도</h2>
-      <p class="muted">이동 구간에서는 방향키(↑↓←→ / WASD) 또는 화면의 버튼으로 이로이를 직접 움직인다. 집·학교는 실제 위치, 동네 학원 4곳은 주소 미확정이라 도보 10분 추정 위치에 가상으로 표시한다.</p>
+      <p class="muted">
+        이동할 때마다 도보/버스/지하철을 고를 수 있다. 도보는 방향키(↑↓←→ / WASD)나 화면 버튼으로 직접 걷고,
+        버스·지하철은 요금을 내면 빠르게 데려다준다. 집·학교는 실제 위치, 동네 학원 4곳은 주소 미확정이라 도보
+        10분 추정 위치에, 압구정 학원은 버스/지하철로만 갈 수 있는 먼 가상 위치에 표시한다.
+      </p>
       <div class="map-wrap">
         <div id="map"></div>
         <div id="dpad" class="dpad" hidden>
