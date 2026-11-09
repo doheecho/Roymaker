@@ -1,0 +1,32 @@
+{
+  "arrival": { "open": "08:30", "lateAfter": "08:50" },
+  "segments": [
+    { "id": "reading", "type": "reading", "label": "자율독서시간", "start": "08:30", "end": "09:00" },
+    { "id": "p1", "type": "period", "period": 1, "label": "1교시", "start": "09:00", "end": "09:40" },
+    { "id": "p2", "type": "period", "period": 2, "label": "2교시", "start": "09:40", "end": "10:20" },
+    { "id": "play", "type": "break", "label": "중간놀이", "start": "10:20", "end": "10:40" },
+    { "id": "p3", "type": "period", "period": 3, "label": "3교시", "start": "10:40", "end": "11:20" },
+    { "id": "rest1", "type": "break", "label": "휴식", "start": "11:20", "end": "11:30" },
+    { "id": "lunch", "type": "lunch", "label": "점심시간", "start": "11:30", "end": "12:10" },
+    { "id": "p4", "type": "period", "period": 4, "label": "4교시", "start": "12:10", "end": "12:50" },
+    { "id": "rest2", "type": "break", "label": "휴식", "start": "12:50", "end": "13:00" },
+    { "id": "p5", "type": "period", "period": 5, "label": "5교시", "start": "13:00", "end": "13:40" }
+  ],
+  "lastPeriodByWeekday": { "1": 4, "2": 5, "3": 5, "4": 5, "5": 4 },
+  "timetable": {
+    "1": ["korean", "math", "joyful_living", "right_living"],
+    "2": ["korean", "math", "wise_living", "joyful_living", "creative_activity"],
+    "3": ["math", "korean", "wise_living", "right_living", "joyful_living"],
+    "4": ["korean", "math", "joyful_living", "wise_living", "creative_activity"],
+    "5": ["korean", "math", "right_living", "creative_activity"]
+  },
+  "afterschool": {
+    "breakBeforeMin": 20,
+    "periodMin": 40,
+    "breakBetweenMin": 10
+  },
+  "vacations": [
+    { "name": "여름방학", "start": "2026-07-22", "end": "2026-08-23" },
+    { "name": "겨울방학", "start": "2026-12-31", "end": "2027-03-01" }
+  ]
+}

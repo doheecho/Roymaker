@@ -8,15 +8,26 @@
     "lat": null,
     "lng": null
   },
-  "school": { "name": "서울금북초등학교", "address": "서울 성동구 행당로1길 13", "lat": null, "lng": null },
+  "school": {
+    "name": "서울금북초등학교",
+    "address": "서울 성동구 행당로1길 13",
+    "lat": null,
+    "lng": null
+  },
   "stats": {
     "intellect": 10,
     "stamina": 10,
     "power": 10,
     "art": 10,
     "social": 10,
-    "diligence": 10
+    "diligence": 10,
+    "popularity": 10,
+    "trust": 50
   },
-  "condition": { "hunger": 80, "staminaNow": 80, "stress": 0 },
+  "condition": {
+    "hunger": 80,
+    "staminaNow": 80,
+    "stress": 0
+  },
   "wallet": 5000
 }

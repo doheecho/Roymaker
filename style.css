@@ -457,3 +457,88 @@ li:last-child { border-bottom: none; }
 }
 .shop-buy-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18); }
 .shop-buy-btn:disabled { opacity: 0.4; cursor: default; background: var(--muted); box-shadow: none; }
+
+/* ── 팔레트 그룹 ── */
+.palette-group { margin-top: 10px; }
+.palette-group:first-child { margin-top: 0; }
+.palette-title { margin: 6px 0 0; font-family: "Jua", sans-serif; font-size: 13px; color: var(--ink); }
+.palette-group .chip-row { margin-top: 6px; }
+.palette-options { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
+.palette-select { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.palette-select select, .reg-time {
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 12.5px;
+  padding: 4px 8px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  max-width: 100%;
+}
+.chip.chip-afterschool { border-color: var(--accent4); background: var(--accent4-soft); }
+.chip.chip-care { border-color: #E0A43B; background: #FFF4DD; }
+.tt-afterschool { background: var(--accent4); }
+.tt-care { background: #E0A43B; }
+
+/* ── 학원 주간 등록 ── */
+.academy-body { flex: 1; min-width: 0; }
+.reg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.reg-day {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Jua", sans-serif;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.reg-day.on { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+.reg-status { flex-basis: 100%; }
+
+/* ── 지도 위 선택창 (돌발사건·핫플레이스·휴대전화) ── */
+.map-overlay-panel {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  right: 12px;
+  max-width: 460px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  z-index: 20;
+  background: var(--surface);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+.map-overlay-panel[hidden] { display: none; }
+.transport-choice[data-tone="event"] { border-color: var(--accent); background: #FFF8F4; }
+.transport-choice[data-tone="danger"] { border-color: var(--bad); background: #FDEDED; }
+.transport-choice[data-tone="hot"] { border-color: #E0A43B; background: #FFF9EC; }
+.transport-choice[data-tone="phone"] { border-color: var(--accent3); background: var(--accent3-soft); }
+.transport-choice .choice-body { font-family: "Gowun Dodum", sans-serif; font-size: 13px; margin: 0 0 10px; }
+.transport-choice .choice-group { font-size: 11.5px; color: var(--muted); margin: 8px 0 4px; font-family: "Gowun Dodum", sans-serif; }
+.transport-choice .chip-row + .chip-row { margin-top: 8px; }
+.choice-opt { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; max-width: 100%; }
+.choice-hint { font-size: 11px; color: var(--muted); padding-left: 6px; }
+.transport-btn { text-align: left; max-width: 100%; }
+
+.phone-btn {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 10;
+  font-family: "Jua", sans-serif;
+  font-size: 13px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent3);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.2);
+}
+.phone-btn[hidden] { display: none; }
+
+.hot-badge { background: #E0A43B; }
+.condition-badge.good { background: var(--accent3-soft); border-color: var(--accent3); color: #2E7A3E; font-weight: 700; }
+.transport-choice .chip-row { align-items: flex-start; }

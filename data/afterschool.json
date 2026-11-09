@@ -1,0 +1,42 @@
+[
+  {
+    "id": "creative_science",
+    "label": "창의·과학",
+    "courses": [
+      { "id": "robot_coding", "name": "로봇제작 / 코딩", "icon": "🤖", "description": "블록이나 교구를 활용한 기초 로봇 조립 및 알고리즘 학습", "growth": { "intellect": 2, "art": 1 }, "staminaCost": 6 },
+      { "id": "life_science", "name": "창의과학 / 생명과학", "icon": "🔬", "description": "직접 실험을 하거나 곤충, 식물 등을 관찰하는 수업", "growth": { "intellect": 2, "diligence": 1 }, "staminaCost": 6 },
+      { "id": "chess_baduk", "name": "체스 / 바둑", "icon": "♟️", "description": "집중력과 두뇌 회전을 키우는 활동", "growth": { "intellect": 2, "diligence": 1 }, "staminaCost": 4 }
+    ]
+  },
+  {
+    "id": "arts_sports",
+    "label": "예체능·스포츠",
+    "courses": [
+      { "id": "soccer", "name": "축구", "icon": "⚽", "description": "체육 활동", "growth": { "power": 2, "social": 1 }, "staminaCost": 14 },
+      { "id": "dodgeball", "name": "피구", "icon": "🏐", "description": "체육 활동", "growth": { "power": 2, "social": 1 }, "staminaCost": 12 },
+      { "id": "music_jumprope", "name": "음악줄넘기", "icon": "🪢", "description": "체육 활동", "growth": { "stamina": 2, "power": 1 }, "staminaCost": 12 },
+      { "id": "inline_skate", "name": "인라인스케이트", "icon": "🛼", "description": "체육 활동", "growth": { "stamina": 2, "power": 1 }, "staminaCost": 12 },
+      { "id": "kpop_dance", "name": "방송댄스", "icon": "💃", "description": "체육 활동", "growth": { "art": 2, "stamina": 1 }, "staminaCost": 10 },
+      { "id": "drawing", "name": "그리기", "icon": "🖍️", "description": "미술·공예", "growth": { "art": 3 }, "staminaCost": 4 },
+      { "id": "clay_art", "name": "클레이아트", "icon": "🧱", "description": "미술·공예", "growth": { "art": 3 }, "staminaCost": 4 },
+      { "id": "total_craft", "name": "토탈공예", "icon": "✂️", "description": "미술·공예", "growth": { "art": 2, "diligence": 1 }, "staminaCost": 4 },
+      { "id": "kids_cooking", "name": "아동요리", "icon": "🍳", "description": "미술·공예", "growth": { "art": 2, "social": 1 }, "staminaCost": 5 },
+      { "id": "ukulele", "name": "우쿠렐레", "icon": "🎸", "description": "음악·악기", "growth": { "art": 3 }, "staminaCost": 4 },
+      { "id": "violin", "name": "바이올린", "icon": "🎻", "description": "음악·악기", "growth": { "art": 2, "diligence": 1 }, "staminaCost": 4 },
+      { "id": "flute", "name": "플룻", "icon": "🪈", "description": "음악·악기", "growth": { "art": 3 }, "staminaCost": 4 },
+      { "id": "drum", "name": "드럼", "icon": "🥁", "description": "음악·악기", "growth": { "art": 2, "power": 1 }, "staminaCost": 7 },
+      { "id": "acoustic_guitar", "name": "통기타", "icon": "🎸", "description": "음악·악기", "growth": { "art": 3 }, "staminaCost": 4 }
+    ]
+  },
+  {
+    "id": "study_language",
+    "label": "학습·외국어",
+    "courses": [
+      { "id": "native_english", "name": "원어민 영어", "icon": "🗽", "description": "게임과 노래를 통한 재미있는 영어 학습", "growth": { "intellect": 2, "social": 1 }, "staminaCost": 5 },
+      { "id": "basic_english", "name": "기초 영어", "icon": "🔤", "description": "게임과 노래를 통한 재미있는 영어 학습", "growth": { "intellect": 2, "social": 1 }, "staminaCost": 5 },
+      { "id": "hanja", "name": "한자", "icon": "🈷️", "description": "집중력 향상과 자격증 취득 목적", "growth": { "intellect": 2, "diligence": 1 }, "staminaCost": 5 },
+      { "id": "abacus", "name": "주산과 암산", "icon": "🧮", "description": "집중력 향상과 자격증 취득 목적", "growth": { "intellect": 2, "diligence": 1 }, "staminaCost": 5 },
+      { "id": "ict", "name": "컴퓨터 (ICT)", "icon": "💻", "description": "타자 연습 및 기초 파워포인트, 한글 문서 작성", "growth": { "intellect": 2, "diligence": 1 }, "staminaCost": 5 }
+    ]
+  }
+]

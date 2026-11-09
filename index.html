@@ -40,9 +40,10 @@
       <div id="view-schedule" class="view">
         <h2>📅 오늘 일정 짜기</h2>
         <p class="muted">
-          아래 항목을 시간표로 끌어다 놓아서 하루 일정을 짠다. 학교는 기본으로 09:00–16:00에 놓여 있고, 블록의
-          ×를 눌러 빼거나 팔레트에서 다시 끌어다 놓을 수 있다. 다 짰으면 "일과 시작"을 누른다 — 시작하면 더는
-          바꿀 수 없고 화면이 지도로 바뀐다.
+          아래 항목을 시간표로 끌어다 놓아서 하루 일정을 짠다. 등교일엔 정규수업(08:30~, 월·금 12:50 / 화·수·목 13:40
+          하교)과 이번 주에 등록한 학원 수업이 기본으로 놓여 있다. 08:50이 넘어서 학교에 도착하면 지각이다.
+          방과후교육은 과목을 고른 뒤 끌어다 놓고, 늘봄학교(아침·오후·저녁돌봄)는 프로그램을 고른 뒤 놓는다.
+          다 짰으면 "일과 시작"을 누른다 — 시작하면 더는 바꿀 수 없고 화면이 지도로 바뀐다.
         </p>
 
         <div id="schedule-palette" class="chip-row"></div>
@@ -56,7 +57,12 @@
 
       <div id="view-academy" class="view" hidden>
         <h2>🏫 학원정보</h2>
-        <p class="muted">동네 학원들의 이름·운영시간·위치·성장 효과다.</p>
+        <p class="muted">
+          동네 학원들의 이름·운영시간·위치·성장 효과다. 학원은 <strong>매주 일정을 미리 등록</strong>한다 — 요일과
+          시작 시각을 고르면 <strong>다음 주 월요일부터</strong> 적용되고, 등록된 수업은 매일 시간표에 자동으로 올라간다.
+          운영시간 밖에는 들어갈 수 없고, 운영시간 안이지만 등록하지 않은 시간에 가면 자율학습만 한다.
+          수업이 끝나면 하원버스를 타고 집으로 가거나 개별적으로 이동할 수 있다.
+        </p>
         <ul id="academies"></ul>
       </div>
 
@@ -72,9 +78,13 @@
           방향키(↑↓←→ / WASD)나 화면 버튼으로 직접 걸어서 이동한다. 걷다가 버스정류장(동그란 B 표시)이나
           지하철역에 닿으면 어디로 갈지 고를 수 있는 창이 뜬다 — 요금을 내고 타면 그 정류장/역까지 빠르게
           이동하고, "그냥 걷기"를 고르면 계속 걸어간다. 정류장·역이 없는 길은 끝까지 도보로 이동한다.
+          걷다 보면 돌발사건(일진 어린이, 친구, 분실물, 수상한 어른…)이 생길 수 있고, 동그란 <strong>H</strong>
+          표시(문구점·분식집·놀이터)에 닿으면 들를 수 있다. 걷는 동안 📱 버튼으로 가족·친구에게 전화할 수 있다.
         </p>
         <div class="map-wrap">
           <div id="map"></div>
+          <div id="event-panel" class="transport-choice map-overlay-panel" hidden></div>
+          <button type="button" id="phone-btn" class="phone-btn" hidden>📱 휴대전화</button>
           <div id="dpad" class="dpad" hidden>
             <button type="button" data-dir="up" aria-label="위로 이동">▲</button>
             <button type="button" data-dir="left" aria-label="왼쪽으로 이동">◀</button>

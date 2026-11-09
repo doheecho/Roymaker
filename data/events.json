@@ -1,0 +1,248 @@
+[
+  {
+    "id": "bully",
+    "weight": 2,
+    "title": "😠 일진 어린이를 만났다!",
+    "text": "덩치 큰 형이 길을 막고 \"용돈 좀 내놔\"라고 한다.",
+    "choices": [
+      {
+        "label": "💪 맞서 싸운다",
+        "check": {
+          "stat": "power",
+          "threshold": 30
+        },
+        "success": {
+          "text": "용기 있게 맞서자 형이 슬금슬금 물러났다!",
+          "effect": {
+            "popularity": 2,
+            "staminaNow": -5,
+            "stress": 5
+          },
+          "minutes": 5
+        },
+        "fail": {
+          "text": "힘에서 밀려 용돈을 빼앗겼다… 어른께 꼭 말씀드리자.",
+          "effect": {
+            "wallet": -1000,
+            "staminaNow": -10,
+            "stress": 15
+          },
+          "minutes": 5
+        }
+      },
+      {
+        "label": "🏃 도망간다",
+        "result": {
+          "text": "있는 힘껏 달려서 도망쳤다. 휴, 숨차다!",
+          "effect": {
+            "staminaNow": -6,
+            "stress": 5
+          },
+          "minutes": 3
+        }
+      }
+    ]
+  },
+  {
+    "id": "poor_friend",
+    "weight": 2,
+    "title": "😢 곤란한 친구를 만났다",
+    "text": "친구가 넘어져서 무릎을 다치고 울고 있다.",
+    "choices": [
+      {
+        "label": "🤝 돕는다",
+        "result": {
+          "text": "친구를 일으켜 주고 가까운 어른에게 함께 가 주었다. 친구가 고맙다고 했다!",
+          "effect": {
+            "social": 2,
+            "trust": 2,
+            "stress": -3
+          },
+          "minutes": 10
+        }
+      },
+      {
+        "label": "🚶 그냥 간다",
+        "result": {
+          "text": "모른 척 지나왔지만 마음이 계속 쓰인다…",
+          "effect": {
+            "trust": -1,
+            "stress": 3
+          },
+          "minutes": 0
+        }
+      }
+    ]
+  },
+  {
+    "id": "found_coin",
+    "weight": 2,
+    "title": "🪙 길에서 돈을 주웠다",
+    "text": "길바닥에 {amount}원이 떨어져 있다. 주인은 보이지 않는다.",
+    "amounts": [
+      100,
+      500,
+      1000
+    ],
+    "choices": [
+      {
+        "label": "주머니에 넣는다",
+        "result": {
+          "text": "{amount}원이 생겼다!",
+          "effect": {
+            "wallet": "{amount}"
+          },
+          "minutes": 0
+        }
+      }
+    ]
+  },
+  {
+    "id": "friend_meet",
+    "weight": 3,
+    "title": "👋 친구를 우연히 마주쳤다",
+    "text": "같은 반 친구가 \"어? 로이다!\" 하고 손을 흔든다.",
+    "choices": [
+      {
+        "label": "🎈 함께 놀러간다",
+        "result": {
+          "text": "친구랑 신나게 놀다 보니 30분이 훌쩍 지났다!",
+          "effect": {
+            "social": 3,
+            "stress": -10,
+            "staminaNow": -5
+          },
+          "minutes": 30
+        }
+      },
+      {
+        "label": "😊 반갑게 인사한다",
+        "result": {
+          "text": "반갑게 인사하고 각자 갈 길을 갔다.",
+          "effect": {
+            "social": 1,
+            "popularity": 1
+          },
+          "minutes": 1
+        }
+      },
+      {
+        "label": "🙈 모른척 지나간다",
+        "result": {
+          "text": "못 본 척 지나갔다. 친구가 서운해할지도…",
+          "effect": {
+            "social": -1,
+            "popularity": -1
+          },
+          "minutes": 0
+        }
+      }
+    ]
+  },
+  {
+    "id": "stranger",
+    "weight": 1,
+    "title": "🕴️ 수상한 어른이 말을 걸었다",
+    "text": "처음 보는 어른이 \"맛있는 거 사줄게, 아저씨랑 같이 가자\"라고 한다.",
+    "requiresSafety": "학교 창의적 체험활동 '안전 교육'을 들으면 고를 수 있어요",
+    "choices": [
+      {
+        "label": "🍭 따라간다",
+        "result": {
+          "crisis": true,
+          "text": "⚠️ 위기 발생! 낯선 곳으로 끌려갈 뻔했다 — 지나가던 경찰 아저씨가 발견해 무사히 구해 주었다. 너무 무서웠다…",
+          "effect": {
+            "stress": 30,
+            "staminaNow": -10,
+            "trust": -1
+          },
+          "minutes": 20
+        }
+      },
+      {
+        "label": "😶 머뭇거린다",
+        "result": {
+          "crisis": true,
+          "text": "⚠️ 위기 발생! 어쩔 줄 몰라 머뭇거리는 사이 손목을 잡혔다 — 주변 어른이 소리쳐서 겨우 벗어났다.",
+          "effect": {
+            "stress": 25,
+            "staminaNow": -8
+          },
+          "minutes": 15
+        }
+      },
+      {
+        "label": "🙅 \"싫어요! 안 가요!\" 크게 외치고 사람 많은 곳으로 간다",
+        "safety": true,
+        "result": {
+          "text": "💡 안전교육 때 배운 대로 큰 소리로 거절하고 가게 안으로 들어갔다. 가게 어른이 칭찬해 주셨다!",
+          "effect": {
+            "diligence": 1,
+            "trust": 2,
+            "stress": 5
+          },
+          "minutes": 5
+        }
+      },
+      {
+        "label": "📱 엄마에게 전화한다",
+        "safety": true,
+        "phone": true,
+        "result": {
+          "text": "💡 \"엄마! 모르는 아저씨가 따라오래!\" 전화하자 수상한 어른이 슬그머니 사라졌다. 엄마가 잘했다고 했다.",
+          "effect": {
+            "trust": 3,
+            "stress": 5
+          },
+          "minutes": 5
+        }
+      }
+    ]
+  },
+  {
+    "id": "lost_item",
+    "weight": 2,
+    "title": "🔎 분실물을 주웠다",
+    "text": "길에서 누군가 잃어버린 {item}을(를) 주웠다.",
+    "variants": [
+      {
+        "item": "스마트폰",
+        "amount": 3000
+      },
+      {
+        "item": "지갑",
+        "amount": 5000
+      },
+      {
+        "item": "돈 봉투",
+        "amount": 3000
+      }
+    ],
+    "choices": [
+      {
+        "label": "🚓 경찰서에 갖다준다",
+        "result": {
+          "text": "{item}을(를) 경찰서에 맡겼다. 경찰 아저씨가 칭찬해 주셨고, 소문이 나서 친구들 사이에서 인기가 올랐다!",
+          "effect": {
+            "social": 2,
+            "popularity": 2,
+            "trust": 3
+          },
+          "minutes": 15
+        }
+      },
+      {
+        "label": "🤫 내가 가진다",
+        "result": {
+          "text": "{item}을(를) 몰래 챙겼다. 안에 있던 {amount}원이 생겼지만 마음이 영 불편하다…",
+          "effect": {
+            "wallet": "{amount}",
+            "trust": -3,
+            "stress": 10
+          },
+          "minutes": 0
+        }
+      }
+    ]
+  }
+]
