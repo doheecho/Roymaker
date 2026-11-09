@@ -29,6 +29,7 @@
 
       <nav class="nav-buttons">
         <button type="button" class="nav-btn active" data-view="schedule">📅 오늘 일정</button>
+        <button type="button" class="nav-btn" data-view="status">📊 능력치</button>
         <button type="button" class="nav-btn" data-view="academy">🏫 학원정보</button>
         <button type="button" class="nav-btn" data-view="activity">🧹 활동정보</button>
         <button type="button" class="nav-btn" data-view="map">🗺️ 지도</button>
@@ -53,6 +54,18 @@
         </div>
 
         <button type="button" id="start-day-btn">일과 시작</button>
+      </div>
+
+      <div id="view-status" class="view" hidden>
+        <h2>📊 능력치</h2>
+        <div id="status-profile" class="status-profile"></div>
+        <p id="status-delta-note" class="muted"></p>
+        <div id="status-groups" class="status-groups"></div>
+        <div class="status-actions">
+          <p class="muted">진행 상황은 하루가 끝날 때마다 이 브라우저에 자동 저장된다.</p>
+          <p id="save-note" class="muted"></p>
+          <button type="button" id="new-game-btn" class="new-game-btn">🔄 새 게임 (저장 지우기)</button>
+        </div>
       </div>
 
       <div id="view-academy" class="view" hidden>
