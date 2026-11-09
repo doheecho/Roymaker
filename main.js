@@ -1,27 +1,53 @@
+// 능력치 3분류 (신체능력 · 학습능력 · 성격/인성)
+const STAT_GROUPS = [
+  { id: "body", label: "신체능력", icon: "🏃", stats: ["stamina", "power", "agility", "dexterity"] },
+  { id: "study", label: "학습능력", icon: "📚", stats: ["language", "math", "perception", "logic", "focus", "expression"] },
+  { id: "character", label: "성격/인성", icon: "💖", stats: ["social", "diligence", "insa", "selfEsteem", "digital", "delinquency"] },
+];
+
 const STAT_LABELS = {
-  intellect: "지력",
   stamina: "체력",
   power: "근력",
-  art: "감성",
+  agility: "순발력",
+  dexterity: "손재주",
+  language: "언어",
+  math: "수리",
+  perception: "지각",
+  logic: "논리",
+  focus: "집중력",
+  expression: "표현력",
   social: "사회성",
   diligence: "성실성",
-  popularity: "인기",
-  trust: "신뢰도",
+  insa: "인싸력",
+  selfEsteem: "자존감",
+  digital: "디지털",
+  delinquency: "비행화",
 };
 
 const STAT_ICONS = {
-  intellect: "📖",
   stamina: "❤️",
   power: "💪",
-  art: "🎨",
+  agility: "⚡",
+  dexterity: "✋",
+  language: "📖",
+  math: "🧮",
+  perception: "🔍",
+  logic: "🧩",
+  focus: "🎯",
+  expression: "🎨",
   social: "🗣️",
   diligence: "✍️",
-  popularity: "⭐",
-  trust: "🤞",
+  insa: "⭐",
+  selfEsteem: "🌟",
+  digital: "💻",
+  delinquency: "😈",
 };
 
-const CONDITION_ICONS = { hunger: "🍚", staminaNow: "⚡", stress: "😵", wallet: "💰" };
-const CONDITION_LABELS = { hunger: "허기", staminaNow: "체력", stress: "스트레스", wallet: "용돈" };
+// 높을수록 나쁜 능력치 — 게이지 색을 다르게 표시
+const NEGATIVE_STATS = new Set(["delinquency"]);
+
+const CONDITION_ICONS = { hunger: "🍚", staminaNow: "🔋", stress: "😵", wallet: "💰" };
+const CONDITION_LABELS = { hunger: "허기", staminaNow: "기력", stress: "스트레스", wallet: "용돈" };
 const SCHOOL_ICON = "🏫";
 
 const HOME_FALLBACK = { lat: 37.5495, lng: 127.0203 };
@@ -34,7 +60,7 @@ const MORNING_CARE_LATE_MIN = 9 * 60;
 const SEGMENT_PHASE_MS = 650;
 const AFTERSCHOOL_STRESS = 8;
 const AUTONOMOUS_STUDY_STRESS = 6;
-const AUTONOMOUS_STUDY_EFFECT = { intellect: 1, diligence: 1, staminaNow: -3 };
+const AUTONOMOUS_STUDY_EFFECT = { focus: 1, diligence: 1, staminaNow: -3 };
 
 // 돌발사건 — 걷는 동안 게임 1분마다 확률 판정
 const EVENT_CHANCE_PER_MIN = 0.07;
@@ -954,16 +980,31 @@ function renderStats(character) {
 
   const statsEl = document.getElementById("stats");
   statsEl.innerHTML = "";
-  Object.entries(character.stats).forEach(([key, value]) => {
-    const row = document.createElement("div");
-    row.className = "stat-row";
-    row.innerHTML = `
-      <span class="icon">${STAT_ICONS[key] ?? ""}</span>
-      <span class="label">${STAT_LABELS[key] ?? key}</span>
-      <span class="bar"><span style="width:${Math.min(value, 100)}%"></span></span>
-      <span class="value">${value}</span>
-    `;
-    statsEl.appendChild(row);
+  STAT_GROUPS.forEach((group) => {
+    const positive = group.stats.filter((key) => !NEGATIVE_STATS.has(key));
+    const avg = Math.round(positive.reduce((sum, key) => sum + (character.stats[key] ?? 0), 0) / positive.length);
+    const box = document.createElement("details");
+    box.className = "stat-group";
+    box.open = state.ui.openStatGroups?.has(group.id) ?? true;
+    box.addEventListener("toggle", () => {
+      state.ui.openStatGroups ??= new Set(STAT_GROUPS.map((g) => g.id));
+      if (box.open) state.ui.openStatGroups.add(group.id);
+      else state.ui.openStatGroups.delete(group.id);
+    });
+    box.innerHTML = `<summary><span>${group.icon} ${group.label}</span><span class="group-avg">평균 ${avg}</span></summary>`;
+    group.stats.forEach((key) => {
+      const value = character.stats[key] ?? 0;
+      const row = document.createElement("div");
+      row.className = `stat-row${NEGATIVE_STATS.has(key) ? " negative" : ""}`;
+      row.innerHTML = `
+        <span class="icon">${STAT_ICONS[key] ?? ""}</span>
+        <span class="label">${STAT_LABELS[key] ?? key}</span>
+        <span class="bar"><span style="width:${Math.min(value, 100)}%"></span></span>
+        <span class="value">${value}</span>
+      `;
+      box.appendChild(row);
+    });
+    statsEl.appendChild(box);
   });
 
   const condEl = document.getElementById("condition");
@@ -972,7 +1013,7 @@ function renderStats(character) {
   condEl.innerHTML = `
     <div class="condition-row">
       <span class="condition-badge">${CONDITION_ICONS.hunger} 허기 ${character.condition.hunger}</span>
-      <span class="condition-badge">${CONDITION_ICONS.staminaNow} 체력 ${character.condition.staminaNow}</span>
+      <span class="condition-badge">${CONDITION_ICONS.staminaNow} 기력 ${character.condition.staminaNow}</span>
       <span class="condition-badge${stressWarning ? " warning" : ""}">${CONDITION_ICONS.stress} 스트레스 ${stress}</span>
       <span class="condition-badge">${CONDITION_ICONS.wallet} ${character.wallet}원</span>
       ${state.safetyEducated ? '<span class="condition-badge good" title="창의적 체험활동 안전 교육 이수 — 수상한 어른에게 슬기롭게 대처할 수 있다">🦺 안전교육 이수</span>' : ""}
@@ -1850,7 +1891,7 @@ async function runDay(blocks) {
   const schoolPart = hadSchool ? (schoolWasLate ? "학교에 지각했다." : "학교에 정시 등교했다.") : "오늘은 학교를 가지 않았다.";
   const sickPart = gotSick ? " 너무 무리해서 몸살이 났다." : "";
   const cancelPart = cancelledEarly ? " 도중에 일정을 취소하고 집에 돌아왔다." : "";
-  summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart}${cancelPart} 허기 ${state.character.condition.hunger} · 체력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
+  summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart}${cancelPart} 허기 ${state.character.condition.hunger} · 기력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
 
   state.day += 1;
   renderDayHeader();

@@ -542,3 +542,22 @@ li:last-child { border-bottom: none; }
 .hot-badge { background: #E0A43B; }
 .condition-badge.good { background: var(--accent3-soft); border-color: var(--accent3); color: #2E7A3E; font-weight: 700; }
 .transport-choice .chip-row { align-items: flex-start; }
+
+/* ── 능력치 3분류 ── */
+.stat-group { border: 1px solid var(--line); border-radius: 12px; padding: 4px 10px 2px; margin-bottom: 8px; background: var(--surface); }
+.stat-group summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-family: "Jua", sans-serif;
+  font-size: 13px;
+  padding: 4px 0;
+  list-style: none;
+}
+.stat-group summary::-webkit-details-marker { display: none; }
+.stat-group summary::after { content: "▾"; color: var(--muted); margin-left: 6px; }
+.stat-group:not([open]) summary::after { content: "▸"; }
+.stat-group .group-avg { margin-left: auto; font-family: monospace; font-size: 11.5px; color: var(--muted); }
+.stat-group .stat-row { margin-bottom: 6px; font-size: 12.5px; }
+.stat-row.negative .bar span { background: linear-gradient(90deg, #E8A0A0, var(--bad)); }
