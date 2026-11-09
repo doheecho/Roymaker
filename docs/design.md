@@ -191,7 +191,7 @@ interface MapService {
 - `Subject` — 교과목별 성장 규칙 (`data/subjects.json`)
 - `Item` — 상점 아이템과 효과 (`data/items.json`)
 - `Activity` — 방과후 활동(집안일·심부름·나들이)과 효과 (`data/activities.json`) — `location`이 `"home"`이면 이동 없이 즉시 진행하고, 그 외(`"place"`)면 `mode`(`"walk"`/`"transit"`)로 도보 가능 여부를 정하며 `address`를 먼저 지오코딩하고 실패하면 `placeQuery`로 장소검색, 그것도 실패하면 `travelMin` 기반 가상 위치를 쓴다
-- `Station` — 실제 지하철역·버스정류장 (`data/stations.json`) — 역은 도로명주소로 지오코딩, 정류장은 실제 지번주소가 있는 곳만 지오코딩하고 나머지는 가상 위치
+- `Station` — 버스정류장(B)·지하철역(S) (`subway.csv`, 유형·이름·위도·경도) — 좌표를 직접 사용, 노선 없이 같은 유형끼리 자유 이동
 - `Holiday` — 학교를 가지 않는 공휴일 날짜 (`data/holidays.json`, `{date: "YYYY-MM-DD", name}`) — 2026년 법정공휴일·대체공휴일을 웹 검색으로 조사해 채워 넣었다(근로자의 날처럼 학교는 정상 수업인 날은 제외). 새 연도로 넘어가거나 날짜가 틀렸으면 이 파일만 고치면 된다.
 - `DailySchedule` — 하루 일정 (현재는 `scheduleBlocks` 배열로 런타임에만 존재, 파일로는 미분리)
 - `FamilyBudget` — 가계 예산 (구현 시 추가, 지금은 `character.wallet` 하나로 단순화)
