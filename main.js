@@ -152,6 +152,7 @@ const state = {
   hotplaces: [],
   places: {},
   companyVisitedToday: false,
+  placeEvents: [],
   walkModeActive: false,
   requestPhone: null,
   school: null,
@@ -272,7 +273,7 @@ function renderDayHeader() {
 }
 
 // subway.csv (유형, 이름, 위도, 경도) — 탭 또는 쉼표 구분.
-// 유형 B = 버스정류장, S = 지하철역, H = 우리집, P = 장소(할머니댁·회사·학원 등)
+// 유형 B = 버스정류장, S = 지하철역, H = 우리집, P = 장소(할머니댁·회사 등), A = 학원(학원 이름과 같게)
 async function loadStations(path) {
   const res = await fetch(path);
   const text = (await res.text()).replace(/^\uFEFF/, "");
@@ -281,7 +282,7 @@ async function loadStations(path) {
   return lines.slice(1).flatMap((line, i) => {
     const [type, name, lat, lng] = line.split(delimiter).map((v) => v.trim());
     const pos = { lat: Number(lat), lng: Number(lng) };
-    if (!["B", "S", "H", "P"].includes(type) || !name || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) {
+    if (!["B", "S", "H", "P", "A"].includes(type) || !name || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) {
       console.warn(`subway.csv ${i + 2}번째 줄을 건너뜀: ${line}`);
       return [];
     }
@@ -418,13 +419,6 @@ function distanceMeters(a, b) {
   return Math.hypot(dx, dy);
 }
 
-function addMarker(map, position, content) {
-  const marker = new kakao.maps.Marker({ map, position: new kakao.maps.LatLng(position.lat, position.lng) });
-  const infowindow = new kakao.maps.InfoWindow({ content: `<div class="map-tip">${content}</div>` });
-  kakao.maps.event.addListener(marker, "click", () => infowindow.open(map, marker));
-  return marker;
-}
-
 function createCharacterOverlay(map, position) {
   const el = document.createElement("div");
   el.className = "char-marker";
@@ -438,12 +432,15 @@ function createCharacterOverlay(map, position) {
 }
 
 // 정류장/역 아이콘: 동그라미 안에 유형 알파벳(B 버스, S 지하철) + 옆에 이름 레이블
+// 지도 아이콘: 동그라미 안 글자(B 버스 · S 지하철 · 집 · 금 학교 · A 학원 · P 장소) + 이름 레이블
+const MARKER_KIND = { B: "버스정류장", S: "지하철역", H: "우리집", P: "장소", A: "학원", school: "학교" };
+const MARKER_BADGE = { H: "집", school: "금" };
+
 function createStationOverlay(map, position, type, name) {
   const el = document.createElement("div");
   el.className = `bus-stop-marker station-${type}`;
-  const kind = { B: "버스정류장", S: "지하철역", H: "우리집", P: "장소" }[type] ?? "";
-  el.title = `${kind} — ${name}`;
-  el.innerHTML = `<span class="bus-badge">${type}</span><span class="bus-label">${name}</span>`;
+  el.title = `${MARKER_KIND[type] ?? ""} — ${name}`;
+  el.innerHTML = `<span class="bus-badge">${MARKER_BADGE[type] ?? type}</span><span class="bus-label">${name}</span>`;
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
@@ -453,9 +450,9 @@ function createStationOverlay(map, position, type, name) {
 
 function createHotplaceOverlay(map, position, place) {
   const el = document.createElement("div");
-  el.className = "bus-stop-marker hot-marker";
+  el.className = "bus-stop-marker station-P";
   el.title = place.realName ? `${place.name} — ${place.realName}` : place.name;
-  el.innerHTML = `<span class="bus-badge hot-badge">${place.icon}</span><span class="bus-label">${place.name}</span>`;
+  el.innerHTML = `<span class="bus-badge">P</span><span class="bus-label">${place.icon} ${place.name}</span>`;
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
@@ -637,6 +634,21 @@ function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
       }
       if (!nearSubway || nearSubway.dist > ARRIVAL_RADIUS_M) suppressed.subway = null;
 
+      // 추억의 장소 근처를 잠시 서성이면 (하루 1번)
+      for (const pe of state.placeEvents) {
+        if (pe.doneToday || !pe.pos) continue;
+        if (distanceMeters(state.charPos, pe.pos) <= pe.radiusM) {
+          pe.dwell += dt;
+          if (pe.dwell >= pe.dwellSec) {
+            pe.doneToday = true;
+            pauseFor(() => runPlaceMemory(pe, clock));
+            return;
+          }
+        } else {
+          pe.dwell = 0;
+        }
+      }
+
       const nearHot = nearestStation(state.charPos, state.hotplaces);
       if (nearHot && nearHot.dist <= ARRIVAL_RADIUS_M && nearHot.id !== suppressed.hotplace) {
         suppressed.hotplace = nearHot.id;
@@ -802,6 +814,15 @@ async function openPhone(clock) {
     return visitParentsCompany(contact, visit);
   }
 
+  const placeCall = state.placeEvents.find(
+    (pe) =>
+      pe.pos &&
+      pe.calls?.[contact.id] &&
+      !pe.callsToday?.has(contact.id) &&
+      distanceMeters(state.charPos, pe.pos) <= pe.callRadiusM
+  );
+  if (placeCall) return placeSpecialCall(placeCall, contact);
+
   const line = pickRandom(contact.lines);
   const firstCall = !state.calledToday.has(contact.id);
   state.calledToday.add(contact.id);
@@ -814,6 +835,35 @@ async function openPhone(clock) {
   await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
     body: `"${line}"${effectNote}`,
     tone: "phone",
+  });
+  return state.phone?.callMinutes ?? 2;
+}
+
+async function runPlaceMemory(pe, clock) {
+  const line = pickRandom(pe.lines);
+  const applied = applyEffect(pe.effect);
+  renderStats(state.character);
+  logLine(`${minutesToClock(clock)} ${pe.icon} ${pe.placeName} — "${line}" (${appliedText(applied)})`);
+  diary(`${josa(pe.placeName, "을/를")} 지나가다가 옛날 생각이 났다. "${line}"`);
+  await presentChoice("event-panel", `${pe.icon} ${pe.title}`, [{ label: "다시 걷기", value: true }], {
+    body: `${pe.text}\n\n"${line}"\n(${appliedText(applied)})`,
+    tone: "event",
+  });
+  return pe.minutes ?? 0;
+}
+
+async function placeSpecialCall(pe, contact) {
+  pe.callsToday ??= new Set();
+  pe.callsToday.add(contact.id);
+  const call = pe.calls[contact.id];
+  const applied = applyEffect(call.effect);
+  renderStats(state.character);
+  const note = Object.keys(applied).length ? ` (${appliedText(applied)})` : "";
+  logLine(`📱 ${pe.placeName}에서 ${contact.name}에게 전화 — "${call.line}"${note}`);
+  diary(`${josa(pe.placeName, "에서/에서")} ${contact.name}에게 전화했더니 ${call.diary}`);
+  await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
+    body: `"${call.line}"${note}`,
+    tone: call.tone ?? "phone",
   });
   return state.phone?.callMinutes ?? 2;
 }
@@ -999,6 +1049,13 @@ function travelTo(target, startClock, placeName) {
 }
 
 // CSV의 P 장소를 이름으로 찾는다 (학원·활동은 `place` 필드 또는 이름이 같으면 연결)
+function csvAcademy(...names) {
+  for (const n of names) {
+    if (n && state.academyPlaces?.[n]) return state.academyPlaces[n];
+  }
+  return null;
+}
+
 function csvPlace(...names) {
   for (const n of names) {
     if (n && state.places[n]) return state.places[n];
@@ -1009,6 +1066,7 @@ function csvPlace(...names) {
 async function renderMap(character, academies, activities, csvRows, hotplaces) {
   const stations = csvRows.filter((r) => r.type === "B" || r.type === "S");
   state.places = Object.fromEntries(csvRows.filter((r) => r.type === "P").map((r) => [r.name, r.pos]));
+  state.academyPlaces = Object.fromEntries(csvRows.filter((r) => r.type === "A").map((r) => [r.name, r.pos]));
   const csvHome = csvRows.find((r) => r.type === "H");
 
   const map = new kakao.maps.Map(document.getElementById("map"), {
@@ -1020,11 +1078,11 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
   const homePos = csvHome ? csvHome.pos : await resolveHomePosition(character.home);
   state.positions.home = homePos;
   map.setCenter(new kakao.maps.LatLng(homePos.lat, homePos.lng));
-  if (!csvHome) addMarker(map, homePos, `집 — 금호파크힐스 113동<br>${character.home.address}`);
+  createStationOverlay(map, homePos, "H", csvHome?.name ?? "우리집");
 
   const schoolFallback = offsetLatLng(homePos.lat, homePos.lng, HOME_SCHOOL_WALK_MIN * CHILD_WALK_M_PER_MIN, 45);
   state.positions.school = await resolvePlace(character.school.address, null, schoolFallback);
-  addMarker(map, state.positions.school, `학교 — ${character.school.name}<br>${character.school.address}`);
+  createStationOverlay(map, state.positions.school, "school", character.school.name);
 
   const placeableAcademies = academies.filter((a) => a.location.etaMinFromHome != null);
   for (let i = 0; i < placeableAcademies.length; i++) {
@@ -1034,12 +1092,12 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
     const mPerMin = isWalk ? CHILD_WALK_M_PER_MIN : TRANSIT_M_PER_MIN;
     const distanceM = academy.location.etaMinFromHome * mPerMin;
     const fallbackPos = offsetLatLng(homePos.lat, homePos.lng, distanceM, bearingDeg);
-    const fromCsv = csvPlace(academy.place, academy.name);
+    const fromCsv = csvAcademy(academy.place, academy.name) ?? csvPlace(academy.place, academy.name);
     const pos = fromCsv ?? (await resolvePlace(academy.address, null, fallbackPos));
     state.positions.academies[academy.id] = pos;
     const category = state.categoryMap[academy.categoryId];
     const etaText = isWalk ? `도보 ${academy.location.etaMinFromHome}분` : `버스/지하철 약 ${academy.location.etaMinFromHome}분`;
-    if (!fromCsv) addMarker(map, pos, `<strong>${academy.name}</strong><br>${category.label} · ${etaText}`);
+    createStationOverlay(map, pos, "A", academy.name);
   }
 
   for (const activity of activities) {
@@ -1048,7 +1106,7 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
     const fromCsv = csvPlace(activity.place, activity.name);
     const pos = fromCsv ?? (await resolvePlace(activity.address, activity.placeQuery, fallbackPos));
     state.positions.activities[activity.id] = pos;
-    if (!fromCsv) addMarker(map, pos, `<strong>${activity.name}</strong><br>${activity.address ?? ""}`);
+    if (!fromCsv) createStationOverlay(map, pos, "P", activity.name);
   }
 
   for (const station of stations) {
@@ -1059,7 +1117,7 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
 
   // H(우리집)·P(장소)도 동그라미 알파벳 아이콘 + 레이블
   csvRows
-    .filter((r) => r.type === "H" || r.type === "P")
+    .filter((r) => r.type === "P")
     .forEach((r) => createStationOverlay(map, r.pos, r.type, r.name));
 
   for (const place of hotplaces) {
@@ -2177,6 +2235,11 @@ async function runDay(blocks) {
   state.lastEventClock = -Infinity;
   state.calledToday = new Set();
   state.companyVisitedToday = false;
+  state.placeEvents.forEach((pe) => {
+    pe.doneToday = false;
+    pe.dwell = 0;
+    pe.callsToday = new Set();
+  });
   state.diaryEntries = [];
 
   const statsAtStart = { ...state.character.stats };
@@ -2387,6 +2450,7 @@ async function main() {
     events,
     hotplaces,
     phone,
+    placeEvents,
   ] = await Promise.all([
     loadJSON("data/character.json"),
     loadJSON("data/academies.json"),
@@ -2402,6 +2466,7 @@ async function main() {
     loadJSON("data/events.json"),
     loadJSON("data/hotplaces.json"),
     loadJSON("data/phone.json"),
+    loadJSON("data/place_events.json"),
   ]);
 
   school.segments = school.segments.map((seg) => ({
@@ -2438,6 +2503,13 @@ async function main() {
   renderTimetable();
   renderShop();
   await renderMap(character, academies, activities, stations, hotplaces);
+  state.placeEvents = placeEvents.map((pe) => ({
+    ...pe,
+    pos: state.places[pe.placeName] ?? null,
+    doneToday: false,
+    dwell: 0,
+    callsToday: new Set(),
+  }));
   wireScheduleEditor();
   wireMovementControls();
   wireNav();
