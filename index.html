@@ -125,6 +125,23 @@
     </section>
   </main>
 
+  <div id="diary-overlay" class="diary-overlay" hidden>
+    <article class="diary-note" aria-labelledby="diary-title">
+      <header class="diary-head">
+        <h2 id="diary-title">[오늘의 일기]</h2>
+        <span id="diary-weather" class="diary-weather"></span>
+      </header>
+      <div id="diary-body" class="diary-body"></div>
+      <section class="diary-section">
+        <h3>✏️ 오늘의 능력치 변화</h3>
+        <div id="diary-stats" class="diary-stats"></div>
+        <p id="diary-condition" class="diary-condition"></p>
+      </section>
+      <button type="button" id="sleep-btn" class="sleep-btn">😴 잠자기</button>
+    </article>
+  </div>
+  <div id="sleep-fade" class="sleep-fade" hidden><span>Zzz…</span></div>
+
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=8d5cf5d494acc41a8002c036c0249f9a&libraries=services"></script>
   <script src="main.js"></script>
 </body>

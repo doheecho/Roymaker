@@ -599,3 +599,92 @@ li:last-child { border-bottom: none; }
   .status-profile { flex-direction: column; align-items: center; text-align: center; }
 }
 .station-S .bus-badge { background: var(--accent4); }
+
+/* ── 오늘의 일기 ── */
+.diary-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(43, 58, 85, 0.55);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 32px 16px;
+  overflow-y: auto;
+}
+.diary-overlay[hidden] { display: none; }
+.diary-note {
+  position: relative;
+  width: 100%;
+  max-width: 620px;
+  background-color: #FFFDF6;
+  background-image:
+    linear-gradient(to right, transparent 46px, #F2A7A0 46px, #F2A7A0 48px, transparent 48px),
+    repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #CFE0F0 33px, #CFE0F0 34px);
+  background-position: 0 0, 0 18px;
+  border-radius: 6px 14px 14px 6px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3), inset 6px 0 0 #E8DFC8;
+  padding: 22px 26px 26px 64px;
+  font-family: "Gaegu", "Gowun Dodum", sans-serif;
+  color: #33405E;
+}
+.diary-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 4px; }
+.diary-head h2 { margin: 0; font-family: "Gaegu", sans-serif; font-weight: 700; font-size: 23px; color: var(--accent-ink); line-height: 34px; }
+.diary-weather { font-size: 16px; color: var(--muted); }
+.diary-body p { margin: 0; font-size: 19px; line-height: 34px; text-wrap: pretty; }
+.diary-section { margin-top: 18px; }
+.diary-section h3 { margin: 0 0 6px; font-family: "Gaegu", sans-serif; font-size: 18px; line-height: 34px; }
+.diary-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.diary-chip {
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 12.5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: var(--surface);
+  transform: rotate(-1deg);
+}
+.diary-chip:nth-child(even) { transform: rotate(1.2deg); }
+.diary-chip.up { border-color: var(--good); color: #2E7A3E; background: var(--accent3-soft); }
+.diary-chip.down { border-color: var(--bad); color: var(--bad); background: #FDEDED; }
+.diary-condition { margin: 8px 0 0; font-family: "Gowun Dodum", sans-serif; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.sleep-btn {
+  display: block;
+  margin: 22px auto 0;
+  font-family: "Jua", sans-serif;
+  font-size: 16px;
+  padding: 12px 34px;
+  border: none;
+  border-radius: 999px;
+  background: #3D4A78;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #262F52;
+}
+.sleep-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 2px 0 #262F52; }
+.sleep-btn:disabled { opacity: 0.6; cursor: default; }
+
+.sleep-fade {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: #0B0F1E;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+  pointer-events: none;
+}
+.sleep-fade.on { opacity: 1; pointer-events: auto; }
+.sleep-fade[hidden] { display: none; }
+.sleep-fade span { color: #C9D3F5; font-family: "Jua", sans-serif; font-size: 28px; letter-spacing: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  .sleep-fade { transition: none; }
+}
+@media (max-width: 520px) {
+  .diary-note { padding: 18px 16px 22px 44px; background-image:
+    linear-gradient(to right, transparent 30px, #F2A7A0 30px, #F2A7A0 32px, transparent 32px),
+    repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #CFE0F0 33px, #CFE0F0 34px); }
+}
+.diary-note .diary-head { background: transparent; border: none; padding: 0; }
