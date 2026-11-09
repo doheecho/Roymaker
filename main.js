@@ -274,7 +274,7 @@ function renderDayHeader() {
   document.getElementById("day-counter").textContent = `Day ${state.day}`;
 }
 
-// subway.csv (유형, 이름, 위도, 경도) — 탭 또는 쉼표 구분.
+// place.csv (유형, 이름, 위도, 경도) — 탭 또는 쉼표 구분.
 // 유형 B = 버스정류장, S = 지하철역, H = 우리집, P = 장소(할머니댁·회사 등), A = 학원(학원 이름과 같게)
 async function loadStations(path) {
   const res = await fetch(path);
@@ -285,7 +285,7 @@ async function loadStations(path) {
     const [type, name, lat, lng] = line.split(delimiter).map((v) => v.trim());
     const pos = { lat: Number(lat), lng: Number(lng) };
     if (!["B", "S", "H", "P", "A"].includes(type) || !name || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) {
-      console.warn(`subway.csv ${i + 2}번째 줄을 건너뜀: ${line}`);
+      console.warn(`place.csv ${i + 2}번째 줄을 건너뜀: ${line}`);
       return [];
     }
     return [{ id: `${type}-${i + 1}`, type, name, pos }];
@@ -2847,7 +2847,7 @@ async function main() {
     loadJSON("data/academy_categories.json"),
     loadJSON("data/items.json"),
     loadJSON("data/activities.json"),
-    loadStations("subway.csv"),
+    loadStations("place.csv"),
     loadJSON("data/holidays.json"),
     loadJSON("data/subjects.json"),
     loadJSON("data/school_schedule.json"),
