@@ -1,0 +1,11 @@
+{
+  "callMinutes": 2,
+  "contacts": [
+    { "id": "mom", "group": "가족", "name": "엄마", "icon": "👩", "lines": ["우리 로이, 차 조심하고 다니고 있지?", "밥은 잘 먹었어? 이따 집에서 보자!", "엄마도 로이 생각하고 있었어 💕"], "effect": { "stress": -4 } },
+    { "id": "dad", "group": "가족", "name": "아빠", "icon": "👨", "lines": ["오~ 우리 로이 전화했네! 오늘 재밌었어?", "아빠 회의 끝나고 다시 전화할게!", "씩씩하게 잘 다니렴, 아빠가 응원할게!"], "effect": { "stress": -4 } },
+    { "id": "friend_1", "group": "친구", "name": "같은 반 친구 1", "icon": "🧒", "lines": ["어디야? 나 놀이터 가는 중!", "내일 학교에서 포켓몬카드 보여줄게!"], "effect": { "social": 1, "stress": -2 }, "note": "등록 친구 — 이름은 추후 설정" },
+    { "id": "friend_2", "group": "친구", "name": "같은 반 친구 2", "icon": "👧", "lines": ["숙제 했어? 나 받아쓰기 연습 중이야.", "다음에 같이 분식집 가자!"], "effect": { "social": 1, "stress": -2 }, "note": "등록 친구 — 이름은 추후 설정" },
+    { "id": "grandma", "group": "기타", "name": "외할머니", "icon": "👵", "lines": ["아이고 우리 강아지~ 할머니 집에 놀러 오렴.", "밥 잘 챙겨 먹고 다니거라."], "effect": { "stress": -3 } },
+    { "id": "police", "group": "기타", "name": "112 (경찰)", "icon": "🚓", "lines": ["112는 위급한 상황에만 거는 번호예요. 장난전화는 안 돼요!"], "effect": { "trust": -2 }, "emergency": true }
+  ]
+}

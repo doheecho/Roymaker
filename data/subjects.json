@@ -2,26 +2,49 @@
   {
     "id": "korean",
     "label": "국어",
-    "growth": { "intellect": 2, "social": 1 }
+    "icon": "📖",
+    "description": "기초 한글 읽기·쓰기를 완성하고, 생각과 느낌을 문장·짧은 글(일기, 독서록)로 표현한다. 맞춤법·띄어쓰기·고운 말 사용 등 기초 언어 예절을 배운다.",
+    "topics": ["받아쓰기", "일기 쓰기", "독서록 쓰기", "띄어쓰기 연습", "고운 말 쓰기"],
+    "growth": { "intellect": 1 }
   },
   {
     "id": "math",
     "label": "수학",
-    "growth": { "intellect": 3 }
+    "icon": "🧮",
+    "description": "세 자리 수, 두 자리 수의 덧셈·뺄셈, 곱셈구구(구구단). 도형(삼각형·사각형·원), 길이 재기(cm·m), 시계 보기, 표와 그래프로 자료 정리.",
+    "topics": ["세 자리 수", "두 자리 수 덧셈·뺄셈", "곱셈구구", "여러 가지 도형", "길이 재기", "시계 보기", "표와 그래프"],
+    "growth": { "intellect": 1 }
   },
   {
-    "id": "integrated_studies",
-    "label": "통합교과 (봄·여름·가을·겨울)",
-    "growth": { "intellect": 1, "art": 1 }
+    "id": "right_living",
+    "label": "바른 생활",
+    "icon": "🤝",
+    "description": "통합교과(도덕·인성): 규칙 지키기, 공공예절, 배려와 나눔 등 실천 중심의 생활 태도.",
+    "topics": ["규칙 지키기", "공공예절", "배려와 나눔"],
+    "growth": { "diligence": 1 }
   },
   {
-    "id": "arts_pe",
-    "label": "즐거운생활 (음악·미술·체육)",
-    "growth": { "art": 2, "stamina": 1 }
+    "id": "wise_living",
+    "label": "슬기로운 생활",
+    "icon": "🔍",
+    "description": "통합교과(사회·과학): 학교 주변 식물·동물 관찰, 우리 동네 이웃들의 직업 탐색 등 주변 환경 탐구.",
+    "topics": ["학교 주변 식물 관찰", "동물 관찰", "우리 동네 직업 탐색"],
+    "growth": { "social": 1 }
+  },
+  {
+    "id": "joyful_living",
+    "label": "즐거운 생활",
+    "icon": "🎵",
+    "description": "통합교과(체육·음악·미술): 그리기, 만들기, 노래 부르기, 신체 놀이 등 감각 표현과 체육 활동.",
+    "topics": ["그리기", "만들기", "노래 부르기", "신체 놀이"],
+    "growth": { "art": 1, "power": 1 }
   },
   {
     "id": "creative_activity",
     "label": "창의적 체험활동",
-    "growth": { "social": 2, "diligence": 1 }
+    "icon": "🌱",
+    "description": "자율·동아리·진로·봉사활동. 학급 회의, 안전 교육, 독서 활동, 학교 행사 준비 등을 진행한다. 순서대로 돌아가며 진행되며, '안전 교육'을 들으면 수상한 어른을 만났을 때 슬기롭게 대처할 수 있다.",
+    "topics": ["학급 회의", "안전 교육", "독서 활동", "학교 행사 준비"],
+    "growth": { "social": 1, "diligence": 1 }
   }
 ]

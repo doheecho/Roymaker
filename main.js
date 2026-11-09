@@ -5,6 +5,8 @@ const STAT_LABELS = {
   art: "감성",
   social: "사회성",
   diligence: "성실성",
+  popularity: "인기",
+  trust: "신뢰도",
 };
 
 const STAT_ICONS = {
@@ -14,6 +16,8 @@ const STAT_ICONS = {
   art: "🎨",
   social: "🗣️",
   diligence: "✍️",
+  popularity: "⭐",
+  trust: "🤞",
 };
 
 const CONDITION_ICONS = { hunger: "🍚", staminaNow: "⚡", stress: "😵", wallet: "💰" };
@@ -23,8 +27,20 @@ const SCHOOL_ICON = "🏫";
 const HOME_FALLBACK = { lat: 37.5495, lng: 127.0203 };
 const CHILD_WALK_M_PER_MIN = 70;
 const HOME_SCHOOL_WALK_MIN = 10;
-const SCHOOL_START_MIN = 9 * 60;
-const SCHOOL_END_MIN = 16 * 60;
+// 학교 시간표 기본값 — 실제 값은 data/school_schedule.json에서 읽어 덮어쓴다.
+let SCHOOL_START_MIN = 8 * 60 + 30;
+let SCHOOL_LATE_MIN = 8 * 60 + 50;
+const MORNING_CARE_LATE_MIN = 9 * 60;
+const SEGMENT_PHASE_MS = 650;
+const AFTERSCHOOL_STRESS = 8;
+const AUTONOMOUS_STUDY_STRESS = 6;
+const AUTONOMOUS_STUDY_EFFECT = { intellect: 1, diligence: 1, staminaNow: -3 };
+
+// 돌발사건 — 걷는 동안 게임 1분마다 확률 판정
+const EVENT_CHANCE_PER_MIN = 0.07;
+const EVENT_COOLDOWN_MIN = 6;
+const MAX_EVENTS_PER_DAY = 3;
+const HOTPLACE_SEARCH_RADIUS_M = 900;
 const ACADEMY_LESSON_MIN = 60;
 const WAIT_PHASE_MS = 2200;
 const MOVE_SPEED_MPS = 60;
@@ -81,14 +97,28 @@ const state = {
   charPos: null,
   charOverlay: null,
   map: null,
+  hotplaces: [],
   walkModeActive: false,
+  requestPhone: null,
+  school: null,
+  subjectMap: {},
+  afterschoolCourses: [],
+  neulbom: null,
+  events: [],
+  phone: null,
+  safetyEducated: false,
+  creativeCount: 0,
+  eventsToday: 0,
+  lastEventClock: -Infinity,
+  calledToday: new Set(),
+  registrations: { active: {}, pending: {} },
+  ui: { afterschoolCourse: null, careProgram: null },
   dayRunning: false,
   day: 1,
   holidaySet: new Set(),
 };
 
-const SCHOOL_BLOCK_TEMPLATE = { id: "school", kind: "school", startMin: SCHOOL_START_MIN, endMin: SCHOOL_END_MIN };
-let scheduleBlocks = [{ ...SCHOOL_BLOCK_TEMPLATE }];
+let scheduleBlocks = [];
 
 const GAME_START_DATE_UTC = Date.UTC(2026, 2, 1); // Day 1 = 2026년 3월 1일 일요일
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -108,11 +138,76 @@ function formatGameDate(date) {
   return `${date.getUTCFullYear()}년 ${date.getUTCMonth() + 1}월 ${date.getUTCDate()}일 ${WEEKDAY_LABELS[date.getUTCDay()]}요일`;
 }
 
+function weekdayOf(dayNumber) {
+  return gameDateForDay(dayNumber).getUTCDay();
+}
+
+function vacationOf(dayNumber) {
+  const key = gameDateKey(gameDateForDay(dayNumber));
+  return (state.school?.vacations ?? []).find((v) => key >= v.start && key <= v.end) ?? null;
+}
+
 function isSchoolDay(dayNumber) {
   const date = gameDateForDay(dayNumber);
   const dow = date.getUTCDay();
   if (dow === 0 || dow === 6) return false;
+  if (vacationOf(dayNumber)) return false;
   return !state.holidaySet.has(gameDateKey(date));
+}
+
+function isWeekday(dayNumber) {
+  const dow = weekdayOf(dayNumber);
+  return dow >= 1 && dow <= 5;
+}
+
+function clockToMinutes(text) {
+  const [h, m] = text.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// 요일별 정규수업 시간 — 월·금은 4교시, 화·수·목은 5교시 후 하교
+function schoolTimesFor(dayNumber) {
+  const dow = weekdayOf(dayNumber);
+  const lastPeriod = state.school?.lastPeriodByWeekday?.[dow] ?? 5;
+  const segs = state.school?.segments ?? [];
+  const last = segs.find((s) => s.type === "period" && s.period === lastPeriod);
+  const endMin = last ? last.endMin : 13 * 60 + 40;
+  return { startMin: SCHOOL_START_MIN, endMin, lastPeriod };
+}
+
+// 방과후교육: 마지막 수업 후 20분 휴식 → 1차시 40분 → 10분 휴식 → 2차시 40분
+function afterschoolTimesFor(dayNumber) {
+  const cfg = state.school?.afterschool ?? { breakBeforeMin: 20, periodMin: 40, breakBetweenMin: 10 };
+  const { endMin: schoolEnd } = schoolTimesFor(dayNumber);
+  const startMin = schoolEnd + cfg.breakBeforeMin;
+  const p1End = startMin + cfg.periodMin;
+  const p2Start = p1End + cfg.breakBetweenMin;
+  return { startMin, p1End, p2Start, endMin: p2Start + cfg.periodMin };
+}
+
+function schoolBlockFor(dayNumber) {
+  const { startMin, endMin } = schoolTimesFor(dayNumber);
+  return { id: "school", kind: "school", startMin, endMin };
+}
+
+function isRegisteredSlot(academyId, dow, startMin) {
+  const reg = state.registrations.active[academyId];
+  return !!reg && reg.days.includes(dow) && reg.startMin === startMin;
+}
+
+// 하루 기본 시간표: 등교일이면 학교, 그리고 이번 주에 등록된 학원 수업
+function buildDefaultBlocks(dayNumber) {
+  const blocks = [];
+  if (isSchoolDay(dayNumber)) blocks.push(schoolBlockFor(dayNumber));
+  const dow = weekdayOf(dayNumber);
+  Object.entries(state.registrations.active).forEach(([academyId, reg]) => {
+    if (!reg.days.includes(dow)) return;
+    const startMin = reg.startMin;
+    const endMin = startMin + ACADEMY_LESSON_MIN;
+    if (blocks.some((b) => rangesOverlap(b.startMin, b.endMin, startMin, endMin))) return;
+    blocks.push({ id: `academy-${academyId}-reg`, kind: "academy", academyId, startMin, endMin });
+  });
+  return blocks.sort((a, b) => a.startMin - b.startMin);
 }
 
 function renderDayHeader() {
@@ -162,6 +257,27 @@ function keywordSearch(query) {
         reject(new Error(`장소 검색 실패: ${query}`));
       }
     });
+  });
+}
+
+// 집 주변 반경 안에서 가장 가까운 장소를 키워드로 찾는다 (핫플레이스용)
+function keywordSearchNear(query, center, radius) {
+  return new Promise((resolve, reject) => {
+    new kakao.maps.services.Places().keywordSearch(
+      query,
+      (result, status) => {
+        if (status === kakao.maps.services.Status.OK && result[0]) {
+          resolve({ lat: Number(result[0].y), lng: Number(result[0].x), placeName: result[0].place_name });
+        } else {
+          reject(new Error(`주변 장소 검색 실패: ${query}`));
+        }
+      },
+      {
+        location: new kakao.maps.LatLng(center.lat, center.lng),
+        radius,
+        sort: kakao.maps.services.SortBy.DISTANCE,
+      }
+    );
   });
 }
 
@@ -260,6 +376,18 @@ function createBusStopOverlay(map, position, name, title) {
   });
 }
 
+function createHotplaceOverlay(map, position, place) {
+  const el = document.createElement("div");
+  el.className = "bus-stop-marker hot-marker";
+  el.title = place.realName ? `${place.name} — ${place.realName}` : place.name;
+  el.innerHTML = `<span class="bus-badge hot-badge">H</span><span class="bus-label">${place.icon} ${place.name}</span>`;
+  return new kakao.maps.CustomOverlay({
+    map,
+    position: new kakao.maps.LatLng(position.lat, position.lng),
+    content: el,
+  });
+}
+
 function animate(durationMs, onFrame) {
   return new Promise((resolve) => {
     const startedAt = performance.now();
@@ -275,6 +403,7 @@ function animate(durationMs, onFrame) {
 
 function showDpad(visible) {
   document.getElementById("dpad").hidden = !visible;
+  document.getElementById("phone-btn").hidden = !visible;
   if (!visible) {
     keys.up = keys.down = keys.left = keys.right = false;
   }
@@ -287,34 +416,62 @@ function nearbyStationId(list) {
 
 function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
   return new Promise((resolve, reject) => {
-    state.walkModeActive = true;
-    showDpad(true);
-
     let clock = startClock;
     let last = performance.now();
-    let confirmingHome = false;
+    let paused = false;
+    let walkedMinAcc = 0;
     let hasLeftHome = !allowEarlyHome || distanceMeters(state.charPos, state.positions.home) > ARRIVAL_RADIUS_M;
-    let suppressedBusStopId = nearbyStationId(state.stations.bus);
-    let suppressedSubwayId = nearbyStationId(state.stations.subway);
-    let boarding = false;
+    const suppressed = {
+      bus: nearbyStationId(state.stations.bus),
+      subway: nearbyStationId(state.stations.subway),
+      hotplace: nearbyStationId(state.hotplaces),
+    };
 
-    function boardAt(kind, currentStation) {
-      boarding = true;
+    function pause() {
+      paused = true;
       state.walkModeActive = false;
       showDpad(false);
+    }
+
+    function resume() {
+      paused = false;
+      state.walkModeActive = true;
+      showDpad(true);
+      last = performance.now();
+      requestAnimationFrame(frame);
+    }
+
+    function finish() {
+      state.walkModeActive = false;
+      state.requestPhone = null;
+      showDpad(false);
+    }
+
+    // 잠깐 멈추고 (창을 띄우고) 걸린 게임 시간(분)만큼 시계를 진행한 뒤 다시 걷기
+    function pauseFor(task) {
+      pause();
+      Promise.resolve(task()).then((minutes) => {
+        clock += minutes ?? 0;
+        renderStats(state.character);
+        resume();
+      });
+    }
+
+    state.requestPhone = () => {
+      if (paused || !state.walkModeActive) return;
+      pauseFor(() => openPhone(clock));
+    };
+
+    function boardAt(kind, currentStation) {
+      pause();
       const stations = kind === "bus" ? state.stations.bus : state.stations.subway;
       const modeLabel = kind === "bus" ? "버스" : "지하철";
       const fare = kind === "bus" ? BUS_FARE : SUBWAY_FARE;
 
       chooseRideDestination(kind, currentStation, stations).then((dest) => {
         if (!dest) {
-          if (kind === "bus") suppressedBusStopId = currentStation.id;
-          else suppressedSubwayId = currentStation.id;
-          boarding = false;
-          state.walkModeActive = true;
-          showDpad(true);
-          last = performance.now();
-          requestAnimationFrame(frame);
+          suppressed[kind] = currentStation.id;
+          resume();
           return;
         }
 
@@ -325,19 +482,15 @@ function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
         rideTransit(dest.pos, clock, `${modeLabel}로 ${dest.name}까지 이동`).then((endClock) => {
           clock = endClock;
           logLine(`${minutesToClock(clock)} ${dest.name} 도착`);
-          suppressedBusStopId = kind === "bus" ? dest.id : suppressedBusStopId;
-          suppressedSubwayId = kind === "subway" ? dest.id : suppressedSubwayId;
-          boarding = false;
-          state.walkModeActive = true;
-          showDpad(true);
-          last = performance.now();
-          requestAnimationFrame(frame);
+          suppressed[kind] = dest.id;
+          suppressed.hotplace = nearbyStationId(state.hotplaces);
+          resume();
         });
       });
     }
 
     function frame(now) {
-      if (confirmingHome || boarding) return;
+      if (paused) return;
 
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
@@ -362,14 +515,14 @@ function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
         state.charOverlay.setPosition(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
         state.map.setCenter(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
         clock += dt * GAME_MIN_PER_REAL_SEC;
+        walkedMinAcc += dt * GAME_MIN_PER_REAL_SEC;
       }
 
       const dist = distanceMeters(state.charPos, target);
       setStatus(`${minutesToClock(clock)} · ${label} (남은 거리 약 ${Math.round(dist)}m)`);
 
       if (dist <= ARRIVAL_RADIUS_M) {
-        state.walkModeActive = false;
-        showDpad(false);
+        finish();
         resolve(clock);
         return;
       }
@@ -378,50 +531,261 @@ function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
         const homeDist = distanceMeters(state.charPos, state.positions.home);
         if (!hasLeftHome && homeDist > ARRIVAL_RADIUS_M) hasLeftHome = true;
         if (hasLeftHome && homeDist <= ARRIVAL_RADIUS_M) {
-          confirmingHome = true;
-          state.walkModeActive = false;
-          showDpad(false);
+          pause();
           confirmGoHomeEarly().then((yes) => {
             if (yes) {
+              finish();
               reject(new DayCancelledEarly(clock));
               return;
             }
-            confirmingHome = false;
             hasLeftHome = false;
-            state.walkModeActive = true;
-            showDpad(true);
-            last = performance.now();
-            requestAnimationFrame(frame);
+            resume();
           });
           return;
         }
       }
 
       const nearBus = nearestStation(state.charPos, state.stations.bus);
-      if (nearBus && nearBus.dist <= ARRIVAL_RADIUS_M && nearBus.id !== suppressedBusStopId) {
+      if (nearBus && nearBus.dist <= ARRIVAL_RADIUS_M && nearBus.id !== suppressed.bus) {
         logLine(`${minutesToClock(clock)} ${nearBus.name} 도착`);
         boardAt("bus", nearBus);
         return;
       }
-      if (!nearBus || nearBus.dist > ARRIVAL_RADIUS_M) suppressedBusStopId = null;
+      if (!nearBus || nearBus.dist > ARRIVAL_RADIUS_M) suppressed.bus = null;
 
       const nearSubway = nearestStation(state.charPos, state.stations.subway);
-      if (nearSubway && nearSubway.dist <= ARRIVAL_RADIUS_M && nearSubway.id !== suppressedSubwayId) {
+      if (nearSubway && nearSubway.dist <= ARRIVAL_RADIUS_M && nearSubway.id !== suppressed.subway) {
         logLine(`${minutesToClock(clock)} ${nearSubway.name} 도착`);
         boardAt("subway", nearSubway);
         return;
       }
-      if (!nearSubway || nearSubway.dist > ARRIVAL_RADIUS_M) suppressedSubwayId = null;
+      if (!nearSubway || nearSubway.dist > ARRIVAL_RADIUS_M) suppressed.subway = null;
+
+      const nearHot = nearestStation(state.charPos, state.hotplaces);
+      if (nearHot && nearHot.dist <= ARRIVAL_RADIUS_M && nearHot.id !== suppressed.hotplace) {
+        suppressed.hotplace = nearHot.id;
+        logLine(`${minutesToClock(clock)} ${nearHot.icon} ${nearHot.name} 앞을 지나간다`);
+        pauseFor(() => visitHotplace(nearHot, clock));
+        return;
+      }
+      if (!nearHot || nearHot.dist > ARRIVAL_RADIUS_M) suppressed.hotplace = null;
+
+      // 돌발사건: 실제로 걸은 게임 1분마다 한 번씩 판정
+      while (walkedMinAcc >= 1) {
+        walkedMinAcc -= 1;
+        if (shouldTriggerEvent(clock)) {
+          walkedMinAcc = 0;
+          state.eventsToday += 1;
+          state.lastEventClock = clock;
+          pauseFor(() => runRandomEvent(clock));
+          return;
+        }
+      }
 
       requestAnimationFrame(frame);
     }
+    state.walkModeActive = true;
+    showDpad(true);
     requestAnimationFrame(frame);
   });
 }
 
-async function waitUntil(startClock, endClock, label) {
+function shouldTriggerEvent(clock) {
+  if (state.events.length === 0) return false;
+  if (state.eventsToday >= MAX_EVENTS_PER_DAY) return false;
+  if (clock - state.lastEventClock < EVENT_COOLDOWN_MIN) return false;
+  return Math.random() < EVENT_CHANCE_PER_MIN;
+}
+
+function pickWeighted(list) {
+  const total = list.reduce((sum, e) => sum + (e.weight ?? 1), 0);
+  let r = Math.random() * total;
+  for (const e of list) {
+    r -= e.weight ?? 1;
+    if (r <= 0) return e;
+  }
+  return list[list.length - 1];
+}
+
+function pickRandom(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function fillTemplate(text, vars) {
+  return String(text ?? "").replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? `{${k}}`));
+}
+
+// 이펙트 값에 "{amount}" 같은 템플릿이 들어 있으면 숫자로 치환
+function resolveEffect(effect, vars) {
+  const out = {};
+  Object.entries(effect ?? {}).forEach(([k, v]) => {
+    out[k] = typeof v === "string" ? Number(fillTemplate(v, vars)) : v;
+  });
+  return out;
+}
+
+function nonZeroEffect(effect) {
+  return Object.fromEntries(Object.entries(effect).filter(([, v]) => v !== 0));
+}
+
+async function runRandomEvent(clock) {
+  const event = pickWeighted(state.events);
+  const vars = {};
+  if (event.amounts) vars.amount = pickRandom(event.amounts);
+  if (event.variants) Object.assign(vars, pickRandom(event.variants));
+
+  logLine(`${minutesToClock(clock)} ${event.title}`);
+
+  const options = event.choices.map((choice) => {
+    const locked = choice.safety && !state.safetyEducated;
+    return {
+      label: locked ? `🔒 ${choice.label}` : choice.label,
+      value: choice,
+      disabled: locked,
+      hint: locked ? event.requiresSafety : null,
+    };
+  });
+  const choice = await presentChoice("event-panel", event.title, options, {
+    body: fillTemplate(event.text, vars),
+    tone: "event",
+  });
+
+  let result = choice.result;
+  if (choice.check) {
+    const stat = state.character.stats[choice.check.stat] ?? 0;
+    const chance = Math.min(0.9, Math.max(0.1, stat / (choice.check.threshold * 2)));
+    result = Math.random() < chance ? choice.success : choice.fail;
+  }
+
+  const effect = nonZeroEffect(resolveEffect(result.effect, vars));
+  applyEffect(effect);
+  renderStats(state.character);
+  const effectNote = Object.keys(effect).length ? ` (${signedEffectText(effect)})` : "";
+  logLine(`${choice.label.replace(/^[^\s가-힣A-Za-z0-9"]+\s/, "")} → ${fillTemplate(result.text, vars)}${effectNote}`);
+  await presentChoice("event-panel", result.crisis ? "⚠️ 위기 발생" : "결과", [{ label: "계속 걷기", value: true }], {
+    body: `${fillTemplate(result.text, vars)}${effectNote}`,
+    tone: result.crisis ? "danger" : "event",
+  });
+  return result.minutes ?? 0;
+}
+
+async function visitHotplace(place, clock) {
+  const options = [{ label: "그냥 지나가기", value: null }];
+  place.menu.forEach((item) => {
+    const priceText = item.price > 0 ? `${item.price}원` : "무료";
+    options.push({
+      label: `${item.icon} ${item.name} · ${priceText} · ${item.minutes}분`,
+      value: item,
+      disabled: state.character.wallet < item.price,
+      hint: signedEffectText(item.effect),
+    });
+  });
+  const item = await presentChoice("event-panel", `${place.icon} ${place.name}`, options, {
+    body: `지금 ${minutesToClock(clock)} · 용돈 ${state.character.wallet}원. 무엇을 할까요?`,
+    tone: "hot",
+  });
+  if (!item) return 0;
+  state.character.wallet -= item.price;
+  applyEffect(item.effect);
+  renderStats(state.character);
+  logLine(`${place.name}에서 ${item.name}${item.price ? ` (${item.price}원)` : ""} — ${signedEffectText(item.effect)}`);
+  return item.minutes;
+}
+
+async function openPhone(clock) {
+  const contacts = state.phone?.contacts ?? [];
+  const groups = [...new Set(contacts.map((c) => c.group))];
+  const options = [{ label: "📵 전화 끊기", value: null }];
+  groups.forEach((group) => {
+    contacts
+      .filter((c) => c.group === group)
+      .forEach((c) => options.push({ label: `${c.icon} ${c.name}`, value: c, group, hint: c.note }));
+  });
+  const contact = await presentChoice("event-panel", "📱 휴대전화", options, {
+    body: `${minutesToClock(clock)} · 누구에게 전화할까요?`,
+    tone: "phone",
+  });
+  if (!contact) return 0;
+
+  const line = pickRandom(contact.lines);
+  const firstCall = !state.calledToday.has(contact.id);
+  state.calledToday.add(contact.id);
+  const effect = firstCall ? contact.effect ?? {} : {};
+  applyEffect(effect);
+  renderStats(state.character);
+  const effectNote = Object.keys(effect).length ? ` (${signedEffectText(effect)})` : "";
+  logLine(`📱 ${contact.name}에게 전화 — "${line}"${effectNote}`);
+  await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
+    body: `"${line}"${effectNote}`,
+    tone: "phone",
+  });
+  return state.phone?.callMinutes ?? 2;
+}
+
+// 공용 선택창 — options: [{ label, value, disabled, hint, group }]
+function presentChoice(panelId, heading, options, { body = null, tone = null } = {}) {
+  return new Promise((resolve) => {
+    const panel = document.getElementById(panelId);
+    panel.hidden = false;
+    panel.innerHTML = "";
+    panel.dataset.tone = tone ?? "";
+
+    const h = document.createElement("p");
+    h.className = "choice-heading";
+    h.textContent = heading;
+    panel.appendChild(h);
+
+    if (body) {
+      const b = document.createElement("p");
+      b.className = "choice-body";
+      b.textContent = body;
+      panel.appendChild(b);
+    }
+
+    let row = null;
+    let currentGroup;
+    options.forEach((opt) => {
+      if (!row || opt.group !== currentGroup) {
+        currentGroup = opt.group;
+        if (opt.group) {
+          const g = document.createElement("p");
+          g.className = "choice-group";
+          g.textContent = opt.group;
+          panel.appendChild(g);
+        }
+        row = document.createElement("div");
+        row.className = "chip-row";
+        panel.appendChild(row);
+      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "transport-btn";
+      btn.disabled = !!opt.disabled;
+      btn.textContent = opt.label;
+      if (opt.hint) btn.title = opt.hint;
+      btn.addEventListener("click", () => {
+        panel.hidden = true;
+        resolve(opt.value);
+      });
+      if (opt.hint) {
+        const wrap = document.createElement("span");
+        wrap.className = "choice-opt";
+        const hint = document.createElement("span");
+        hint.className = "choice-hint";
+        hint.textContent = opt.hint;
+        wrap.appendChild(btn);
+        wrap.appendChild(hint);
+        row.appendChild(wrap);
+      } else {
+        row.appendChild(btn);
+      }
+    });
+  });
+}
+
+async function waitUntil(startClock, endClock, label, durationMs = WAIT_PHASE_MS) {
   setStatus(`${minutesToClock(startClock)} · ${label}`);
-  await animate(WAIT_PHASE_MS, (t) => {
+  await animate(durationMs, (t) => {
     setStatus(`${minutesToClock(startClock + (endClock - startClock) * t)} · ${label}`);
   });
   setStatus(`${minutesToClock(endClock)} · ${label}`);
@@ -466,67 +830,17 @@ function chooseRideDestination(kind, currentStation, stations) {
 }
 
 function confirmGoHomeEarly() {
-  return new Promise((resolve) => {
-    const panel = document.getElementById("home-confirm");
-    panel.hidden = false;
-    panel.innerHTML = "";
-
-    const heading = document.createElement("p");
-    heading.textContent = "일정을 취소하고 집에 들어갑니다";
-    panel.appendChild(heading);
-
-    const row = document.createElement("div");
-    row.className = "chip-row";
-
-    function addOption(label, value) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "transport-btn";
-      btn.textContent = label;
-      btn.addEventListener("click", () => {
-        panel.hidden = true;
-        resolve(value);
-      });
-      row.appendChild(btn);
-    }
-
-    addOption("예", true);
-    addOption("아니오", false);
-
-    panel.appendChild(row);
-  });
+  return presentChoice("home-confirm", "일정을 취소하고 집에 들어갑니다", [
+    { label: "예", value: true },
+    { label: "아니오", value: false },
+  ]);
 }
 
 function chooseHomeActivity(homeActivities) {
-  return new Promise((resolve) => {
-    const panel = document.getElementById("home-confirm");
-    panel.hidden = false;
-    panel.innerHTML = "";
-
-    const heading = document.createElement("p");
-    heading.textContent = "집에서 무엇을 할까요?";
-    panel.appendChild(heading);
-
-    const row = document.createElement("div");
-    row.className = "chip-row";
-
-    function addOption(label, value) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "transport-btn";
-      btn.textContent = label;
-      btn.addEventListener("click", () => {
-        panel.hidden = true;
-        resolve(value);
-      });
-      row.appendChild(btn);
-    }
-
-    homeActivities.forEach((activity) => addOption(activity.name, activity));
-    addOption("그냥 쉬기", null);
-
-    panel.appendChild(row);
-  });
+  return presentChoice("home-confirm", "집에서 무엇을 할까요?", [
+    ...homeActivities.map((activity) => ({ label: activity.name, value: activity })),
+    { label: "그냥 쉬기", value: null },
+  ]);
 }
 
 async function rideTransit(target, startClock, label) {
@@ -555,7 +869,7 @@ function travelTo(target, startClock, placeName) {
   return walkTo(target, startClock, `${placeName}(으)로 이동 중`, { allowEarlyHome });
 }
 
-async function renderMap(character, academies, activities, stations) {
+async function renderMap(character, academies, activities, stations, hotplaces) {
   const map = new kakao.maps.Map(document.getElementById("map"), {
     center: new kakao.maps.LatLng(HOME_FALLBACK.lat, HOME_FALLBACK.lng),
     level: MAP_ZOOM_LEVEL,
@@ -611,6 +925,26 @@ async function renderMap(character, academies, activities, stations) {
     createBusStopOverlay(map, pos, stop.name, `정류장 코드 ${stop.code}${note}`);
   }
 
+  for (const place of hotplaces) {
+    const fallbackPos = offsetLatLng(homePos.lat, homePos.lng, place.fallback.distanceM, place.fallback.bearing);
+    let pos = fallbackPos;
+    let realName = null;
+    if (place.address) {
+      pos = await resolvePlace(place.address, null, fallbackPos);
+    } else if (place.placeQuery) {
+      try {
+        const found = await keywordSearchNear(place.placeQuery, homePos, HOTPLACE_SEARCH_RADIUS_M);
+        pos = { lat: found.lat, lng: found.lng };
+        realName = found.placeName;
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+    const entry = { ...place, pos, realName };
+    state.hotplaces.push(entry);
+    createHotplaceOverlay(map, pos, entry);
+  }
+
   state.charPos = { ...homePos };
   state.charOverlay = createCharacterOverlay(map, homePos);
 }
@@ -641,8 +975,23 @@ function renderStats(character) {
       <span class="condition-badge">${CONDITION_ICONS.staminaNow} 체력 ${character.condition.staminaNow}</span>
       <span class="condition-badge${stressWarning ? " warning" : ""}">${CONDITION_ICONS.stress} 스트레스 ${stress}</span>
       <span class="condition-badge">${CONDITION_ICONS.wallet} ${character.wallet}원</span>
+      ${state.safetyEducated ? '<span class="condition-badge good" title="창의적 체험활동 안전 교육 이수 — 수상한 어른에게 슬기롭게 대처할 수 있다">🦺 안전교육 이수</span>' : ""}
     </div>
   `;
+}
+
+const REG_WEEKDAYS = [1, 2, 3, 4, 5];
+
+function regSummary(reg) {
+  if (!reg || reg.days.length === 0) return "등록 안 함";
+  return `${reg.days.map((d) => WEEKDAY_LABELS[d]).join("·")} ${minutesToClock(reg.startMin)}`;
+}
+
+function sameReg(a, b) {
+  const na = a && a.days.length ? a : null;
+  const nb = b && b.days.length ? b : null;
+  if (!na || !nb) return !na && !nb;
+  return na.startMin === nb.startMin && na.days.join() === nb.days.join();
 }
 
 function renderAcademies(academies, categoryMap) {
@@ -660,11 +1009,61 @@ function renderAcademies(academies, categoryMap) {
     const li = document.createElement("li");
     li.innerHTML = `
       <span class="item-icon">${category.icon ?? "🏫"}</span>
-      <span>
+      <span class="academy-body">
         <strong>${academy.name}</strong> (${category.label})<br>
         <span class="muted">${growthText} · ${hoursText} · ${addressText} (집에서 ${academy.location.mode === "walk" ? "도보" : "이동"} ${academy.location.etaMinFromHome}분)</span>
       </span>
     `;
+
+    if (academy.hours) {
+      const body = li.querySelector(".academy-body");
+      const regEl = document.createElement("div");
+      regEl.className = "reg-row";
+
+      const pending = state.registrations.pending[academy.id] ?? { days: [], startMin: clockToMinutes(academy.hours.open) };
+      const open = clockToMinutes(academy.hours.open);
+      const close = clockToMinutes(academy.hours.close);
+
+      REG_WEEKDAYS.forEach((dow) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `reg-day${pending.days.includes(dow) ? " on" : ""}`;
+        btn.textContent = WEEKDAY_LABELS[dow];
+        btn.setAttribute("aria-pressed", pending.days.includes(dow) ? "true" : "false");
+        btn.addEventListener("click", () => {
+          const days = pending.days.includes(dow) ? pending.days.filter((d) => d !== dow) : [...pending.days, dow].sort();
+          state.registrations.pending[academy.id] = { days, startMin: pending.startMin };
+          renderAcademies(state.academies, state.categoryMap);
+        });
+        regEl.appendChild(btn);
+      });
+
+      const select = document.createElement("select");
+      select.className = "reg-time";
+      select.setAttribute("aria-label", `${academy.name} 수업 시작 시각`);
+      for (let m = open; m + ACADEMY_LESSON_MIN <= close; m += 60) {
+        const opt = document.createElement("option");
+        opt.value = String(m);
+        opt.textContent = minutesToClock(m);
+        opt.selected = m === pending.startMin;
+        select.appendChild(opt);
+      }
+      select.addEventListener("change", () => {
+        state.registrations.pending[academy.id] = { days: pending.days, startMin: Number(select.value) };
+        renderAcademies(state.academies, state.categoryMap);
+      });
+      regEl.appendChild(select);
+
+      const active = state.registrations.active[academy.id];
+      const status = document.createElement("span");
+      status.className = "muted reg-status";
+      status.textContent = sameReg(active, state.registrations.pending[academy.id])
+        ? `이번 주 등록: ${regSummary(active)}`
+        : `이번 주: ${regSummary(active)} → 다음 주(월)부터: ${regSummary(state.registrations.pending[academy.id])}`;
+      regEl.appendChild(status);
+
+      body.appendChild(regEl);
+    }
     el.appendChild(li);
   });
 }
@@ -789,7 +1188,7 @@ let previewEl = null;
 function updatePreview(range) {
   clearPreview();
   if (!range) return;
-  const conflict = scheduleBlocks.some((b) => rangesOverlap(b.startMin, b.endMin, range.startMin, range.endMin));
+  const conflict = range.invalid || scheduleBlocks.some((b) => rangesOverlap(b.startMin, b.endMin, range.startMin, range.endMin));
   previewEl = document.createElement("div");
   previewEl.className = `tt-preview ${conflict ? "tt-preview-bad" : "tt-preview-ok"}`;
   previewEl.style.top = `${minutesToRow(range.startMin) * ROW_PX}px`;
@@ -821,14 +1220,7 @@ function makeDraggable(chipEl, spec) {
     function computeRange(clientX, clientY) {
       const row = rowFromPoint(clientX, clientY);
       if (row == null) return null;
-      if (spec.kind === "school") {
-        return { startMin: SCHOOL_START_MIN, endMin: SCHOOL_END_MIN };
-      }
-      const durationMin = spec.kind === "activity" ? spec.durationMin : ACADEMY_LESSON_MIN;
-      const startMin = rowToMinutes(row);
-      const endMin = startMin + durationMin;
-      if (endMin > DAY_TIMELINE_END_MIN) return null;
-      return { startMin, endMin };
+      return rangeForSpec(spec, rowToMinutes(row));
     }
 
     function onMove(ev) {
@@ -844,16 +1236,19 @@ function makeDraggable(chipEl, spec) {
 
       const range = computeRange(ev.clientX, ev.clientY);
       if (!range) return;
-      const conflict = scheduleBlocks.some((b) => rangesOverlap(b.startMin, b.endMin, range.startMin, range.endMin));
+      const conflict = range.invalid || scheduleBlocks.some((b) => rangesOverlap(b.startMin, b.endMin, range.startMin, range.endMin));
       if (conflict) {
         flashReject();
         return;
       }
       scheduleBlocks.push({
-        id: spec.kind === "school" ? "school" : `${spec.kind}-${spec.academyId ?? spec.activityId ?? "x"}-${Date.now()}`,
+        id: spec.kind === "school" ? "school" : `${spec.kind}-${spec.academyId ?? spec.activityId ?? spec.careSlot ?? "x"}-${Date.now()}`,
         kind: spec.kind,
         academyId: spec.academyId,
         activityId: spec.activityId,
+        courseId: spec.kind === "afterschool" ? state.ui.afterschoolCourse : undefined,
+        careSlot: spec.careSlot,
+        programId: spec.kind === "care" && spec.careSlot !== "morning" ? state.ui.careProgram : undefined,
         startMin: range.startMin,
         endMin: range.endMin,
       });
@@ -866,6 +1261,58 @@ function makeDraggable(chipEl, spec) {
   });
 }
 
+function careSlotById(id) {
+  return state.neulbom?.slots.find((slot) => slot.id === id);
+}
+
+function careProgramById(id) {
+  for (const group of state.neulbom?.programs ?? []) {
+    const item = group.items.find((i) => i.id === id);
+    if (item) return { ...item, groupLabel: group.label };
+  }
+  return null;
+}
+
+function afterschoolCourseById(id) {
+  return state.afterschoolCourses.find((c) => c.id === id) ?? null;
+}
+
+// 팔레트 항목을 rowStartMin에 떨어뜨렸을 때의 시간 범위. invalid면 놓을 수 없다(운영시간 밖 등).
+function rangeForSpec(spec, rowStartMin) {
+  if (spec.kind === "school") return schoolTimesFor(state.day);
+  if (spec.kind === "afterschool") {
+    const t = afterschoolTimesFor(state.day);
+    return { startMin: t.startMin, endMin: t.endMin };
+  }
+  if (spec.kind === "care") {
+    const slot = careSlotById(spec.careSlot);
+    let endMin = clockToMinutes(slot.end);
+    let startMin;
+    if (slot.start) {
+      startMin = clockToMinutes(slot.start);
+    } else {
+      // 오후돌봄: 정규수업/방과후교육이 끝나는 시각에 맞춰 시작
+      const schoolish = scheduleBlocks.filter((b) => b.kind === "school" || b.kind === "afterschool");
+      startMin = schoolish.length ? Math.max(...schoolish.map((b) => b.endMin)) : rowStartMin;
+      // 뒤에 학원 등 다른 일정이 있으면 그 전까지만 돌봄
+      const nextStarts = scheduleBlocks.map((b) => b.startMin).filter((m) => m >= startMin);
+      if (nextStarts.length) endMin = Math.min(endMin, ...nextStarts);
+    }
+    return { startMin, endMin, invalid: startMin >= endMin };
+  }
+  const durationMin = spec.kind === "activity" ? spec.durationMin : ACADEMY_LESSON_MIN;
+  const startMin = rowStartMin;
+  const endMin = startMin + durationMin;
+  if (endMin > DAY_TIMELINE_END_MIN) return null;
+  const place =
+    spec.kind === "academy"
+      ? state.academies.find((a) => a.id === spec.academyId)
+      : state.activities.find((a) => a.id === spec.activityId);
+  const hours = place?.hours;
+  const outsideHours = !!hours && (startMin < clockToMinutes(hours.open) || endMin > clockToMinutes(hours.close));
+  return { startMin, endMin, invalid: outsideHours };
+}
+
 function createChip(icon, label, spec, extraClass) {
   const chip = document.createElement("div");
   chip.className = `chip${extraClass ? ` ${extraClass}` : ""}`;
@@ -874,40 +1321,160 @@ function createChip(icon, label, spec, extraClass) {
   return chip;
 }
 
+function paletteGroup(parent, title) {
+  const group = document.createElement("div");
+  group.className = "palette-group";
+  const h = document.createElement("p");
+  h.className = "palette-title";
+  h.textContent = title;
+  group.appendChild(h);
+  const row = document.createElement("div");
+  row.className = "chip-row";
+  group.appendChild(row);
+  parent.appendChild(group);
+  return { group, row };
+}
+
+function paletteSelect(label, groups, selected, onChange) {
+  const wrap = document.createElement("label");
+  wrap.className = "palette-select";
+  wrap.textContent = `${label} `;
+  const select = document.createElement("select");
+  groups.forEach((g) => {
+    const og = document.createElement("optgroup");
+    og.label = g.label;
+    g.items.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.id;
+      opt.textContent = `${item.icon ? `${item.icon} ` : ""}${item.name}`;
+      opt.title = item.description ?? "";
+      opt.selected = item.id === selected;
+      og.appendChild(opt);
+    });
+    select.appendChild(og);
+  });
+  select.addEventListener("change", () => onChange(select.value));
+  wrap.appendChild(select);
+  return wrap;
+}
+
 function renderPalette() {
   const el = document.getElementById("schedule-palette");
   el.innerHTML = "";
 
+  const vacation = vacationOf(state.day);
+  const weekday = isWeekday(state.day);
+  const school = paletteGroup(el, vacation ? `🏫 학교 — ${vacation.name} 중` : "🏫 학교 · 방과후 · 늘봄");
+
   const hasSchool = scheduleBlocks.some((b) => b.kind === "school");
-  if (!hasSchool) {
-    el.appendChild(createChip(SCHOOL_ICON, "학교 (09:00–16:00)", { kind: "school" }, "chip-school"));
+  if (!hasSchool && !vacation) {
+    const t = schoolTimesFor(state.day);
+    school.row.appendChild(
+      createChip(SCHOOL_ICON, `정규수업 (${minutesToClock(t.startMin)}–${minutesToClock(t.endMin)})`, { kind: "school" }, "chip-school")
+    );
   }
 
+  if (weekday && !vacation) {
+    const t = afterschoolTimesFor(state.day);
+    const course = afterschoolCourseById(state.ui.afterschoolCourse);
+    school.row.appendChild(
+      createChip(
+        course?.icon ?? "🎒",
+        `방과후 · ${course?.name ?? ""} (${minutesToClock(t.startMin)}–${minutesToClock(t.endMin)})`,
+        { kind: "afterschool" },
+        "chip-afterschool"
+      )
+    );
+  }
+
+  const careSlots = (state.neulbom?.slots ?? []).filter((slot) =>
+    slot.vacationOnly ? vacation && weekday : !vacation && weekday
+  );
+  careSlots.forEach((slot) => {
+    const timeText = slot.start ? `${slot.start}–${slot.end}` : `~${slot.end}`;
+    school.row.appendChild(createChip(slot.icon, `늘봄 ${slot.name} (${timeText})`, { kind: "care", careSlot: slot.id }, "chip-care"));
+  });
+
+  if (weekday) {
+    const opts = document.createElement("div");
+    opts.className = "palette-options";
+    if (!vacation && state.afterschoolCourses.length) {
+      opts.appendChild(
+        paletteSelect(
+          "방과후 과목",
+          (state.afterschoolGroups ?? []).map((g) => ({ label: g.label, items: g.courses })),
+          state.ui.afterschoolCourse,
+          (value) => {
+            state.ui.afterschoolCourse = value;
+            renderPalette();
+          }
+        )
+      );
+    }
+    if (careSlots.length && state.neulbom) {
+      opts.appendChild(
+        paletteSelect("늘봄 프로그램", state.neulbom.programs, state.ui.careProgram, (value) => {
+          state.ui.careProgram = value;
+        })
+      );
+    }
+    school.group.appendChild(opts);
+  }
+
+  const acts = paletteGroup(el, "🧹 활동");
   state.activities.forEach((activity) => {
-    el.appendChild(
+    const hoursText = activity.hours ? ` · ${activity.hours.open}~${activity.hours.close}` : "";
+    acts.row.appendChild(
       createChip(
         activity.icon,
-        `${activity.name} (${activity.durationMin}분)`,
+        `${activity.name} (${activity.durationMin}분${hoursText})`,
         { kind: "activity", activityId: activity.id, durationMin: activity.durationMin },
         "chip-activity"
       )
     );
   });
 
+  const acads = paletteGroup(el, "🏢 학원 — 운영시간 안에만 놓을 수 있다. 등록하지 않은 시간은 자율학습");
   state.academies
     .filter((a) => a.location.etaMinFromHome != null)
     .forEach((academy) => {
       const category = state.categoryMap[academy.categoryId];
-      const suffix = academy.location.mode === "walk" ? "" : " · 버스/지하철 권장(도보는 멀어요)";
-      el.appendChild(
+      const suffix = academy.location.mode === "walk" ? "" : " · 버스/지하철 권장";
+      const hoursText = academy.hours ? ` · ${academy.hours.open}~${academy.hours.close}` : "";
+      acads.row.appendChild(
         createChip(
           category.icon ?? "🏫",
-          `${academy.name} (${ACADEMY_LESSON_MIN}분${suffix})`,
+          `${academy.name} (${ACADEMY_LESSON_MIN}분${hoursText}${suffix})`,
           { kind: "academy", academyId: academy.id },
           "chip-academy"
         )
       );
     });
+}
+
+function blockDisplay(block) {
+  const dow = weekdayOf(state.day);
+  if (block.kind === "school") return { icon: SCHOOL_ICON, label: "정규수업", cls: "tt-school" };
+  if (block.kind === "afterschool") {
+    const course = afterschoolCourseById(block.courseId);
+    return { icon: course?.icon ?? "🎒", label: `방과후 · ${course?.name ?? "?"}`, cls: "tt-afterschool" };
+  }
+  if (block.kind === "care") {
+    const slot = careSlotById(block.careSlot);
+    const program = careProgramById(block.programId);
+    return { icon: slot?.icon ?? "🏠", label: `늘봄 ${slot?.name ?? ""}${program ? ` · ${program.name}` : ""}`, cls: "tt-care" };
+  }
+  if (block.kind === "activity") {
+    const activity = state.activities.find((a) => a.id === block.activityId);
+    return { icon: activity.icon, label: activity.name, cls: "tt-activity" };
+  }
+  const academy = state.academies.find((a) => a.id === block.academyId);
+  const registered = isRegisteredSlot(academy.id, dow, block.startMin);
+  return {
+    icon: state.categoryMap[academy.categoryId]?.icon ?? "🏫",
+    label: `${academy.name}${registered ? " (등록 수업)" : " (자율학습)"}`,
+    cls: "tt-academy",
+  };
 }
 
 function renderTimetable() {
@@ -929,26 +1496,15 @@ function renderTimetable() {
   scheduleBlocks.forEach((block) => {
     const top = minutesToRow(block.startMin) * ROW_PX;
     const height = minutesToRow(block.endMin) * ROW_PX - top;
-    const kindClass = block.kind === "school" ? "tt-school" : block.kind === "activity" ? "tt-activity" : "tt-academy";
+    const { icon, label, cls } = blockDisplay(block);
     const div = document.createElement("div");
-    div.className = `tt-block ${kindClass}`;
+    div.className = `tt-block ${cls}`;
     div.style.top = `${top}px`;
     div.style.height = `${height}px`;
 
-    let icon = SCHOOL_ICON;
-    let label = "학교";
-    if (block.kind === "activity") {
-      const activity = state.activities.find((a) => a.id === block.activityId);
-      icon = activity.icon;
-      label = activity.name;
-    } else if (block.kind === "academy") {
-      const academy = state.academies.find((a) => a.id === block.academyId);
-      icon = state.categoryMap[academy.categoryId]?.icon ?? "🏫";
-      label = academy.name;
-    }
     const span = document.createElement("span");
     span.className = "tt-label";
-    span.innerHTML = `<span>${icon}</span><span>${label}</span>`;
+    span.innerHTML = `<span>${icon}</span><span>${minutesToClock(block.startMin)} ${label}</span>`;
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "tt-remove";
@@ -984,14 +1540,6 @@ function addStress(amount) {
   state.character.condition.stress = Math.max(0, Math.min(100, state.character.condition.stress + amount));
 }
 
-function applySchoolDayEffects() {
-  state.character.condition.hunger = 80;
-  state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - 10);
-  addStress(SCHOOL_STRESS);
-  renderStats(state.character);
-  logLine("급식을 먹고 허기를 회복했다 (허기 80)");
-}
-
 function applyAcademyEffects(academy) {
   const category = state.categoryMap[academy.categoryId];
   Object.entries(category.growth).forEach(([stat, amount]) => {
@@ -1005,7 +1553,16 @@ function applyAcademyEffects(academy) {
   const growthText = Object.entries(category.growth)
     .map(([stat, amount]) => `${STAT_LABELS[stat]} +${amount}`)
     .join(" · ");
-  logLine(`${academy.name} 수업 완료 — ${growthText}`);
+  logLine(`${academy.name} 등록 수업 완료 — ${growthText}`);
+}
+
+// 운영시간 안이지만 사전 등록하지 않은 시간에 간 경우 — 자율학습
+function applyAutonomousStudy(academy) {
+  applyEffect(AUTONOMOUS_STUDY_EFFECT);
+  state.character.condition.hunger = Math.max(0, state.character.condition.hunger - 10);
+  addStress(AUTONOMOUS_STUDY_STRESS);
+  renderStats(state.character);
+  logLine(`${academy.name} — 등록된 수업 시간이 아니라 자율학습을 했다 (${signedEffectText(AUTONOMOUS_STUDY_EFFECT)})`);
 }
 
 function applyActivityEffects(activity) {
@@ -1028,6 +1585,155 @@ function applyEndOfDay(stressRecovery) {
   logLine("저녁밥을 먹고 하루를 마쳤다");
 }
 
+function scaleGrowth(perHour, hours) {
+  const out = {};
+  Object.entries(perHour ?? {}).forEach(([k, v]) => {
+    const amount = Math.round(v * hours);
+    if (amount !== 0) out[k] = amount;
+  });
+  return out;
+}
+
+// 정규수업: 자율독서 → 교시별 과목 → 중간놀이/점심 … 요일별 마지막 교시까지
+async function runSchoolBlock(block, clock, dow) {
+  const timetable = state.school?.timetable?.[dow] ?? [];
+  const segments = (state.school?.segments ?? []).filter((seg) => seg.endMin <= block.endMin);
+
+  if (clock < block.startMin) {
+    logLine(`${minutesToClock(clock)} 교문 앞에서 ${minutesToClock(block.startMin)}까지 기다렸다`);
+    clock = block.startMin;
+  }
+
+  for (const seg of segments) {
+    const subject = seg.type === "period" ? state.subjectMap[timetable[seg.period - 1]] : null;
+    const segLabel = subject ? `${seg.label} ${subject.icon} ${subject.label}` : seg.label;
+
+    if (seg.endMin <= clock) {
+      if (seg.type === "period") logLine(`${segLabel} — 지각해서 놓쳤다`);
+      continue;
+    }
+
+    await waitUntil(Math.max(seg.startMin, clock), seg.endMin, segLabel, SEGMENT_PHASE_MS);
+    clock = seg.endMin;
+
+    if (seg.type === "period") {
+      if (!subject) {
+        logLine(`${seg.label} — 자습`);
+        continue;
+      }
+      let topic;
+      if (subject.id === "creative_activity") {
+        topic = subject.topics[state.creativeCount % subject.topics.length];
+        state.creativeCount += 1;
+      } else {
+        topic = pickRandom(subject.topics);
+      }
+      applyEffect(subject.growth);
+      renderStats(state.character);
+      logLine(`${segLabel} — ${topic} (${signedEffectText(subject.growth)})`);
+      if (topic === "안전 교육" && !state.safetyEducated) {
+        state.safetyEducated = true;
+        renderStats(state.character);
+        logLine("🦺 안전 교육을 잘 들었다! 이제 수상한 어른을 만나도 슬기롭게 대처할 수 있다");
+      }
+    } else if (seg.type === "lunch") {
+      state.character.condition.hunger = Math.max(state.character.condition.hunger, 80);
+      renderStats(state.character);
+      logLine(`${minutesToClock(seg.startMin)} 점심시간 — 급식을 먹고 허기를 회복했다 (허기 ${state.character.condition.hunger})`);
+    } else if (seg.type === "reading") {
+      logLine(`${minutesToClock(seg.startMin)} 자율독서시간 — 조용히 책을 읽었다`);
+    }
+  }
+
+  state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - 10);
+  addStress(SCHOOL_STRESS);
+  renderStats(state.character);
+  logLine(`${minutesToClock(block.endMin)} 정규수업 끝 (${WEEKDAY_LABELS[dow] ?? ""}요일 ${segments.filter((s) => s.type === "period").length}교시까지)`);
+  return Math.max(clock, block.endMin);
+}
+
+// 방과후교육: 1차시 40분 → 10분 휴식 → 2차시 40분
+async function runAfterschoolBlock(block, clock) {
+  const course = afterschoolCourseById(block.courseId);
+  const cfg = state.school?.afterschool ?? { periodMin: 40, breakBetweenMin: 10 };
+  const p1End = block.startMin + cfg.periodMin;
+  const p2Start = p1End + cfg.breakBetweenMin;
+  const name = course?.name ?? "방과후";
+
+  if (clock < block.startMin) {
+    await waitUntil(clock, block.startMin, "방과후 시작 전 휴식", SEGMENT_PHASE_MS);
+    clock = block.startMin;
+  }
+  const phases = [
+    { start: block.startMin, end: p1End, label: `방과후 1차시 · ${name}` },
+    { start: p1End, end: p2Start, label: "방과후 쉬는 시간" },
+    { start: p2Start, end: block.endMin, label: `방과후 2차시 · ${name}` },
+  ];
+  for (const phase of phases) {
+    if (phase.end <= clock) continue;
+    await waitUntil(Math.max(phase.start, clock), phase.end, phase.label, SEGMENT_PHASE_MS);
+    clock = phase.end;
+  }
+
+  if (course) {
+    applyEffect(course.growth);
+    state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - course.staminaCost);
+  }
+  state.character.condition.hunger = Math.max(0, state.character.condition.hunger - 10);
+  addStress(AFTERSCHOOL_STRESS);
+  renderStats(state.character);
+  logLine(`방과후교육 ${name} 완료${course ? ` — ${signedEffectText(course.growth)}` : ""}`);
+  return Math.max(clock, block.endMin);
+}
+
+// 늘봄학교 돌봄 (아침·오후·저녁·방학중)
+async function runCareBlock(block, clock) {
+  const slot = careSlotById(block.careSlot);
+  const program = careProgramById(block.programId);
+  const start = Math.max(clock, block.startMin);
+  const label = `늘봄 ${slot.name}${program ? ` · ${program.name}` : ""}`;
+  await waitUntil(start, block.endMin, label);
+  const hours = Math.max(0, (block.endMin - start) / 60);
+
+  const effect = slot.effect ? { ...slot.effect } : scaleGrowth(program?.growthPerHour, hours);
+  applyEffect(effect);
+  const c = state.character.condition;
+  c.staminaNow = Math.max(0, c.staminaNow - Math.round((program?.staminaPerHour ?? 2) * hours));
+  c.hunger = Math.max(0, c.hunger - Math.round(5 * hours));
+  if (slot.lunch) c.hunger = Math.max(c.hunger, 80);
+  if (slot.snackHunger) c.hunger = Math.min(100, c.hunger + slot.snackHunger);
+  addStress(Math.round((slot.stressPerHour ?? 2) * hours));
+  renderStats(state.character);
+
+  const extras = [slot.lunch ? "점심 제공" : null, slot.snackHunger ? `저녁 간식 (허기 +${slot.snackHunger})` : null].filter(Boolean);
+  const effectNote = Object.keys(effect).length ? ` — ${signedEffectText(effect)}` : "";
+  logLine(`${label} 끝${effectNote}${extras.length ? ` · ${extras.join(" · ")}` : ""}`);
+  return block.endMin;
+}
+
+function lateThresholdFor(block) {
+  if (block.kind === "school") return SCHOOL_LATE_MIN;
+  if (block.kind === "care" && block.careSlot === "morning") return MORNING_CARE_LATE_MIN;
+  return block.startMin;
+}
+
+function isAtHome() {
+  return distanceMeters(state.charPos, state.positions.home) <= ARRIVAL_RADIUS_M;
+}
+
+function blockPlace(block) {
+  if (block.kind === "school" || block.kind === "afterschool" || block.kind === "care") {
+    return { pos: state.positions.school, name: "학교" };
+  }
+  if (block.kind === "activity") {
+    const activity = state.activities.find((a) => a.id === block.activityId);
+    const pos = activity.location === "home" ? state.positions.home : state.positions.activities[activity.id];
+    return { pos, name: activity.location === "home" ? "집" : activity.name, activity };
+  }
+  const academy = state.academies.find((a) => a.id === block.academyId);
+  return { pos: state.positions.academies[block.academyId], name: academy.name, academy };
+}
+
 async function runDay(blocks) {
   document.getElementById("day-run").hidden = false;
   document.getElementById("day-summary").hidden = true;
@@ -1035,9 +1741,12 @@ async function runDay(blocks) {
 
   state.charPos = { ...state.positions.home };
   state.charOverlay.setPosition(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
+  state.eventsToday = 0;
+  state.lastEventClock = -Infinity;
+  state.calledToday = new Set();
 
+  const dow = weekdayOf(state.day);
   let clock = DAY_TIMELINE_START_MIN;
-  let atHome = true;
   let hadSchool = false;
   let schoolWasLate = false;
   let gotSick = false;
@@ -1049,63 +1758,71 @@ async function runDay(blocks) {
 
   try {
     for (const block of blocks) {
-      const isSchool = block.kind === "school";
-      const isActivity = block.kind === "activity";
-      const academy = isSchool || isActivity ? null : state.academies.find((a) => a.id === block.academyId);
-      const activity = isActivity ? state.activities.find((a) => a.id === block.activityId) : null;
-      const isHomeActivity = isActivity && activity.location === "home";
+      const place = blockPlace(block);
+      const { label: blockLabel } = blockDisplay(block);
+      const alreadyThere = distanceMeters(state.charPos, place.pos) <= ARRIVAL_RADIUS_M;
 
-      const targetPos = isSchool
-        ? state.positions.school
-        : isHomeActivity
-        ? state.positions.home
-        : isActivity
-        ? state.positions.activities[activity.id]
-        : state.positions.academies[block.academyId];
-      const placeName = isSchool ? "학교" : isActivity ? activity.name : academy.name;
-
-      if (isHomeActivity && atHome) {
-        logLine(`${minutesToClock(clock)} 집에서 ${placeName} 시작`);
+      if (alreadyThere) {
+        logLine(`${minutesToClock(clock)} ${place.name}에서 이어서 ${blockLabel}`);
+        if (block.kind === "school") hadSchool = true;
       } else {
-        logLine(`${minutesToClock(clock)} ${placeName}(으)로 이동 시작`);
-        clock = await travelTo(targetPos, clock, placeName);
-        atHome = isHomeActivity;
-
-        const late = clock > block.startMin;
-        if (isSchool) {
+        logLine(`${minutesToClock(clock)} ${place.name}(으)로 이동 시작 (${blockLabel})`);
+        clock = await travelTo(place.pos, clock, place.name);
+        const late = clock > lateThresholdFor(block);
+        if (block.kind === "school") {
           hadSchool = true;
           schoolWasLate = late;
         }
-        logLine(`${minutesToClock(clock)} ${placeName} 도착${late ? " — 지각" : ""}`);
+        logLine(`${minutesToClock(clock)} ${place.name} 도착${late ? " — 지각" : ""}`);
       }
 
-      clock = Math.max(clock, block.startMin);
-      await waitUntil(
-        clock,
-        block.endMin,
-        isSchool ? "수업 중 (점심 포함)" : isActivity ? `${placeName} 중` : `${placeName} 수업`
-      );
-      clock = block.endMin;
-
-      if (isSchool) applySchoolDayEffects();
-      else if (isActivity) applyActivityEffects(activity);
-      else applyAcademyEffects(academy);
+      if (block.kind === "school") {
+        clock = await runSchoolBlock(block, clock, dow);
+      } else if (block.kind === "afterschool") {
+        clock = await runAfterschoolBlock(block, clock);
+      } else if (block.kind === "care") {
+        clock = await runCareBlock(block, clock);
+      } else {
+        clock = Math.max(clock, block.startMin);
+        const registered = block.kind === "academy" && isRegisteredSlot(block.academyId, dow, block.startMin);
+        const waitLabel =
+          block.kind === "activity" ? `${place.activity.name} 중` : registered ? `${place.name} 수업` : `${place.name} 자율학습`;
+        await waitUntil(clock, block.endMin, waitLabel);
+        clock = block.endMin;
+        if (block.kind === "activity") applyActivityEffects(place.activity);
+        else if (registered) applyAcademyEffects(place.academy);
+        else applyAutonomousStudy(place.academy);
+      }
 
       if (state.character.condition.stress >= STRESS_ILLNESS_THRESHOLD) {
         triggerIllness();
         gotSick = true;
         break;
       }
+
+      // 학원 수업이 끝나면 하원버스 or 개별 이동
+      if (block.kind === "academy") {
+        const how = await presentChoice("transport-choice", `${place.name} 끝 — 어떻게 갈까요?`, [
+          { label: "🚌 하원버스 타고 집으로", value: "shuttle" },
+          { label: "🚶 하원버스 안 타고 개별 이동", value: "walk" },
+        ]);
+        if (how === "shuttle") {
+          logLine(`${minutesToClock(clock)} 하원버스 탑승`);
+          clock = await rideTransit(state.positions.home, clock, "하원버스로 집까지 이동");
+          logLine(`${minutesToClock(clock)} 하원버스로 집 도착`);
+        } else {
+          logLine(`${minutesToClock(clock)} 하원버스를 타지 않고 개별적으로 이동한다`);
+        }
+      }
     }
   } catch (err) {
     if (!(err instanceof DayCancelledEarly)) throw err;
     cancelledEarly = true;
     clock = err.clock;
-    atHome = true;
     logLine(`${minutesToClock(clock)} 일정을 취소하고 집으로 돌아왔다`);
   }
 
-  if (!atHome) {
+  if (!isAtHome()) {
     logLine(`${minutesToClock(clock)} 집으로 귀가 이동`);
     clock = await travelTo(state.positions.home, clock, "집");
     logLine(`${minutesToClock(clock)} 집 도착`);
@@ -1138,7 +1855,14 @@ async function runDay(blocks) {
   state.day += 1;
   renderDayHeader();
 
-  scheduleBlocks = isSchoolDay(state.day) ? [{ ...SCHOOL_BLOCK_TEMPLATE }] : [];
+  // 월요일이 되면 지난주에 미리 등록해 둔 학원 일정이 이번 주 일정으로 확정된다
+  if (weekdayOf(state.day) === 1) {
+    state.registrations.active = JSON.parse(JSON.stringify(state.registrations.pending));
+    logLine("📋 새 주가 시작됐다 — 미리 등록한 학원 일정이 이번 주에 적용된다");
+  }
+  renderAcademies(state.academies, state.categoryMap);
+
+  scheduleBlocks = buildDefaultBlocks(state.day);
   renderTimetable();
 
   state.dayRunning = false;
@@ -1196,6 +1920,8 @@ function wireMovementControls() {
     if (dir) keys[dir] = false;
   });
 
+  document.getElementById("phone-btn").addEventListener("click", () => state.requestPhone?.());
+
   document.querySelectorAll("#dpad button").forEach((btn) => {
     const dir = btn.dataset.dir;
     btn.addEventListener("pointerdown", (event) => {
@@ -1212,7 +1938,22 @@ async function main() {
   renderClock();
   setInterval(renderClock, 1000 * 30);
 
-  const [character, academies, categories, items, activities, stations, holidays] = await Promise.all([
+  const [
+    character,
+    academies,
+    categories,
+    items,
+    activities,
+    stations,
+    holidays,
+    subjects,
+    school,
+    afterschool,
+    neulbom,
+    events,
+    hotplaces,
+    phone,
+  ] = await Promise.all([
     loadJSON("data/character.json"),
     loadJSON("data/academies.json"),
     loadJSON("data/academy_categories.json"),
@@ -1220,7 +1961,31 @@ async function main() {
     loadJSON("data/activities.json"),
     loadJSON("data/stations.json"),
     loadJSON("data/holidays.json"),
+    loadJSON("data/subjects.json"),
+    loadJSON("data/school_schedule.json"),
+    loadJSON("data/afterschool.json"),
+    loadJSON("data/neulbom.json"),
+    loadJSON("data/events.json"),
+    loadJSON("data/hotplaces.json"),
+    loadJSON("data/phone.json"),
   ]);
+
+  school.segments = school.segments.map((seg) => ({
+    ...seg,
+    startMin: clockToMinutes(seg.start),
+    endMin: clockToMinutes(seg.end),
+  }));
+  state.school = school;
+  SCHOOL_START_MIN = clockToMinutes(school.arrival.open);
+  SCHOOL_LATE_MIN = clockToMinutes(school.arrival.lateAfter);
+  state.subjectMap = Object.fromEntries(subjects.map((sub) => [sub.id, sub]));
+  state.afterschoolGroups = afterschool;
+  state.afterschoolCourses = afterschool.flatMap((g) => g.courses);
+  state.ui.afterschoolCourse = state.afterschoolCourses[0]?.id ?? null;
+  state.neulbom = neulbom;
+  state.ui.careProgram = neulbom.programs[0]?.items[0]?.id ?? null;
+  state.events = events;
+  state.phone = phone;
 
   state.character = character;
   state.academies = academies;
@@ -1230,14 +1995,14 @@ async function main() {
   state.holidaySet = new Set(holidays.map((h) => h.date));
 
   renderDayHeader();
-  scheduleBlocks = isSchoolDay(state.day) ? [{ ...SCHOOL_BLOCK_TEMPLATE }] : [];
+  scheduleBlocks = buildDefaultBlocks(state.day);
 
   renderStats(character);
   renderAcademies(academies, state.categoryMap);
   renderActivityInfo();
   renderTimetable();
   renderShop();
-  await renderMap(character, academies, activities, stations);
+  await renderMap(character, academies, activities, stations, hotplaces);
   wireScheduleEditor();
   wireMovementControls();
   wireNav();
