@@ -91,6 +91,8 @@ const LOW_HUNGER = 30;
 const LOW_ENERGY = 20;
 const LATE_DILIGENCE_PENALTY = 1;
 const SAVE_KEY = "roymaker-save-v2";
+const SLEEP_FADE_MS = 900;
+const SLEEP_HOLD_MS = 700;
 const ACADEMY_LESSON_MIN = 60;
 const WAIT_PHASE_MS = 2200;
 const MOVE_SPEED_MPS = 60;
@@ -162,6 +164,7 @@ const state = {
   lastEventClock: -Infinity,
   calledToday: new Set(),
   registrations: { active: {}, pending: {} },
+  diaryEntries: [],
   ui: { afterschoolCourse: null, careProgram: null },
   dayRunning: false,
   day: 1,
@@ -546,6 +549,7 @@ function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
         state.character.wallet -= fare;
         renderStats(state.character);
         logLine(`${modeLabel} 요금 ${fare}원 지불 (잔액 ${state.character.wallet}원)`);
+        diary(`${currentStation.name}에서 ${modeLabel}를 타고 ${josa(dest.name, "까지/까지")} 갔다.`);
 
         rideTransit(dest.pos, clock, `${modeLabel}로 ${dest.name}까지 이동`).then((endClock) => {
           clock = endClock;
@@ -729,6 +733,9 @@ async function runRandomEvent(clock) {
   const applied = applyEffect(effect);
   renderStats(state.character);
   const effectNote = Object.keys(applied).length ? ` (${appliedText(applied)})` : "";
+  const what = event.title.replace(/^[^가-힣]+/u, "").trim();
+  const how = fillTemplate(result.text, vars).replace(/^[^가-힣"0-9A-Za-z]+/u, "").trim();
+  diary(`${/[.!?…]$/.test(what) ? what : `${what}.`} ${how}`);
   logLine(`${choice.label.replace(/^[^\s가-힣A-Za-z0-9"]+\s/, "")} → ${fillTemplate(result.text, vars)}${effectNote}`);
   await presentChoice("event-panel", result.crisis ? "⚠️ 위기 발생" : "결과", [{ label: "계속 걷기", value: true }], {
     body: `${fillTemplate(result.text, vars)}${effectNote}`,
@@ -757,6 +764,11 @@ async function visitHotplace(place, clock) {
   const applied = applyEffect(item.effect);
   renderStats(state.character);
   logLine(`${place.name}에서 ${item.name}${item.price ? ` (${item.price}원)` : ""} — ${appliedText(applied)}`);
+  diary(
+    item.price > 0
+      ? `가는 길에 ${josa(place.name.split(" / ")[0], "에/에")} 들러서 ${josa(item.name, "을/를")} 샀다.`
+      : `가는 길에 ${josa(place.name.split(" / ")[0], "에서/에서")} ${josa(item.name, "을/를")} 했다. 정말 신났다!`
+  );
   return item.minutes;
 }
 
@@ -783,6 +795,7 @@ async function openPhone(clock) {
   renderStats(state.character);
   const effectNote = Object.keys(applied).length ? ` (${appliedText(applied)})` : "";
   logLine(`📱 ${contact.name}에게 전화 — "${line}"${effectNote}`);
+  diary(`${contact.name}에게 전화를 했다. "${line}"`);
   await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
     body: `"${line}"${effectNote}`,
     tone: "phone",
@@ -1752,6 +1765,120 @@ function renderTimetable() {
   renderPalette();
 }
 
+// ── 오늘의 일기 ──
+// 받침 유무에 따라 조사 고르기: josa("떡볶이", "을/를") → "떡볶이를"
+function josa(word, pair) {
+  const [withBatchim, withoutBatchim] = pair.split("/");
+  const core = String(word).replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const last = core.charCodeAt(core.length - 1);
+  if (last >= 0xac00 && last <= 0xd7a3) {
+    const jong = (last - 0xac00) % 28;
+    if (pair === "으로/로") return `${word}${jong === 0 || jong === 8 ? "로" : "으로"}`;
+    return `${word}${jong === 0 ? withoutBatchim : withBatchim}`;
+  }
+  return `${word}${withBatchim}(${withoutBatchim})`;
+}
+
+function diary(text) {
+  state.diaryEntries.push(text);
+}
+
+const DIARY_WEATHER = ["☀️ 맑음", "⛅ 구름 조금", "☁️ 흐림", "🌧️ 비", "🌬️ 바람", "🌈 맑게 갬"];
+
+function formatDiaryDate(date) {
+  return `${date.getUTCFullYear()}. ${date.getUTCMonth() + 1}. ${date.getUTCDate()}. ${WEEKDAY_LABELS[date.getUTCDay()]}`;
+}
+
+function diaryClosing(character, gotSick) {
+  const c = character.condition;
+  if (gotSick) return "몸이 안 좋아서 오늘은 일찍 자야겠다. 내일은 꼭 나아야지.";
+  if (c.stress >= 60) return "오늘은 정말 정말 피곤한 하루였다. 푹 자고 싶다.";
+  if (c.stress <= 20) return "오늘도 즐거운 하루였다! 내일은 또 무슨 일이 생길까?";
+  return "오늘 하루도 끝! 내일도 힘내자.";
+}
+
+function showDiary({ delta, gotSick }) {
+  const overlay = document.getElementById("diary-overlay");
+  const date = gameDateForDay(state.day);
+  document.getElementById("diary-title").textContent = `[오늘의 일기] ${formatDiaryDate(date)}`;
+  document.getElementById("diary-weather").textContent = `날씨: ${DIARY_WEATHER[(state.day * 7 + 3) % DIARY_WEATHER.length]}`;
+
+  const body = document.getElementById("diary-body");
+  body.innerHTML = "";
+  const entries = state.diaryEntries.length ? state.diaryEntries : ["오늘은 별일 없이 조용히 지나갔다."];
+  [...entries, diaryClosing(state.character, gotSick)].forEach((text) => {
+    const p = document.createElement("p");
+    p.textContent = text;
+    body.appendChild(p);
+  });
+
+  const statsEl = document.getElementById("diary-stats");
+  statsEl.innerHTML = "";
+  const keys = Object.keys(delta);
+  if (keys.length === 0) {
+    statsEl.innerHTML = '<span class="diary-chip">능력치 변화 없음</span>';
+  } else {
+    keys.forEach((key) => {
+      const d = delta[key];
+      const good = NEGATIVE_STATS.has(key) ? d < 0 : d > 0;
+      const chip = document.createElement("span");
+      chip.className = `diary-chip ${good ? "up" : "down"}`;
+      chip.textContent = `${STAT_ICONS[key] ?? ""} ${STAT_LABELS[key] ?? key} ${d > 0 ? "+" : ""}${d}`;
+      statsEl.appendChild(chip);
+    });
+  }
+  const c = state.character.condition;
+  document.getElementById("diary-condition").textContent =
+    `🍚 허기 ${c.hunger} · 🔋 기력 ${c.staminaNow} · 😵 스트레스 ${c.stress} · 💰 ${state.character.wallet}원`;
+
+  overlay.hidden = false;
+  overlay.scrollTop = 0;
+  document.getElementById("sleep-btn").focus();
+}
+
+// 잠자기: 화면이 잠시 어두워졌다가 다음 날 일정 화면으로
+function sleepAndAdvance() {
+  const fade = document.getElementById("sleep-fade");
+  const btn = document.getElementById("sleep-btn");
+  btn.disabled = true;
+  fade.hidden = false;
+  requestAnimationFrame(() => fade.classList.add("on"));
+  setTimeout(() => {
+    document.getElementById("diary-overlay").hidden = true;
+    advanceToNextDay();
+    showView("schedule");
+    window.scrollTo(0, 0);
+    fade.classList.remove("on");
+    setTimeout(() => {
+      fade.hidden = true;
+      btn.disabled = false;
+    }, SLEEP_FADE_MS);
+  }, SLEEP_FADE_MS + SLEEP_HOLD_MS);
+}
+
+function advanceToNextDay() {
+  state.day += 1;
+  renderDayHeader();
+
+  // 월요일이 되면 지난주에 미리 등록해 둔 학원 일정이 이번 주 일정으로 확정된다
+  if (weekdayOf(state.day) === 1) {
+    state.registrations.active = JSON.parse(JSON.stringify(state.registrations.pending));
+    logLine("📋 새 주가 시작됐다 — 미리 등록한 학원 일정이 이번 주에 적용된다");
+  }
+  renderAcademies(state.academies, state.categoryMap);
+
+  scheduleBlocks = buildDefaultBlocks(state.day);
+  renderTimetable();
+  renderStats(state.character);
+  saveGame();
+
+  state.dayRunning = false;
+  const startBtn = document.getElementById("start-day-btn");
+  startBtn.disabled = false;
+  startBtn.textContent = "일과 시작";
+  renderShop();
+}
+
 function logLine(text) {
   const el = document.getElementById("day-log");
   const li = document.createElement("li");
@@ -1777,6 +1904,7 @@ function applyAcademyEffects(academy) {
   renderStats(state.character);
 
   logLine(`${academy.name} 등록 수업 완료 — ${appliedText(applied)}`);
+  diary(`${josa(academy.name, "에서/에서")} 열심히 수업을 들었다.`);
 }
 
 // 운영시간 안이지만 사전 등록하지 않은 시간에 간 경우 — 자율학습
@@ -1786,18 +1914,25 @@ function applyAutonomousStudy(academy) {
   addStress(AUTONOMOUS_STUDY_STRESS);
   renderStats(state.character);
   logLine(`${academy.name} — 등록된 수업 시간이 아니라 자율학습을 했다 (${appliedText(applied)})`);
+  diary(`${josa(academy.name, "에/에")} 갔는데 내 수업 시간이 아니라서 혼자 자습을 했다.`);
 }
 
 function applyActivityEffects(activity) {
   const applied = applyEffect(activity.effect);
   renderStats(state.character);
   logLine(`${activity.name} 완료 — ${appliedText(applied)}`);
+  diary(
+    applied.wallet > 0
+      ? `${josa(activity.name, "을/를")} 해서 용돈 ${applied.wallet}원을 벌었다!`
+      : `${josa(activity.name, "을/를")} 했다.`
+  );
 }
 
 function triggerIllness() {
   state.character.condition.stress = Math.max(0, state.character.condition.stress - STRESS_ILLNESS_RELIEF);
   renderStats(state.character);
   logLine("스트레스가 너무 쌓여 몸살이 났다 — 나머지 일정을 취소하고 집으로 돌아갔다");
+  diary("너무 무리했는지 몸살이 나서 남은 일정을 못 하고 집에 왔다.");
 }
 
 function applyEndOfDay(stressRecovery) {
@@ -1824,9 +1959,12 @@ async function runSchoolBlock(block, clock, dow) {
 
   if (clock < block.startMin) {
     logLine(`${minutesToClock(clock)} 교문 앞에서 ${minutesToClock(block.startMin)}까지 기다렸다`);
+    diary("학교에 너무 일찍 도착해서 교문 앞에서 기다렸다.");
     clock = block.startMin;
   }
 
+  const learned = [];
+  let ateLunch = false;
   for (const seg of segments) {
     const subject = seg.type === "period" ? state.subjectMap[timetable[seg.period - 1]] : null;
     const segLabel = subject ? `${seg.label} ${subject.icon} ${subject.label}` : seg.label;
@@ -1854,13 +1992,16 @@ async function runSchoolBlock(block, clock, dow) {
       const applied = applyEffect(subject.growth);
       renderStats(state.character);
       logLine(`${segLabel} — ${topic} (${appliedText(applied)})`);
+      learned.push(`${subject.label} 시간엔 ${topic}`);
       if (topic === "안전 교육" && !state.safetyEducated) {
         state.safetyEducated = true;
         renderStats(state.character);
         logLine("🦺 안전 교육을 잘 들었다! 이제 수상한 어른을 만나도 슬기롭게 대처할 수 있다");
+        diary("안전 교육 시간에 모르는 어른이 같이 가자고 하면 크게 싫다고 말하고 사람 많은 곳으로 가야 한다고 배웠다.");
       }
     } else if (seg.type === "lunch") {
       state.character.condition.hunger = Math.max(state.character.condition.hunger, 80);
+      ateLunch = true;
       renderStats(state.character);
       logLine(`${minutesToClock(seg.startMin)} 점심시간 — 급식을 먹고 허기를 회복했다 (허기 ${state.character.condition.hunger})`);
     } else if (seg.type === "reading") {
@@ -1871,6 +2012,8 @@ async function runSchoolBlock(block, clock, dow) {
   state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - 10);
   addStress(SCHOOL_STRESS);
   renderStats(state.character);
+  if (learned.length) diary(`학교에서 ${josa(learned.join(", "), "을/를")} 했다.`);
+  if (ateLunch) diary("점심 급식을 맛있게 먹었다.");
   logLine(`${minutesToClock(block.endMin)} 정규수업 끝 (${WEEKDAY_LABELS[dow] ?? ""}요일 ${segments.filter((s) => s.type === "period").length}교시까지)`);
   return Math.max(clock, block.endMin);
 }
@@ -1906,6 +2049,7 @@ async function runAfterschoolBlock(block, clock) {
   state.character.condition.hunger = Math.max(0, state.character.condition.hunger - 10);
   addStress(AFTERSCHOOL_STRESS);
   renderStats(state.character);
+  diary(`방과후 ${name} 수업이 재미있었다.`);
   logLine(`방과후교육 ${name} 완료${applied ? ` — ${appliedText(applied)}` : ""}`);
   return Math.max(clock, block.endMin);
 }
@@ -1930,6 +2074,7 @@ async function runCareBlock(block, clock) {
 
   const extras = [slot.lunch ? "점심 제공" : null, slot.snackHunger ? `저녁 간식 (허기 +${slot.snackHunger})` : null].filter(Boolean);
   const effectNote = Object.keys(effect).length ? ` — ${appliedText(effect)}` : "";
+  diary(program ? `늘봄교실 ${slot.name} 시간에 ${josa(program.name, "을/를")} 했다.` : `늘봄교실 ${slot.name}에서 시간을 보냈다.`);
   logLine(`${label} 끝${effectNote}${extras.length ? ` · ${extras.join(" · ")}` : ""}`);
   return block.endMin;
 }
@@ -1967,6 +2112,7 @@ async function runDay(blocks) {
   state.eventsToday = 0;
   state.lastEventClock = -Infinity;
   state.calledToday = new Set();
+  state.diaryEntries = [];
 
   const statsAtStart = { ...state.character.stats };
   const dow = weekdayOf(state.day);
@@ -1978,6 +2124,7 @@ async function runDay(blocks) {
 
   if (blocks.length === 0) {
     logLine("오늘은 아무 일정도 없다 — 집에서 하루를 보냈다");
+    diary("오늘은 아무 일정 없이 집에서 푹 쉬었다.");
   }
 
   try {
@@ -2002,6 +2149,9 @@ async function runDay(blocks) {
           applyEffect({ diligence: -LATE_DILIGENCE_PENALTY });
           renderStats(state.character);
           logLine(`지각해서 선생님께 주의를 받았다 (성실성 -${LATE_DILIGENCE_PENALTY})`);
+          diary("학교에 늦어서 선생님께 주의를 받았다. 내일은 일찍 일어나야지.");
+        } else if (block.kind === "school" && clock >= SCHOOL_START_MIN) {
+          diary("학교에 늦지 않게 도착했다.");
         }
       }
 
@@ -2039,6 +2189,7 @@ async function runDay(blocks) {
           logLine(`${minutesToClock(clock)} 하원버스 탑승`);
           clock = await rideTransit(state.positions.home, clock, "하원버스로 집까지 이동");
           logLine(`${minutesToClock(clock)} 하원버스로 집 도착`);
+          diary("수업이 끝나고 하원버스를 타고 집에 왔다.");
         } else {
           logLine(`${minutesToClock(clock)} 하원버스를 타지 않고 개별적으로 이동한다`);
         }
@@ -2049,6 +2200,7 @@ async function runDay(blocks) {
     cancelledEarly = true;
     clock = err.clock;
     logLine(`${minutesToClock(clock)} 일정을 취소하고 집으로 돌아왔다`);
+    diary("가던 길에 마음이 바뀌어서 남은 일정을 취소하고 집으로 돌아왔다.");
   }
 
   if (!isAtHome()) {
@@ -2068,6 +2220,7 @@ async function runDay(blocks) {
       applyActivityEffects(choice);
     } else {
       logLine(`${minutesToClock(clock)} 그냥 쉬었다`);
+      diary("집에서 뒹굴뒹굴 쉬었다.");
     }
   }
 
@@ -2084,26 +2237,8 @@ async function runDay(blocks) {
   const deltaText = Object.keys(delta).length ? ` 오늘의 변화: ${signedEffectText(delta)}.` : " 오늘은 능력치 변화가 없었다.";
   summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart}${cancelPart}${deltaText} 허기 ${state.character.condition.hunger} · 기력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
 
-  state.day += 1;
-  renderDayHeader();
-
-  // 월요일이 되면 지난주에 미리 등록해 둔 학원 일정이 이번 주 일정으로 확정된다
-  if (weekdayOf(state.day) === 1) {
-    state.registrations.active = JSON.parse(JSON.stringify(state.registrations.pending));
-    logLine("📋 새 주가 시작됐다 — 미리 등록한 학원 일정이 이번 주에 적용된다");
-  }
-  renderAcademies(state.academies, state.categoryMap);
-
-  scheduleBlocks = buildDefaultBlocks(state.day);
-  renderTimetable();
-  renderStats(state.character);
-  saveGame();
-
-  state.dayRunning = false;
-  const startBtn = document.getElementById("start-day-btn");
-  startBtn.disabled = false;
-  startBtn.textContent = "다음 날 일과 시작";
-  renderShop();
+  setStatus(`Day ${state.day} 끝 — 오늘의 일기를 쓰고 잠자리에 들어요`);
+  showDiary({ delta, gotSick });
 }
 
 function showView(name) {
@@ -2241,6 +2376,7 @@ async function main() {
   wireScheduleEditor();
   wireMovementControls();
   wireNav();
+  document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
   document.getElementById("new-game-btn").addEventListener("click", () => {
     if (state.dayRunning) return;
     if (!window.confirm("저장된 진행 상황을 지우고 Day 1부터 새로 시작할까요?")) return;
