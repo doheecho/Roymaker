@@ -14,7 +14,8 @@
         "success": {
           "text": "용기 있게 맞서자 형이 슬금슬금 물러났다!",
           "effect": {
-            "popularity": 2,
+            "insa": 2,
+            "selfEsteem": 2,
             "staminaNow": -5,
             "stress": 5
           },
@@ -24,6 +25,7 @@
           "text": "힘에서 밀려 용돈을 빼앗겼다… 어른께 꼭 말씀드리자.",
           "effect": {
             "wallet": -1000,
+            "selfEsteem": -2,
             "staminaNow": -10,
             "stress": 15
           },
@@ -35,6 +37,7 @@
         "result": {
           "text": "있는 힘껏 달려서 도망쳤다. 휴, 숨차다!",
           "effect": {
+            "agility": 1,
             "staminaNow": -6,
             "stress": 5
           },
@@ -55,7 +58,7 @@
           "text": "친구를 일으켜 주고 가까운 어른에게 함께 가 주었다. 친구가 고맙다고 했다!",
           "effect": {
             "social": 2,
-            "trust": 2,
+            "selfEsteem": 2,
             "stress": -3
           },
           "minutes": 10
@@ -66,7 +69,7 @@
         "result": {
           "text": "모른 척 지나왔지만 마음이 계속 쓰인다…",
           "effect": {
-            "trust": -1,
+            "delinquency": 1,
             "stress": 3
           },
           "minutes": 0
@@ -121,7 +124,7 @@
           "text": "반갑게 인사하고 각자 갈 길을 갔다.",
           "effect": {
             "social": 1,
-            "popularity": 1
+            "insa": 1
           },
           "minutes": 1
         }
@@ -132,7 +135,7 @@
           "text": "못 본 척 지나갔다. 친구가 서운해할지도…",
           "effect": {
             "social": -1,
-            "popularity": -1
+            "insa": -1
           },
           "minutes": 0
         }
@@ -154,7 +157,7 @@
           "effect": {
             "stress": 30,
             "staminaNow": -10,
-            "trust": -1
+            "selfEsteem": -2
           },
           "minutes": 20
         }
@@ -178,7 +181,7 @@
           "text": "💡 안전교육 때 배운 대로 큰 소리로 거절하고 가게 안으로 들어갔다. 가게 어른이 칭찬해 주셨다!",
           "effect": {
             "diligence": 1,
-            "trust": 2,
+            "selfEsteem": 2,
             "stress": 5
           },
           "minutes": 5
@@ -191,7 +194,7 @@
         "result": {
           "text": "💡 \"엄마! 모르는 아저씨가 따라오래!\" 전화하자 수상한 어른이 슬그머니 사라졌다. 엄마가 잘했다고 했다.",
           "effect": {
-            "trust": 3,
+            "selfEsteem": 3,
             "stress": 5
           },
           "minutes": 5
@@ -225,8 +228,8 @@
           "text": "{item}을(를) 경찰서에 맡겼다. 경찰 아저씨가 칭찬해 주셨고, 소문이 나서 친구들 사이에서 인기가 올랐다!",
           "effect": {
             "social": 2,
-            "popularity": 2,
-            "trust": 3
+            "insa": 2,
+            "selfEsteem": 3
           },
           "minutes": 15
         }
@@ -237,7 +240,7 @@
           "text": "{item}을(를) 몰래 챙겼다. 안에 있던 {amount}원이 생겼지만 마음이 영 불편하다…",
           "effect": {
             "wallet": "{amount}",
-            "trust": -3,
+            "delinquency": 3,
             "stress": 10
           },
           "minutes": 0

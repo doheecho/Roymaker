@@ -8,7 +8,13 @@
     "mode": "walk",
     "hours": null,
     "address": "집",
-    "effect": { "wallet": 800, "diligence": 1, "hunger": -8, "staminaNow": -8, "stress": 6 }
+    "effect": {
+      "wallet": 800,
+      "diligence": 1,
+      "hunger": -8,
+      "staminaNow": -8,
+      "stress": 6
+    }
   },
   {
     "id": "chore_60",
@@ -19,7 +25,13 @@
     "mode": "walk",
     "hours": null,
     "address": "집",
-    "effect": { "wallet": 2000, "diligence": 1, "hunger": -14, "staminaNow": -14, "stress": 10 }
+    "effect": {
+      "wallet": 2000,
+      "diligence": 1,
+      "hunger": -14,
+      "staminaNow": -14,
+      "stress": 10
+    }
   },
   {
     "id": "errand_grandma_seongdong",
@@ -31,7 +43,13 @@
     "placeQuery": "벽산아파트",
     "address": "서울 성동구 무학로 50",
     "hours": null,
-    "effect": { "wallet": 2000, "diligence": 1, "hunger": -10, "staminaNow": -10, "stress": -5 }
+    "effect": {
+      "wallet": 2000,
+      "diligence": 1,
+      "hunger": -10,
+      "staminaNow": -10,
+      "stress": -5
+    }
   },
   {
     "id": "errand_junggye",
@@ -43,7 +61,13 @@
     "placeQuery": "중계동",
     "address": "서울 노원구 섬밭로 265",
     "hours": null,
-    "effect": { "wallet": 4000, "diligence": 1, "hunger": -20, "staminaNow": -15, "stress": -10 }
+    "effect": {
+      "wallet": 4000,
+      "diligence": 1,
+      "hunger": -20,
+      "staminaNow": -15,
+      "stress": -10
+    }
   },
   {
     "id": "butterfly_garden",
@@ -55,7 +79,16 @@
     "placeQuery": "불암산 나비정원",
     "travelMin": 15,
     "address": "서울 노원구 한글비석로12길 51-27",
-    "hours": { "open": "10:00", "close": "17:00" },
-    "effect": { "art": 2, "social": 2, "hunger": -20, "staminaNow": -15, "stress": -15 }
+    "hours": {
+      "open": "10:00",
+      "close": "17:00"
+    },
+    "effect": {
+      "perception": 2,
+      "social": 1,
+      "hunger": -20,
+      "staminaNow": -15,
+      "stress": -15
+    }
   }
 ]

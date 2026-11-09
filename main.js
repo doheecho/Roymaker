@@ -1,27 +1,72 @@
+// 능력치 3분류 (신체능력 · 학습능력 · 성격/인성)
+const STAT_GROUPS = [
+  { id: "body", label: "신체능력", icon: "🏃", stats: ["stamina", "power", "agility", "dexterity"] },
+  { id: "study", label: "학습능력", icon: "📚", stats: ["language", "math", "perception", "logic", "focus", "expression"] },
+  { id: "character", label: "성격/인성", icon: "💖", stats: ["social", "diligence", "insa", "selfEsteem", "digital", "delinquency"] },
+];
+
 const STAT_LABELS = {
-  intellect: "지력",
   stamina: "체력",
   power: "근력",
-  art: "감성",
+  agility: "순발력",
+  dexterity: "손재주",
+  language: "언어",
+  math: "수리",
+  perception: "지각",
+  logic: "논리",
+  focus: "집중력",
+  expression: "표현력",
   social: "사회성",
   diligence: "성실성",
-  popularity: "인기",
-  trust: "신뢰도",
+  insa: "인싸력",
+  selfEsteem: "자존감",
+  digital: "디지털",
+  delinquency: "비행화",
 };
 
 const STAT_ICONS = {
-  intellect: "📖",
   stamina: "❤️",
   power: "💪",
-  art: "🎨",
+  agility: "⚡",
+  dexterity: "✋",
+  language: "📖",
+  math: "🧮",
+  perception: "🔍",
+  logic: "🧩",
+  focus: "🎯",
+  expression: "🎨",
   social: "🗣️",
   diligence: "✍️",
-  popularity: "⭐",
-  trust: "🤞",
+  insa: "⭐",
+  selfEsteem: "🌟",
+  digital: "💻",
+  delinquency: "😈",
 };
 
-const CONDITION_ICONS = { hunger: "🍚", staminaNow: "⚡", stress: "😵", wallet: "💰" };
-const CONDITION_LABELS = { hunger: "허기", staminaNow: "체력", stress: "스트레스", wallet: "용돈" };
+const STAT_INFO = {
+  stamina: "오래 움직여도 덜 지치는 힘. 체육 활동·줄넘기·인라인으로 오른다.",
+  power: "힘과 운동 수행력. 태권도·즐거운 생활 신체 놀이로 오른다.",
+  agility: "재빠르게 반응하는 힘. 축구·피구·인라인·술래잡기로 오른다.",
+  dexterity: "손으로 만들고 다루는 솜씨. 공예·클레이·악기·요리·로봇 조립으로 오른다.",
+  language: "읽기·쓰기·말하기. 국어·논술·영어·한자로 오른다.",
+  math: "수와 연산, 도형, 시계 보기. 수학·주산·문제집으로 오른다.",
+  perception: "주변을 관찰하고 알아차리는 힘. 슬기로운 생활·과학실험·나들이로 오른다.",
+  logic: "차근차근 생각하는 힘. 코딩·로봇·체스/바둑으로 오른다.",
+  focus: "한 가지에 오래 집중하는 힘. 한자·주산·바둑·자율학습으로 오른다.",
+  expression: "그림·음악·몸짓으로 표현하는 힘. 미술·음악·댄스·연극으로 오른다.",
+  social: "친구와 어울리고 협동하는 힘. 창의적 체험활동·친구 돕기·함께 놀기로 오른다.",
+  diligence: "약속과 규칙을 지키는 생활 태도. 바른 생활·등록 수업으로 오르고 지각하면 떨어진다.",
+  insa: "친구들 사이의 인기. 포켓몬카드·반갑게 인사·방송댄스로 오른다.",
+  selfEsteem: "스스로를 믿는 마음. 친구 돕기·위기 대처·분실물 신고로 오른다.",
+  digital: "컴퓨터와 디지털 도구를 다루는 힘. 컴퓨터(ICT)·AI·코딩으로 오른다.",
+  delinquency: "나쁜 길로 빠지는 정도 — 낮을수록 좋다. 분실물을 몰래 가지거나 장난전화를 하면 오른다.",
+};
+
+// 높을수록 나쁜 능력치 — 게이지 색을 다르게 표시
+const NEGATIVE_STATS = new Set(["delinquency"]);
+
+const CONDITION_ICONS = { hunger: "🍚", staminaNow: "🔋", stress: "😵", wallet: "💰" };
+const CONDITION_LABELS = { hunger: "허기", staminaNow: "기력", stress: "스트레스", wallet: "용돈" };
 const SCHOOL_ICON = "🏫";
 
 const HOME_FALLBACK = { lat: 37.5495, lng: 127.0203 };
@@ -34,13 +79,18 @@ const MORNING_CARE_LATE_MIN = 9 * 60;
 const SEGMENT_PHASE_MS = 650;
 const AFTERSCHOOL_STRESS = 8;
 const AUTONOMOUS_STUDY_STRESS = 6;
-const AUTONOMOUS_STUDY_EFFECT = { intellect: 1, diligence: 1, staminaNow: -3 };
+const AUTONOMOUS_STUDY_EFFECT = { focus: 1, diligence: 1, staminaNow: -3 };
 
 // 돌발사건 — 걷는 동안 게임 1분마다 확률 판정
 const EVENT_CHANCE_PER_MIN = 0.07;
 const EVENT_COOLDOWN_MIN = 6;
 const MAX_EVENTS_PER_DAY = 3;
 const HOTPLACE_SEARCH_RADIUS_M = 900;
+
+const LOW_HUNGER = 30;
+const LOW_ENERGY = 20;
+const LATE_DILIGENCE_PENALTY = 1;
+const SAVE_KEY = "roymaker-save-v2";
 const ACADEMY_LESSON_MIN = 60;
 const WAIT_PHASE_MS = 2200;
 const MOVE_SPEED_MPS = 60;
@@ -658,9 +708,9 @@ async function runRandomEvent(clock) {
   }
 
   const effect = nonZeroEffect(resolveEffect(result.effect, vars));
-  applyEffect(effect);
+  const applied = applyEffect(effect);
   renderStats(state.character);
-  const effectNote = Object.keys(effect).length ? ` (${signedEffectText(effect)})` : "";
+  const effectNote = Object.keys(applied).length ? ` (${appliedText(applied)})` : "";
   logLine(`${choice.label.replace(/^[^\s가-힣A-Za-z0-9"]+\s/, "")} → ${fillTemplate(result.text, vars)}${effectNote}`);
   await presentChoice("event-panel", result.crisis ? "⚠️ 위기 발생" : "결과", [{ label: "계속 걷기", value: true }], {
     body: `${fillTemplate(result.text, vars)}${effectNote}`,
@@ -686,9 +736,9 @@ async function visitHotplace(place, clock) {
   });
   if (!item) return 0;
   state.character.wallet -= item.price;
-  applyEffect(item.effect);
+  const applied = applyEffect(item.effect);
   renderStats(state.character);
-  logLine(`${place.name}에서 ${item.name}${item.price ? ` (${item.price}원)` : ""} — ${signedEffectText(item.effect)}`);
+  logLine(`${place.name}에서 ${item.name}${item.price ? ` (${item.price}원)` : ""} — ${appliedText(applied)}`);
   return item.minutes;
 }
 
@@ -711,9 +761,9 @@ async function openPhone(clock) {
   const firstCall = !state.calledToday.has(contact.id);
   state.calledToday.add(contact.id);
   const effect = firstCall ? contact.effect ?? {} : {};
-  applyEffect(effect);
+  const applied = applyEffect(effect);
   renderStats(state.character);
-  const effectNote = Object.keys(effect).length ? ` (${signedEffectText(effect)})` : "";
+  const effectNote = Object.keys(applied).length ? ` (${appliedText(applied)})` : "";
   logLine(`📱 ${contact.name}에게 전화 — "${line}"${effectNote}`);
   await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
     body: `"${line}"${effectNote}`,
@@ -954,17 +1004,31 @@ function renderStats(character) {
 
   const statsEl = document.getElementById("stats");
   statsEl.innerHTML = "";
-  Object.entries(character.stats).forEach(([key, value]) => {
+  STAT_GROUPS.forEach((group) => {
+    const avg = groupAverage(character, group);
     const row = document.createElement("div");
-    row.className = "stat-row";
+    row.className = "stat-row group-row";
     row.innerHTML = `
-      <span class="icon">${STAT_ICONS[key] ?? ""}</span>
-      <span class="label">${STAT_LABELS[key] ?? key}</span>
-      <span class="bar"><span style="width:${Math.min(value, 100)}%"></span></span>
-      <span class="value">${value}</span>
+      <span class="icon">${group.icon}</span>
+      <span class="label">${group.label}</span>
+      <span class="bar"><span style="width:${Math.min(avg, 100)}%"></span></span>
+      <span class="value">${avg}</span>
     `;
     statsEl.appendChild(row);
   });
+  const delinquency = character.stats.delinquency ?? 0;
+  if (delinquency > 0) {
+    const warn = document.createElement("p");
+    warn.className = "stat-warn";
+    warn.textContent = `😈 비행화 ${delinquency}`;
+    statsEl.appendChild(warn);
+  }
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "stat-more";
+  more.textContent = "📊 전체 능력치 보기";
+  more.addEventListener("click", () => showView("status"));
+  statsEl.appendChild(more);
 
   const condEl = document.getElementById("condition");
   const stress = character.condition.stress;
@@ -972,12 +1036,13 @@ function renderStats(character) {
   condEl.innerHTML = `
     <div class="condition-row">
       <span class="condition-badge">${CONDITION_ICONS.hunger} 허기 ${character.condition.hunger}</span>
-      <span class="condition-badge">${CONDITION_ICONS.staminaNow} 체력 ${character.condition.staminaNow}</span>
+      <span class="condition-badge">${CONDITION_ICONS.staminaNow} 기력 ${character.condition.staminaNow}</span>
       <span class="condition-badge${stressWarning ? " warning" : ""}">${CONDITION_ICONS.stress} 스트레스 ${stress}</span>
       <span class="condition-badge">${CONDITION_ICONS.wallet} ${character.wallet}원</span>
       ${state.safetyEducated ? '<span class="condition-badge good" title="창의적 체험활동 안전 교육 이수 — 수상한 어른에게 슬기롭게 대처할 수 있다">🦺 안전교육 이수</span>' : ""}
     </div>
   `;
+  renderStatusView();
 }
 
 const REG_WEEKDAYS = [1, 2, 3, 4, 5];
@@ -992,6 +1057,131 @@ function sameReg(a, b) {
   const nb = b && b.days.length ? b : null;
   if (!na || !nb) return !na && !nb;
   return na.startMin === nb.startMin && na.days.join() === nb.days.join();
+}
+
+function groupAverage(character, group) {
+  const positive = group.stats.filter((key) => !NEGATIVE_STATS.has(key));
+  return Math.round(positive.reduce((sum, key) => sum + (character.stats[key] ?? 0), 0) / positive.length);
+}
+
+function conditionComment(character) {
+  const c = character.condition;
+  if (c.stress >= 70) return "😵 스트레스가 많이 쌓였어요. 오늘은 일정을 줄이고 쉬게 해 주세요.";
+  if (c.hunger <= LOW_HUNGER) return "🍚 배가 고파요. 배고프면 능력치가 절반만 자라요.";
+  if (c.staminaNow <= LOW_ENERGY) return "🔋 기력이 바닥났어요. 지치면 능력치가 절반만 자라요.";
+  if ((character.stats.delinquency ?? 0) >= 10) return "😈 요즘 행동이 조금 걱정돼요. 바른 선택을 할 수 있게 도와주세요.";
+  if (c.stress <= 20) return "😊 컨디션 최고! 오늘은 무엇이든 잘 배울 수 있을 것 같아요.";
+  return "🙂 평소처럼 씩씩하게 지내고 있어요.";
+}
+
+// 프린세스 메이커 2의 상태 화면처럼 — 프로필 + 분류별 전체 능력치
+function renderStatusView() {
+  const character = state.character;
+  const profile = document.getElementById("status-profile");
+  if (!profile) return;
+  const positiveKeys = Object.keys(STAT_LABELS).filter((k) => !NEGATIVE_STATS.has(k));
+  const sorted = [...positiveKeys].sort((a, b) => (character.stats[b] ?? 0) - (character.stats[a] ?? 0));
+  const best = sorted[0];
+  const worst = sorted[sorted.length - 1];
+  const delta = state.lastDay?.delta ?? {};
+  const hasDelta = Object.keys(delta).length > 0;
+
+  profile.innerHTML = `
+    <img class="status-avatar" src="img/character-face.png" alt="${character.name}">
+    <div class="status-info">
+      <p class="status-name">${character.name} <span class="muted">초등학교 ${character.grade}학년</span></p>
+      <p class="muted">${formatGameDate(gameDateForDay(state.day))} · Day ${state.day} · 💰 ${character.wallet}원</p>
+      <p class="status-cond">🍚 허기 ${character.condition.hunger} · 🔋 기력 ${character.condition.staminaNow} · 😵 스트레스 ${character.condition.stress}${state.safetyEducated ? " · 🦺 안전교육 이수" : ""}</p>
+      <p class="status-comment">${conditionComment(character)}</p>
+      <p class="muted">가장 자신 있는 능력: <strong>${STAT_ICONS[best]} ${STAT_LABELS[best]} ${character.stats[best]}</strong> · 더 키워야 할 능력: <strong>${STAT_ICONS[worst]} ${STAT_LABELS[worst]} ${character.stats[worst]}</strong></p>
+    </div>
+  `;
+
+  const groupsEl = document.getElementById("status-groups");
+  groupsEl.innerHTML = "";
+  STAT_GROUPS.forEach((group) => {
+    const card = document.createElement("section");
+    card.className = `status-group status-${group.id}`;
+    card.innerHTML = `<h3>${group.icon} ${group.label} <span class="group-avg">평균 ${groupAverage(character, group)}</span></h3>`;
+    group.stats.forEach((key) => {
+      const value = character.stats[key] ?? 0;
+      const d = delta[key] ?? 0;
+      const good = NEGATIVE_STATS.has(key) ? d < 0 : d > 0;
+      const row = document.createElement("div");
+      row.className = `stat-row${NEGATIVE_STATS.has(key) ? " negative" : ""}`;
+      row.title = STAT_INFO[key] ?? "";
+      row.innerHTML = `
+        <span class="icon">${STAT_ICONS[key] ?? ""}</span>
+        <span class="label">${STAT_LABELS[key] ?? key}</span>
+        <span class="bar"><span style="width:${Math.min(value, 100)}%"></span></span>
+        <span class="value">${value}</span>
+        <span class="delta ${d === 0 ? "" : good ? "up" : "down"}">${d === 0 ? "" : `${d > 0 ? "+" : ""}${d}`}</span>
+      `;
+      card.appendChild(row);
+      const info = document.createElement("p");
+      info.className = "stat-info";
+      info.textContent = STAT_INFO[key] ?? "";
+      card.appendChild(info);
+    });
+    groupsEl.appendChild(card);
+  });
+
+  document.getElementById("status-delta-note").textContent = hasDelta
+    ? `오른쪽 숫자는 지난 일과(Day ${state.lastDay.day}) 동안의 변화예요.`
+    : "일과를 한 번 마치면 그날 능력치가 얼마나 변했는지 함께 보여 줘요.";
+}
+
+function statDelta(before, after) {
+  const out = {};
+  Object.keys(STAT_LABELS).forEach((key) => {
+    const d = (after[key] ?? 0) - (before[key] ?? 0);
+    if (d !== 0) out[key] = d;
+  });
+  return out;
+}
+
+// ── 저장 / 불러오기 (브라우저에만 저장됨) ──
+function saveGame() {
+  try {
+    const data = {
+      version: 2,
+      day: state.day,
+      stats: state.character.stats,
+      condition: state.character.condition,
+      wallet: state.character.wallet,
+      registrations: state.registrations,
+      safetyEducated: state.safetyEducated,
+      creativeCount: state.creativeCount,
+      ui: { afterschoolCourse: state.ui.afterschoolCourse, careProgram: state.ui.careProgram },
+      lastDay: state.lastDay ?? null,
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn("저장 실패", err);
+  }
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (data.version !== 2) return false;
+    state.day = data.day;
+    Object.assign(state.character.stats, data.stats);
+    Object.assign(state.character.condition, data.condition);
+    state.character.wallet = data.wallet;
+    state.registrations = data.registrations ?? { active: {}, pending: {} };
+    state.safetyEducated = !!data.safetyEducated;
+    state.creativeCount = data.creativeCount ?? 0;
+    if (data.ui?.afterschoolCourse) state.ui.afterschoolCourse = data.ui.afterschoolCourse;
+    if (data.ui?.careProgram) state.ui.careProgram = data.ui.careProgram;
+    state.lastDay = data.lastDay ?? null;
+    return true;
+  } catch (err) {
+    console.warn("불러오기 실패", err);
+    return false;
+  }
 }
 
 function renderAcademies(academies, categoryMap) {
@@ -1033,6 +1223,7 @@ function renderAcademies(academies, categoryMap) {
         btn.addEventListener("click", () => {
           const days = pending.days.includes(dow) ? pending.days.filter((d) => d !== dow) : [...pending.days, dow].sort();
           state.registrations.pending[academy.id] = { days, startMin: pending.startMin };
+          saveGame();
           renderAcademies(state.academies, state.categoryMap);
         });
         regEl.appendChild(btn);
@@ -1050,6 +1241,7 @@ function renderAcademies(academies, categoryMap) {
       }
       select.addEventListener("change", () => {
         state.registrations.pending[academy.id] = { days: pending.days, startMin: Number(select.value) };
+        saveGame();
         renderAcademies(state.academies, state.categoryMap);
       });
       regEl.appendChild(select);
@@ -1068,16 +1260,44 @@ function renderAcademies(academies, categoryMap) {
   });
 }
 
-function applyEffect(effect) {
+// 배고프거나(허기 ≤ 30) 지치면(기력 ≤ 20) 능력치 성장이 절반으로 줄어든다
+function growthMultiplier() {
+  const c = state.character.condition;
+  return c.hunger <= LOW_HUNGER || c.staminaNow <= LOW_ENERGY ? 0.5 : 1;
+}
+
+// 효과를 적용하고 실제로 적용된 값을 돌려준다 (로그는 이 값으로 찍는다)
+function applyEffect(effect, { modifier = true } = {}) {
+  const mult = modifier ? growthMultiplier() : 1;
+  const applied = {};
+  let halved = false;
   Object.entries(effect).forEach(([key, amount]) => {
     if (key === "wallet") {
       state.character.wallet = Math.max(0, state.character.wallet + amount);
+      applied[key] = amount;
     } else if (key === "hunger" || key === "staminaNow" || key === "stress") {
       state.character.condition[key] = Math.min(100, Math.max(0, state.character.condition[key] + amount));
+      applied[key] = amount;
     } else {
-      state.character.stats[key] = Math.min(100, Math.max(0, (state.character.stats[key] ?? 0) + amount));
+      let gain = amount;
+      if (amount > 0 && !NEGATIVE_STATS.has(key) && mult < 1) {
+        // 확률 반올림: +1이면 50% 확률로 0, +3이면 1 또는 2
+        const scaled = amount * mult;
+        gain = Math.floor(scaled) + (Math.random() < scaled - Math.floor(scaled) ? 1 : 0);
+        if (gain < amount) halved = true;
+      }
+      state.character.stats[key] = Math.min(100, Math.max(0, (state.character.stats[key] ?? 0) + gain));
+      if (gain !== 0) applied[key] = gain;
     }
   });
+  Object.defineProperty(applied, "halved", { value: halved, enumerable: false });
+  return applied;
+}
+
+function appliedText(applied) {
+  const text = signedEffectText(applied);
+  if (!applied.halved) return text;
+  return `${text ? `${text} · ` : ""}배고프거나 지쳐서 덜 자랐다`;
 }
 
 function effectText(effect) {
@@ -1147,9 +1367,10 @@ function renderShop() {
     buyBtn.addEventListener("click", () => {
       if (state.dayRunning || state.character.wallet < item.price) return;
       state.character.wallet -= item.price;
-      applyEffect(item.effect);
+      applyEffect(item.effect, { modifier: false });
       renderStats(state.character);
       renderShop();
+      saveGame();
       showShopFeedback(`${item.icon ?? ""} ${item.name}을(를) 샀다! ${effectText(item.effect)} (잔액 ${state.character.wallet}원)`);
     });
 
@@ -1542,33 +1763,28 @@ function addStress(amount) {
 
 function applyAcademyEffects(academy) {
   const category = state.categoryMap[academy.categoryId];
-  Object.entries(category.growth).forEach(([stat, amount]) => {
-    state.character.stats[stat] = Math.min(100, (state.character.stats[stat] ?? 0) + amount);
-  });
+  const applied = applyEffect(category.growth);
   state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - category.staminaCost);
   state.character.condition.hunger = Math.max(0, state.character.condition.hunger - 15);
   addStress(ACADEMY_STRESS);
   renderStats(state.character);
 
-  const growthText = Object.entries(category.growth)
-    .map(([stat, amount]) => `${STAT_LABELS[stat]} +${amount}`)
-    .join(" · ");
-  logLine(`${academy.name} 등록 수업 완료 — ${growthText}`);
+  logLine(`${academy.name} 등록 수업 완료 — ${appliedText(applied)}`);
 }
 
 // 운영시간 안이지만 사전 등록하지 않은 시간에 간 경우 — 자율학습
 function applyAutonomousStudy(academy) {
-  applyEffect(AUTONOMOUS_STUDY_EFFECT);
+  const applied = applyEffect(AUTONOMOUS_STUDY_EFFECT);
   state.character.condition.hunger = Math.max(0, state.character.condition.hunger - 10);
   addStress(AUTONOMOUS_STUDY_STRESS);
   renderStats(state.character);
-  logLine(`${academy.name} — 등록된 수업 시간이 아니라 자율학습을 했다 (${signedEffectText(AUTONOMOUS_STUDY_EFFECT)})`);
+  logLine(`${academy.name} — 등록된 수업 시간이 아니라 자율학습을 했다 (${appliedText(applied)})`);
 }
 
 function applyActivityEffects(activity) {
-  applyEffect(activity.effect);
+  const applied = applyEffect(activity.effect);
   renderStats(state.character);
-  logLine(`${activity.name} 완료 — ${signedEffectText(activity.effect)}`);
+  logLine(`${activity.name} 완료 — ${appliedText(applied)}`);
 }
 
 function triggerIllness() {
@@ -1628,9 +1844,9 @@ async function runSchoolBlock(block, clock, dow) {
       } else {
         topic = pickRandom(subject.topics);
       }
-      applyEffect(subject.growth);
+      const applied = applyEffect(subject.growth);
       renderStats(state.character);
-      logLine(`${segLabel} — ${topic} (${signedEffectText(subject.growth)})`);
+      logLine(`${segLabel} — ${topic} (${appliedText(applied)})`);
       if (topic === "안전 교육" && !state.safetyEducated) {
         state.safetyEducated = true;
         renderStats(state.character);
@@ -1675,14 +1891,15 @@ async function runAfterschoolBlock(block, clock) {
     clock = phase.end;
   }
 
+  let applied = null;
   if (course) {
-    applyEffect(course.growth);
+    applied = applyEffect(course.growth);
     state.character.condition.staminaNow = Math.max(0, state.character.condition.staminaNow - course.staminaCost);
   }
   state.character.condition.hunger = Math.max(0, state.character.condition.hunger - 10);
   addStress(AFTERSCHOOL_STRESS);
   renderStats(state.character);
-  logLine(`방과후교육 ${name} 완료${course ? ` — ${signedEffectText(course.growth)}` : ""}`);
+  logLine(`방과후교육 ${name} 완료${applied ? ` — ${appliedText(applied)}` : ""}`);
   return Math.max(clock, block.endMin);
 }
 
@@ -1695,8 +1912,7 @@ async function runCareBlock(block, clock) {
   await waitUntil(start, block.endMin, label);
   const hours = Math.max(0, (block.endMin - start) / 60);
 
-  const effect = slot.effect ? { ...slot.effect } : scaleGrowth(program?.growthPerHour, hours);
-  applyEffect(effect);
+  const effect = applyEffect(slot.effect ? { ...slot.effect } : scaleGrowth(program?.growthPerHour, hours));
   const c = state.character.condition;
   c.staminaNow = Math.max(0, c.staminaNow - Math.round((program?.staminaPerHour ?? 2) * hours));
   c.hunger = Math.max(0, c.hunger - Math.round(5 * hours));
@@ -1706,7 +1922,7 @@ async function runCareBlock(block, clock) {
   renderStats(state.character);
 
   const extras = [slot.lunch ? "점심 제공" : null, slot.snackHunger ? `저녁 간식 (허기 +${slot.snackHunger})` : null].filter(Boolean);
-  const effectNote = Object.keys(effect).length ? ` — ${signedEffectText(effect)}` : "";
+  const effectNote = Object.keys(effect).length ? ` — ${appliedText(effect)}` : "";
   logLine(`${label} 끝${effectNote}${extras.length ? ` · ${extras.join(" · ")}` : ""}`);
   return block.endMin;
 }
@@ -1745,6 +1961,7 @@ async function runDay(blocks) {
   state.lastEventClock = -Infinity;
   state.calledToday = new Set();
 
+  const statsAtStart = { ...state.character.stats };
   const dow = weekdayOf(state.day);
   let clock = DAY_TIMELINE_START_MIN;
   let hadSchool = false;
@@ -1774,6 +1991,11 @@ async function runDay(blocks) {
           schoolWasLate = late;
         }
         logLine(`${minutesToClock(clock)} ${place.name} 도착${late ? " — 지각" : ""}`);
+        if (late && block.kind === "school") {
+          applyEffect({ diligence: -LATE_DILIGENCE_PENALTY });
+          renderStats(state.character);
+          logLine(`지각해서 선생님께 주의를 받았다 (성실성 -${LATE_DILIGENCE_PENALTY})`);
+        }
       }
 
       if (block.kind === "school") {
@@ -1850,7 +2072,10 @@ async function runDay(blocks) {
   const schoolPart = hadSchool ? (schoolWasLate ? "학교에 지각했다." : "학교에 정시 등교했다.") : "오늘은 학교를 가지 않았다.";
   const sickPart = gotSick ? " 너무 무리해서 몸살이 났다." : "";
   const cancelPart = cancelledEarly ? " 도중에 일정을 취소하고 집에 돌아왔다." : "";
-  summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart}${cancelPart} 허기 ${state.character.condition.hunger} · 체력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
+  const delta = statDelta(statsAtStart, state.character.stats);
+  state.lastDay = { day: state.day, delta };
+  const deltaText = Object.keys(delta).length ? ` 오늘의 변화: ${signedEffectText(delta)}.` : " 오늘은 능력치 변화가 없었다.";
+  summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart}${cancelPart}${deltaText} 허기 ${state.character.condition.hunger} · 기력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
 
   state.day += 1;
   renderDayHeader();
@@ -1864,6 +2089,8 @@ async function runDay(blocks) {
 
   scheduleBlocks = buildDefaultBlocks(state.day);
   renderTimetable();
+  renderStats(state.character);
+  saveGame();
 
   state.dayRunning = false;
   const startBtn = document.getElementById("start-day-btn");
@@ -1994,6 +2221,7 @@ async function main() {
   state.categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
   state.holidaySet = new Set(holidays.map((h) => h.date));
 
+  const restored = loadGame();
   renderDayHeader();
   scheduleBlocks = buildDefaultBlocks(state.day);
 
@@ -2006,6 +2234,19 @@ async function main() {
   wireScheduleEditor();
   wireMovementControls();
   wireNav();
+  document.getElementById("new-game-btn").addEventListener("click", () => {
+    if (state.dayRunning) return;
+    if (!window.confirm("저장된 진행 상황을 지우고 Day 1부터 새로 시작할까요?")) return;
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch (err) {
+      console.warn(err);
+    }
+    location.reload();
+  });
+  if (restored) {
+    document.getElementById("save-note").textContent = `💾 저장된 진행 상황(Day ${state.day})을 불러왔어요.`;
+  }
 }
 
 main();

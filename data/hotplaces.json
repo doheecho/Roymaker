@@ -5,13 +5,66 @@
     "icon": "✏️",
     "address": null,
     "placeQuery": "문구",
-    "fallback": { "distanceM": 260, "bearing": 110 },
+    "fallback": {
+      "distanceM": 260,
+      "bearing": 110
+    },
     "menu": [
-      { "id": "slime", "name": "슬라임", "icon": "🟢", "price": 2000, "minutes": 10, "effect": { "stress": -10 } },
-      { "id": "wakppu", "name": "왁뿌", "icon": "🧊", "price": 2500, "minutes": 10, "effect": { "stress": -10, "social": 1 } },
-      { "id": "pokemon_bread", "name": "포켓몬빵", "icon": "🍞", "price": 1500, "minutes": 10, "effect": { "stress": -8, "staminaNow": 5, "social": 1 } },
-      { "id": "pokemon_card", "name": "포켓몬카드", "icon": "🃏", "price": 1000, "minutes": 10, "effect": { "stress": -6, "social": 1 } },
-      { "id": "workbook", "name": "문제집", "icon": "📒", "price": 5000, "minutes": 10, "effect": { "intellect": 2 } }
+      {
+        "id": "slime",
+        "name": "슬라임",
+        "icon": "🟢",
+        "price": 2000,
+        "minutes": 10,
+        "effect": {
+          "stress": -10
+        }
+      },
+      {
+        "id": "wakppu",
+        "name": "왁뿌",
+        "icon": "🧊",
+        "price": 2500,
+        "minutes": 10,
+        "effect": {
+          "stress": -10,
+          "insa": 1
+        }
+      },
+      {
+        "id": "pokemon_bread",
+        "name": "포켓몬빵",
+        "icon": "🍞",
+        "price": 1500,
+        "minutes": 10,
+        "effect": {
+          "stress": -8,
+          "staminaNow": 5,
+          "insa": 1
+        }
+      },
+      {
+        "id": "pokemon_card",
+        "name": "포켓몬카드",
+        "icon": "🃏",
+        "price": 1000,
+        "minutes": 10,
+        "effect": {
+          "stress": -6,
+          "insa": 1
+        }
+      },
+      {
+        "id": "workbook",
+        "name": "문제집",
+        "icon": "📒",
+        "price": 5000,
+        "minutes": 10,
+        "effect": {
+          "focus": 1,
+          "math": 1
+        }
+      }
     ]
   },
   {
@@ -20,10 +73,35 @@
     "icon": "🍢",
     "address": null,
     "placeQuery": "분식",
-    "fallback": { "distanceM": 320, "bearing": 250 },
+    "fallback": {
+      "distanceM": 320,
+      "bearing": 250
+    },
     "menu": [
-      { "id": "cup_tteokbokki", "name": "컵떡볶이", "icon": "🌶️", "price": 2000, "minutes": 15, "effect": { "stress": -8, "staminaNow": 8, "hunger": 25 } },
-      { "id": "slush", "name": "슬러시", "icon": "🧋", "price": 1500, "minutes": 10, "effect": { "stress": -8, "staminaNow": 5, "hunger": 10 } }
+      {
+        "id": "cup_tteokbokki",
+        "name": "컵떡볶이",
+        "icon": "🌶️",
+        "price": 2000,
+        "minutes": 15,
+        "effect": {
+          "stress": -8,
+          "staminaNow": 8,
+          "hunger": 25
+        }
+      },
+      {
+        "id": "slush",
+        "name": "슬러시",
+        "icon": "🧋",
+        "price": 1500,
+        "minutes": 10,
+        "effect": {
+          "stress": -8,
+          "staminaNow": 5,
+          "hunger": 10
+        }
+      }
     ]
   },
   {
@@ -32,9 +110,24 @@
     "icon": "🛝",
     "address": null,
     "placeQuery": "어린이공원",
-    "fallback": { "distanceM": 200, "bearing": 340 },
+    "fallback": {
+      "distanceM": 200,
+      "bearing": 340
+    },
     "menu": [
-      { "id": "tag", "name": "친구들과 술래잡기", "icon": "🏃", "price": 0, "minutes": 30, "effect": { "social": 2, "staminaNow": -10, "stress": -12 } }
+      {
+        "id": "tag",
+        "name": "친구들과 술래잡기",
+        "icon": "🏃",
+        "price": 0,
+        "minutes": 30,
+        "effect": {
+          "social": 1,
+          "agility": 1,
+          "staminaNow": -10,
+          "stress": -12
+        }
+      }
     ]
   }
 ]

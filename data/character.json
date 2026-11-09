@@ -15,14 +15,22 @@
     "lng": null
   },
   "stats": {
-    "intellect": 10,
     "stamina": 10,
     "power": 10,
-    "art": 10,
+    "agility": 10,
+    "dexterity": 10,
+    "language": 10,
+    "math": 10,
+    "perception": 10,
+    "logic": 10,
+    "focus": 10,
+    "expression": 10,
     "social": 10,
     "diligence": 10,
-    "popularity": 10,
-    "trust": 50
+    "insa": 10,
+    "selfEsteem": 10,
+    "digital": 10,
+    "delinquency": 0
   },
   "condition": {
     "hunger": 80,

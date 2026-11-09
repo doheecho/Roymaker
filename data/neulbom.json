@@ -1,43 +1,173 @@
 {
   "slots": [
-    { "id": "morning", "name": "아침돌봄", "icon": "🌅", "start": "07:30", "end": "08:30", "schoolDayOnly": true, "description": "부모님의 이른 출근을 위해 7:30~9:00 사이에 조기 등교 가능. 이후 바로 정규수업(자율독서)으로 이어진다.", "effect": { "diligence": 1 }, "stressPerHour": 1 },
-    { "id": "afternoon", "name": "오후돌봄", "icon": "🏠", "start": null, "end": "18:00", "schoolDayOnly": true, "description": "정규수업 혹은 방과후교육 종료 후 18:00까지 운영. 시간표에 놓으면 앞 수업이 끝나는 시각에 맞춰 자동으로 시작한다.", "stressPerHour": 2 },
-    { "id": "evening", "name": "저녁돌봄", "icon": "🌙", "start": "18:00", "end": "20:00", "schoolDayOnly": true, "description": "20:00까지 연장 운영. 저녁 간식이 나온다.", "stressPerHour": 2, "snackHunger": 20 },
-    { "id": "vacation", "name": "방학중돌봄", "icon": "☀️", "start": "08:30", "end": "17:00", "vacationOnly": true, "description": "방학기간 8:30~17:00 운영. 점심이 제공된다.", "stressPerHour": 1, "lunch": true }
+    {
+      "id": "morning",
+      "name": "아침돌봄",
+      "icon": "🌅",
+      "start": "07:30",
+      "end": "08:30",
+      "schoolDayOnly": true,
+      "description": "부모님의 이른 출근을 위해 7:30~9:00 사이에 조기 등교 가능. 이후 바로 정규수업(자율독서)으로 이어진다.",
+      "effect": {
+        "focus": 1
+      },
+      "stressPerHour": 1
+    },
+    {
+      "id": "afternoon",
+      "name": "오후돌봄",
+      "icon": "🏠",
+      "start": null,
+      "end": "18:00",
+      "schoolDayOnly": true,
+      "description": "정규수업 혹은 방과후교육 종료 후 18:00까지 운영. 시간표에 놓으면 앞 수업이 끝나는 시각에 맞춰 자동으로 시작한다.",
+      "stressPerHour": 2
+    },
+    {
+      "id": "evening",
+      "name": "저녁돌봄",
+      "icon": "🌙",
+      "start": "18:00",
+      "end": "20:00",
+      "schoolDayOnly": true,
+      "description": "20:00까지 연장 운영. 저녁 간식이 나온다.",
+      "stressPerHour": 2,
+      "snackHunger": 20
+    },
+    {
+      "id": "vacation",
+      "name": "방학중돌봄",
+      "icon": "☀️",
+      "start": "08:30",
+      "end": "17:00",
+      "vacationOnly": true,
+      "description": "방학기간 8:30~17:00 운영. 점심이 제공된다.",
+      "stressPerHour": 1,
+      "lunch": true
+    }
   ],
   "programs": [
     {
       "id": "play_pe",
       "label": "체육·놀이 활동",
       "items": [
-        { "id": "play_gym", "name": "놀이 체육", "description": "매트 운동, 미니 장애물 달리기 등 기초 신체 놀이", "growthPerHour": { "power": 1, "stamina": 1 }, "staminaPerHour": 8 },
-        { "id": "music_jumprope", "name": "음악 줄넘기", "description": "신나는 음악에 맞추어 다양한 줄넘기 동작을 배우는 활동", "growthPerHour": { "stamina": 1, "diligence": 1 }, "staminaPerHour": 8 },
-        { "id": "kids_dance", "name": "키즈 댄스 / 방송 댄스", "description": "K-POP이나 유행하는 안무를 배우며 리듬감을 키우는 활동", "growthPerHour": { "art": 1, "stamina": 1 }, "staminaPerHour": 7 }
+        {
+          "id": "play_gym",
+          "name": "놀이 체육",
+          "description": "매트 운동, 미니 장애물 달리기 등 기초 신체 놀이",
+          "growthPerHour": {
+            "agility": 1,
+            "stamina": 1
+          },
+          "staminaPerHour": 8
+        },
+        {
+          "id": "music_jumprope",
+          "name": "음악 줄넘기",
+          "description": "신나는 음악에 맞추어 다양한 줄넘기 동작을 배우는 활동",
+          "growthPerHour": {
+            "stamina": 1,
+            "agility": 1
+          },
+          "staminaPerHour": 8
+        },
+        {
+          "id": "kids_dance",
+          "name": "키즈 댄스 / 방송 댄스",
+          "description": "K-POP이나 유행하는 안무를 배우며 리듬감을 키우는 활동",
+          "growthPerHour": {
+            "expression": 1,
+            "insa": 1
+          },
+          "staminaPerHour": 7
+        }
       ]
     },
     {
       "id": "digital_coding",
       "label": "창의·미래형 디지털 코딩",
       "items": [
-        { "id": "play_coding", "name": "놀이형 코딩", "description": "블록 교구나 로봇형 교구(알버트, 오조봇 등)로 명령어를 전달하며 알고리즘의 기초를 배운다", "growthPerHour": { "intellect": 1, "art": 1 }, "staminaPerHour": 3 },
-        { "id": "ai_intro", "name": "창의 인공지능(AI) 입문", "description": "간단한 AI 드로잉 앱이나 음성인식 교구를 체험하는 기초 수업", "growthPerHour": { "intellect": 2 }, "staminaPerHour": 3 }
+        {
+          "id": "play_coding",
+          "name": "놀이형 코딩",
+          "description": "블록 교구나 로봇형 교구(알버트, 오조봇 등)로 명령어를 전달하며 알고리즘의 기초를 배운다",
+          "growthPerHour": {
+            "logic": 1,
+            "digital": 1
+          },
+          "staminaPerHour": 3
+        },
+        {
+          "id": "ai_intro",
+          "name": "창의 인공지능(AI) 입문",
+          "description": "간단한 AI 드로잉 앱이나 음성인식 교구를 체험하는 기초 수업",
+          "growthPerHour": {
+            "digital": 2
+          },
+          "staminaPerHour": 3
+        }
       ]
     },
     {
       "id": "humanities_arts",
       "label": "인문·예술·감성 교육",
       "items": [
-        { "id": "creative_art", "name": "창의 미술 / 클레이아트", "description": "찰흙, 물감, 종이접기, 재활용품 등 다양한 재료를 활용한 조형 활동", "growthPerHour": { "art": 2 }, "staminaPerHour": 3 },
-        { "id": "play_theater", "name": "놀이 연극 / 구연동화", "description": "동화책 속 주인공이 되어 대사와 몸짓으로 감정을 표현해 보는 활동", "growthPerHour": { "art": 1, "social": 1 }, "staminaPerHour": 4 },
-        { "id": "instrument", "name": "악기 체험", "description": "칼림바, 리코더, 우쿨렐레 등 다루기 쉬운 악기를 놀이처럼 배우기", "growthPerHour": { "art": 2 }, "staminaPerHour": 3 }
+        {
+          "id": "creative_art",
+          "name": "창의 미술 / 클레이아트",
+          "description": "찰흙, 물감, 종이접기, 재활용품 등 다양한 재료를 활용한 조형 활동",
+          "growthPerHour": {
+            "dexterity": 1,
+            "expression": 1
+          },
+          "staminaPerHour": 3
+        },
+        {
+          "id": "play_theater",
+          "name": "놀이 연극 / 구연동화",
+          "description": "동화책 속 주인공이 되어 대사와 몸짓으로 감정을 표현해 보는 활동",
+          "growthPerHour": {
+            "expression": 1,
+            "selfEsteem": 1
+          },
+          "staminaPerHour": 4
+        },
+        {
+          "id": "instrument",
+          "name": "악기 체험",
+          "description": "칼림바, 리코더, 우쿨렐레 등 다루기 쉬운 악기를 놀이처럼 배우기",
+          "growthPerHour": {
+            "dexterity": 1,
+            "expression": 1
+          },
+          "staminaPerHour": 3
+        }
       ]
     },
     {
       "id": "basic_study",
       "label": "기초 학습 및 탐구",
       "items": [
-        { "id": "science_lab", "name": "생명과학 / 과학실험", "description": "식물·곤충 표본 관찰, 자석 장난감 만들기 등 직접 만지고 조립하는 탐구 실험", "growthPerHour": { "intellect": 1, "diligence": 1 }, "staminaPerHour": 3 },
-        { "id": "play_math_english", "name": "놀이 수학 · 놀이 영어", "description": "연산 보드게임으로 셈 공부, 동요나 게임으로 단어를 익히는 영어 놀이", "growthPerHour": { "intellect": 2 }, "staminaPerHour": 3 }
+        {
+          "id": "science_lab",
+          "name": "생명과학 / 과학실험",
+          "description": "식물·곤충 표본 관찰, 자석 장난감 만들기 등 직접 만지고 조립하는 탐구 실험",
+          "growthPerHour": {
+            "perception": 1,
+            "logic": 1
+          },
+          "staminaPerHour": 3
+        },
+        {
+          "id": "play_math_english",
+          "name": "놀이 수학 · 놀이 영어",
+          "description": "연산 보드게임으로 셈 공부, 동요나 게임으로 단어를 익히는 영어 놀이",
+          "growthPerHour": {
+            "math": 1,
+            "language": 1
+          },
+          "staminaPerHour": 3
+        }
       ]
     }
   ]
