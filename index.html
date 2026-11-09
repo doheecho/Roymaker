@@ -28,7 +28,7 @@
       <div id="condition"></div>
 
       <nav class="nav-buttons">
-        <button type="button" class="nav-btn active" data-view="schedule">📅 오늘 일정</button>
+        <button type="button" class="nav-btn active" data-view="schedule">📅 주간 일정</button>
         <button type="button" class="nav-btn" data-view="status">📊 능력치</button>
         <button type="button" class="nav-btn" data-view="academy">🏫 학원정보</button>
         <button type="button" class="nav-btn" data-view="activity">🧹 활동정보</button>
@@ -39,12 +39,14 @@
 
     <section id="main-view" class="panel">
       <div id="view-schedule" class="view">
-        <h2>📅 오늘 일정 짜기</h2>
+        <h2>📅 이번 주 일정 짜기</h2>
+        <p id="planner-note" class="planner-note"></p>
         <p class="muted">
-          아래 항목을 시간표로 끌어다 놓아서 하루 일정을 짠다. 등교일엔 정규수업(08:30~, 월·금 12:50 / 화·수·목 13:40
-          하교)과 이번 주에 등록한 학원 수업이 기본으로 놓여 있다. 08:50이 넘어서 학교에 도착하면 지각이다.
-          방과후교육은 과목을 고른 뒤 끌어다 놓고, 늘봄학교(아침·오후·저녁돌봄)는 프로그램을 고른 뒤 놓는다.
-          다 짰으면 "일과 시작"을 누른다 — 시작하면 더는 바꿀 수 없고 화면이 지도로 바뀐다.
+          매주 월요일에 월~금 한 주 일정을 짠다. 아래 항목을 원하는 <strong>요일 칸</strong>의 시간으로 끌어다 놓으면 된다.
+          등교일엔 정규수업(08:30~, 월·금 12:50 / 화·수·목 13:40 하교)과 이번 주에 등록한 학원 수업이 기본으로 들어가 있다.
+          08:50이 넘어서 학교에 도착하면 지각이다. 방과후교육은 과목을, 늘봄학교는 프로그램을 고른 뒤 놓는다.
+          지난 요일은 잠기고, <strong>오늘과 남은 요일은 일과를 시작하기 전까지 고칠 수 있다.</strong>
+          "일과 시작"을 누르면 오늘 일정이 지도에서 진행된다.
         </p>
 
         <div id="schedule-palette" class="chip-row"></div>

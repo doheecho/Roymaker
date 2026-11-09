@@ -695,3 +695,75 @@ li:last-child { border-bottom: none; }
 .station-A .bus-badge { background: #2F7F8F; }
 .station-school .bus-badge { background: var(--ink); font-size: 11.5px; }
 .station-H .bus-badge { font-size: 11.5px; }
+
+/* ── 주간 시간표 (월~금 5칸) ── */
+.planner-note { margin: 0 0 6px; font-family: "Jua", sans-serif; font-size: 13.5px; color: var(--accent-ink); }
+#timetable-wrap { overflow-x: auto; padding: 0; }
+#timetable { position: relative; }
+#timetable.tt-week { min-width: calc(44px + var(--tt-cols) * 112px); }
+.tt-head, .tt-body { display: grid; grid-template-columns: 44px repeat(var(--tt-cols, 1), minmax(0, 1fr)); }
+.tt-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--surface);
+  border-bottom: 2px dashed var(--line);
+}
+.tt-day-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px 4px;
+  padding: 6px 2px;
+  font-size: 12.5px;
+  text-align: center;
+  border-left: 1px dashed var(--line);
+}
+.tt-day-head strong { font-family: "Jua", sans-serif; font-weight: 400; }
+.tt-day-head.today { background: var(--accent-soft); color: var(--accent-ink); }
+.tt-day-head.past { color: var(--muted); }
+.tt-day-head.holiday strong { color: var(--bad); }
+.tt-tag { font-size: 10px; padding: 0 6px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.tt-day-head.today .tt-tag:first-of-type { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tt-body { position: relative; }
+.tt-gutter { position: relative; }
+.tt-gutter span {
+  position: absolute;
+  left: 4px;
+  transform: translateY(-1px);
+  font-family: monospace;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.tt-col {
+  position: relative;
+  border-left: 1px dashed var(--line);
+  background-image: repeating-linear-gradient(to bottom, var(--line) 0, var(--line) 1px, transparent 1px, transparent 60px);
+}
+.tt-col.today { background-color: rgba(255, 233, 224, 0.45); }
+.tt-col.locked { background-color: rgba(136, 124, 104, 0.08); }
+.tt-col.locked .tt-block { opacity: 0.5; }
+.tt-col .tt-block { left: 3px; right: 3px; padding: 2px 4px; font-size: 11px; align-items: flex-start; gap: 2px; }
+.tt-week .tt-block .tt-label { white-space: normal; line-height: 1.25; align-items: flex-start; }
+.tt-col .tt-block .tt-remove { width: 16px; height: 16px; font-size: 11px; }
+.tt-col .tt-preview { left: 3px; right: 3px; }
+
+/* ── 집·학교 네모 아이콘 ── */
+.square-badge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 2px solid #fff;
+  color: #fff;
+  font-family: "Jua", sans-serif;
+  font-size: 12.5px;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+}
+.station-H .square-badge { background: var(--accent); }
+.station-school .square-badge { background: var(--ink); }
