@@ -168,13 +168,14 @@ const state = {
   calledToday: new Set(),
   registrations: { active: {}, pending: {} },
   diaryEntries: [],
+  weekPlan: {},
   ui: { afterschoolCourse: null, careProgram: null },
   dayRunning: false,
   day: 1,
   holidaySet: new Set(),
 };
 
-let scheduleBlocks = [];
+// 주간 계획: { [dayNumber]: blocks[] } — 월요일에 한 주(월~금)를 짜고, 당일 아침까지 고칠 수 있다
 
 const GAME_START_DATE_UTC = Date.UTC(2026, 2, 1); // Day 1 = 2026년 3월 1일 일요일
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -434,13 +435,16 @@ function createCharacterOverlay(map, position) {
 // 정류장/역 아이콘: 동그라미 안에 유형 알파벳(B 버스, S 지하철) + 옆에 이름 레이블
 // 지도 아이콘: 동그라미 안 글자(B 버스 · S 지하철 · 집 · 금 학교 · A 학원 · P 장소) + 이름 레이블
 const MARKER_KIND = { B: "버스정류장", S: "지하철역", H: "우리집", P: "장소", A: "학원", school: "학교" };
-const MARKER_BADGE = { H: "집", school: "금" };
+// 집·학교는 네모 아이콘 안에 이름을 바로 쓴다
+const MARKER_SQUARE = { H: "우리집", school: "금북초" };
 
 function createStationOverlay(map, position, type, name) {
   const el = document.createElement("div");
   el.className = `bus-stop-marker station-${type}`;
   el.title = `${MARKER_KIND[type] ?? ""} — ${name}`;
-  el.innerHTML = `<span class="bus-badge">${MARKER_BADGE[type] ?? type}</span><span class="bus-label">${name}</span>`;
+  el.innerHTML = MARKER_SQUARE[type]
+    ? `<span class="square-badge">${MARKER_SQUARE[type]}</span>`
+    : `<span class="bus-badge">${type}</span><span class="bus-label">${name}</span>`;
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
@@ -1299,6 +1303,7 @@ function saveGame() {
       creativeCount: state.creativeCount,
       ui: { afterschoolCourse: state.ui.afterschoolCourse, careProgram: state.ui.careProgram },
       lastDay: state.lastDay ?? null,
+      weekPlan: state.weekPlan,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch (err) {
@@ -1322,6 +1327,7 @@ function loadGame() {
     if (data.ui?.afterschoolCourse) state.ui.afterschoolCourse = data.ui.afterschoolCourse;
     if (data.ui?.careProgram) state.ui.careProgram = data.ui.careProgram;
     state.lastDay = data.lastDay ?? null;
+    state.weekPlan = data.weekPlan ?? {};
     return true;
   } catch (err) {
     console.warn("불러오기 실패", err);
@@ -1537,11 +1543,56 @@ function rangesOverlap(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && bStart < aEnd;
 }
 
-function rowFromPoint(clientX, clientY) {
-  const rect = document.getElementById("timetable").getBoundingClientRect();
-  if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
-  const row = Math.floor((clientY - rect.top) / ROW_PX);
-  return Math.min(Math.max(row, 0), TOTAL_ROWS - 1);
+// ── 주간 계획 ──
+function planFor(day) {
+  if (!state.weekPlan[day]) state.weekPlan[day] = buildDefaultBlocks(day);
+  return state.weekPlan[day];
+}
+
+// 평일이면 이번 주 월~금 5칸, 주말이면 오늘 하루만
+function plannerDays() {
+  const dow = weekdayOf(state.day);
+  if (dow >= 1 && dow <= 5) {
+    const monday = state.day - (dow - 1);
+    return [0, 1, 2, 3, 4].map((i) => monday + i);
+  }
+  return [state.day];
+}
+
+function isDayEditable(day) {
+  return !state.dayRunning && day >= state.day;
+}
+
+function pruneWeekPlan() {
+  const first = plannerDays()[0];
+  Object.keys(state.weekPlan).forEach((key) => {
+    if (Number(key) < first) delete state.weekPlan[key];
+  });
+}
+
+function dayHeaderInfo(day) {
+  const date = gameDateForDay(day);
+  const key = gameDateKey(date);
+  const holiday = state.holidays?.find((h) => h.date === key);
+  const vacation = vacationOf(day);
+  return {
+    title: `${WEEKDAY_LABELS[date.getUTCDay()]} ${date.getUTCMonth() + 1}/${date.getUTCDate()}`,
+    tag: holiday ? holiday.name : vacation ? vacation.name : null,
+  };
+}
+
+// 포인터 아래의 요일 칸과 시간 줄
+function cellFromPoint(clientX, clientY) {
+  const wrap = document.getElementById("timetable-wrap").getBoundingClientRect();
+  if (clientX < wrap.left || clientX > wrap.right || clientY < wrap.top || clientY > wrap.bottom) return null;
+  for (const col of document.querySelectorAll("#timetable .tt-col")) {
+    const r = col.getBoundingClientRect();
+    if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+      const row = Math.min(Math.max(Math.floor((clientY - r.top) / ROW_PX), 0), TOTAL_ROWS - 1);
+      return { day: Number(col.dataset.day), col, row };
+    }
+  }
+  return null;
 }
 
 function flashReject() {
@@ -1550,16 +1601,21 @@ function flashReject() {
   setTimeout(() => el.classList.remove("tt-reject"), 350);
 }
 
+function rangeConflicts(day, range) {
+  return range.invalid || planFor(day).some((b) => rangesOverlap(b.startMin, b.endMin, range.startMin, range.endMin));
+}
+
 let previewEl = null;
-function updatePreview(range) {
+function updatePreview(hit) {
   clearPreview();
-  if (!range) return;
-  const conflict = range.invalid || scheduleBlocks.some((b) => rangesOverlap(b.startMin, b.endMin, range.startMin, range.endMin));
+  if (!hit) return;
+  const { range, col, day } = hit;
+  const bad = rangeConflicts(day, range);
   previewEl = document.createElement("div");
-  previewEl.className = `tt-preview ${conflict ? "tt-preview-bad" : "tt-preview-ok"}`;
+  previewEl.className = `tt-preview ${bad ? "tt-preview-bad" : "tt-preview-ok"}`;
   previewEl.style.top = `${minutesToRow(range.startMin) * ROW_PX}px`;
   previewEl.style.height = `${(minutesToRow(range.endMin) - minutesToRow(range.startMin)) * ROW_PX}px`;
-  document.getElementById("timetable").appendChild(previewEl);
+  col.appendChild(previewEl);
 }
 function clearPreview() {
   if (previewEl) {
@@ -1583,15 +1639,18 @@ function makeDraggable(chipEl, spec) {
     document.body.appendChild(ghost);
     moveGhostTo(ghost, event.clientX, event.clientY);
 
-    function computeRange(clientX, clientY) {
-      const row = rowFromPoint(clientX, clientY);
-      if (row == null) return null;
-      return rangeForSpec(spec, rowToMinutes(row));
+    function hitTest(clientX, clientY) {
+      const cell = cellFromPoint(clientX, clientY);
+      if (!cell) return null;
+      const range = rangeForSpec(spec, rowToMinutes(cell.row), cell.day);
+      if (!range) return null;
+      if (!isDayEditable(cell.day)) range.invalid = true;
+      return { ...cell, range };
     }
 
     function onMove(ev) {
       moveGhostTo(ghost, ev.clientX, ev.clientY);
-      updatePreview(computeRange(ev.clientX, ev.clientY));
+      updatePreview(hitTest(ev.clientX, ev.clientY));
     }
 
     function onUp(ev) {
@@ -1600,14 +1659,14 @@ function makeDraggable(chipEl, spec) {
       ghost.remove();
       clearPreview();
 
-      const range = computeRange(ev.clientX, ev.clientY);
-      if (!range) return;
-      const conflict = range.invalid || scheduleBlocks.some((b) => rangesOverlap(b.startMin, b.endMin, range.startMin, range.endMin));
-      if (conflict) {
+      const hit = hitTest(ev.clientX, ev.clientY);
+      if (!hit) return;
+      if (rangeConflicts(hit.day, hit.range)) {
         flashReject();
         return;
       }
-      scheduleBlocks.push({
+      const plan = planFor(hit.day);
+      plan.push({
         id: spec.kind === "school" ? "school" : `${spec.kind}-${spec.academyId ?? spec.activityId ?? spec.careSlot ?? "x"}-${Date.now()}`,
         kind: spec.kind,
         academyId: spec.academyId,
@@ -1615,10 +1674,11 @@ function makeDraggable(chipEl, spec) {
         courseId: spec.kind === "afterschool" ? state.ui.afterschoolCourse : undefined,
         careSlot: spec.careSlot,
         programId: spec.kind === "care" && spec.careSlot !== "morning" ? state.ui.careProgram : undefined,
-        startMin: range.startMin,
-        endMin: range.endMin,
+        startMin: hit.range.startMin,
+        endMin: hit.range.endMin,
       });
-      scheduleBlocks.sort((a, b) => a.startMin - b.startMin);
+      plan.sort((x, y) => x.startMin - y.startMin);
+      saveGame();
       renderTimetable();
     }
 
@@ -1643,28 +1703,32 @@ function afterschoolCourseById(id) {
   return state.afterschoolCourses.find((c) => c.id === id) ?? null;
 }
 
-// 팔레트 항목을 rowStartMin에 떨어뜨렸을 때의 시간 범위. invalid면 놓을 수 없다(운영시간 밖 등).
-function rangeForSpec(spec, rowStartMin) {
-  if (spec.kind === "school") return schoolTimesFor(state.day);
+// 팔레트 항목을 그 날(day)의 rowStartMin에 떨어뜨렸을 때의 시간 범위. invalid면 놓을 수 없다.
+function rangeForSpec(spec, rowStartMin, day) {
+  const vacation = vacationOf(day);
+  const weekday = isWeekday(day);
+  if (spec.kind === "school") return { ...schoolTimesFor(day), invalid: !!vacation };
   if (spec.kind === "afterschool") {
-    const t = afterschoolTimesFor(state.day);
-    return { startMin: t.startMin, endMin: t.endMin };
+    const t = afterschoolTimesFor(day);
+    return { startMin: t.startMin, endMin: t.endMin, invalid: !weekday || !!vacation };
   }
   if (spec.kind === "care") {
     const slot = careSlotById(spec.careSlot);
+    const dayOk = slot.vacationOnly ? weekday && !!vacation : weekday && !vacation;
     let endMin = clockToMinutes(slot.end);
     let startMin;
     if (slot.start) {
       startMin = clockToMinutes(slot.start);
     } else {
       // 오후돌봄: 정규수업/방과후교육이 끝나는 시각에 맞춰 시작
-      const schoolish = scheduleBlocks.filter((b) => b.kind === "school" || b.kind === "afterschool");
+      const plan = planFor(day);
+      const schoolish = plan.filter((b) => b.kind === "school" || b.kind === "afterschool");
       startMin = schoolish.length ? Math.max(...schoolish.map((b) => b.endMin)) : rowStartMin;
       // 뒤에 학원 등 다른 일정이 있으면 그 전까지만 돌봄
-      const nextStarts = scheduleBlocks.map((b) => b.startMin).filter((m) => m >= startMin);
+      const nextStarts = plan.map((b) => b.startMin).filter((m) => m >= startMin);
       if (nextStarts.length) endMin = Math.min(endMin, ...nextStarts);
     }
-    return { startMin, endMin, invalid: startMin >= endMin };
+    return { startMin, endMin, invalid: !dayOk || startMin >= endMin };
   }
   const durationMin = spec.kind === "activity" ? spec.durationMin : ACADEMY_LESSON_MIN;
   const startMin = rowStartMin;
@@ -1728,43 +1792,32 @@ function renderPalette() {
   const el = document.getElementById("schedule-palette");
   el.innerHTML = "";
 
-  const vacation = vacationOf(state.day);
-  const weekday = isWeekday(state.day);
-  const school = paletteGroup(el, vacation ? `🏫 학교 — ${vacation.name} 중` : "🏫 학교 · 방과후 · 늘봄");
+  const days = plannerDays();
+  const schoolDays = days.filter((d) => isWeekday(d) && !vacationOf(d));
+  const vacationDays = days.filter((d) => isWeekday(d) && vacationOf(d));
+  const school = paletteGroup(el, "🏫 학교 · 방과후 · 늘봄 — 요일 칸에 끌어다 놓으면 그 요일 시간에 맞춰 들어간다");
 
-  const hasSchool = scheduleBlocks.some((b) => b.kind === "school");
-  if (!hasSchool && !vacation) {
-    const t = schoolTimesFor(state.day);
-    school.row.appendChild(
-      createChip(SCHOOL_ICON, `정규수업 (${minutesToClock(t.startMin)}–${minutesToClock(t.endMin)})`, { kind: "school" }, "chip-school")
-    );
+  if (days.some((d) => !vacationOf(d))) {
+    school.row.appendChild(createChip(SCHOOL_ICON, "정규수업 (월·금 ~12:50 / 화~목 ~13:40)", { kind: "school" }, "chip-school"));
   }
 
-  if (weekday && !vacation) {
-    const t = afterschoolTimesFor(state.day);
+  if (schoolDays.length) {
     const course = afterschoolCourseById(state.ui.afterschoolCourse);
     school.row.appendChild(
-      createChip(
-        course?.icon ?? "🎒",
-        `방과후 · ${course?.name ?? ""} (${minutesToClock(t.startMin)}–${minutesToClock(t.endMin)})`,
-        { kind: "afterschool" },
-        "chip-afterschool"
-      )
+      createChip(course?.icon ?? "🎒", `방과후 · ${course?.name ?? ""} (수업 20분 뒤, 90분)`, { kind: "afterschool" }, "chip-afterschool")
     );
   }
 
-  const careSlots = (state.neulbom?.slots ?? []).filter((slot) =>
-    slot.vacationOnly ? vacation && weekday : !vacation && weekday
-  );
+  const careSlots = (state.neulbom?.slots ?? []).filter((slot) => (slot.vacationOnly ? vacationDays.length : schoolDays.length));
   careSlots.forEach((slot) => {
     const timeText = slot.start ? `${slot.start}–${slot.end}` : `~${slot.end}`;
     school.row.appendChild(createChip(slot.icon, `늘봄 ${slot.name} (${timeText})`, { kind: "care", careSlot: slot.id }, "chip-care"));
   });
 
-  if (weekday) {
+  if (schoolDays.length || vacationDays.length) {
     const opts = document.createElement("div");
     opts.className = "palette-options";
-    if (!vacation && state.afterschoolCourses.length) {
+    if (schoolDays.length && state.afterschoolCourses.length) {
       opts.appendChild(
         paletteSelect(
           "방과후 과목",
@@ -1818,8 +1871,8 @@ function renderPalette() {
     });
 }
 
-function blockDisplay(block) {
-  const dow = weekdayOf(state.day);
+function blockDisplay(block, day = state.day) {
+  const dow = weekdayOf(day);
   if (block.kind === "school") return { icon: SCHOOL_ICON, label: "정규수업", cls: "tt-school" };
   if (block.kind === "afterschool") {
     const course = afterschoolCourseById(block.courseId);
@@ -1846,46 +1899,90 @@ function blockDisplay(block) {
 function renderTimetable() {
   const el = document.getElementById("timetable");
   el.innerHTML = "";
-  el.style.height = `${TOTAL_ROWS * ROW_PX}px`;
+  const days = plannerDays();
+  el.style.setProperty("--tt-cols", days.length);
+  el.classList.toggle("tt-week", days.length > 1);
 
-  for (let row = 0; row <= TOTAL_ROWS; row++) {
-    const min = rowToMinutes(row);
-    if (min % 60 === 0) {
-      const line = document.createElement("div");
-      line.className = "tt-hour-line";
-      line.style.top = `${row * ROW_PX}px`;
-      line.textContent = minutesToClock(min);
-      el.appendChild(line);
-    }
-  }
-
-  scheduleBlocks.forEach((block) => {
-    const top = minutesToRow(block.startMin) * ROW_PX;
-    const height = minutesToRow(block.endMin) * ROW_PX - top;
-    const { icon, label, cls } = blockDisplay(block);
-    const div = document.createElement("div");
-    div.className = `tt-block ${cls}`;
-    div.style.top = `${top}px`;
-    div.style.height = `${height}px`;
-
-    const span = document.createElement("span");
-    span.className = "tt-label";
-    span.innerHTML = `<span>${icon}</span><span>${minutesToClock(block.startMin)} ${label}</span>`;
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "tt-remove";
-    removeBtn.setAttribute("aria-label", "일정 삭제");
-    removeBtn.textContent = "×";
-    removeBtn.addEventListener("click", () => {
-      if (state.dayRunning) return;
-      scheduleBlocks = scheduleBlocks.filter((b) => b.id !== block.id);
-      renderTimetable();
-    });
-
-    div.appendChild(span);
-    div.appendChild(removeBtn);
-    el.appendChild(div);
+  const head = document.createElement("div");
+  head.className = "tt-head";
+  head.appendChild(document.createElement("div"));
+  days.forEach((day) => {
+    const info = dayHeaderInfo(day);
+    const h = document.createElement("div");
+    h.className = `tt-day-head${day === state.day ? " today" : ""}${day < state.day ? " past" : ""}${info.tag ? " holiday" : ""}`;
+    h.innerHTML = `<strong>${info.title}</strong>${day === state.day ? '<span class="tt-tag">오늘</span>' : ""}${
+      info.tag ? `<span class="tt-tag">${info.tag}</span>` : ""
+    }`;
+    head.appendChild(h);
   });
+  el.appendChild(head);
+
+  const body = document.createElement("div");
+  body.className = "tt-body";
+  body.style.height = `${TOTAL_ROWS * ROW_PX}px`;
+
+  const gutter = document.createElement("div");
+  gutter.className = "tt-gutter";
+  for (let row = 0; row <= TOTAL_ROWS; row += 2) {
+    const label = document.createElement("span");
+    label.style.top = `${row * ROW_PX}px`;
+    label.textContent = minutesToClock(rowToMinutes(row));
+    gutter.appendChild(label);
+  }
+  body.appendChild(gutter);
+
+  days.forEach((day) => {
+    const editable = isDayEditable(day);
+    const col = document.createElement("div");
+    col.className = `tt-col${day === state.day ? " today" : ""}${!editable ? " locked" : ""}`;
+    col.dataset.day = String(day);
+
+    planFor(day).forEach((block) => {
+      const top = minutesToRow(block.startMin) * ROW_PX;
+      const height = minutesToRow(block.endMin) * ROW_PX - top;
+      const { icon, label, cls } = blockDisplay(block, day);
+      const div = document.createElement("div");
+      div.className = `tt-block ${cls}`;
+      div.style.top = `${top}px`;
+      div.style.height = `${height}px`;
+      div.title = `${minutesToClock(block.startMin)}–${minutesToClock(block.endMin)} ${label}`;
+
+      const span = document.createElement("span");
+      span.className = "tt-label";
+      span.innerHTML = `<span>${icon}</span><span>${minutesToClock(block.startMin)} ${label}</span>`;
+      div.appendChild(span);
+
+      if (editable) {
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "tt-remove";
+        removeBtn.setAttribute("aria-label", "일정 삭제");
+        removeBtn.textContent = "×";
+        removeBtn.addEventListener("click", () => {
+          if (!isDayEditable(day)) return;
+          state.weekPlan[day] = planFor(day).filter((b) => b.id !== block.id);
+          saveGame();
+          renderTimetable();
+        });
+        div.appendChild(removeBtn);
+      }
+      col.appendChild(div);
+    });
+    body.appendChild(col);
+  });
+  el.appendChild(body);
+
+  const note = document.getElementById("planner-note");
+  if (note) {
+    const dow = weekdayOf(state.day);
+    note.textContent =
+      dow === 1
+        ? "📋 월요일 — 이번 주(월~금) 일정을 짜는 날이에요. 요일 칸에 항목을 끌어다 놓으세요."
+        : dow >= 2 && dow <= 5
+        ? "✏️ 이번 주 계획대로 진행해요. 오늘과 남은 요일 일정은 아직 고칠 수 있어요(지난 요일은 잠김)."
+        : "🌤️ 주말이에요 — 오늘 하루 일정만 짜요. 월요일이 되면 새 한 주 일정을 짠다.";
+  }
+  document.getElementById("start-day-btn").textContent = `오늘(${WEEKDAY_LABELS[weekdayOf(state.day)]}) 일과 시작`;
 
   renderPalette();
 }
@@ -1989,7 +2086,7 @@ function advanceToNextDay() {
   }
   renderAcademies(state.academies, state.categoryMap);
 
-  scheduleBlocks = buildDefaultBlocks(state.day);
+  pruneWeekPlan();
   renderTimetable();
   renderStats(state.character);
   saveGame();
@@ -1997,7 +2094,6 @@ function advanceToNextDay() {
   state.dayRunning = false;
   const startBtn = document.getElementById("start-day-btn");
   startBtn.disabled = false;
-  startBtn.textContent = "일과 시작";
   renderShop();
 }
 
@@ -2400,7 +2496,8 @@ function wireScheduleEditor() {
     document.getElementById("start-day-btn").disabled = true;
     renderShop();
     showView("map");
-    const blocksForToday = scheduleBlocks.map((b) => ({ ...b }));
+    const blocksForToday = planFor(state.day).map((b) => ({ ...b }));
+    renderTimetable();
     runDay(blocksForToday);
   });
 }
@@ -2492,10 +2589,11 @@ async function main() {
   state.activities = activities;
   state.categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
   state.holidaySet = new Set(holidays.map((h) => h.date));
+  state.holidays = holidays;
 
   const restored = loadGame();
   renderDayHeader();
-  scheduleBlocks = buildDefaultBlocks(state.day);
+  pruneWeekPlan();
 
   renderStats(character);
   renderAcademies(academies, state.categoryMap);
