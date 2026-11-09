@@ -91,6 +91,8 @@ const LOW_HUNGER = 30;
 const LOW_ENERGY = 20;
 const LATE_DILIGENCE_PENALTY = 1;
 const SAVE_KEY = "roymaker-save-v2";
+const CLOUD_SAVE_ID = "iroi"; // 가족 공용 세이브 — Firestore의 saves/{CLOUD_SAVE_ID} 문서 하나를 모든 기기가 공유
+const FIREBASE_SDK_VERSION = "10.14.1";
 const SLEEP_FADE_MS = 900;
 const SLEEP_HOLD_MS = 700;
 const ACADEMY_LESSON_MIN = 60;
@@ -174,6 +176,7 @@ const state = {
   dayRunning: false,
   day: 1,
   holidaySet: new Set(),
+  cloud: { ready: false, db: null, docRef: null },
 };
 
 // 주간 계획: { [dayNumber]: blocks[] } — 월요일에 한 주(월~금)를 짜고, 당일 아침까지 고칠 수 있다
@@ -1658,25 +1661,89 @@ function statDelta(before, after) {
   return out;
 }
 
-// ── 저장 / 불러오기 (브라우저에만 저장됨) ──
+// ── 저장 / 불러오기 (localStorage는 항상, Firebase가 설정돼 있으면 클라우드에도) ──
+function buildSaveData() {
+  return {
+    version: 2,
+    day: state.day,
+    stats: state.character.stats,
+    condition: state.character.condition,
+    wallet: state.character.wallet,
+    registrations: state.registrations,
+    safetyEducated: state.safetyEducated,
+    creativeCount: state.creativeCount,
+    ui: { afterschoolCourse: state.ui.afterschoolCourse, careProgram: state.ui.careProgram },
+    lastDay: state.lastDay ?? null,
+    weekPlan: state.weekPlan,
+  };
+}
+
+function applySaveData(data) {
+  state.day = data.day;
+  Object.assign(state.character.stats, data.stats);
+  Object.assign(state.character.condition, data.condition);
+  state.character.wallet = data.wallet;
+  state.registrations = data.registrations ?? { active: {}, pending: {} };
+  state.safetyEducated = !!data.safetyEducated;
+  state.creativeCount = data.creativeCount ?? 0;
+  if (data.ui?.afterschoolCourse) state.ui.afterschoolCourse = data.ui.afterschoolCourse;
+  if (data.ui?.careProgram) state.ui.careProgram = data.ui.careProgram;
+  state.lastDay = data.lastDay ?? null;
+  state.weekPlan = data.weekPlan ?? {};
+}
+
 function saveGame() {
+  const data = buildSaveData();
   try {
-    const data = {
-      version: 2,
-      day: state.day,
-      stats: state.character.stats,
-      condition: state.character.condition,
-      wallet: state.character.wallet,
-      registrations: state.registrations,
-      safetyEducated: state.safetyEducated,
-      creativeCount: state.creativeCount,
-      ui: { afterschoolCourse: state.ui.afterschoolCourse, careProgram: state.ui.careProgram },
-      lastDay: state.lastDay ?? null,
-      weekPlan: state.weekPlan,
-    };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch (err) {
     console.warn("저장 실패", err);
+  }
+  if (state.cloud.ready) {
+    state.cloud.docRef.set(data).catch((err) => console.warn("클라우드 저장 실패 — 이 기기엔 저장됐어요", err));
+  }
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement("script");
+    el.src = src;
+    el.onload = () => resolve();
+    el.onerror = () => reject(new Error(`스크립트 로드 실패: ${src}`));
+    document.head.appendChild(el);
+  });
+}
+
+// firebase-config.js에 실제 값이 채워져 있을 때만 SDK를 불러와 연결한다 — 없으면 이 기기 저장만 쓴다
+async function initCloudSave() {
+  if (typeof FIREBASE_CONFIG === "undefined" || !FIREBASE_CONFIG.apiKey) return;
+  try {
+    await loadScript(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app-compat.js`);
+    await loadScript(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth-compat.js`);
+    await loadScript(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore-compat.js`);
+    firebase.initializeApp(FIREBASE_CONFIG);
+    await firebase.auth().signInAnonymously();
+    state.cloud.db = firebase.firestore();
+    state.cloud.docRef = state.cloud.db.collection("saves").doc(CLOUD_SAVE_ID);
+    state.cloud.ready = true;
+  } catch (err) {
+    console.warn("클라우드 저장 연결 실패 — 이 기기 저장만 사용합니다", err);
+    state.cloud.ready = false;
+  }
+}
+
+async function loadFromCloud() {
+  if (!state.cloud.ready) return false;
+  try {
+    const snap = await state.cloud.docRef.get();
+    if (!snap.exists) return false;
+    const data = snap.data();
+    if (data.version !== 2) return false;
+    applySaveData(data);
+    return true;
+  } catch (err) {
+    console.warn("클라우드 불러오기 실패 — 이 기기 저장을 대신 확인합니다", err);
+    return false;
   }
 }
 
@@ -1686,17 +1753,7 @@ function loadGame() {
     if (!raw) return false;
     const data = JSON.parse(raw);
     if (data.version !== 2) return false;
-    state.day = data.day;
-    Object.assign(state.character.stats, data.stats);
-    Object.assign(state.character.condition, data.condition);
-    state.character.wallet = data.wallet;
-    state.registrations = data.registrations ?? { active: {}, pending: {} };
-    state.safetyEducated = !!data.safetyEducated;
-    state.creativeCount = data.creativeCount ?? 0;
-    if (data.ui?.afterschoolCourse) state.ui.afterschoolCourse = data.ui.afterschoolCourse;
-    if (data.ui?.careProgram) state.ui.careProgram = data.ui.careProgram;
-    state.lastDay = data.lastDay ?? null;
-    state.weekPlan = data.weekPlan ?? {};
+    applySaveData(data);
     return true;
   } catch (err) {
     console.warn("불러오기 실패", err);
@@ -2901,6 +2958,7 @@ function wireMovementControls() {
 async function main() {
   renderClock();
   setInterval(renderClock, 1000 * 30);
+  const cloudReadyPromise = initCloudSave(); // 데이터 로딩과 동시에 진행 — 느려도 게임 시작을 막지 않음
 
   const [
     character,
@@ -2961,7 +3019,13 @@ async function main() {
   state.holidaySet = new Set(holidays.map((h) => h.date));
   state.holidays = holidays;
 
-  const restored = loadGame();
+  await cloudReadyPromise;
+  const fromCloud = state.cloud.ready && (await loadFromCloud());
+  let restored = fromCloud;
+  if (!restored) {
+    restored = loadGame();
+    if (restored && state.cloud.ready) saveGame(); // 이 기기에만 있던 기존 세이브를 클라우드로 올려서 다른 기기와 동기화
+  }
   renderDayHeader();
   pruneWeekPlan();
 
@@ -2982,7 +3046,7 @@ async function main() {
   wireMovementControls();
   wireNav();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
-  document.getElementById("new-game-btn").addEventListener("click", () => {
+  document.getElementById("new-game-btn").addEventListener("click", async () => {
     if (state.dayRunning) return;
     if (!window.confirm("저장된 진행 상황을 지우고 Day 1부터 새로 시작할까요?")) return;
     try {
@@ -2990,10 +3054,19 @@ async function main() {
     } catch (err) {
       console.warn(err);
     }
+    if (state.cloud.ready) {
+      try {
+        await state.cloud.docRef.delete();
+      } catch (err) {
+        console.warn("클라우드 세이브 삭제 실패", err);
+      }
+    }
     location.reload();
   });
   if (restored) {
-    document.getElementById("save-note").textContent = `💾 저장된 진행 상황(Day ${state.day})을 불러왔어요.`;
+    document.getElementById("save-note").textContent = fromCloud
+      ? `☁️ 클라우드에 저장된 진행 상황(Day ${state.day})을 불러왔어요.`
+      : `💾 이 기기에 저장된 진행 상황(Day ${state.day})을 불러왔어요.`;
   }
 }
 

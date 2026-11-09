@@ -587,8 +587,12 @@ isParentAtWork(시각) = 평일(월~금) AND 공휴일 아님 AND 09:00 ≤ 시�
 
 - 저장 키: `localStorage["roymaker-save-v2"]` (`SAVE_KEY`)
 - 하루가 끝나거나(다음 날로 넘어갈 때), 학원 등록을 바꾸거나, 상점에서 구매할 때마다 자동 저장된다(`saveGame()`).
-- 저장된 게임을 불러오면: `"💾 저장된 진행 상황(Day {N})을 불러왔어요."`
-- **🔄 새 게임 (저장 지우기)** 버튼: 확인창 `"저장된 진행 상황을 지우고 Day 1부터 새로 시작할까요?"` → 확인 시 저장 삭제 후 페이지 새로고침. 하루 진행 중에는 비활성화.
+- 저장된 게임을 불러오면: 로컬에서 왔으면 `"💾 이 기기에 저장된 진행 상황(Day {N})을 불러왔어요."`, 클라우드에서 왔으면 `"☁️ 클라우드에 저장된 진행 상황(Day {N})을 불러왔어요."`
+- **🔄 새 게임 (저장 지우기)** 버튼: 확인창 `"저장된 진행 상황을 지우고 Day 1부터 새로 시작할까요?"` → 확인 시 로컬 저장 삭제(+클라우드 연결돼 있으면 클라우드 문서도 삭제) 후 페이지 새로고침. 하루 진행 중에는 비활성화.
+- **여러 기기 공유(선택, 2026-11 추가)**: 루트의 `firebase-config.js`에 Firebase 프로젝트 설정값(`apiKey` 등 6개, 카카오 키처럼 공개돼도 되는 값)을 채우면 Firestore `saves/{CLOUD_SAVE_ID}`("iroi") 문서 하나를 모든 기기가 공유한다. 설정 방법·Firestore 보안 규칙은 README.md "여러 기기에서 세이브 공유" 절 참고.
+  - 시작 시 순서(`main()`): `initCloudSave()`(SDK 동적 로드 + 익명 로그인, 데이터 로딩과 병렬 진행) → 클라우드 연결됐으면 `loadFromCloud()` 먼저 시도 → 없으면 `loadGame()`(로컬)로 폴백, 이때 로컬에 기존 세이브가 있고 클라우드가 비어 있으면 `saveGame()`을 한 번 더 호출해 로컬 세이브를 클라우드로 올려준다(최초 마이그레이션).
+  - `saveGame()`은 항상 로컬(`localStorage`)에 먼저 쓰고, `state.cloud.ready`면 같은 데이터를 Firestore에도 `.set()`한다 — 둘 중 하나가 실패해도 나머지 한쪽은 정상 저장된다.
+  - `firebase-config.js`의 `apiKey`가 비어 있거나, SDK 로드/인증이 실패하면(`FirebaseError` 등) `state.cloud.ready`가 `false`로 남고 콘솔에 경고만 찍힌 채 평소처럼 로컬 전용으로 동작한다 — 설정 실수로 게임이 멈추지 않는다.
 
 ---
 
@@ -622,6 +626,8 @@ isParentAtWork(시각) = 평일(월~금) AND 공휴일 아님 AND 09:00 ≤ 시�
 | `STRESS_ILLNESS_THRESHOLD` | 80 | 몸살(일정 강제종료) 기준 |
 | `STRESS_ILLNESS_RELIEF` | 40 | 몸살 시 즉시 스트레스 완화량 |
 | `DAY_TIMELINE_START_MIN`/`END_MIN` | 07:00 / 21:00 | 시간표에 배치 가능한 범위 |
+| `CLOUD_SAVE_ID` | `"iroi"` | Firestore `saves/{이 값}` — 모든 기기가 공유하는 세이브 문서 id |
+| `FIREBASE_SDK_VERSION` | `"10.14.1"` | `firebase-config.js` 설정 시 불러오는 Firebase JS SDK 버전 |
 
 ---
 
