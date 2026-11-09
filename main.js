@@ -150,6 +150,7 @@ const state = {
   charOverlay: null,
   map: null,
   hotplaces: [],
+  sprite: { dir: "down", frame: 0, drawnDir: "down", movingAt: 0, riding: null, canvas: null, bubble: null },
   places: {},
   companyVisitedToday: false,
   placeEvents: [],
@@ -420,10 +421,200 @@ function distanceMeters(a, b) {
   return Math.hypot(dx, dy);
 }
 
+// ── 걷는 캐릭터 스프라이트 (16×22 도트, 코드로 직접 그림) ──
+const SPRITE_W = 16;
+const SPRITE_H = 22;
+const SPRITE_SCALE = 2;
+const SPRITE_FRAME_MS = 140;
+const WALK_CYCLE = [1, 0, 2, 0]; // 0 서기, 1 왼발, 2 오른발
+const SP = {
+  hair: "#2a2320",
+  skin: "#f5c7a1",
+  skinD: "#d9a27c",
+  shirt: "#4c8fd1",
+  shirtD: "#356fa8",
+  pants: "#2b3a55",
+  shoe: "#ff7a52",
+  bag: "#ff7a52",
+  bagD: "#b14a2a",
+  glass: "#5a5a66",
+  eye: "#1b1b1b",
+  blush: "#f2a7a0",
+  mouth: "#c9575a",
+};
+
+function spriteRect(ctx, x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+}
+
+// 앞(아래쪽)·뒤(위쪽) 공통 몸통과 다리
+function drawFrontBack(ctx, frame, back) {
+  const r = (x, y, w, h, c) => spriteRect(ctx, x, y, w, h, c);
+  // 머리
+  r(4, 3, 8, 6, SP.skin);
+  r(5, 1, 6, 1, SP.hair);
+  r(3, 2, 10, 2, SP.hair);
+  if (back) {
+    r(3, 4, 10, 5, SP.hair);
+  } else {
+    r(4, 4, 8, 1, SP.hair);
+    r(3, 4, 1, 3, SP.hair);
+    r(12, 4, 1, 3, SP.hair);
+    r(5, 6, 1, 1, SP.glass);
+    r(7, 6, 2, 1, SP.glass);
+    r(10, 6, 1, 1, SP.glass);
+    r(6, 6, 1, 1, SP.eye);
+    r(9, 6, 1, 1, SP.eye);
+    r(5, 7, 1, 1, SP.blush);
+    r(10, 7, 1, 1, SP.blush);
+    r(7, 8, 2, 1, SP.mouth);
+  }
+  r(7, 9, 2, 1, SP.skinD);
+  // 몸통 + 가방
+  r(5, 10, 6, 5, SP.shirt);
+  if (back) {
+    r(5, 10, 6, 5, SP.bag);
+    r(5, 10, 6, 1, SP.bagD);
+    r(5, 14, 6, 1, SP.bagD);
+  } else {
+    r(6, 10, 1, 3, SP.bagD);
+    r(9, 10, 1, 3, SP.bagD);
+  }
+  // 팔 (걸을 때 앞뒤로 흔들림)
+  const leftDy = frame === 1 ? 1 : frame === 2 ? -1 : 0;
+  const rightDy = -leftDy;
+  r(4, 10 + Math.max(0, leftDy), 1, 2, SP.shirtD);
+  r(4, 12 + leftDy, 1, 2, SP.skin);
+  r(11, 10 + Math.max(0, rightDy), 1, 2, SP.shirtD);
+  r(11, 12 + rightDy, 1, 2, SP.skin);
+  // 반바지
+  r(5, 15, 6, 2, SP.pants);
+  // 다리: 내딛는 발은 길게, 드는 발은 짧게
+  const legs = [
+    { x: 5, len: frame === 1 ? 4 : frame === 2 ? 2 : 3 },
+    { x: 9, len: frame === 2 ? 4 : frame === 1 ? 2 : 3 },
+  ];
+  legs.forEach(({ x, len }) => {
+    r(x, 17, 2, len, SP.skin);
+    r(x, 17 + len, 2, 1, SP.shoe);
+  });
+}
+
+// 옆모습 (왼쪽을 보는 기준 — 오른쪽은 좌우 반전)
+function drawSide(ctx, frame) {
+  const r = (x, y, w, h, c) => spriteRect(ctx, x, y, w, h, c);
+  r(4, 3, 7, 6, SP.skin);
+  r(5, 1, 6, 1, SP.hair);
+  r(4, 2, 8, 2, SP.hair);
+  r(4, 4, 4, 1, SP.hair);
+  r(8, 4, 4, 4, SP.hair);
+  r(8, 6, 1, 1, SP.skinD);
+  r(3, 6, 1, 1, SP.skin);
+  r(4, 6, 1, 1, SP.glass);
+  r(6, 6, 1, 1, SP.glass);
+  r(5, 6, 1, 1, SP.eye);
+  r(6, 7, 1, 1, SP.blush);
+  r(5, 8, 1, 1, SP.mouth);
+  r(7, 9, 2, 1, SP.skinD);
+  // 몸통 + 등 뒤 가방
+  r(6, 10, 4, 5, SP.shirt);
+  r(10, 10, 2, 5, SP.bag);
+  r(11, 10, 1, 5, SP.bagD);
+  // 반바지
+  r(6, 15, 4, 2, SP.pants);
+  // 다리
+  if (frame === 0) {
+    r(7, 17, 2, 3, SP.skin);
+    r(6, 20, 3, 1, SP.shoe);
+  } else {
+    const front = frame === 1 ? SP.skin : SP.skinD;
+    const backC = frame === 1 ? SP.skinD : SP.skin;
+    r(8, 17, 1, 1, backC);
+    r(9, 18, 1, 2, backC);
+    r(9, 20, 2, 1, SP.shoe);
+    r(7, 17, 1, 1, front);
+    r(6, 18, 1, 2, front);
+    r(4, 20, 3, 1, SP.shoe);
+  }
+  // 팔
+  if (frame === 0) {
+    r(7, 10, 1, 2, SP.shirtD);
+    r(7, 12, 1, 2, SP.skin);
+  } else if (frame === 1) {
+    r(7, 10, 1, 1, SP.shirtD);
+    r(6, 11, 1, 1, SP.shirtD);
+    r(5, 12, 1, 2, SP.skin);
+  } else {
+    r(8, 10, 1, 1, SP.shirtD);
+    r(9, 11, 1, 1, SP.shirtD);
+    r(9, 12, 1, 2, SP.skin);
+  }
+}
+
+function drawSprite(canvas, dir, frame) {
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, SPRITE_W, SPRITE_H);
+  if (dir === "left" || dir === "right") {
+    ctx.save();
+    if (dir === "right") {
+      ctx.translate(SPRITE_W, 0);
+      ctx.scale(-1, 1);
+    }
+    drawSide(ctx, frame);
+    ctx.restore();
+  } else {
+    drawFrontBack(ctx, frame, dir === "up");
+  }
+}
+
+function setSpriteFacing(dir, moving) {
+  state.sprite.dir = dir;
+  if (moving) state.sprite.movingAt = performance.now();
+}
+
+function setSpriteRide(emoji) {
+  state.sprite.riding = emoji;
+  if (state.sprite.bubble) {
+    state.sprite.bubble.textContent = emoji ?? "";
+    state.sprite.bubble.hidden = !emoji;
+  }
+}
+
+function startSpriteTicker() {
+  let step = 0;
+  setInterval(() => {
+    const sp = state.sprite;
+    if (!sp.canvas) return;
+    const moving = !sp.riding && performance.now() - sp.movingAt < SPRITE_FRAME_MS;
+    const frame = moving ? WALK_CYCLE[step++ % WALK_CYCLE.length] : 0;
+    if (!moving) step = 0;
+    if (frame !== sp.frame || sp.dir !== sp.drawnDir) {
+      drawSprite(sp.canvas, sp.dir, frame);
+      sp.frame = frame;
+      sp.drawnDir = sp.dir;
+    }
+  }, SPRITE_FRAME_MS);
+}
+
 function createCharacterOverlay(map, position) {
   const el = document.createElement("div");
-  el.className = "char-marker";
-  el.textContent = "🧒";
+  el.className = "char-sprite";
+  const canvas = document.createElement("canvas");
+  canvas.width = SPRITE_W;
+  canvas.height = SPRITE_H;
+  canvas.style.width = `${SPRITE_W * SPRITE_SCALE}px`;
+  canvas.style.height = `${SPRITE_H * SPRITE_SCALE}px`;
+  canvas.setAttribute("aria-label", "이로이");
+  const bubble = document.createElement("span");
+  bubble.className = "ride-bubble";
+  bubble.hidden = true;
+  el.appendChild(bubble);
+  el.appendChild(canvas);
+  state.sprite.canvas = canvas;
+  state.sprite.bubble = bubble;
+  drawSprite(canvas, state.sprite.dir, 0);
+  startSpriteTicker();
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
@@ -580,6 +771,9 @@ function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
       const mag = Math.hypot(dir.x, dir.y);
 
       if (mag > 0) {
+        // 대각선이면 좌우를 우선해서 바라본다
+        const facing = dir.x !== 0 ? (dir.x > 0 ? "right" : "left") : dir.y > 0 ? "up" : "down";
+        setSpriteFacing(facing, true);
         const nx = dir.x / mag;
         const ny = dir.y / mag;
         const metersPerDegLat = 111320;
@@ -1031,6 +1225,10 @@ async function rideTransit(target, startClock, label) {
   const gameMinutes = Math.max(5, Math.round(dist / TRANSIT_M_PER_MIN));
   const endClock = startClock + gameMinutes;
   const fromPos = { ...state.charPos };
+  const dLat = target.lat - fromPos.lat;
+  const dLng = (target.lng - fromPos.lng) * Math.cos((fromPos.lat * Math.PI) / 180);
+  setSpriteFacing(Math.abs(dLng) >= Math.abs(dLat) ? (dLng > 0 ? "right" : "left") : dLat > 0 ? "up" : "down", false);
+  setSpriteRide(label.includes("지하철") ? "🚇" : "🚌");
 
   await animate(TRANSIT_RIDE_MS, (t) => {
     const lat = lerp(fromPos.lat, target.lat, t);
@@ -1043,6 +1241,7 @@ async function rideTransit(target, startClock, label) {
 
   state.charPos = { ...target };
   state.charOverlay.setPosition(new kakao.maps.LatLng(target.lat, target.lng));
+  setSpriteRide(null);
   setStatus(`${minutesToClock(endClock)} · ${label}`);
   return endClock;
 }
@@ -2327,6 +2526,7 @@ async function runDay(blocks) {
 
   state.charPos = { ...state.positions.home };
   state.charOverlay.setPosition(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
+  setSpriteFacing("down", false);
   state.eventsToday = 0;
   state.lastEventClock = -Infinity;
   state.calledToday = new Set();
