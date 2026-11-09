@@ -150,6 +150,8 @@ const state = {
   charOverlay: null,
   map: null,
   hotplaces: [],
+  places: {},
+  companyVisitedToday: false,
   walkModeActive: false,
   requestPhone: null,
   school: null,
@@ -269,7 +271,8 @@ function renderDayHeader() {
   document.getElementById("day-counter").textContent = `Day ${state.day}`;
 }
 
-// subway.csv (유형, 이름, 위도, 경도) — 탭 또는 쉼표 구분. 유형 B = 버스정류장, S = 지하철역
+// subway.csv (유형, 이름, 위도, 경도) — 탭 또는 쉼표 구분.
+// 유형 B = 버스정류장, S = 지하철역, H = 우리집, P = 장소(할머니댁·회사·학원 등)
 async function loadStations(path) {
   const res = await fetch(path);
   const text = (await res.text()).replace(/^\uFEFF/, "");
@@ -278,7 +281,7 @@ async function loadStations(path) {
   return lines.slice(1).flatMap((line, i) => {
     const [type, name, lat, lng] = line.split(delimiter).map((v) => v.trim());
     const pos = { lat: Number(lat), lng: Number(lng) };
-    if (!["B", "S"].includes(type) || !name || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) {
+    if (!["B", "S", "H", "P"].includes(type) || !name || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) {
       console.warn(`subway.csv ${i + 2}번째 줄을 건너뜀: ${line}`);
       return [];
     }
@@ -438,7 +441,8 @@ function createCharacterOverlay(map, position) {
 function createStationOverlay(map, position, type, name) {
   const el = document.createElement("div");
   el.className = `bus-stop-marker station-${type}`;
-  el.title = `${type === "S" ? "지하철역" : "버스정류장"} — ${name}`;
+  const kind = { B: "버스정류장", S: "지하철역", H: "우리집", P: "장소" }[type] ?? "";
+  el.title = `${kind} — ${name}`;
   el.innerHTML = `<span class="bus-badge">${type}</span><span class="bus-label">${name}</span>`;
   return new kakao.maps.CustomOverlay({
     map,
@@ -451,7 +455,7 @@ function createHotplaceOverlay(map, position, place) {
   const el = document.createElement("div");
   el.className = "bus-stop-marker hot-marker";
   el.title = place.realName ? `${place.name} — ${place.realName}` : place.name;
-  el.innerHTML = `<span class="bus-badge hot-badge">H</span><span class="bus-label">${place.icon} ${place.name}</span>`;
+  el.innerHTML = `<span class="bus-badge hot-badge">${place.icon}</span><span class="bus-label">${place.name}</span>`;
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
@@ -787,6 +791,17 @@ async function openPhone(clock) {
   });
   if (!contact) return 0;
 
+  const visit = state.phone?.companyVisit;
+  const companyPos = visit ? state.places[visit.placeName] : null;
+  if (
+    contact.companyVisit &&
+    companyPos &&
+    !state.companyVisitedToday &&
+    distanceMeters(state.charPos, companyPos) <= visit.radiusM
+  ) {
+    return visitParentsCompany(contact, visit);
+  }
+
   const line = pickRandom(contact.lines);
   const firstCall = !state.calledToday.has(contact.id);
   state.calledToday.add(contact.id);
@@ -801,6 +816,39 @@ async function openPhone(clock) {
     tone: "phone",
   });
   return state.phone?.callMinutes ?? 2;
+}
+
+// 엄마·아빠 회사(삼성메디슨) 근처에서 전화하면 → 회사 앞으로 나와서 간식 선물
+async function visitParentsCompany(contact, visit) {
+  state.companyVisitedToday = true;
+  const who = contact.name;
+  await presentChoice("event-panel", `📞 ${who}`, [{ label: "기다리기", value: true }], {
+    body: `"${who}! 나 지금 ${who} 회사 앞이야. 잠깐 나와 줄 수 있어?"\n\n"뭐? 로이가 여기까지 왔다고? 금방 나갈게!"`,
+    tone: "phone",
+  });
+
+  const snacks = [...visit.snacks].sort(() => Math.random() - 0.5).slice(0, visit.pickCount);
+  const total = { ...visit.baseEffect };
+  snacks.forEach((snack) => {
+    Object.entries(snack.effect).forEach(([k, v]) => {
+      total[k] = (total[k] ?? 0) + v;
+    });
+  });
+  const applied = applyEffect(total);
+  renderStats(state.character);
+
+  const snackNames = snacks.map((x) => `${x.icon} ${x.name}`).join(", ");
+  const snackPlain = snacks.map((x) => x.name).join(", ");
+  logLine(`🏢 ${visit.placeName} 앞 — ${josa(who, "이/가")} 나와서 간식을 줬다: ${snackPlain} (${appliedText(applied)})`);
+  diary(
+    `${visit.placeName} 앞에서 ${who}에게 전화했더니 ${josa(who, "이/가")} 회사에서 나왔다! ` +
+      `회사 식권으로 받은 ${josa(snackPlain, "을/를")} 간식으로 선물해 줘서 맛있게 먹었다.`
+  );
+  await presentChoice("event-panel", `🏢 ${visit.placeName} 앞`, [{ label: "😋 맛있게 먹기", value: true }], {
+    body: `${josa(who, "이/가")} 회사에서 나와 꼭 안아 주었다! 회사 식권으로 받은 간식을 선물로 줬다.\n${snackNames}\n(${appliedText(applied)})`,
+    tone: "event",
+  });
+  return visit.minutes;
 }
 
 // 공용 선택창 — options: [{ label, value, disabled, hint, group }]
@@ -950,17 +998,29 @@ function travelTo(target, startClock, placeName) {
   return walkTo(target, startClock, `${placeName}(으)로 이동 중`, { allowEarlyHome });
 }
 
-async function renderMap(character, academies, activities, stations, hotplaces) {
+// CSV의 P 장소를 이름으로 찾는다 (학원·활동은 `place` 필드 또는 이름이 같으면 연결)
+function csvPlace(...names) {
+  for (const n of names) {
+    if (n && state.places[n]) return state.places[n];
+  }
+  return null;
+}
+
+async function renderMap(character, academies, activities, csvRows, hotplaces) {
+  const stations = csvRows.filter((r) => r.type === "B" || r.type === "S");
+  state.places = Object.fromEntries(csvRows.filter((r) => r.type === "P").map((r) => [r.name, r.pos]));
+  const csvHome = csvRows.find((r) => r.type === "H");
+
   const map = new kakao.maps.Map(document.getElementById("map"), {
     center: new kakao.maps.LatLng(HOME_FALLBACK.lat, HOME_FALLBACK.lng),
     level: MAP_ZOOM_LEVEL,
   });
   state.map = map;
 
-  const homePos = await resolveHomePosition(character.home);
+  const homePos = csvHome ? csvHome.pos : await resolveHomePosition(character.home);
   state.positions.home = homePos;
   map.setCenter(new kakao.maps.LatLng(homePos.lat, homePos.lng));
-  addMarker(map, homePos, `집 — 금호파크힐스 113동<br>${character.home.address}`);
+  if (!csvHome) addMarker(map, homePos, `집 — 금호파크힐스 113동<br>${character.home.address}`);
 
   const schoolFallback = offsetLatLng(homePos.lat, homePos.lng, HOME_SCHOOL_WALK_MIN * CHILD_WALK_M_PER_MIN, 45);
   state.positions.school = await resolvePlace(character.school.address, null, schoolFallback);
@@ -974,19 +1034,21 @@ async function renderMap(character, academies, activities, stations, hotplaces) 
     const mPerMin = isWalk ? CHILD_WALK_M_PER_MIN : TRANSIT_M_PER_MIN;
     const distanceM = academy.location.etaMinFromHome * mPerMin;
     const fallbackPos = offsetLatLng(homePos.lat, homePos.lng, distanceM, bearingDeg);
-    const pos = await resolvePlace(academy.address, null, fallbackPos);
+    const fromCsv = csvPlace(academy.place, academy.name);
+    const pos = fromCsv ?? (await resolvePlace(academy.address, null, fallbackPos));
     state.positions.academies[academy.id] = pos;
     const category = state.categoryMap[academy.categoryId];
     const etaText = isWalk ? `도보 ${academy.location.etaMinFromHome}분` : `버스/지하철 약 ${academy.location.etaMinFromHome}분`;
-    addMarker(map, pos, `<strong>${academy.name}</strong><br>${category.label} · ${etaText}`);
+    if (!fromCsv) addMarker(map, pos, `<strong>${academy.name}</strong><br>${category.label} · ${etaText}`);
   }
 
   for (const activity of activities) {
     if (activity.location === "home") continue;
     const fallbackPos = offsetLatLng(homePos.lat, homePos.lng, (activity.travelMin ?? 15) * CHILD_WALK_M_PER_MIN, 200);
-    const pos = await resolvePlace(activity.address, activity.placeQuery, fallbackPos);
+    const fromCsv = csvPlace(activity.place, activity.name);
+    const pos = fromCsv ?? (await resolvePlace(activity.address, activity.placeQuery, fallbackPos));
     state.positions.activities[activity.id] = pos;
-    addMarker(map, pos, `<strong>${activity.name}</strong><br>${activity.address ?? ""}`);
+    if (!fromCsv) addMarker(map, pos, `<strong>${activity.name}</strong><br>${activity.address ?? ""}`);
   }
 
   for (const station of stations) {
@@ -994,6 +1056,11 @@ async function renderMap(character, academies, activities, stations, hotplaces) 
     list.push(station);
     createStationOverlay(map, station.pos, station.type, station.name);
   }
+
+  // H(우리집)·P(장소)도 동그라미 알파벳 아이콘 + 레이블
+  csvRows
+    .filter((r) => r.type === "H" || r.type === "P")
+    .forEach((r) => createStationOverlay(map, r.pos, r.type, r.name));
 
   for (const place of hotplaces) {
     const fallbackPos = offsetLatLng(homePos.lat, homePos.lng, place.fallback.distanceM, place.fallback.bearing);
@@ -1785,9 +1852,6 @@ function diary(text) {
 
 const DIARY_WEATHER = ["☀️ 맑음", "⛅ 구름 조금", "☁️ 흐림", "🌧️ 비", "🌬️ 바람", "🌈 맑게 갬"];
 
-function formatDiaryDate(date) {
-  return `${date.getUTCFullYear()}. ${date.getUTCMonth() + 1}. ${date.getUTCDate()}. ${WEEKDAY_LABELS[date.getUTCDay()]}`;
-}
 
 function diaryClosing(character, gotSick) {
   const c = character.condition;
@@ -1800,7 +1864,7 @@ function diaryClosing(character, gotSick) {
 function showDiary({ delta, gotSick }) {
   const overlay = document.getElementById("diary-overlay");
   const date = gameDateForDay(state.day);
-  document.getElementById("diary-title").textContent = `[오늘의 일기] ${formatDiaryDate(date)}`;
+  document.getElementById("diary-title").textContent = `[오늘의 일기] ${formatGameDate(date)}`;
   document.getElementById("diary-weather").textContent = `날씨: ${DIARY_WEATHER[(state.day * 7 + 3) % DIARY_WEATHER.length]}`;
 
   const body = document.getElementById("diary-body");
@@ -2112,6 +2176,7 @@ async function runDay(blocks) {
   state.eventsToday = 0;
   state.lastEventClock = -Infinity;
   state.calledToday = new Set();
+  state.companyVisitedToday = false;
   state.diaryEntries = [];
 
   const statsAtStart = { ...state.character.stats };

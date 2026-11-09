@@ -688,3 +688,7 @@ li:last-child { border-bottom: none; }
     repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #CFE0F0 33px, #CFE0F0 34px); }
 }
 .diary-note .diary-head { background: transparent; border: none; padding: 0; }
+.station-H .bus-badge { background: var(--accent); }
+.station-P .bus-badge { background: var(--accent3); }
+.hot-badge { font-size: 12px; }
+.transport-choice .choice-body { white-space: pre-line; }

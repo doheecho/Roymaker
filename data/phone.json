@@ -13,7 +13,8 @@
       ],
       "effect": {
         "stress": -4
-      }
+      },
+      "companyVisit": true
     },
     {
       "id": "dad",
@@ -27,7 +28,8 @@
       ],
       "effect": {
         "stress": -4
-      }
+      },
+      "companyVisit": true
     },
     {
       "id": "friend_1",
@@ -85,5 +87,70 @@
       },
       "emergency": true
     }
-  ]
+  ],
+  "companyVisit": {
+    "placeName": "삼성메디슨",
+    "radiusM": 300,
+    "minutes": 15,
+    "pickCount": 3,
+    "baseEffect": {
+      "stress": -8,
+      "selfEsteem": 1
+    },
+    "snacks": [
+      {
+        "id": "milk",
+        "name": "우유",
+        "icon": "🥛",
+        "effect": {
+          "staminaNow": 5,
+          "hunger": 8
+        }
+      },
+      {
+        "id": "bread",
+        "name": "빵",
+        "icon": "🍞",
+        "effect": {
+          "hunger": 15,
+          "staminaNow": 3
+        }
+      },
+      {
+        "id": "misugaru",
+        "name": "미숫가루",
+        "icon": "🥤",
+        "effect": {
+          "staminaNow": 8,
+          "hunger": 10
+        }
+      },
+      {
+        "id": "jelly",
+        "name": "젤리",
+        "icon": "🍬",
+        "effect": {
+          "stress": -6
+        }
+      },
+      {
+        "id": "starbucks_cookie",
+        "name": "스타벅스 과자",
+        "icon": "🍪",
+        "effect": {
+          "stress": -6,
+          "hunger": 6
+        }
+      },
+      {
+        "id": "banana",
+        "name": "바나나",
+        "icon": "🍌",
+        "effect": {
+          "staminaNow": 8,
+          "hunger": 8
+        }
+      }
+    ]
+  }
 }
