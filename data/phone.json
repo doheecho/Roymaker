@@ -97,6 +97,15 @@
       "stress": -8,
       "selfEsteem": 1
     },
+    "persuade": {
+      "contactId": "mom",
+      "message": "엄마, 빨리 퇴근하고 나랑 놀자!",
+      "logicThreshold": 20,
+      "successLine": "정말? 알았어, 엄마가 오늘은 특별히 서둘러서 일찍 퇴근할게! 이따 집에서 꼭 안아줄게 💕",
+      "successEffect": { "stress": -10, "selfEsteem": 3, "social": 1 },
+      "failLine": "로이야 미안해, 엄마 아직 회사에서 할 일이 남았어. 이따 퇴근하고 꼭 같이 놀자! 사랑해 💕",
+      "failEffect": { "stress": -2 }
+    },
     "snacks": [
       {
         "id": "milk",

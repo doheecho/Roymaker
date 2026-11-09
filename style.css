@@ -69,7 +69,7 @@ main {
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
   max-width: 1180px;
   margin: 0 auto;
   padding: 24px;
@@ -79,7 +79,7 @@ main {
   #stats-panel { position: static; }
 }
 
-#stats-panel { position: sticky; top: 18px; }
+#stats-panel { position: sticky; top: 18px; align-self: start; height: fit-content; }
 #main-view { min-height: 520px; }
 
 .panel {

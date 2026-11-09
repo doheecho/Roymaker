@@ -218,6 +218,13 @@ function isWeekday(dayNumber) {
   return dow >= 1 && dow <= 5;
 }
 
+// 평일 9~16시는 엄마·아빠가 회사에 있는 시간 — 이때는 "집으로 돌아와" 같은 말 대신 "이따 보자" 톤을 쓴다
+function isParentAtWork(clock) {
+  if (!isWeekday(state.day)) return false;
+  if (state.holidaySet.has(gameDateKey(gameDateForDay(state.day)))) return false;
+  return clock >= 9 * 60 && clock < 16 * 60;
+}
+
 function clockToMinutes(text) {
   const [h, m] = text.split(":").map(Number);
   return h * 60 + m;
@@ -1007,8 +1014,18 @@ function nonZeroEffect(effect) {
   return Object.fromEntries(Object.entries(effect).filter(([, v]) => v !== 0));
 }
 
+// locationBoost: {placeName, radiusM, multiplier} — 그 장소 근처에 있으면 이 이벤트가 뽑힐 확률이 올라간다
+function effectiveEventWeight(e) {
+  const base = e.weight ?? 1;
+  if (!e.locationBoost) return base;
+  const pos = resolveNamedPlace(e.locationBoost.placeName);
+  if (!pos || distanceMeters(state.charPos, pos) > e.locationBoost.radiusM) return base;
+  return base * (e.locationBoost.multiplier ?? 1);
+}
+
 async function runRandomEvent(clock) {
-  const event = pickWeighted(state.events);
+  const weighted = state.events.map((e) => ({ ...e, weight: effectiveEventWeight(e) }));
+  const event = pickWeighted(weighted);
   const vars = {};
   if (event.amounts) vars.amount = pickRandom(event.amounts);
   if (event.variants) Object.assign(vars, pickRandom(event.variants));
@@ -1102,6 +1119,9 @@ async function openPhone(clock) {
     !state.companyVisitedToday &&
     distanceMeters(state.charPos, companyPos) <= visit.radiusM
   ) {
+    if (visit.persuade && contact.id === visit.persuade.contactId) {
+      return offerMomCompanyOptions(contact, visit, clock);
+    }
     return visitParentsCompany(contact, visit);
   }
 
@@ -1112,7 +1132,7 @@ async function openPhone(clock) {
       !pe.callsToday?.has(contact.id) &&
       distanceMeters(state.charPos, pe.pos) <= pe.callRadiusM
   );
-  if (placeCall) return placeSpecialCall(placeCall, contact);
+  if (placeCall) return placeSpecialCall(placeCall, contact, clock);
 
   const line = pickRandom(contact.lines);
   const firstCall = !state.calledToday.has(contact.id);
@@ -1143,17 +1163,20 @@ async function runPlaceMemory(pe, clock) {
   return pe.minutes ?? 0;
 }
 
-async function placeSpecialCall(pe, contact) {
+async function placeSpecialCall(pe, contact, clock) {
   pe.callsToday ??= new Set();
   pe.callsToday.add(contact.id);
   const call = pe.calls[contact.id];
+  // 평일 9~16시(부모님 근무중)에는 "집으로 돌아와" 대신 준비된 workLine("이따 보자" 톤)을 쓴다
+  const atWork = isParentAtWork(clock) && (contact.id === "mom" || contact.id === "dad");
+  const line = atWork && call.workLine ? call.workLine : call.line;
   const applied = applyEffect(call.effect);
   renderStats(state.character);
   const note = Object.keys(applied).length ? ` (${appliedText(applied)})` : "";
-  logLine(`📱 ${pe.placeName}에서 ${contact.name}에게 전화 — "${call.line}"${note}`);
+  logLine(`📱 ${pe.placeName}에서 ${contact.name}에게 전화 — "${line}"${note}`);
   diary(`${josa(pe.placeName, "에서/에서")} ${contact.name}에게 전화했더니 ${call.diary}`);
   await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
-    body: `"${call.line}"${note}`,
+    body: `"${line}"${note}`,
     tone: call.tone ?? "phone",
   });
   return state.phone?.callMinutes ?? 2;
@@ -1190,6 +1213,50 @@ async function visitParentsCompany(contact, visit) {
     tone: "event",
   });
   return visit.minutes;
+}
+
+// 회사 근처에서 엄마에게 전화할 때 — 잠깐 나와달라고 할지, 아예 일찍 퇴근하자고 조를지 고른다
+async function offerMomCompanyOptions(contact, visit, clock) {
+  const choice = await presentChoice(
+    "event-panel",
+    `📞 ${contact.name}`,
+    [
+      { label: "🍪 회사 앞으로 잠깐 나와줄 수 있어?", value: "visit" },
+      { label: `🏃 ${visit.persuade.message}`, value: "persuade" },
+      { label: "📵 그냥 끊는다", value: null },
+    ],
+    {
+      body: `${minutesToClock(clock)} · ${visit.placeName} 근처다. ${contact.name}에게 뭐라고 할까요?`,
+      tone: "phone",
+    }
+  );
+  if (choice === "visit") return visitParentsCompany(contact, visit);
+  if (choice === "persuade") return persuadeMomLeaveWork(contact, visit);
+  return 0;
+}
+
+async function persuadeMomLeaveWork(contact, visit) {
+  state.companyVisitedToday = true;
+  const p = visit.persuade;
+  const logic = state.character.stats.logic ?? 0;
+  const chance = Math.min(0.9, Math.max(0.1, logic / (p.logicThreshold * 2)));
+  const success = Math.random() < chance;
+
+  const line = success ? p.successLine : p.failLine;
+  const applied = applyEffect(success ? p.successEffect : p.failEffect);
+  renderStats(state.character);
+  const note = Object.keys(applied).length ? ` (${appliedText(applied)})` : "";
+  logLine(`📱 ${visit.placeName}에서 엄마에게 전화 — "${p.message}" → "${line}"${note}`);
+  diary(
+    success
+      ? "엄마한테 빨리 퇴근하고 놀아달라고 졸랐더니, 엄마가 오늘은 특별히 일찍 퇴근하기로 했다! 너무 신났다."
+      : "엄마한테 빨리 와달라고 졸랐는데, 엄마는 아직 일이 안 끝났다고 했다. 이따 보기로 했다."
+  );
+  await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: success ? "야호!" : "알겠어요", value: true }], {
+    body: `"${line}"${note}`,
+    tone: success ? "event" : "phone",
+  });
+  return state.phone?.callMinutes ?? 2;
 }
 
 // 공용 선택창 — options: [{ label, value, disabled, hint, group }]
@@ -1357,6 +1424,16 @@ function csvPlace(...names) {
     if (n && state.places[n]) return state.places[n];
   }
   return null;
+}
+
+// 이벤트의 locationBoost 등에서 쓰는, 이름으로 아무 장소(P/역/정류장)나 찾는 범용 조회
+function resolveNamedPlace(name) {
+  if (!name) return null;
+  if (state.places[name]) return state.places[name];
+  const station = [...(state.stations?.subway ?? []), ...(state.stations?.bus ?? [])].find((s) =>
+    s.name.includes(name)
+  );
+  return station ? station.pos : null;
 }
 
 async function renderMap(character, academies, activities, csvRows, hotplaces) {
