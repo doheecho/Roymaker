@@ -150,7 +150,7 @@ const state = {
   charOverlay: null,
   map: null,
   hotplaces: [],
-  sprite: { dir: "down", frame: 0, drawnDir: "down", movingAt: 0, riding: null, canvas: null, bubble: null },
+  sprite: { dir: "down", frame: null, drawnDir: "down", cache: null, movingAt: 0, riding: null, canvas: null, bubble: null },
   places: {},
   companyVisitedToday: false,
   placeEvents: [],
@@ -421,151 +421,244 @@ function distanceMeters(a, b) {
   return Math.hypot(dx, dy);
 }
 
-// ── 걷는 캐릭터 스프라이트 (16×22 도트, 코드로 직접 그림) ──
-const SPRITE_W = 16;
-const SPRITE_H = 22;
+// ── 걷는 캐릭터 스프라이트 (24×32 도트, 코드로 직접 그림 + 외곽선) ──
+// 팔다리는 sin 곡선으로 앞뒤로 흔들리고(8프레임), 걸음마다 몸이 살짝 위아래로 들썩인다.
+const SPRITE_W = 24;
+const SPRITE_H = 35;
 const SPRITE_SCALE = 2;
-const SPRITE_FRAME_MS = 140;
-const WALK_CYCLE = [1, 0, 2, 0]; // 0 서기, 1 왼발, 2 오른발
+const SPRITE_FRAME_MS = 85;
+const WALK_FRAMES = 8;
 const SP = {
-  hair: "#2a2320",
-  skin: "#f5c7a1",
-  skinD: "#d9a27c",
-  shirt: "#4c8fd1",
-  shirtD: "#356fa8",
+  outline: "#2a2030",
+  hair: "#1f1a1c",
+  hairHi: "#463c44",
+  skin: "#f7cfae",
+  skinD: "#e3a985",
+  shirt: "#8fd8b8",
+  shirtD: "#5fb893",
   pants: "#2b3a55",
   shoe: "#ff7a52",
-  bag: "#ff7a52",
-  bagD: "#b14a2a",
-  glass: "#5a5a66",
-  eye: "#1b1b1b",
-  blush: "#f2a7a0",
-  mouth: "#c9575a",
+  shoeD: "#c9573a",
+  bag: "#ff8a5c",
+  bagD: "#c95a36",
+  glass: "#c8a46a",
+  lens: "#fdf6e8",
+  eye: "#3a2a24",
+  blush: "#f4a3a0",
+  mouth: "#c95c5c",
 };
 
-function spriteRect(ctx, x, y, w, h, color) {
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, w, h);
+function makeSpriteCtx() {
+  const c = document.createElement("canvas");
+  c.width = SPRITE_W;
+  c.height = SPRITE_H;
+  const ctx = c.getContext("2d");
+  const r = (x, y, w, h, color) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.round(x), Math.round(y), w, h);
+  };
+  // 굵기 w의 팔다리 선
+  const limb = (x0, y0, x1, y1, w, color) => {
+    const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      r(lerp(x0, x1, t) - (w - 1) / 2, lerp(y0, y1, t), w, 1, color);
+    }
+  };
+  // 타원 채우기
+  const oval = (cx, cy, rx, ry, color) => {
+    for (let y = -ry; y <= ry; y++) {
+      const half = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y * y) / (ry * ry + 0.5))));
+      r(cx - half, cy + y, half * 2 + 1, 1, color);
+    }
+  };
+  return { c, ctx, r, limb, oval };
 }
 
-// 앞(아래쪽)·뒤(위쪽) 공통 몸통과 다리
-function drawFrontBack(ctx, frame, back) {
-  const r = (x, y, w, h, c) => spriteRect(ctx, x, y, w, h, c);
+// 투명 픽셀 중 그림과 맞닿은 곳에 외곽선
+function addOutline(c, ctx) {
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+  const at = (x, y) => (x < 0 || y < 0 || x >= c.width || y >= c.height ? 0 : d[(y * c.width + x) * 4 + 3]);
+  const mark = [];
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      if (at(x, y)) continue;
+      if (at(x - 1, y) || at(x + 1, y) || at(x, y - 1) || at(x, y + 1)) mark.push([x, y]);
+    }
+  }
+  ctx.fillStyle = SP.outline;
+  mark.forEach(([x, y]) => ctx.fillRect(x, y, 1, 1));
+}
+
+// 앞모습(아래)·뒷모습(위)
+function paintFrontBack(g, swing, bob, back) {
+  const { r, limb, oval } = g;
+  const y0 = 2 - bob;
+  // 팔 — 손이 앞뒤로 오가며 위아래로 보인다
+  const lHand = 21 + y0 + swing * 1.6;
+  const rHand = 21 + y0 - swing * 1.6;
+  const arm = (x, handY) => {
+    limb(x, 15 + y0, x, handY, 2, SP.skin);
+    limb(x, 15 + y0, x, 16 + y0, 2, SP.shirtD);
+  };
+  arm(7, lHand);
+  arm(16, rHand);
+  // 다리 — 드는 발은 올라간다
+  const leg = (x, lift) => {
+    const footY = 29 - lift;
+    limb(x, 24 + y0, x, footY + y0, 2, SP.skin);
+    r(x - 1, footY + 1 + y0, 3, 2, SP.shoe);
+    r(x - 1, footY + 2 + y0, 3, 1, SP.shoeD);
+  };
+  leg(9.5, Math.max(0, -swing) * 2.2);
+  leg(13.5, Math.max(0, swing) * 2.2);
+  // 몸통
+  r(8, 14 + y0, 8, 8, SP.shirt);
+  r(8, 21 + y0, 8, 1, SP.shirtD);
+  if (back) {
+    r(8, 15 + y0, 8, 7, SP.bag);
+    r(8, 15 + y0, 8, 2, SP.bagD);
+    r(10, 18 + y0, 4, 1, SP.bagD);
+  } else {
+    r(10, 14 + y0, 4, 1, SP.shirtD);
+    r(9, 15 + y0, 1, 4, SP.bagD);
+    r(14, 15 + y0, 1, 4, SP.bagD);
+  }
+  r(8, 22 + y0, 8, 3, SP.pants);
+  r(11, 24 + y0, 2, 1, SP.outline);
   // 머리
-  r(4, 3, 8, 6, SP.skin);
-  r(5, 1, 6, 1, SP.hair);
-  r(3, 2, 10, 2, SP.hair);
+  oval(11.5, 8 + y0, 7, 6, SP.skin);
+  r(10, 13 + y0, 4, 1, SP.skinD);
   if (back) {
-    r(3, 4, 10, 5, SP.hair);
+    oval(11.5, 7 + y0, 8, 6, SP.hair);
+    r(9, 12 + y0, 6, 1, SP.hair);
+    r(8, 3 + y0, 3, 1, SP.hairHi);
   } else {
-    r(4, 4, 8, 1, SP.hair);
-    r(3, 4, 1, 3, SP.hair);
-    r(12, 4, 1, 3, SP.hair);
-    r(5, 6, 1, 1, SP.glass);
-    r(7, 6, 2, 1, SP.glass);
-    r(10, 6, 1, 1, SP.glass);
-    r(6, 6, 1, 1, SP.eye);
-    r(9, 6, 1, 1, SP.eye);
-    r(5, 7, 1, 1, SP.blush);
-    r(10, 7, 1, 1, SP.blush);
-    r(7, 8, 2, 1, SP.mouth);
+    // 머리카락: 위쪽 덮고 앞머리는 들쭉날쭉
+    oval(11.5, 4 + y0, 8, 4, SP.hair);
+    r(4, 4 + y0, 2, 5, SP.hair);
+    r(18, 4 + y0, 2, 5, SP.hair);
+    [6, 7, 9, 10, 12, 14, 15, 17].forEach((x, i) => r(x, 6 + y0, 1, i % 2 ? 2 : 1, SP.hair));
+    r(8, 2 + y0, 3, 1, SP.hairHi);
+    r(13, 1 + y0, 2, 1, SP.hairHi);
+    // 동그란 안경 + 웃는 눈
+    const lens = (x) => {
+      r(x, 8 + y0, 5, 3, SP.lens);
+      r(x + 1, 7 + y0, 3, 1, SP.glass);
+      r(x + 1, 11 + y0, 3, 1, SP.glass);
+      r(x, 8 + y0, 1, 3, SP.glass);
+      r(x + 4, 8 + y0, 1, 3, SP.glass);
+      r(x + 1, 9 + y0, 1, 1, SP.eye);
+      r(x + 2, 8 + y0, 1, 1, SP.eye);
+      r(x + 3, 9 + y0, 1, 1, SP.eye);
+    };
+    lens(6);
+    lens(13);
+    r(11, 9 + y0, 2, 1, SP.glass);
+    r(5, 11 + y0, 2, 1, SP.blush);
+    r(17, 11 + y0, 2, 1, SP.blush);
+    r(10, 12 + y0, 1, 1, SP.mouth);
+    r(11, 13 + y0, 2, 1, SP.mouth);
+    r(13, 12 + y0, 1, 1, SP.mouth);
   }
-  r(7, 9, 2, 1, SP.skinD);
-  // 몸통 + 가방
-  r(5, 10, 6, 5, SP.shirt);
-  if (back) {
-    r(5, 10, 6, 5, SP.bag);
-    r(5, 10, 6, 1, SP.bagD);
-    r(5, 14, 6, 1, SP.bagD);
-  } else {
-    r(6, 10, 1, 3, SP.bagD);
-    r(9, 10, 1, 3, SP.bagD);
-  }
-  // 팔 (걸을 때 앞뒤로 흔들림)
-  const leftDy = frame === 1 ? 1 : frame === 2 ? -1 : 0;
-  const rightDy = -leftDy;
-  r(4, 10 + Math.max(0, leftDy), 1, 2, SP.shirtD);
-  r(4, 12 + leftDy, 1, 2, SP.skin);
-  r(11, 10 + Math.max(0, rightDy), 1, 2, SP.shirtD);
-  r(11, 12 + rightDy, 1, 2, SP.skin);
-  // 반바지
-  r(5, 15, 6, 2, SP.pants);
-  // 다리: 내딛는 발은 길게, 드는 발은 짧게
-  const legs = [
-    { x: 5, len: frame === 1 ? 4 : frame === 2 ? 2 : 3 },
-    { x: 9, len: frame === 2 ? 4 : frame === 1 ? 2 : 3 },
-  ];
-  legs.forEach(({ x, len }) => {
-    r(x, 17, 2, len, SP.skin);
-    r(x, 17 + len, 2, 1, SP.shoe);
-  });
 }
 
 // 옆모습 (왼쪽을 보는 기준 — 오른쪽은 좌우 반전)
-function drawSide(ctx, frame) {
-  const r = (x, y, w, h, c) => spriteRect(ctx, x, y, w, h, c);
-  r(4, 3, 7, 6, SP.skin);
-  r(5, 1, 6, 1, SP.hair);
-  r(4, 2, 8, 2, SP.hair);
-  r(4, 4, 4, 1, SP.hair);
-  r(8, 4, 4, 4, SP.hair);
-  r(8, 6, 1, 1, SP.skinD);
-  r(3, 6, 1, 1, SP.skin);
-  r(4, 6, 1, 1, SP.glass);
-  r(6, 6, 1, 1, SP.glass);
-  r(5, 6, 1, 1, SP.eye);
-  r(6, 7, 1, 1, SP.blush);
-  r(5, 8, 1, 1, SP.mouth);
-  r(7, 9, 2, 1, SP.skinD);
+function paintSide(g, swing, bob) {
+  const { r, limb, oval } = g;
+  const y0 = 2 - bob;
+  const hip = { x: 12, y: 23 + y0 };
+  const shoulder = { x: 12, y: 15 + y0 };
+  const legAt = (angle) => ({ x: hip.x + Math.sin(angle) * 6, y: hip.y + Math.cos(angle) * 6 });
+  const armAt = (angle) => ({ x: shoulder.x + Math.sin(angle) * 6, y: shoulder.y + Math.cos(angle) * 6 });
+  const legA = -swing * 0.55; // 음수 = 앞(왼쪽)
+  const armA = swing * 0.6;
+  const drawLeg = (angle, skin, shoe) => {
+    const f = legAt(angle);
+    limb(hip.x, hip.y, f.x, f.y, 2, skin);
+    r(f.x - 2, f.y + 1, 4, 2, shoe);
+  };
+  const drawArm = (angle, skin, sleeve) => {
+    const h = armAt(angle);
+    limb(shoulder.x, shoulder.y, h.x, h.y, 2, skin);
+    limb(shoulder.x, shoulder.y, lerp(shoulder.x, h.x, 0.3), lerp(shoulder.y, h.y, 0.3), 2, sleeve);
+  };
+  // 먼 쪽 팔다리 (어둡게)
+  drawArm(-armA, SP.skinD, SP.shirtD);
+  drawLeg(-legA, SP.skinD, SP.shoeD);
   // 몸통 + 등 뒤 가방
-  r(6, 10, 4, 5, SP.shirt);
-  r(10, 10, 2, 5, SP.bag);
-  r(11, 10, 1, 5, SP.bagD);
-  // 반바지
-  r(6, 15, 4, 2, SP.pants);
-  // 다리
-  if (frame === 0) {
-    r(7, 17, 2, 3, SP.skin);
-    r(6, 20, 3, 1, SP.shoe);
+  r(9, 14 + y0, 6, 8, SP.shirt);
+  r(15, 15 + y0, 3, 7, SP.bag);
+  r(17, 15 + y0, 1, 7, SP.bagD);
+  r(9, 22 + y0, 6, 3, SP.pants);
+  // 가까운 쪽 다리
+  drawLeg(legA, SP.skin, SP.shoe);
+  // 머리
+  oval(11, 8 + y0, 6, 6, SP.skin);
+  r(4, 9 + y0, 1, 2, SP.skin);
+  oval(12, 4 + y0, 7, 4, SP.hair);
+  r(13, 4 + y0, 5, 7, SP.hair);
+  [5, 7, 8, 10].forEach((x, i) => r(x, 6 + y0, 1, i % 2 ? 1 : 2, SP.hair));
+  r(9, 1 + y0, 3, 1, SP.hairHi);
+  r(13, 9 + y0, 1, 2, SP.skinD);
+  // 안경 + 웃는 눈
+  r(5, 8 + y0, 4, 3, SP.lens);
+  r(5, 7 + y0, 4, 1, SP.glass);
+  r(5, 11 + y0, 4, 1, SP.glass);
+  r(4, 8 + y0, 1, 3, SP.glass);
+  r(9, 8 + y0, 4, 1, SP.glass);
+  r(5, 9 + y0, 1, 1, SP.eye);
+  r(6, 8 + y0, 1, 1, SP.eye);
+  r(7, 9 + y0, 1, 1, SP.eye);
+  r(8, 11 + y0, 2, 1, SP.blush);
+  r(5, 12 + y0, 1, 1, SP.mouth);
+  r(6, 13 + y0, 2, 1, SP.mouth);
+  // 가까운 쪽 팔
+  drawArm(armA, SP.skin, SP.shirtD);
+}
+
+function renderSpriteFrame(dir, swing, bob) {
+  const g = makeSpriteCtx();
+  if (dir === "left" || dir === "right") {
+    paintSide(g, swing, bob);
+    if (dir === "right") {
+      const flipped = makeSpriteCtx();
+      flipped.ctx.translate(SPRITE_W, 0);
+      flipped.ctx.scale(-1, 1);
+      flipped.ctx.drawImage(g.c, 0, 0);
+      flipped.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      addOutline(flipped.c, flipped.ctx);
+      return flipped.c;
+    }
   } else {
-    const front = frame === 1 ? SP.skin : SP.skinD;
-    const backC = frame === 1 ? SP.skinD : SP.skin;
-    r(8, 17, 1, 1, backC);
-    r(9, 18, 1, 2, backC);
-    r(9, 20, 2, 1, SP.shoe);
-    r(7, 17, 1, 1, front);
-    r(6, 18, 1, 2, front);
-    r(4, 20, 3, 1, SP.shoe);
+    paintFrontBack(g, swing, bob, dir === "up");
   }
-  // 팔
-  if (frame === 0) {
-    r(7, 10, 1, 2, SP.shirtD);
-    r(7, 12, 1, 2, SP.skin);
-  } else if (frame === 1) {
-    r(7, 10, 1, 1, SP.shirtD);
-    r(6, 11, 1, 1, SP.shirtD);
-    r(5, 12, 1, 2, SP.skin);
-  } else {
-    r(8, 10, 1, 1, SP.shirtD);
-    r(9, 11, 1, 1, SP.shirtD);
-    r(9, 12, 1, 2, SP.skin);
-  }
+  addOutline(g.c, g.ctx);
+  return g.c;
+}
+
+// 방향별 걷기 8프레임 + 서 있는 자세를 미리 그려 둔다
+function buildSpriteCache() {
+  const cache = {};
+  ["down", "up", "left", "right"].forEach((dir) => {
+    const frames = [];
+    for (let i = 0; i < WALK_FRAMES; i++) {
+      const swing = Math.sin((i / WALK_FRAMES) * Math.PI * 2);
+      const bob = Math.abs(swing) < 0.75 ? 1 : 0; // 다리가 모일 때 살짝 올라간다
+      frames.push(renderSpriteFrame(dir, swing, bob));
+    }
+    cache[dir] = { walk: frames, idle: renderSpriteFrame(dir, 0, 0) };
+  });
+  return cache;
 }
 
 function drawSprite(canvas, dir, frame) {
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, SPRITE_W, SPRITE_H);
-  if (dir === "left" || dir === "right") {
-    ctx.save();
-    if (dir === "right") {
-      ctx.translate(SPRITE_W, 0);
-      ctx.scale(-1, 1);
-    }
-    drawSide(ctx, frame);
-    ctx.restore();
-  } else {
-    drawFrontBack(ctx, frame, dir === "up");
-  }
+  state.sprite.cache ??= buildSpriteCache();
+  const set = state.sprite.cache[dir];
+  ctx.drawImage(frame == null ? set.idle : set.walk[frame % WALK_FRAMES], 0, 0);
 }
 
 function setSpriteFacing(dir, moving) {
@@ -586,8 +679,8 @@ function startSpriteTicker() {
   setInterval(() => {
     const sp = state.sprite;
     if (!sp.canvas) return;
-    const moving = !sp.riding && performance.now() - sp.movingAt < SPRITE_FRAME_MS;
-    const frame = moving ? WALK_CYCLE[step++ % WALK_CYCLE.length] : 0;
+    const moving = !sp.riding && performance.now() - sp.movingAt < SPRITE_FRAME_MS * 2;
+    const frame = moving ? step++ % WALK_FRAMES : null;
     if (!moving) step = 0;
     if (frame !== sp.frame || sp.dir !== sp.drawnDir) {
       drawSprite(sp.canvas, sp.dir, frame);
@@ -613,7 +706,7 @@ function createCharacterOverlay(map, position) {
   el.appendChild(canvas);
   state.sprite.canvas = canvas;
   state.sprite.bubble = bubble;
-  drawSprite(canvas, state.sprite.dir, 0);
+  drawSprite(canvas, state.sprite.dir, null);
   startSpriteTicker();
   return new kakao.maps.CustomOverlay({
     map,

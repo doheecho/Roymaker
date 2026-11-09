@@ -773,11 +773,11 @@ li:last-child { border-bottom: none; }
 .char-sprite canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  filter: drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff) drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff);
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.9));
 }
 .char-sprite::after {
   content: "";
-  width: 22px;
+  width: 30px;
   height: 6px;
   margin-top: -4px;
   border-radius: 50%;
