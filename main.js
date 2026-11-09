@@ -266,6 +266,23 @@ function renderDayHeader() {
   document.getElementById("day-counter").textContent = `Day ${state.day}`;
 }
 
+// subway.csv (유형, 이름, 위도, 경도) — 탭 또는 쉼표 구분. 유형 B = 버스정류장, S = 지하철역
+async function loadStations(path) {
+  const res = await fetch(path);
+  const text = (await res.text()).replace(/^\uFEFF/, "");
+  const lines = text.split(/\r?\n/).filter((line) => line.trim());
+  const delimiter = lines[0].includes("\t") ? "\t" : ",";
+  return lines.slice(1).flatMap((line, i) => {
+    const [type, name, lat, lng] = line.split(delimiter).map((v) => v.trim());
+    const pos = { lat: Number(lat), lng: Number(lng) };
+    if (!["B", "S"].includes(type) || !name || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) {
+      console.warn(`subway.csv ${i + 2}번째 줄을 건너뜀: ${line}`);
+      return [];
+    }
+    return [{ id: `${type}-${i + 1}`, type, name, pos }];
+  });
+}
+
 async function loadJSON(path) {
   const res = await fetch(path);
   return res.json();
@@ -414,11 +431,12 @@ function createCharacterOverlay(map, position) {
   });
 }
 
-function createBusStopOverlay(map, position, name, title) {
+// 정류장/역 아이콘: 동그라미 안에 유형 알파벳(B 버스, S 지하철) + 옆에 이름 레이블
+function createStationOverlay(map, position, type, name) {
   const el = document.createElement("div");
-  el.className = "bus-stop-marker";
-  el.title = title ?? name;
-  el.innerHTML = `<span class="bus-badge">B</span><span class="bus-label">${name}</span>`;
+  el.className = `bus-stop-marker station-${type}`;
+  el.title = `${type === "S" ? "지하철역" : "버스정류장"} — ${name}`;
+  el.innerHTML = `<span class="bus-badge">${type}</span><span class="bus-label">${name}</span>`;
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
@@ -958,21 +976,10 @@ async function renderMap(character, academies, activities, stations, hotplaces) 
     addMarker(map, pos, `<strong>${activity.name}</strong><br>${activity.address ?? ""}`);
   }
 
-  for (const station of stations.subway) {
-    const fallbackPos = offsetLatLng(homePos.lat, homePos.lng, 1000, 0);
-    const pos = await resolvePlace(station.address, null, fallbackPos);
-    state.stations.subway.push({ ...station, pos });
-    addMarker(map, pos, `🚇 ${station.name}`);
-  }
-
-  for (let i = 0; i < stations.bus.length; i++) {
-    const stop = stations.bus[i];
-    const bearingDeg = (360 / stations.bus.length) * i;
-    const fallbackPos = offsetLatLng(homePos.lat, homePos.lng, 350, bearingDeg);
-    const pos = await resolvePlace(stop.address, null, fallbackPos);
-    state.stations.bus.push({ ...stop, pos });
-    const note = stop.address ? "" : " (가상 위치)";
-    createBusStopOverlay(map, pos, stop.name, `정류장 코드 ${stop.code}${note}`);
+  for (const station of stations) {
+    const list = station.type === "S" ? state.stations.subway : state.stations.bus;
+    list.push(station);
+    createStationOverlay(map, station.pos, station.type, station.name);
   }
 
   for (const place of hotplaces) {
@@ -2186,7 +2193,7 @@ async function main() {
     loadJSON("data/academy_categories.json"),
     loadJSON("data/items.json"),
     loadJSON("data/activities.json"),
-    loadJSON("data/stations.json"),
+    loadStations("subway.csv"),
     loadJSON("data/holidays.json"),
     loadJSON("data/subjects.json"),
     loadJSON("data/school_schedule.json"),
