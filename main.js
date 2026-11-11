@@ -1,3 +1,6 @@
+// place.csv가 유형을 한글 단어로 적어도("우리집"/"학교"/"학원"/"공원") 내부적으로는 기존 짧은 코드로 다룬다
+const CSV_TYPE_ALIASES = { 우리집: "H", 학교: "school", 학원: "A", 공원: "park" };
+
 // 능력치 3분류 (신체능력 · 학습능력 · 성격/인성)
 const STAT_GROUPS = [
   { id: "body", label: "신체능력", icon: "🏃", stats: ["stamina", "power", "agility", "dexterity"] },
@@ -100,6 +103,9 @@ const WAIT_PHASE_MS = 3000;
 const MOVE_SPEED_MPS = 60;
 const GAME_MIN_PER_REAL_SEC = 1.0;
 const ARRIVAL_RADIUS_M = 20;
+// 히스테리시스: 진입 반경(ARRIVAL_RADIUS_M)보다 넉넉하게 벗어나야 "다시 물어봐도 되는 상태"로 풀린다
+// — 경계선 바로 위에서 서성일 때 선택창이 껐다 켜졌다 반복되는 걸 막는다
+const DEPART_RADIUS_M = 30;
 const MAP_ZOOM_LEVEL = 3;
 
 class DayCancelledEarly extends Error {
@@ -287,23 +293,27 @@ function renderDayHeader() {
 // place.csv (유형, 이름, 위도, 경도) — 탭 또는 쉼표 구분.
 // 유형 B = 버스정류장, S = 지하철역, H = 우리집, P = 장소(할머니댁·회사 등), A = 학원(학원 이름과 같게)
 async function loadStations(path) {
-  const res = await fetch(path);
+  const res = await fetch(`${path}?v=${DATA_VERSION}`);
   const text = (await res.text()).replace(/^\uFEFF/, "");
   const lines = text.split(/\r?\n/).filter((line) => line.trim());
   const delimiter = lines[0].includes("\t") ? "\t" : ",";
   return lines.slice(1).flatMap((line, i) => {
-    const [type, name, lat, lng] = line.split(delimiter).map((v) => v.trim());
+    const [rawType, name, lat, lng, rawAddress] = line.split(delimiter).map((v) => (v ?? "").trim());
+    const type = CSV_TYPE_ALIASES[rawType] ?? rawType;
     const pos = { lat: Number(lat), lng: Number(lng) };
-    if (!["B", "S", "H", "P", "A"].includes(type) || !name || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) {
+    if (!["B", "S", "H", "P", "A", "school", "park"].includes(type) || !name || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lng)) {
       console.warn(`place.csv ${i + 2}번째 줄을 건너뜀: ${line}`);
       return [];
     }
-    return [{ id: `${type}-${i + 1}`, type, name, pos }];
+    return [{ id: `${type}-${i + 1}`, type, name, pos, address: rawAddress || null }];
   });
 }
 
+// index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
+const DATA_VERSION = "20261111h";
+
 async function loadJSON(path) {
-  const res = await fetch(path);
+  const res = await fetch(`${path}?v=${DATA_VERSION}`);
   return res.json();
 }
 
@@ -722,17 +732,20 @@ function createCharacterOverlay(map, position) {
 
 // 정류장/역 아이콘: 동그라미 안에 유형 알파벳(B 버스, S 지하철) + 옆에 이름 레이블
 // 지도 아이콘: 동그라미 안 글자(B 버스 · S 지하철 · 집 · 금 학교 · A 학원 · P 장소) + 이름 레이블
-const MARKER_KIND = { B: "버스정류장", S: "지하철역", H: "우리집", P: "장소", A: "학원", school: "학교" };
-// 집·학교는 네모 아이콘 안에 이름을 바로 쓴다
-const MARKER_SQUARE = { H: "우리집", school: "금북초" };
+const MARKER_KIND = { B: "버스정류장", S: "지하철역", H: "우리집", P: "장소", A: "학원", school: "학교", park: "공원" };
+// 집·학교·학원은 네모 아이콘 안에 짧은 이름을 바로 쓴다 — 학원은 개수가 많아질 수 있어 구체적인 이름 대신 "학원"으로 통일(지도 라벨 겹침 방지)
+const MARKER_SQUARE = { H: "우리집", school: "금북초", A: "학원" };
+// 동그라미 배지에 유형 글자 그대로 쓰기 애매한 것만 별도 지정 (나머지는 type 그대로: B/S/P)
+const MARKER_BADGE = { park: "공" };
 
-function createStationOverlay(map, position, type, name) {
+function createStationOverlay(map, position, type, name, address) {
   const el = document.createElement("div");
   el.className = `bus-stop-marker station-${type}`;
-  el.title = `${MARKER_KIND[type] ?? ""} — ${name}`;
+  const kindName = `${MARKER_KIND[type] ?? ""} — ${name}`;
+  el.title = address ? `${kindName}\n${address}` : kindName;
   el.innerHTML = MARKER_SQUARE[type]
     ? `<span class="square-badge">${MARKER_SQUARE[type]}</span>`
-    : `<span class="bus-badge">${type}</span><span class="bus-label">${name}</span>`;
+    : `<span class="bus-badge">${MARKER_BADGE[type] ?? type}</span><span class="bus-label">${name}</span>`;
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
@@ -922,7 +935,7 @@ function walkTo(target, startClock, label, { allowEarlyHome = false, roam = fals
         boardAt("bus", nearBus);
         return;
       }
-      if (!nearBus || nearBus.dist > ARRIVAL_RADIUS_M) suppressed.bus = null;
+      if (!nearBus || nearBus.dist > DEPART_RADIUS_M) suppressed.bus = null;
 
       const nearSubway = nearestStation(state.charPos, state.stations.subway);
       if (nearSubway && nearSubway.dist <= ARRIVAL_RADIUS_M && nearSubway.id !== suppressed.subway) {
@@ -930,7 +943,7 @@ function walkTo(target, startClock, label, { allowEarlyHome = false, roam = fals
         boardAt("subway", nearSubway);
         return;
       }
-      if (!nearSubway || nearSubway.dist > ARRIVAL_RADIUS_M) suppressed.subway = null;
+      if (!nearSubway || nearSubway.dist > DEPART_RADIUS_M) suppressed.subway = null;
 
       // 추억의 장소 근처를 잠시 서성이면 (하루 1번)
       for (const pe of state.placeEvents) {
@@ -954,7 +967,7 @@ function walkTo(target, startClock, label, { allowEarlyHome = false, roam = fals
         pauseFor(() => visitHotplace(nearHot, clock));
         return;
       }
-      if (!nearHot || nearHot.dist > ARRIVAL_RADIUS_M) suppressed.hotplace = null;
+      if (!nearHot || nearHot.dist > DEPART_RADIUS_M) suppressed.hotplace = null;
 
       // 돌발사건: 실제로 걸은 게임 1분마다 한 번씩 판정
       while (walkedMinAcc >= 1) {
@@ -1074,7 +1087,30 @@ async function runRandomEvent(clock) {
   return result.minutes ?? 0;
 }
 
+const INTRO_SHOW_MS = 1500;
+const INTRO_FADE_MS = 500;
+
+// 매장/장소 전용 인트로 이미지(img/characters/intro_{id}.*)가 있으면 지도 중앙에 잠깐 띄웠다가 사라진다.
+// 없으면(파일을 아직 안 넣었으면) 조용히 아무 일도 안 하고 바로 다음 대화로 넘어간다.
+async function maybeShowIntro(id) {
+  if (!id || typeof resolveCustomPortrait !== "function") return;
+  const url = await resolveCustomPortrait(`intro_${id}`);
+  if (!url) return;
+  const panel = document.getElementById("intro-panel");
+  if (!panel) return;
+  panel.innerHTML = `<img src="${url}" alt="">`;
+  panel.classList.remove("fade-out");
+  panel.hidden = false;
+  await new Promise((r) => setTimeout(r, INTRO_SHOW_MS));
+  panel.classList.add("fade-out");
+  await new Promise((r) => setTimeout(r, INTRO_FADE_MS));
+  panel.hidden = true;
+  panel.innerHTML = "";
+  panel.classList.remove("fade-out");
+}
+
 async function visitHotplace(place, clock) {
+  await maybeShowIntro(place.id);
   const options = [{ label: "그냥 지나가기", value: null }];
   place.menu.forEach((item) => {
     const priceText = item.price > 0 ? `${item.price}원` : "무료";
@@ -1565,6 +1601,7 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
   state.places = Object.fromEntries(csvRows.filter((r) => r.type === "P").map((r) => [r.name, r.pos]));
   state.academyPlaces = Object.fromEntries(csvRows.filter((r) => r.type === "A").map((r) => [r.name, r.pos]));
   const csvHome = csvRows.find((r) => r.type === "H");
+  const csvSchool = csvRows.find((r) => r.type === "school");
 
   const map = new kakao.maps.Map(document.getElementById("map"), {
     center: new kakao.maps.LatLng(HOME_FALLBACK.lat, HOME_FALLBACK.lng),
@@ -1575,11 +1612,11 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
   const homePos = csvHome ? csvHome.pos : await resolveHomePosition(character.home);
   state.positions.home = homePos;
   map.setCenter(new kakao.maps.LatLng(homePos.lat, homePos.lng));
-  createStationOverlay(map, homePos, "H", csvHome?.name ?? "우리집");
+  createStationOverlay(map, homePos, "H", csvHome?.name ?? "우리집", csvHome?.address);
 
   const schoolFallback = offsetLatLng(homePos.lat, homePos.lng, HOME_SCHOOL_WALK_MIN * CHILD_WALK_M_PER_MIN, 45);
-  state.positions.school = await resolvePlace(character.school.address, null, schoolFallback);
-  createStationOverlay(map, state.positions.school, "school", character.school.name);
+  state.positions.school = csvSchool ? csvSchool.pos : await resolvePlace(character.school.address, null, schoolFallback);
+  createStationOverlay(map, state.positions.school, "school", csvSchool?.name ?? character.school.name, csvSchool?.address);
 
   const placeableAcademies = academies.filter((a) => a.location.etaMinFromHome != null);
   for (let i = 0; i < placeableAcademies.length; i++) {
@@ -1594,7 +1631,8 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
     state.positions.academies[academy.id] = pos;
     const category = state.categoryMap[academy.categoryId];
     const etaText = isWalk ? `도보 ${academy.location.etaMinFromHome}분` : `버스/지하철 약 ${academy.location.etaMinFromHome}분`;
-    createStationOverlay(map, pos, "A", academy.name);
+    // CSV의 "학원" 행과 같은 좌표면 아래 블록 전체 렌더링에서 이미 핀을 그리므로 중복 생성하지 않는다
+    if (!fromCsv) createStationOverlay(map, pos, "A", academy.name, academy.address);
   }
 
   for (const activity of activities) {
@@ -1612,18 +1650,23 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
     createStationOverlay(map, station.pos, station.type, station.name);
   }
 
-  // H(우리집)·P(장소)도 동그라미 알파벳 아이콘 + 레이블
+  // P(장소)·학원·공원도 동그라미/네모 아이콘 + 레이블 — 핫플레이스와 이름이 겹치는 P는
+  // 아래 핫플레이스 루프가 전용 오버레이를 그리므로 여기서는 제외(중복 방지)
+  const hotplaceNames = new Set(hotplaces.map((h) => h.name));
   csvRows
-    .filter((r) => r.type === "P")
-    .forEach((r) => createStationOverlay(map, r.pos, r.type, r.name));
+    .filter((r) => (r.type === "P" && !hotplaceNames.has(r.name)) || r.type === "A" || r.type === "park")
+    .forEach((r) => createStationOverlay(map, r.pos, r.type, r.name, r.address));
 
   for (const place of hotplaces) {
-    const fallbackPos = offsetLatLng(homePos.lat, homePos.lng, place.fallback.distanceM, place.fallback.bearing);
-    let pos = fallbackPos;
+    const fromCsv = csvPlace(place.name);
+    const fallbackPos = place.fallback
+      ? offsetLatLng(homePos.lat, homePos.lng, place.fallback.distanceM, place.fallback.bearing)
+      : homePos;
+    let pos = fromCsv ?? fallbackPos;
     let realName = null;
-    if (place.address) {
+    if (!fromCsv && place.address) {
       pos = await resolvePlace(place.address, null, fallbackPos);
-    } else if (place.placeQuery) {
+    } else if (!fromCsv && place.placeQuery) {
       try {
         const found = await keywordSearchNear(place.placeQuery, homePos, HOTPLACE_SEARCH_RADIUS_M);
         pos = { lat: found.lat, lng: found.lng };
@@ -2862,6 +2905,7 @@ async function runSchoolBlock(block, clock, dow, wasLate = false) {
     clock = block.startMin;
   }
 
+  await maybeShowIntro("school");
   await teacherSays(
     "homeroom_teacher",
     "🏫 교실",
@@ -3286,6 +3330,7 @@ async function runDay(blocks) {
         const registered = block.kind === "academy" && isRegisteredSlot(block.academyId, dow, block.startMin);
         if (block.kind === "academy") {
           const cat = state.categoryMap[place.academy.categoryId];
+          await maybeShowIntro(cat?.introId);
           await teacherSays(
             cat?.teacher ?? "teacher",
             `${cat?.icon ?? "🏫"} ${place.name}`,
@@ -3492,6 +3537,13 @@ async function ensureUiModules() {
   if (typeof portraitSpec !== "function") await loadLocalScript("portraits.js");
   if (typeof showScene !== "function") await loadLocalScript("scenes.js");
   const wrap = document.querySelector(".map-wrap");
+  if (wrap && !document.getElementById("intro-panel")) {
+    const panel = document.createElement("div");
+    panel.id = "intro-panel";
+    panel.className = "intro-panel";
+    panel.hidden = true;
+    wrap.appendChild(panel);
+  }
   if (wrap && !document.getElementById("scene-panel")) {
     const panel = document.createElement("div");
     panel.id = "scene-panel";

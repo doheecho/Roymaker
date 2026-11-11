@@ -28,6 +28,12 @@ const PORTRAIT_SPECS = {
   swim_coach: { name: "수영장 코치님", skin: "#d9a074", hair: "#1f1a1c", style: "short", hat: "swimcap", hatColor: "#3d7be0", goggles: true, mouth: "grin", whistle: true, shirt: "#1f6fbf", bg: "#d6f0fb" },
   sports_coach: { name: "체육 코치님", skin: "#e3b08a", hair: "#1f1a1c", style: "short", hat: "cap", hatColor: "#d9534f", mouth: "grin", whistle: true, shirt: "#d9534f", bg: "#fde0dd" },
   gyeongyul_uncle: { name: "경율이 삼촌", skin: "#efc39e", hair: "#2b2422", style: "short", glasses: "square", mouth: "smile", shirt: "#e0a43b", bg: "#fdf0d2" },
+  alba_mcdonalds: { name: "맥도날드 알바생", skin: "#f3cba9", hair: "#2b2422", style: "short", hat: "cap", hatColor: "#d9534f", mouth: "grin", cheeks: true, shirt: "#ffd257", bg: "#fff1bf" },
+  alba_momstouch: { name: "맘스터치 알바생", skin: "#efc39e", hair: "#3a2a24", style: "short", hat: "cap", hatColor: "#4f7a3f", mouth: "smile", shirt: "#5fae6e", bg: "#e3f4e0" },
+  alba_lotteria: { name: "롯데리아 알바생", skin: "#f7d6bc", hair: "#5a3a26", style: "bob", hat: "cap", hatColor: "#d9534f", mouth: "smile", cheeks: true, lashes: true, shirt: "#e8584f", bg: "#fbd9d6" },
+  alba_kfc: { name: "KFC 알바생", skin: "#e8b892", hair: "#1f1a1c", style: "short", hat: "cap", hatColor: "#c9302c", mouth: "grin", shirt: "#ffffff", bg: "#fbe2e0" },
+  alba_burgerking: { name: "버거킹 알바생", skin: "#efc39e", hair: "#3a2a24", style: "spiky", hat: "cap", hatColor: "#e0a43b", mouth: "grin", cheeks: true, shirt: "#8a4a2a", bg: "#f7e3cc" },
+  alba_gimbab: { name: "김밥천국 알바생", skin: "#f3cba9", hair: "#3a2620", style: "bun", headscarf: "#e0a43b", mouth: "smile", apron: "#fff1e0", shirt: "#7a9e5a", bg: "#f0f7e6" },
 };
 
 const PORTRAIT_SIZE = 32;

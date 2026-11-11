@@ -145,5 +145,83 @@
     "greeting": "로이야! 우리 술래잡기 할 건데 같이 할래?",
     "declineLine": "아니야~ 나는 지금 {doing} 해. 다음에 즐겁게 놀자~",
     "acceptLine": "그래! 재미있겠다 나도 같이 놀자~"
+  },
+  {
+    "id": "mcdonalds",
+    "name": "맥도날드 한양대점",
+    "icon": "🍔",
+    "menu": [
+      { "id": "bigmac", "name": "빅맥", "icon": "🍔", "price": 5900, "minutes": 15, "effect": { "hunger": 28, "staminaNow": 8, "stress": -10 }, "reaction": "빅맥 소스가 진짜 맛있다! 한 입 베어물면 행복해져~" },
+      { "id": "shanghai", "name": "상하이버거", "icon": "🍔", "price": 5200, "minutes": 15, "effect": { "hunger": 28, "staminaNow": 8, "stress": -10 }, "reaction": "매콤바삭한 상하이버거! 한 입 더 먹고 싶다~" },
+      { "id": "mcchicken", "name": "맥치킨", "icon": "🍗", "price": 4300, "minutes": 10, "effect": { "hunger": 20, "staminaNow": 6, "stress": -8 }, "reaction": "바삭한 맥치킨 최고! 든든하다~" },
+      { "id": "bulgogi", "name": "불고기버거", "icon": "🍔", "price": 4000, "minutes": 10, "effect": { "hunger": 20, "staminaNow": 6, "stress": -8 }, "reaction": "달콤한 불고기 소스가 자꾸 생각나는 맛이야!" }
+    ],
+    "speaker": "alba_mcdonalds",
+    "greeting": "안녕하세요, 맥도날드입니다! 어떤 것을 주문하시겠어요?"
+  },
+  {
+    "id": "momstouch",
+    "name": "맘스터치 신금호역점",
+    "icon": "🍗",
+    "menu": [
+      { "id": "sygeo", "name": "싸이버거", "icon": "🍔", "price": 5000, "minutes": 15, "effect": { "hunger": 28, "staminaNow": 8, "stress": -10 }, "reaction": "싸이버거 패티가 두툼해서 든든해!" },
+      { "id": "bulsaigeo", "name": "불싸이버거", "icon": "🍔", "price": 5900, "minutes": 15, "effect": { "hunger": 28, "staminaNow": 8, "stress": -10 }, "reaction": "매콤한 불싸이버거! 땀이 좀 나지만 맛있다~" },
+      { "id": "tender", "name": "치킨텐더(4조각)", "icon": "🍗", "price": 4900, "minutes": 10, "effect": { "hunger": 20, "staminaNow": 6, "stress": -8 }, "reaction": "바삭바삭 치킨텐더 하나씩 집어먹는 재미!" },
+      { "id": "yangnyeom", "name": "양념치킨버거", "icon": "🍔", "price": 5300, "minutes": 15, "effect": { "hunger": 28, "staminaNow": 8, "stress": -10 }, "reaction": "새콤달콤 양념 소스가 자꾸 손이 가!" }
+    ],
+    "speaker": "alba_momstouch",
+    "greeting": "안녕하세요, 맘스터치입니다! 어떤 것을 주문하시겠어요?"
+  },
+  {
+    "id": "lotteria",
+    "name": "롯데리아 롯데마트행당역점",
+    "icon": "🍔",
+    "menu": [
+      { "id": "riabulgogi", "name": "리아불고기버거", "icon": "🍔", "price": 4300, "minutes": 10, "effect": { "hunger": 20, "staminaNow": 6, "stress": -8 }, "reaction": "리아불고기버거는 역시 옛날부터 먹던 맛이야!" },
+      { "id": "hanwoo", "name": "한우불고기버거", "icon": "🍔", "price": 6900, "minutes": 15, "effect": { "hunger": 32, "staminaNow": 9, "stress": -11 }, "reaction": "한우 패티가 훨씬 고급스러운 맛이다!" },
+      { "id": "hotcrispy", "name": "핫크리스피버거", "icon": "🍗", "price": 5500, "minutes": 15, "effect": { "hunger": 28, "staminaNow": 8, "stress": -10 }, "reaction": "바삭하고 매콤한 핫크리스피! 눈물나게 맛있어~" },
+      { "id": "shrimp", "name": "새우버거", "icon": "🍤", "price": 5200, "minutes": 15, "effect": { "hunger": 26, "staminaNow": 7, "stress": -9 }, "reaction": "통새우가 통통해서 씹는 맛이 좋다!" }
+    ],
+    "speaker": "alba_lotteria",
+    "greeting": "안녕하세요, 롯데리아입니다! 어떤 것을 주문하시겠어요?"
+  },
+  {
+    "id": "kfc",
+    "name": "KFC 신금호역점",
+    "icon": "🍗",
+    "menu": [
+      { "id": "zinger", "name": "징거버거", "icon": "🍔", "price": 6900, "minutes": 15, "effect": { "hunger": 32, "staminaNow": 9, "stress": -11 }, "reaction": "징거버거 매콤함이 딱 좋아! 계속 생각날 맛~" },
+      { "id": "tower", "name": "타워버거", "icon": "🍔", "price": 7400, "minutes": 15, "effect": { "hunger": 35, "staminaNow": 10, "stress": -12 }, "reaction": "타워버거는 너무 높아서 한 입에 안 들어가!" },
+      { "id": "original", "name": "오리지널 치킨(1조각)", "icon": "🍗", "price": 3300, "minutes": 10, "effect": { "hunger": 20, "staminaNow": 6, "stress": -8 }, "reaction": "11가지 허브향이 난다는데 그냥 다 맛있어!" },
+      { "id": "biscuit", "name": "비스킷", "icon": "🥐", "price": 2000, "minutes": 10, "effect": { "hunger": 15, "staminaNow": 5, "stress": -6 }, "reaction": "폭신한 비스킷에 꿀 발라 먹으면 최고야~" }
+    ],
+    "speaker": "alba_kfc",
+    "greeting": "안녕하세요, KFC입니다! 어떤 것을 주문하시겠어요?"
+  },
+  {
+    "id": "burgerking",
+    "name": "버거킹 왕십리센트라스점",
+    "icon": "🍔",
+    "menu": [
+      { "id": "whopper", "name": "와퍼", "icon": "🍔", "price": 7400, "minutes": 15, "effect": { "hunger": 35, "staminaNow": 10, "stress": -12 }, "reaction": "불향 가득한 와퍼! 역시 버거킹은 이 맛이지~" },
+      { "id": "quattro", "name": "콰트로치즈와퍼", "icon": "🍔", "price": 8900, "minutes": 15, "effect": { "hunger": 38, "staminaNow": 11, "stress": -13 }, "reaction": "치즈가 네 종류나 들어가서 입안이 치즈 천국!" },
+      { "id": "chickenking", "name": "치킨킹버거", "icon": "🍗", "price": 6900, "minutes": 15, "effect": { "hunger": 30, "staminaNow": 9, "stress": -11 }, "reaction": "치킨킹버거 패티가 두꺼워서 배부르다!" },
+      { "id": "shrimpwhopper", "name": "통새우와퍼", "icon": "🍤", "price": 8400, "minutes": 15, "effect": { "hunger": 36, "staminaNow": 10, "stress": -12 }, "reaction": "통새우가 통째로 들어가서 너무 신기해!" }
+    ],
+    "speaker": "alba_burgerking",
+    "greeting": "안녕하세요, 버거킹입니다! 어떤 것을 주문하시겠어요?"
+  },
+  {
+    "id": "gimbab",
+    "name": "김밥천국 마장점",
+    "icon": "🍙",
+    "menu": [
+      { "id": "tuna_gimbab", "name": "참치김밥", "icon": "🍙", "price": 3500, "minutes": 10, "effect": { "hunger": 20, "staminaNow": 6, "stress": -7 }, "reaction": "참치마요가 고소해서 자꾸 손이 가!" },
+      { "id": "ramen", "name": "라면", "icon": "🍜", "price": 4000, "minutes": 10, "effect": { "hunger": 25, "staminaNow": 7, "stress": -8 }, "reaction": "뜨끈한 라면 국물이 속을 확 풀어준다~" },
+      { "id": "tteokbokki2", "name": "떡볶이", "icon": "🌶️", "price": 4000, "minutes": 10, "effect": { "hunger": 22, "staminaNow": 7, "stress": -9 }, "reaction": "매콤달콤 떡볶이는 언제 먹어도 맛있어!" },
+      { "id": "cheese_gimbab", "name": "치즈김밥", "icon": "🍙", "price": 4000, "minutes": 10, "effect": { "hunger": 22, "staminaNow": 6, "stress": -7 }, "reaction": "치즈가 쭉 늘어나는 게 너무 재밌다!" }
+    ],
+    "speaker": "alba_gimbab",
+    "greeting": "안녕하세요, 김밥천국입니다! 어떤 것을 주문하시겠어요?"
   }
 ]

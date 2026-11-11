@@ -10,7 +10,8 @@
     },
     "staminaCost": 15,
     "teacher": "taekwondo_master",
-    "greeting": "이로이! 오늘도 건강하게 태권도를 배워볼까? 기합 크게 넣어 보자, 얍!"
+    "greeting": "이로이! 오늘도 건강하게 태권도를 배워볼까? 기합 크게 넣어 보자, 얍!",
+    "introId": "taekwondo"
   },
   {
     "id": "art",

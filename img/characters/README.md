@@ -35,6 +35,21 @@
 | `수학 선생님` | `math_teacher` |
 | `수영장 코치님` | `swim_coach` |
 | `체육 코치님` | `sports_coach` |
+| `맥도날드 알바생` | `alba_mcdonalds` |
+| `맘스터치 알바생` | `alba_momstouch` |
+| `롯데리아 알바생` | `alba_lotteria` |
+| `KFC 알바생` | `alba_kfc` |
+| `버거킹 알바생` | `alba_burgerking` |
+| `김밥천국 알바생` | `alba_gimbab` |
 
 > `방과후 선생님`은 세 명이라, 각각 다른 사진을 쓰려면 `afterschool_1.png` ~ `afterschool_3.png`로 넣어 주세요.
 > `같은 반 친구`는 두 명이 이름이 같아서, 서로 다른 그림을 쓰려면 `friend_1.png`, `friend_2.png`처럼 id로 넣어 주세요.
+
+## 매장/장소 입장 인트로 이미지
+
+매장이나 특정 장소에 들어갈 때, 대화가 시작되기 전에 지도 중앙에 1.5초간 떴다가 사라지는 큰 이미지입니다.
+같은 `img/characters/` 폴더에 **`intro_` + id**로 된 이미지를 넣으면 자동으로 쓰입니다 — 없으면 그냥 인트로 없이 바로 대화로 넘어갑니다.
+
+- 비율은 **3:2(가로로 넓게)**로 만들어 주세요. 화면에는 지도 너비의 80% 크기로 표시됩니다.
+- 예: `intro_school.png`(학교), `intro_taekwondo.png`(태권도학원), `intro_lotteria.png`(롯데리아) 등.
+- 학원은 카테고리의 `introId`(`data/academy_categories.json`)로, 매장/장소는 활동 id(`data/hotplaces.json`의 `id`)로 파일 이름을 맞추면 됩니다.

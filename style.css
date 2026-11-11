@@ -695,6 +695,7 @@ li:last-child { border-bottom: none; }
 .station-A .bus-badge { background: #2F7F8F; }
 .station-school .bus-badge { background: var(--ink); font-size: 11.5px; }
 .station-H .bus-badge { font-size: 11.5px; }
+.station-park .bus-badge { background: #3f8f4f; }
 
 /* ── 주간 시간표 (월~금 5칸) ── */
 .planner-note { margin: 0 0 6px; font-family: "Jua", sans-serif; font-size: 13.5px; color: var(--accent-ink); }
@@ -767,6 +768,7 @@ li:last-child { border-bottom: none; }
 }
 .station-H .square-badge { background: var(--accent); }
 .station-school .square-badge { background: var(--ink); }
+.station-A .square-badge { background: #2F7F8F; }
 
 /* ── 걷는 캐릭터 스프라이트 ── */
 .char-sprite { position: relative; display: flex; flex-direction: column; align-items: center; }
@@ -889,6 +891,26 @@ li:last-child { border-bottom: none; }
   .pm-portrait canvas { width: 64px; height: 64px; }
   .pm-dialog .choice-body { font-size: 13.5px; }
 }
+
+/* ── 매장/장소 입장 인트로(지도 중앙에 잠깐 떴다가 사라짐) ── */
+.intro-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  aspect-ratio: 3 / 2;
+  z-index: 20;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 3px solid #e8d49a;
+  box-shadow: 0 0 0 2px #6b5a2e, 0 10px 28px rgba(0, 0, 0, 0.45);
+  opacity: 1;
+  transition: opacity 0.5s ease;
+}
+.intro-panel.fade-out { opacity: 0; }
+.intro-panel[hidden] { display: none; }
+.intro-panel img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* ── 일정 애니메이션 창 ── */
 .scene-panel {
