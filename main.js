@@ -117,6 +117,7 @@ class DayCancelledEarly extends Error {
 
 const BUS_FARE = 450;
 const SUBWAY_FARE = 450;
+const WEEKLY_ALLOWANCE = 10000;
 const TRANSIT_M_PER_MIN = 220;
 const TRANSIT_RIDE_MS = 1800;
 
@@ -158,6 +159,8 @@ const state = {
   charOverlay: null,
   map: null,
   hotplaces: [],
+  parks: [],
+  parkFriends: [],
   sprite: { dir: "down", frame: null, drawnDir: "down", cache: null, movingAt: 0, riding: null, canvas: null, bubble: null },
   places: {},
   companyVisitedToday: false,
@@ -319,7 +322,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261111j";
+const DATA_VERSION = "20261111k";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -812,6 +815,7 @@ function walkTo(target, startClock, label, { allowEarlyHome = false, roam = fals
       bus: nearbyStationId(state.stations.bus),
       subway: nearbyStationId(state.stations.subway),
       hotplace: nearbyStationId(state.hotplaces),
+      park: nearbyStationId(state.parks),
     };
 
     function pause() {
@@ -977,6 +981,15 @@ function walkTo(target, startClock, label, { allowEarlyHome = false, roam = fals
         return;
       }
       if (!nearHot || nearHot.dist > DEPART_RADIUS_M) suppressed.hotplace = null;
+
+      const nearPark = nearestStation(state.charPos, state.parks);
+      if (nearPark && nearPark.dist <= ARRIVAL_RADIUS_M && nearPark.id !== suppressed.park) {
+        suppressed.park = nearPark.id;
+        logLine(`${minutesToClock(clock)} ${nearPark.icon} ${nearPark.name} 안으로 들어갔다`);
+        pauseFor(() => visitPark(nearPark, clock));
+        return;
+      }
+      if (!nearPark || nearPark.dist > DEPART_RADIUS_M) suppressed.park = null;
 
       // 돌발사건: 실제로 걸은 게임 1분마다 한 번씩 판정
       while (walkedMinAcc >= 1) {
@@ -1167,6 +1180,51 @@ async function visitHotplace(place, clock) {
       : `가는 길에 ${josa(place.name.split(" / ")[0], "에서/에서")} ${josa(item.name, "을/를")} 했다. 정말 신났다!`
   );
   return item.minutes;
+}
+
+// 공원에 들어가면 친구를 만나는 이벤트 — 매번 놀자는 친구 중 하나를 랜덤으로 뽑는다(weight로 빈도 조절)
+async function visitPark(park, clock) {
+  const variant = pickWeighted(state.parkFriends);
+  const accepted = await presentChoice(
+    "event-panel",
+    `${variant.icon ?? "🧒"} ${park.name}`,
+    [
+      {
+        label: variant.acceptLabel ?? "같이 논다",
+        value: true,
+        disabled: variant.cost ? state.character.wallet < variant.cost : false,
+        hint: signedEffectText(variant.cost ? { wallet: -variant.cost, ...variant.effect } : variant.effect ?? {}),
+      },
+      { label: variant.declineLabel ?? "다음에 놀자", value: false },
+    ],
+    { body: `"${variant.greeting}"`, tone: "event", speaker: variant.speaker ?? "friend_1" }
+  );
+  if (!accepted) {
+    logLine(`${park.name}에서 ${variant.friendName ?? "친구"}를 만났지만 다음에 놀기로 했다`);
+    await presentChoice("event-panel", `${variant.icon ?? "🧒"} ${park.name}`, [{ label: "▶ 계속 걷기", value: true }], {
+      body: `"${variant.declineLine ?? "그래~ 다음에 꼭 같이 놀자!"}"`,
+      speaker: variant.speaker ?? "friend_1",
+    });
+    return 0;
+  }
+  if (variant.acceptLine) {
+    await presentChoice("event-panel", `${variant.icon ?? "🧒"} ${park.name}`, [{ label: "▶", value: true }], {
+      body: `"${variant.acceptLine}"`,
+      speaker: variant.speaker ?? "friend_1",
+    });
+  }
+  const end = clock + (variant.minutes ?? 20);
+  await waitUntil(clock, end, `${park.name}에서 ${variant.friendName ?? "친구"}랑 노는 중`, WAIT_PHASE_MS, { id: "play" });
+  if (variant.cost) state.character.wallet = Math.max(0, state.character.wallet - variant.cost);
+  const applied = applyEffect(variant.effect ?? {});
+  renderStats(state.character);
+  logLine(`${park.name}에서 ${variant.friendName ?? "친구"}랑 놀았다${variant.cost ? ` (용돈 -${variant.cost}원)` : ""} — ${appliedText(applied)}`);
+  diary(`${park.name}에서 친구를 만나서 같이 놀았다. ${variant.reaction ?? ""}`);
+  await presentChoice("event-panel", `${variant.icon ?? "🧒"} ${park.name}`, [{ label: "▶ 계속 걷기", value: true }], {
+    body: `"${variant.reaction ?? "진짜 재밌었다!"}"\n(${appliedText(applied)})`,
+    speaker: "iroi",
+  });
+  return variant.minutes ?? 20;
 }
 
 async function openPhone(clock) {
@@ -1665,6 +1723,9 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
   csvRows
     .filter((r) => (r.type === "P" && !hotplaceNames.has(r.name)) || r.type === "A" || r.type === "park")
     .forEach((r) => createStationOverlay(map, r.pos, r.type, r.name, r.address));
+
+  // 공원에 들어가면 친구를 만나는 이벤트가 발동한다(walkTo 참고)
+  state.parks = csvRows.filter((r) => r.type === "park").map((r) => ({ id: r.id, name: r.name, pos: r.pos, icon: "🌳" }));
 
   for (const place of hotplaces) {
     const fromCsv = csvPlace(place.name);
@@ -2802,6 +2863,9 @@ function advanceToNextDay() {
   if (weekdayOf(state.day) === 1) {
     state.registrations.active = JSON.parse(JSON.stringify(state.registrations.pending));
     logLine("📋 새 주가 시작됐다 — 미리 등록한 학원 일정이 이번 주에 적용된다");
+    applyEffect({ wallet: WEEKLY_ALLOWANCE }, { modifier: false });
+    renderStats(state.character);
+    logLine(`💰 이번 주 용돈 ${WEEKLY_ALLOWANCE}원을 받았다 (잔액 ${state.character.wallet}원)`);
   }
   renderAcademies(state.academies, state.categoryMap);
 
@@ -3084,35 +3148,47 @@ function recentLogicGain() {
   return (state.character.stats.logic ?? 0) - oldest;
 }
 
+// 차비가 없어서 일정을 못 갔다고 인정해 주는 용돈 기준 — 이 미만이면 논리 능력치 변명 대신 차비 부족 사유로 처리
+const NO_FARE_WALLET_THRESHOLD = 1000;
+
 async function eveningTalkWithMom(clock, skipped) {
   const names = [...new Set(skipped.map((b) => blockDisplay(b).label.replace(/ \((등록 수업|자율학습)\)$/, "")))];
   const what = names.length ? names.join(", ") : "오늘 일정";
-  const good = recentLogicGain() >= LOGIC_GAIN_FOR_EXCUSE;
+  const noFare = state.character.wallet < NO_FARE_WALLET_THRESHOLD;
+  const good = !noFare && recentLogicGain() >= LOGIC_GAIN_FOR_EXCUSE;
   await presentChoice("event-panel", "🏠 엄마와 대화", [{ label: "▶", value: true }], {
     body: `"로이야, 오늘 ${josa(what, "을/를")} 안 가고 집에 왔다며? 무슨 일 있었어?"`,
     speaker: "mom",
   });
   await presentChoice("event-panel", "🏠 엄마와 대화", [{ label: "▶", value: true }], {
-    body: good
+    body: noFare
+      ? "\"엄마… 그게… 학원에 갈 차비가 없어서 못 갔어요… 죄송해요ㅠ\""
+      : good
       ? "\"엄마, 그게… 오늘 너무 피곤하고 머리도 아파서 무리하면 내일 더 힘들 것 같았어. 그래서 오늘은 쉬고 내일 더 열심히 하려고 집에 왔어.\""
       : "\"엄마… 그냥… 가기 싫어서… 집에 왔어…\"",
     speaker: "iroi",
   });
-  const effect = good ? { stress: -10, staminaNow: 10 } : { stress: 10, delinquency: 2 };
+  const effect = noFare ? { stress: -10, selfEsteem: 1, wallet: WEEKLY_ALLOWANCE } : good ? { stress: -10, staminaNow: 10 } : { stress: 10, delinquency: 2 };
   const applied = applyEffect(effect);
   renderStats(state.character);
-  const reply = good
+  const reply = noFare
+    ? "\"뭐? 차비가 없어서 못 갔다고?! 세상에… 엄마가 그것도 모르고 있었네, 정말 미안해ㅠ 앞으로는 용돈을 꼭 넉넉히 챙겨줄게. 오늘은 로이 잘못이 아니니까 속상해하지 마.\""
+    : good
     ? "\"그랬구나… 많이 힘들었지? 엄마한테 차근차근 이유를 설명해 줘서 고마워. 몸이 안 좋을 땐 쉬는 게 맞아. 잘했어, 오늘은 푹 쉬자.\""
     : "\"로이야, 정해진 약속을 이유 없이 안 지키면 안 돼. 선생님도 기다리셨을 거야. 다음부터는 꼭 계획대로 하자, 알았지?\"";
-  logLine(`🌇 엄마와 대화 — ${good ? "이유를 잘 설명해서 엄마가 걱정하며 잘했다고 했다" : "이유 없이 계획을 어겨서 꾸중을 들었다"} (${appliedText(applied)})`);
+  logLine(
+    `🌇 엄마와 대화 — ${noFare ? "차비가 없어서 못 갔다고 하자 엄마가 미안해하며 용돈을 바로 줬다" : good ? "이유를 잘 설명해서 엄마가 걱정하며 잘했다고 했다" : "이유 없이 계획을 어겨서 꾸중을 들었다"} (${appliedText(applied)})`
+  );
   diary(
-    good
+    noFare
+      ? `차비가 없어서 ${josa(what, "을/를")} 못 갔다고 하자, 엄마가 미안해하면서 용돈을 바로 챙겨 주셨다.`
+      : good
       ? `${josa(what, "을/를")} 안 가고 집에 온 이유를 엄마한테 잘 설명했더니, 엄마가 걱정하면서 잘했다고 해 주셨다.`
       : `이유 없이 ${josa(what, "을/를")} 빼먹어서 엄마한테 혼났다. 다음부터는 계획을 꼭 지켜야지.`
   );
-  await presentChoice("event-panel", "🏠 엄마와 대화", [{ label: good ? "고마워 엄마!" : "죄송해요…", value: true }], {
+  await presentChoice("event-panel", "🏠 엄마와 대화", [{ label: noFare ? "엄마… 고마워요ㅠ" : good ? "고마워 엄마!" : "죄송해요…", value: true }], {
     body: `${reply}\n(${appliedText(applied)})`,
-    tone: good ? "event" : "danger",
+    tone: noFare || good ? "event" : "danger",
     speaker: "mom",
   });
   return clock;
@@ -3633,6 +3709,7 @@ async function main() {
     hotplaces,
     phone,
     placeEvents,
+    parkFriends,
   ] = await Promise.all([
     loadJSON("data/character.json"),
     loadJSON("data/academies.json"),
@@ -3649,7 +3726,9 @@ async function main() {
     loadJSON("data/hotplaces.json"),
     loadJSON("data/phone.json"),
     loadJSON("data/place_events.json"),
+    loadJSON("data/park_friends.json"),
   ]);
+  state.parkFriends = parkFriends;
 
   school.segments = school.segments.map((seg) => ({
     ...seg,

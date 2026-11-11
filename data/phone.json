@@ -66,9 +66,52 @@
       "group": "기타",
       "name": "외할머니",
       "icon": "👵",
+      "portrait": "grandma_mom",
       "lines": [
         "아이고 우리 강아지~ 할머니 집에 놀러 오렴.",
         "밥 잘 챙겨 먹고 다니거라."
+      ],
+      "effect": {
+        "stress": -3
+      }
+    },
+    {
+      "id": "grandma_paternal",
+      "group": "기타",
+      "name": "친할머니",
+      "icon": "👵",
+      "portrait": "grandma_dad",
+      "lines": [
+        "우리 로이~ 할머니가 많이 보고 싶네. 언제 한번 놀러 오렴.",
+        "밥 잘 챙겨 먹고, 감기 걸리지 않게 옷 따뜻하게 입고 다녀."
+      ],
+      "effect": {
+        "stress": -3
+      }
+    },
+    {
+      "id": "grandpa_maternal",
+      "group": "기타",
+      "name": "외할아버지",
+      "icon": "👴",
+      "portrait": "grandpa_mom",
+      "lines": [
+        "허허, 우리 로이구나! 공부도 좋지만 몸 튼튼하게 잘 뛰어놀아야 한다.",
+        "할아버지가 용돈 좀 보내줄까? 열심히 하고 있지?"
+      ],
+      "effect": {
+        "stress": -3
+      }
+    },
+    {
+      "id": "grandpa_paternal",
+      "group": "기타",
+      "name": "친할아버지",
+      "icon": "👴",
+      "portrait": "grandpa_dad",
+      "lines": [
+        "우리 손주 목소리 들으니 좋구나! 학교생활은 재밌니?",
+        "씩씩하게 잘 다니고 있다니 할아버지가 아주 든든하다."
       ],
       "effect": {
         "stress": -3
@@ -79,6 +122,7 @@
       "group": "기타",
       "name": "112 (경찰)",
       "icon": "🚓",
+      "portrait": "police_man",
       "lines": [
         "112는 위급한 상황에만 거는 번호예요. 장난전화는 안 돼요!"
       ],

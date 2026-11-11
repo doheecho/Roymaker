@@ -3,7 +3,7 @@
 이 문서는 `main.js`와 `data/*.json`, `place.csv`에 있는 **모든 조건문·분기·수치·메시지**를 빠짐없이 옮겨 적은 참고 문서다. 내용을 고치고 싶으면 아래 표에 적힌 파일/필드를 그대로 지정해서 "이 파일의 이 항목을 이렇게 바꿔줘" 식으로 요청하면 된다. (예: "`data/events.json`의 `butterfly_uncle` 이벤트 `locationBoost.multiplier`를 20으로 바꿔줘")
 
 - 기준 커밋: `d17315c` (2026-11-11, 모바일 Claude Code 세션 PR #10~16 반영)
-- 소스 파일: `main.js`, `portraits.js`, `scenes.js`, `firebase-config.js`, `data/character.json`, `data/academies.json`, `data/academy_categories.json`, `data/subjects.json`, `data/school_schedule.json`, `data/afterschool.json`, `data/neulbom.json`, `data/activities.json`, `data/items.json`, `data/holidays.json`, `data/events.json`, `data/hotplaces.json`, `data/place_events.json`, `data/phone.json`, `place.csv`, `img/characters/README.md`
+- 소스 파일: `main.js`, `portraits.js`, `scenes.js`, `firebase-config.js`, `data/character.json`, `data/academies.json`, `data/academy_categories.json`, `data/subjects.json`, `data/school_schedule.json`, `data/afterschool.json`, `data/neulbom.json`, `data/activities.json`, `data/items.json`, `data/holidays.json`, `data/events.json`, `data/hotplaces.json`, `data/place_events.json`, `data/park_friends.json`, `data/phone.json`, `place.csv`, `img/characters/README.md`
 
 ---
 
@@ -18,6 +18,7 @@
 | 초기 능력치 | 16종 모두 10, `delinquency`(비행화)만 0 |
 | 초기 컨디션 | 허기 80 · 기력(staminaNow) 80 · 스트레스 0 |
 | 초기 용돈 | 5,000원 |
+| 주간 용돈(2026-11 추가) | **매주 월요일**(`advanceToNextDay`) 자동으로 +10,000원(`WEEKLY_ALLOWANCE`) 지급. 로그: `"💰 이번 주 용돈 10000원을 받았다 (잔액 {용돈}원)"` — 학원 등록 확정(§6-3)과 같은 타이밍에 같이 처리됨 |
 
 ---
 
@@ -418,9 +419,11 @@ else → 1.0
 ### 10-6. 계획을 어긴 날 — 엄마와 대화 (`eveningTalkWithMom`, 2026-11 추가)
 §10-4로 일정을 취소하고 집에 온 날, **빼먹은 일정 중 가장 늦게 끝났을 시각이 지난 뒤 집에 있는 순간**(§10-5 자유시간 루프 중, 또는 자러 가기 직전) 엄마가 이유를 묻는다.
 - 엄마: `"로이야, 오늘 {빼먹은 일정 이름들}을(를) 안 가고 집에 왔다며? 무슨 일 있었어?"`
-- 판정 기준: **최근 7일(`LOGIC_LOOKBACK_DAYS`) 사이 논리 능력치가 2 이상(`LOGIC_GAIN_FOR_EXCUSE`) 올랐는지**(`state.logicHistory`, 매일 하루 시작할 때 그날의 논리 수치를 기록해 둔 값과 비교)
-  - **올랐으면(타당한 이유를 댈 수 있음)**: 이로이 `"엄마, 그게… 오늘 너무 피곤하고 머리도 아파서 무리하면 내일 더 힘들 것 같았어. 그래서 오늘은 쉬고 내일 더 열심히 하려고 집에 왔어."` → 엄마 `"그랬구나… 많이 힘들었지? 엄마한테 차근차근 이유를 설명해 줘서 고마워. 몸이 안 좋을 땐 쉬는 게 맞아. 잘했어, 오늘은 푹 쉬자."` — 효과: 스트레스 −10, 기력 +10
-  - **안 올랐으면**: 이로이 `"엄마… 그냥… 가기 싫어서… 집에 왔어…"` → 엄마 `"로이야, 정해진 약속을 이유 없이 안 지키면 안 돼. 선생님도 기다리셨을 거야. 다음부터는 꼭 계획대로 하자, 알았지?"` — 효과: 스트레스 +10, 비행화 +2
+- 판정 순서(2026-11 우선순위 추가 — 차비 부족 사유가 논리 변명보다 먼저 체크됨):
+  1. **용돈이 1,000원 미만(`NO_FARE_WALLET_THRESHOLD`)이면**: 이로이 `"엄마… 그게… 학원에 갈 차비가 없어서 못 갔어요… 죄송해요ㅠ"` → 엄마 `"뭐? 차비가 없어서 못 갔다고?! 세상에… 엄마가 그것도 모르고 있었네, 정말 미안해ㅠ 앞으로는 용돈을 꼭 넉넉히 챙겨줄게. 오늘은 로이 잘못이 아니니까 속상해하지 마."` — 효과: 스트레스 −10, 자존감 +1, **용돈 +10,000원(`WEEKLY_ALLOWANCE`) 즉시 지급**. 비행화 패널티 없음(로이 잘못이 아님으로 처리).
+  2. (용돈이 충분하면) **최근 7일(`LOGIC_LOOKBACK_DAYS`) 사이 논리 능력치가 2 이상(`LOGIC_GAIN_FOR_EXCUSE`) 올랐는지**(`state.logicHistory`, 매일 하루 시작할 때 그날의 논리 수치를 기록해 둔 값과 비교)
+     - **올랐으면(타당한 이유를 댈 수 있음)**: 이로이 `"엄마, 그게… 오늘 너무 피곤하고 머리도 아파서 무리하면 내일 더 힘들 것 같았어. 그래서 오늘은 쉬고 내일 더 열심히 하려고 집에 왔어."` → 엄마 `"그랬구나… 많이 힘들었지? 엄마한테 차근차근 이유를 설명해 줘서 고마워. 몸이 안 좋을 땐 쉬는 게 맞아. 잘했어, 오늘은 푹 쉬자."` — 효과: 스트레스 −10, 기력 +10
+     - **안 올랐으면**: 이로이 `"엄마… 그냥… 가기 싫어서… 집에 왔어…"` → 엄마 `"로이야, 정해진 약속을 이유 없이 안 지키면 안 돼. 선생님도 기다리셨을 거야. 다음부터는 꼭 계획대로 하자, 알았지?"` — 효과: 스트레스 +10, 비행화 +2
 
 ### 10-7. 하루 요약 · 일기
 - 하루 끝나면: 허기 90으로 회복, 기력 +10(최대 100), 스트레스 −(일정 없었으면 30 / 있었으면 15) 회복. 로그: `"저녁밥을 먹고 하루를 마쳤다"`
@@ -558,6 +561,24 @@ else → 1.0
 - 이미지를 찾는 방식은 캐릭터 커스텀 사진과 완전히 같다(§18, `resolveCustomPortrait`) — 같은 `img/characters/` 폴더에서 **`intro_{id}`**로 찾는다. 학원은 `data/academy_categories.json`의 `introId`로, 매장/장소는 `data/hotplaces.json`의 `id`로, 학교는 고정 id `"school"`로 찾는다.
 - **이미지가 없으면 조용히 생략**하고 바로 대화로 넘어간다 — 에러 없음, 필수 아님. 지금 등록된 것: `intro_school`(금북초등학교), `intro_taekwondo`(태비KTS태권스쿨), `intro_mcdonalds`/`intro_momstouch`/`intro_lotteria`/`intro_kfc`/`intro_burgerking`(김밥천국 제외 5곳).
 
+### 12-3. 공원 친구 만남 (`data/park_friends.json`, 2026-11 추가)
+
+`place.csv`의 **공원**(§20) 반경 20m 안에 들어가면(`ARRIVAL_RADIUS_M`, 다른 근접 트리거와 같은 히스테리시스 — 이탈은 30m `DEPART_RADIUS_M`) 같은 반 친구를 우연히 만나는 이벤트가 뜬다. 하왕십리극동미라주(§13)처럼 하루 1번 제한은 없음 — 공원에 다시 들어가면 또 발동(단, 같은 공원을 벗어나기 전까지는 재질문 안 함).
+
+매번 아래 중 하나를 가중치(`weight`)로 랜덤 선택(`pickWeighted`):
+
+| id | 가중치 | 놀이 | 효과 | 비용 |
+|---|---|---|---|---|
+| `tag` | 4 | 🏃 술래잡기 | 사회성 +1, 순발력 +1, 기력 −8, 스트레스 −10 (20분) | — |
+| `swing` | 4 | 🌳 그네 타기 | 사회성 +1, 기력 −5, 스트레스 −8 (15분) | — |
+| `soccer` | 3 | ⚽ 축구 | 사회성 +1, 순발력 +1, 기력 −10, 스트레스 −9 (25분) | — |
+| `jumprope` | 3 | 🪢 줄넘기 시합 | 사회성 +1, 순발력 +1, 기력 −6, 스트레스 −7 (15분) | — |
+| `chat` | 2 | 💬 그냥 수다 | 사회성 +1, 스트레스 −5 (10분) | — |
+| `arcade` | 1 | 🕹️ 오락실 가기(어떤 친구가 꼬드김) | 인싸력 +2, 스트레스 −14, 기력 −5 (30분) | **용돈 −2,000원** |
+
+- 선택창은 항상 "같이 논다" / "다음에 놀자(거절)" 2개뿐 — 거절해도 효과·시간 소모 없이 바로 계속 걸을 수 있다. `arcade`는 용돈이 2,000원 미만이면 "같이 논다" 선택지가 비활성화된다(다른 변형은 비용이 없어 항상 선택 가능).
+- 친구는 전부 `friend_1`/`friend_2`(같은 반 친구) 중 하나로 등장 — 놀이터 핫플레이스(§12 "놀이터 / 공원")와는 별개의 시스템이다(그쪽은 키워드 검색으로 찾은 가상 위치 1곳, 이쪽은 `place.csv`에 실제로 등록된 공원 3곳: 논골새싹공원·대현산배수지공원·신금호공원).
+
 ---
 
 ## 13. 추억의 장소 이벤트 — 극동미라주 (`data/place_events.json`)
@@ -652,8 +673,11 @@ else → 1.0
 | 아빠 | `dad` |
 | 같은 반 친구 (1) | `friend_1` |
 | 같은 반 친구 (2) | `friend_2` |
-| 외할머니 | `grandma` |
-| 경찰관 | `police` |
+| 외할머니 | `grandma_mom` (전화 연락처 id는 여전히 `grandma` — `phone.json`의 `portrait` 필드로 매핑, 2026-11) |
+| 친할머니 | `grandma_dad` (전화 연락처 id `grandma_paternal`, 2026-11 추가) |
+| 외할아버지 | `grandpa_mom` (전화 연락처 id `grandpa_maternal`, 2026-11 추가) |
+| 친할아버지 | `grandpa_dad` (전화 연락처 id `grandpa_paternal`, 2026-11 추가) |
+| 경찰관 | `police_man` (전화 연락처 id는 여전히 `police` — `phone.json`의 `portrait` 필드로 매핑, 2026-11) |
 | 수상한 어른 | `stranger` |
 | 동네 형 | `bully` |
 | 친구(우는 친구) | `crying_friend` |
@@ -679,6 +703,7 @@ else → 1.0
 | 김밥천국 알바생 | `alba_gimbab` |
 
 - 방과후 선생님은 3명이라 각각 다른 사진을 쓰려면 `afterschool_1.png`~`afterschool_3.png`로, 같은 반 친구도 두 명이 이름이 같아서 다른 그림을 쓰려면 `friend_1.png`/`friend_2.png`로 넣어야 한다.
+- **전화 연락처의 portrait 오버라이드(2026-11 추가)**: `data/phone.json`의 각 연락처는 `id`(전화 걸기 로직·호출 기록에 쓰이는 내부 식별자)와 별개로 `portrait` 필드를 넣을 수 있다 — 있으면 대화창 사진은 `id`가 아니라 `portrait` 값으로 찾는다(`speaker: contact.portrait ?? contact.id`). 외할머니(`id: grandma`)와 경찰관(`id: police`)은 내부 로직 호환을 위해 id는 그대로 두고 `portrait: grandma_mom`/`portrait: police_man`만 추가했다.
 - GitHub에 올린 뒤 GitHub Pages 배포가 반영되는 1~2분 정도 지나야 새로고침했을 때 보인다 — 이 프로젝트가 GitHub Pages로 호스팅되고 있다는 뜻이며, `index.html`의 `<meta http-equiv="Cache-Control" content="no-cache">`와 `style.css?v=…`/스크립트의 `?v=${APP_VERSION}` 버전 쿼리도 전부 "사용자 브라우저가 예전 파일을 캐시해서 새 기능이 안 보이는" 문제를 막기 위한 장치다. (주의: 이 커스텀 사진 교체는 GitHub Contents API 목록 조회라서 Pages 배포와 무관하게 거의 바로 반영되지만, 같은 탭에서 이미 한 번 목록을 받아 온 뒤라면 그 세션 안에서는 캐시가 유지된다 — 새로고침하면 바로 반영됨.)
 - 매장/학교/학원 **입장 인트로 이미지**(지도 중앙에 크게 떴다 사라지는 연출)도 같은 폴더, 같은 방식(`intro_{id}`)으로 넣는다 — §12-2 참고.
 
@@ -817,6 +842,8 @@ isParentAtWork(시각) = 평일(월~금) AND 공휴일 아님 AND 09:00 ≤ 시�
 | `FIREBASE_SDK_VERSION` | `"10.14.1"` | `firebase-config.js` 설정 시 불러오는 Firebase JS SDK 버전 |
 | `LOGIC_LOOKBACK_DAYS` | 7 | 엄마와의 대화(§10-6)에서 "최근 며칠" 논리 변화를 볼지 |
 | `LOGIC_GAIN_FOR_EXCUSE` | 2 | 그 기간 동안 논리가 이만큼 오르면 이유를 잘 설명한 걸로 침 |
+| `NO_FARE_WALLET_THRESHOLD` | 1,000원 | 엄마와의 대화(§10-6)에서 이 미만이면 "차비가 없어서" 사유로 처리(논리 변명보다 우선) |
+| `WEEKLY_ALLOWANCE` | 10,000원 | 매주 월요일 자동 지급 용돈(2026-11 추가) — §10-6의 차비 부족 보상 지급액도 같은 값 재사용 |
 | `BEDTIME_MIN` | 22:00 | 자유 시간(§10-5)이 자동으로 끝나는 시각 |
 | `HOMEWORK_MIN` | 60분 | 숙제 소요 시간 |
 | `GAME_SESSION_MIN` | 60분 | 게임 한 판 소요 시간 |
