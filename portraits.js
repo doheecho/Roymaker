@@ -234,7 +234,9 @@ function portraitElement(id) {
 // ── 직접 넣은 캐릭터 이미지 (img/characters/) ──
 // 파일 이름을 캐릭터 이름(예: 엄마.png, 이로이.jpg) 또는 id(예: mom.png)로 넣으면 그 그림으로 바뀐다.
 const CHARACTER_DIR = "img/characters/";
-const CHARACTER_EXTS = ["png", "jpg", "jpeg", "webp", "gif"];
+const CHARACTER_EXTS = ["png", "jpg", "jpeg", "webp"];
+const LISTING_CACHE_KEY = "roymaker-character-listing";
+const LISTING_CACHE_MS = 10 * 60 * 1000;
 const CHARACTER_REPO = "doheecho/Roymaker";
 const customPortraitCache = {};
 let characterListing = null; // Map(이름 → 파일명) | false(목록을 못 받음)
@@ -243,6 +245,16 @@ let characterListingPromise = null;
 // GitHub에서 폴더 목록을 한 번 받아 온다 (실패하면 파일을 하나씩 찾아본다)
 function loadCharacterListing() {
   characterListingPromise ??= (async () => {
+    // 10분 안에 받아 둔 목록이 있으면 다시 묻지 않는다 (GitHub API 요청 제한 대비)
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(LISTING_CACHE_KEY) ?? "null");
+      if (cached && Date.now() - cached.at < LISTING_CACHE_MS) {
+        characterListing = new Map(cached.entries);
+        return;
+      }
+    } catch (err) {
+      // 저장소를 못 쓰면 그냥 새로 받는다
+    }
     try {
       const res = await fetch(`https://api.github.com/repos/${CHARACTER_REPO}/contents/${CHARACTER_DIR.replace(/\/$/, "")}`, {
         headers: { Accept: "application/vnd.github+json" },
@@ -253,6 +265,11 @@ function loadCharacterListing() {
       items
         .filter((it) => it.type === "file" && /\.(png|jpe?g|webp|gif)$/i.test(it.name))
         .forEach((it) => characterListing.set(it.name.replace(/\.[^.]+$/, "").normalize("NFC").trim(), it.name));
+      try {
+        sessionStorage.setItem(LISTING_CACHE_KEY, JSON.stringify({ at: Date.now(), entries: [...characterListing] }));
+      } catch (err) {
+        // 무시
+      }
     } catch (err) {
       characterListing = false;
     }
