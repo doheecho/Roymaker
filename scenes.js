@@ -350,6 +350,19 @@ const SCENES = {
       sR(ctx, bx, by, 1, 3, "#3a2a24");
     }
   },
+  game(ctx, t) {
+    bgRoom(ctx, "#e6e0f5", "#c8955c", "#a9773f");
+    sR(ctx, 36, 8, 56, 34, "#2b2f36");
+    const palette = ["#64b5f6", "#ff8a65", "#81c784", "#ffd54f", "#ba68c8"];
+    sR(ctx, 39, 11, 50, 28, palette[Math.floor(t * 2) % palette.length]);
+    const hx = 44 + tri(t, 1.4) * 36;
+    sR(ctx, hx, 28, 5, 5, "#ffffff");
+    sR(ctx, 70, 16 + Math.round(Math.sin(t * 5) * 3), 6, 4, "#2b2f36");
+    sR(ctx, 60, 42, 8, 6, "#2b2f36");
+    sR(ctx, 30, 62, 68, 10, "#d9534f");
+    drawActor(ctx, spriteFrame("up", false, t), 52, 34 + (Math.floor(t * 4) % 2));
+    sR(ctx, 58, 52, 12, 4, "#3b3f45");
+  },
   rest(ctx, t) {
     bgRoom(ctx, "#e6e0f5", "#c8955c", "#a9773f");
     sR(ctx, 26, 30, 4, 30, "#8a5a32");

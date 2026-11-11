@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111c">
+<link rel="stylesheet" href="style.css?v=20261111d">
 </head>
 <body>
   <header>
@@ -40,15 +40,16 @@
 
     <section id="main-view" class="panel">
       <div id="view-schedule" class="view">
-        <h2>📅 이번 주 일정 짜기</h2>
-        <p id="planner-note" class="planner-note"></p>
-        <p class="muted">
-          매주 월요일에 월~금 한 주 일정을 짠다. 아래 항목을 원하는 <strong>요일 칸</strong>의 시간으로 끌어다 놓으면 된다.
+        <div class="view-head">
+          <h2>📅 이번 주 일정 짜기</h2>
+          <button type="button" class="help-btn" data-help="schedule" data-title="📅 이번 주 일정 짜기">❓ 설명보기</button>
+        </div>
+        <template id="help-schedule"><p>매주 월요일에 월~금 한 주 일정을 짠다. 아래 항목을 원하는 <strong>요일 칸</strong>의 시간으로 끌어다 놓으면 된다.
           등교일엔 정규수업(08:30~, 월·금 12:50 / 화·수·목 13:40 하교)과 이번 주에 등록한 학원 수업이 기본으로 들어가 있다.
-          08:50이 넘어서 학교에 도착하면 지각이다. 방과후교육은 과목을, 늘봄학교는 프로그램을 고른 뒤 놓는다.
+          08:50이 넘어서 학교에 도착하면 지각이다. 방과후 수업은 과목을, 돌봄은 프로그램을 고른 뒤 놓는다.
           지난 요일은 잠기고, <strong>오늘과 남은 요일은 일과를 시작하기 전까지 고칠 수 있다.</strong>
-          "일과 시작"을 누르면 오늘 일정이 지도에서 진행된다.
-        </p>
+          "일과 시작"을 누르면 오늘 일정이 지도에서 진행되고, 일정이 다 끝나면 집에서 무엇을 할지(밖에서 놀기·숙제·게임·잠자기) 고른다.</p></template>
+        <p id="planner-note" class="planner-note"></p>
 
         <div id="schedule-palette" class="chip-row"></div>
 
@@ -72,19 +73,25 @@
       </div>
 
       <div id="view-academy" class="view" hidden>
-        <h2>🏫 학원정보</h2>
-        <p class="muted">
+        <div class="view-head">
+          <h2>🏫 학원정보</h2>
+          <button type="button" class="help-btn" data-help="academy" data-title="🏫 학원정보">❓ 설명보기</button>
+        </div>
+        <template id="help-academy"><p>
           동네 학원들의 이름·운영시간·위치·성장 효과다. 학원은 <strong>매주 일정을 미리 등록</strong>한다 — 요일과
           시작 시각을 고르면 <strong>다음 주 월요일부터</strong> 적용되고, 등록된 수업은 매일 시간표에 자동으로 올라간다.
           운영시간 밖에는 들어갈 수 없고, 운영시간 안이지만 등록하지 않은 시간에 가면 자율학습만 한다.
           수업이 끝나면 하원버스를 타고 집으로 가거나 개별적으로 이동할 수 있다.
-        </p>
+        </p></template>
         <ul id="academies"></ul>
       </div>
 
       <div id="view-activity" class="view" hidden>
-        <h2>🧹 활동정보</h2>
-        <p class="muted">집이나 동네에서 할 수 있는 방과후 활동들이다. 돈을 벌거나(집안일), 쉬면서 능력치를 올릴 수 있다(나들이).</p>
+        <div class="view-head">
+          <h2>🧹 활동정보</h2>
+          <button type="button" class="help-btn" data-help="activity" data-title="🧹 활동정보">❓ 설명보기</button>
+        </div>
+        <template id="help-activity"><p>집이나 동네에서 할 수 있는 방과후 활동들이다. 돈을 벌거나(집안일), 쉬면서 능력치를 올릴 수 있다(나들이).</p></template>
         <ul id="activities-info"></ul>
       </div>
 
@@ -118,13 +125,24 @@
       </div>
 
       <div id="view-shop" class="view" hidden>
-        <h2>🛍️ 상점</h2>
-        <p class="muted">용돈으로 물건을 사면 바로 효과가 적용된다. 하루 일정이 진행 중일 때는 살 수 없다.</p>
+        <div class="view-head">
+          <h2>🛍️ 상점</h2>
+          <button type="button" class="help-btn" data-help="shop" data-title="🛍️ 상점">❓ 설명보기</button>
+        </div>
+        <template id="help-shop"><p>용돈으로 물건을 사면 바로 효과가 적용된다. 하루 일정이 진행 중일 때는 살 수 없다.</p></template>
         <p id="shop-feedback" class="muted" hidden></p>
         <ul id="shop-items"></ul>
       </div>
     </section>
   </main>
+
+  <div id="help-modal" class="help-modal" hidden>
+    <div class="help-card" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <h3 id="help-title">설명</h3>
+      <div id="help-body" class="help-body"></div>
+      <button type="button" id="help-close" class="help-close">확인</button>
+    </div>
+  </div>
 
   <div id="diary-overlay" class="diary-overlay" hidden>
     <article class="diary-note" aria-labelledby="diary-title">
@@ -144,9 +162,9 @@
   <div id="sleep-fade" class="sleep-fade" hidden><span>Zzz…</span></div>
 
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=8d5cf5d494acc41a8002c036c0249f9a&libraries=services"></script>
-  <script src="firebase-config.js?v=20261111c"></script>
-  <script src="portraits.js?v=20261111c"></script>
-  <script src="scenes.js?v=20261111c"></script>
-  <script src="main.js?v=20261111c"></script>
+  <script src="firebase-config.js?v=20261111d"></script>
+  <script src="portraits.js?v=20261111d"></script>
+  <script src="scenes.js?v=20261111d"></script>
+  <script src="main.js?v=20261111d"></script>
 </body>
 </html>

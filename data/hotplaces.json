@@ -18,7 +18,8 @@
         "minutes": 10,
         "effect": {
           "stress": -10
-        }
+        },
+        "reaction": "우와, 말랑말랑 쭉쭉 늘어나! 스트레스가 싹 풀린다~"
       },
       {
         "id": "wakppu",
@@ -29,7 +30,8 @@
         "effect": {
           "stress": -10,
           "insa": 1
-        }
+        },
+        "reaction": "뽀드득 뽀드득! 왁뿌 터지는 소리 너무 좋아! 친구들한테도 보여줘야지!"
       },
       {
         "id": "pokemon_bread",
@@ -41,7 +43,8 @@
           "stress": -8,
           "staminaNow": 5,
           "insa": 1
-        }
+        },
+        "reaction": "포켓몬빵 맛있다! 안에 무슨 띠부씰 들었을까? 두근두근!"
       },
       {
         "id": "pokemon_card",
@@ -52,7 +55,8 @@
         "effect": {
           "stress": -6,
           "insa": 1
-        }
+        },
+        "reaction": "앗, 반짝이 카드다! 내일 친구들한테 자랑해야지~"
       },
       {
         "id": "workbook",
@@ -63,7 +67,8 @@
         "effect": {
           "focus": 1,
           "math": 1
-        }
+        },
+        "reaction": "문제집 샀으니까 오늘부터 열심히 풀어야지!"
       }
     ],
     "speaker": "stationery_owner",
@@ -90,7 +95,8 @@
           "stress": -8,
           "staminaNow": 8,
           "hunger": 25
-        }
+        },
+        "reaction": "와 진짜 맛있다! 엄청 맵고 짜! 물, 물 줘~"
       },
       {
         "id": "slush",
@@ -102,7 +108,8 @@
           "stress": -8,
           "staminaNow": 5,
           "hunger": 10
-        }
+        },
+        "reaction": "우와 슬러시가 엄청 시원하고 달아! 머리가 띵~해!"
       }
     ],
     "speaker": "snack_owner",
@@ -130,10 +137,13 @@
           "agility": 1,
           "staminaNow": -10,
           "stress": -12
-        }
+        },
+        "reaction": "헉헉… 술래잡기 너무 재밌었다! 땀이 뻘뻘 나네~"
       }
     ],
     "speaker": "friend_1",
-    "greeting": "로이야! 우리 술래잡기 할 건데 같이 할래?"
+    "greeting": "로이야! 우리 술래잡기 할 건데 같이 할래?",
+    "declineLine": "아니야~ 나는 지금 {doing} 해. 다음에 즐겁게 놀자~",
+    "acceptLine": "그래! 재미있겠다 나도 같이 놀자~"
   }
 ]

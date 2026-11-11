@@ -924,3 +924,58 @@ li:last-child { border-bottom: none; }
 }
 .map-overlay-panel.pm-dialog[hidden] { display: none; }
 .pm-dialog .choice-heading[hidden] { display: none; }
+
+/* ── 화면 제목 + 설명보기 팝업 ── */
+.view-head { display: flex; align-items: center; gap: 10px; margin: 2px 0 10px; }
+.view-head h2 { margin: 0; }
+.help-btn {
+  margin-left: auto;
+  flex: none;
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 12.5px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.help-btn:hover { border-color: var(--accent2); }
+.help-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 3500;
+  background: rgba(27, 31, 77, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.help-modal[hidden] { display: none; }
+.help-card {
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #2b3170 0%, #1b1f4d 100%);
+  border: 3px solid #e8d49a;
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px #6b5a2e, 0 14px 30px rgba(0, 0, 0, 0.45);
+  padding: 16px 18px;
+  color: #fdf8ea;
+}
+.help-card h3 { margin: 0 0 8px; font-family: "Jua", sans-serif; font-size: 16px; color: #e8d49a; }
+.help-body p { margin: 0; font-size: 14px; line-height: 1.75; }
+.help-body strong { color: #ffe9a8; }
+.help-close {
+  display: block;
+  margin: 14px 0 0 auto;
+  font-family: "Jua", sans-serif;
+  font-size: 14px;
+  padding: 6px 22px;
+  border: 1px solid #b89d5a;
+  border-radius: 3px;
+  background: rgba(232, 212, 154, 0.2);
+  color: #fdf8ea;
+  cursor: pointer;
+}
