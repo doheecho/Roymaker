@@ -784,14 +784,14 @@ function nearbyStationId(list) {
   return nearest && nearest.dist <= ARRIVAL_RADIUS_M ? nearest.id : null;
 }
 
-function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
+function walkTo(target, startClock, label, { allowEarlyHome = false, roam = false } = {}) {
   if (typeof hideScene === "function") hideScene();
   return new Promise((resolve, reject) => {
     let clock = startClock;
     let last = performance.now();
     let paused = false;
     let walkedMinAcc = 0;
-    let hasLeftHome = !allowEarlyHome || distanceMeters(state.charPos, state.positions.home) > ARRIVAL_RADIUS_M;
+    let hasLeftHome = !(allowEarlyHome || roam) || distanceMeters(state.charPos, state.positions.home) > ARRIVAL_RADIUS_M;
     const suppressed = {
       bus: nearbyStationId(state.stations.bus),
       subway: nearbyStationId(state.stations.subway),
@@ -896,7 +896,9 @@ function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
       const dist = distanceMeters(state.charPos, target);
       setStatus(`${minutesToClock(clock)} · ${label} (남은 거리 약 ${Math.round(dist)}m)`);
 
-      if (dist <= ARRIVAL_RADIUS_M) {
+      // 자유롭게 놀러 나간 경우엔 집을 한 번 벗어났다가 돌아와야 끝난다
+      if (roam && !hasLeftHome && distanceMeters(state.charPos, state.positions.home) > ARRIVAL_RADIUS_M) hasLeftHome = true;
+      if (dist <= ARRIVAL_RADIUS_M && (!roam || hasLeftHome)) {
         finish();
         resolve(clock);
         return;
@@ -1051,6 +1053,10 @@ async function runRandomEvent(clock) {
     speaker: event.speaker ?? "iroi",
   });
 
+  if (event.id === "stranger") {
+    state.recentStranger = { pos: { ...state.charPos }, called: new Set() };
+  }
+
   let result = choice.result;
   if (choice.check) {
     const stat = state.character.stats[choice.check.stat] ?? 0;
@@ -1090,11 +1096,32 @@ async function visitHotplace(place, clock) {
     tone: "hot",
     speaker: place.speaker ?? "iroi",
   });
-  if (!item) return 0;
+  if (!item) {
+    if (place.declineLine) {
+      await presentChoice("event-panel", `${place.icon} ${place.name}`, [{ label: "▶ 계속 걷기", value: true }], {
+        body: fillTemplate(place.declineLine, { doing: state.walkPurpose ?? "가야 할 데가 있어서 바빠야" }),
+        speaker: "iroi",
+      });
+    }
+    return 0;
+  }
+  if (place.acceptLine) {
+    await presentChoice("event-panel", `${place.icon} ${place.name}`, [{ label: "▶", value: true }], {
+      body: place.acceptLine,
+      speaker: "iroi",
+    });
+  }
   state.character.wallet -= item.price;
   const applied = applyEffect(item.effect);
   renderStats(state.character);
   logLine(`${place.name}에서 ${item.name}${item.price ? ` (${item.price}원)` : ""} — ${appliedText(applied)}`);
+  if (item.reaction) {
+    await presentChoice("event-panel", `${item.icon} ${item.name}`, [{ label: "▶ 계속 걷기", value: true }], {
+      body: `${item.reaction}\n(${appliedText(applied)})`,
+      tone: "hot",
+      speaker: "iroi",
+    });
+  }
   diary(
     item.price > 0
       ? `가는 길에 ${josa(place.name.split(" / ")[0], "에/에")} 들러서 ${josa(item.name, "을/를")} 샀다.`
@@ -1118,6 +1145,18 @@ async function openPhone(clock) {
     speaker: "iroi",
   });
   if (!contact) return 0;
+
+  const report = state.phone?.strangerReport;
+  const rs = state.recentStranger;
+  if (
+    report &&
+    rs &&
+    report.calls[contact.id] &&
+    !rs.called.has(contact.id) &&
+    distanceMeters(state.charPos, rs.pos) <= report.radiusM
+  ) {
+    return strangerReportCall(contact, report);
+  }
 
   const visit = state.phone?.companyVisit;
   const companyPos = visit ? state.places[visit.placeName] : null;
@@ -1189,6 +1228,29 @@ async function placeSpecialCall(pe, contact, clock) {
   await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
     body: `"${line}"${note}`,
     tone: call.tone ?? "phone",
+    speaker: contact.portrait ?? contact.id,
+    speakerName: contact.name,
+  });
+  return state.phone?.callMinutes ?? 2;
+}
+
+// 수상한 어른을 만난 직후(그 자리에서 100m 안) 경찰·엄마·아빠에게 전화하면
+async function strangerReportCall(contact, report) {
+  state.recentStranger.called.add(contact.id);
+  const call = report.calls[contact.id];
+  await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "▶", value: true }], {
+    body: call.iroiLine,
+    tone: call.tone ?? "danger",
+    speaker: "iroi",
+  });
+  const applied = applyEffect(call.effect);
+  renderStats(state.character);
+  const note = Object.keys(applied).length ? `\n(${appliedText(applied)})` : "";
+  logLine(`📱 ${contact.name}에게 수상한 어른을 만났다고 전화 — "${call.reply}"${note.replace("\n", " ")}`);
+  diary(call.diary);
+  await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
+    body: `${call.reply}${note}`,
+    tone: "phone",
     speaker: contact.portrait ?? contact.id,
     speakerName: contact.name,
   });
@@ -1438,13 +1500,6 @@ function confirmGoHomeEarly() {
   );
 }
 
-function chooseHomeActivity(homeActivities) {
-  return presentChoice("event-panel", "🏠 집", [
-    ...homeActivities.map((activity) => ({ label: activity.name, value: activity })),
-    { label: "그냥 쉬기", value: null },
-  ], { body: "집에 왔다! 이제 뭐 하지?", speaker: "iroi" });
-}
-
 async function rideTransit(target, startClock, label) {
   const dist = distanceMeters(state.charPos, target);
   const gameMinutes = Math.max(5, Math.round(dist / TRANSIT_M_PER_MIN));
@@ -1472,6 +1527,7 @@ async function rideTransit(target, startClock, label) {
 }
 
 function travelTo(target, startClock, placeName) {
+  state.walkPurpose = `${josa(placeName, "에/에")} 가야`;
   const allowEarlyHome = target !== state.positions.home;
   return walkTo(target, startClock, `${placeName}(으)로 이동 중`, { allowEarlyHome });
 }
@@ -1840,7 +1896,7 @@ function renderAcademies(academies, categoryMap) {
       <span class="item-icon">${category.icon ?? "🏫"}</span>
       <span class="academy-body">
         <strong>${academy.name}</strong> (${category.label})<br>
-        <span class="muted">${growthText} · ${hoursText} · ${addressText} (집에서 ${academy.location.mode === "walk" ? "도보" : "이동"} ${academy.location.etaMinFromHome}분)</span>
+        <span class="muted">${growthText} · ${hoursText} · ${addressText}</span>
       </span>
     `;
 
@@ -1963,14 +2019,13 @@ function renderActivityInfo() {
   state.activities.forEach((activity) => {
     const hoursText = activity.hours ? `운영 ${activity.hours.open}~${activity.hours.close}` : "시간 제한 없음";
     const locationText = activity.location === "home" ? "집" : activity.address ?? "위치 미정";
-    const modeTag = activity.location !== "home" && activity.mode === "transit" ? " · 버스/지하철 권장(도보는 멀어요)" : "";
 
     const li = document.createElement("li");
     li.innerHTML = `
       <span class="item-icon">${activity.icon}</span>
       <span>
         <strong>${activity.name}</strong> (${activity.durationMin}분)<br>
-        <span class="muted">${signedEffectText(activity.effect)} · ${locationText}${activity.location === "home" ? "" : ` · ${hoursText}`}${modeTag}</span>
+        <span class="muted">${signedEffectText(activity.effect)} · ${locationText}${activity.location === "home" ? "" : ` · ${hoursText}`}</span>
       </span>
     `;
     el.appendChild(li);
@@ -2283,7 +2338,7 @@ function renderPalette() {
   const days = plannerDays();
   const schoolDays = days.filter((d) => isWeekday(d) && !vacationOf(d));
   const vacationDays = days.filter((d) => isWeekday(d) && vacationOf(d));
-  const school = paletteGroup(el, "🏫 학교 · 방과후 · 늘봄 — 요일 칸에 끌어다 놓으면 그 요일 시간에 맞춰 들어간다");
+  const school = paletteGroup(el, "🏫 학교 수업");
 
   if (days.some((d) => !vacationOf(d))) {
     school.row.appendChild(createChip(SCHOOL_ICON, "정규수업 (월·금 ~12:50 / 화~목 ~13:40)", { kind: "school" }, "chip-school"));
@@ -2292,14 +2347,14 @@ function renderPalette() {
   if (schoolDays.length) {
     const course = afterschoolCourseById(state.ui.afterschoolCourse);
     school.row.appendChild(
-      createChip(course?.icon ?? "🎒", `방과후 · ${course?.name ?? ""} (수업 20분 뒤, 90분)`, { kind: "afterschool" }, "chip-afterschool")
+      createChip(course?.icon ?? "🎒", "방과후 수업", { kind: "afterschool" }, "chip-afterschool")
     );
   }
 
   const careSlots = (state.neulbom?.slots ?? []).filter((slot) => (slot.vacationOnly ? vacationDays.length : schoolDays.length));
   careSlots.forEach((slot) => {
     const timeText = slot.start ? `${slot.start}–${slot.end}` : `~${slot.end}`;
-    school.row.appendChild(createChip(slot.icon, `늘봄 ${slot.name} (${timeText})`, { kind: "care", careSlot: slot.id }, "chip-care"));
+    school.row.appendChild(createChip(slot.icon, `${slot.name} (${timeText})`, { kind: "care", careSlot: slot.id }, "chip-care"));
   });
 
   if (schoolDays.length || vacationDays.length) {
@@ -2341,7 +2396,7 @@ function renderPalette() {
     );
   });
 
-  const acads = paletteGroup(el, "🏢 학원 — 운영시간 안에만 놓을 수 있다. 등록하지 않은 시간은 자율학습");
+  const acads = paletteGroup(el, "🏢 학원 — 정해진 수업시간이 아닐 때에 가면 자율학습을 한다. 각 수업은 60분 진행한다.");
   state.academies
     .filter((a) => a.location.etaMinFromHome != null)
     .forEach((academy) => {
@@ -2369,7 +2424,7 @@ function blockDisplay(block, day = state.day) {
   if (block.kind === "care") {
     const slot = careSlotById(block.careSlot);
     const program = careProgramById(block.programId);
-    return { icon: slot?.icon ?? "🏠", label: `늘봄 ${slot?.name ?? ""}${program ? ` · ${program.name}` : ""}`, cls: "tt-care" };
+    return { icon: slot?.icon ?? "🏠", label: `${slot?.name ?? ""}${program ? ` · ${program.name}` : ""}`, cls: "tt-care" };
   }
   if (block.kind === "activity") {
     const activity = state.activities.find((a) => a.id === block.activityId);
@@ -2801,6 +2856,124 @@ function lateThresholdFor(block) {
   return block.startMin;
 }
 
+// ── 일정이 다 끝난 뒤의 자유 시간 ──
+const BEDTIME_MIN = 22 * 60;
+const HOMEWORK_MIN = 60;
+const GAME_SESSION_MIN = 60;
+const GAME_SCOLD_MIN = 120;
+const HOMEWORK_SYMBOLS = {
+  korean: ["가", "나", "다", "✎"],
+  math: ["1", "+", "2", "=", "3"],
+  right_living: ["♡", "질서", "배려"],
+  wise_living: ["🌱", "?", "!"],
+  joyful_living: ["♪", "✂", "★"],
+  creative_activity: ["!", "★", "✎"],
+};
+
+// 확률 반올림으로 절반만 (1이면 50% 확률로 1)
+function halfGrowth(growth) {
+  const out = {};
+  Object.entries(growth).forEach(([k, v]) => {
+    const half = v / 2;
+    const n = Math.floor(half) + (Math.random() < half - Math.floor(half) ? 1 : 0);
+    if (n) out[k] = n;
+  });
+  return out;
+}
+
+async function eveningFreeTime(clock) {
+  state.gameMinutesToday = 0;
+  for (;;) {
+    if (clock >= BEDTIME_MIN) {
+      await presentChoice("event-panel", "🌙 밤", [{ label: "😴 잠자러 가기", value: true }], {
+        body: `벌써 ${minutesToClock(clock)}이야! 이제 자야겠다.`,
+        speaker: "iroi",
+      });
+      return clock;
+    }
+    const pick = await presentChoice(
+      "event-panel",
+      "🏠 집",
+      [
+        { label: "🏃 밖에 나가서 논다", value: "out" },
+        { label: "📚 집에서 숙제를 한다", value: "homework" },
+        { label: "🎮 집에서 게임을 한다", value: "game" },
+        { label: "😴 그냥 잔다", value: "sleep" },
+      ],
+      { body: `${minutesToClock(clock)} · 오늘 일정이 다 끝났다! 이제 뭘 할까?`, speaker: "iroi" }
+    );
+    if (pick === "sleep") {
+      logLine(`${minutesToClock(clock)} 잠자리에 들었다`);
+      return clock;
+    }
+    if (pick === "out") clock = await playOutside(clock);
+    else if (pick === "homework") clock = await doHomework(clock);
+    else if (pick === "game") clock = await playGame(clock);
+  }
+}
+
+async function playOutside(clock) {
+  logLine(`${minutesToClock(clock)} 밖에 놀러 나갔다 (집으로 돌아오면 끝)`);
+  state.walkPurpose = "동네 구경을 해야";
+  const endClock = await walkTo(state.positions.home, clock, "밖에서 노는 중 — 집으로 돌아오면 끝", { roam: true });
+  logLine(`${minutesToClock(endClock)} 실컷 놀고 집에 돌아왔다`);
+  diary("일정이 끝나고 밖에 나가서 동네를 돌아다니며 놀았다.");
+  return endClock;
+}
+
+async function doHomework(clock) {
+  const subjects = Object.values(state.subjectMap);
+  const subject = pickRandom(subjects);
+  const topic = pickRandom(subject.topics);
+  const end = clock + HOMEWORK_MIN;
+  await waitUntil(clock, end, `${subject.icon} ${subject.label} 숙제 — ${topic}`, WAIT_PHASE_MS, {
+    id: "study",
+    symbols: HOMEWORK_SYMBOLS[subject.id] ?? ["✎"],
+  });
+  const effect = { ...halfGrowth(subject.growth), diligence: 1, selfEsteem: 1 };
+  const applied = applyEffect(effect);
+  renderStats(state.character);
+  logLine(`${minutesToClock(end)} ${subject.label} 숙제 끝 — ${topic} (${appliedText(applied)})`);
+  diary(`집에서 ${subject.label} 숙제를 했다. ${josa(topic, "을/를")} 공부했다.`);
+  await presentChoice("event-panel", "📚 숙제", [{ label: "▶", value: true }], {
+    body: `${subject.label} 숙제 끝! 오늘은 ${josa(topic, "을/를")} 공부했어. 뿌듯하다~\n(${appliedText(applied)})`,
+    speaker: "iroi",
+  });
+  return end;
+}
+
+async function playGame(clock) {
+  const end = clock + GAME_SESSION_MIN;
+  await waitUntil(clock, end, "🎮 집에서 게임하는 중", WAIT_PHASE_MS, { id: "game" });
+  state.gameMinutesToday = (state.gameMinutesToday ?? 0) + GAME_SESSION_MIN;
+  const applied = applyEffect({ stress: -10 });
+  renderStats(state.character);
+  logLine(`${minutesToClock(end)} 게임 ${GAME_SESSION_MIN}분 (${appliedText(applied)})`);
+  await presentChoice("event-panel", "🎮 게임", [{ label: "▶", value: true }], {
+    body: `와, 게임 진짜 재밌다! 스트레스가 확 풀렸어~\n(${appliedText(applied)})`,
+    speaker: "iroi",
+  });
+  if (state.gameMinutesToday >= GAME_SCOLD_MIN) {
+    const parent = Math.random() < 0.5 ? "mom" : "dad";
+    const line =
+      parent === "mom"
+        ? "로이야! 게임을 벌써 몇 시간째 하는 거야? 이제 그만하고 다른 거 하자!"
+        : "게임은 한 시간만 하기로 약속했지? 약속을 안 지키면 안 돼. 당장 그만!";
+    const scold = applyEffect({ delinquency: 1, stress: 5 });
+    renderStats(state.character);
+    logLine(`${parent === "mom" ? "엄마" : "아빠"}에게 게임을 너무 오래 한다고 꾸중을 들었다 (${appliedText(scold)})`);
+    diary(`게임을 너무 오래 해서 ${parent === "mom" ? "엄마" : "아빠"}한테 혼났다. 내일은 약속을 지켜야지.`);
+    await presentChoice("event-panel", "😠 꾸중", [{ label: "죄송해요…", value: true }], {
+      body: `${line}\n(${appliedText(scold)})`,
+      tone: "danger",
+      speaker: parent,
+    });
+  } else {
+    diary("집에서 게임을 했다. 정말 재미있었다!");
+  }
+  return end;
+}
+
 function isAtHome() {
   return distanceMeters(state.charPos, state.positions.home) <= ARRIVAL_RADIUS_M;
 }
@@ -2827,6 +3000,7 @@ async function runDay(blocks) {
   state.charOverlay.setPosition(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
   setSpriteFacing("down", false);
   state.eventsToday = 0;
+  state.recentStranger = null;
   state.lastEventClock = -Infinity;
   state.calledToday = new Set();
   state.companyVisitedToday = false;
@@ -2941,21 +3115,13 @@ async function runDay(blocks) {
     logLine(`${minutesToClock(clock)} 집 도착`);
   }
 
-  if (cancelledEarly) {
-    const homeActivities = state.activities.filter((a) => a.location === "home");
-    const choice = await chooseHomeActivity(homeActivities);
-    if (choice) {
-      logLine(`${minutesToClock(clock)} 집에서 ${choice.name} 시작`);
-      const endClock = clock + choice.durationMin;
-      await waitUntil(clock, endClock, `${choice.name} 중`, WAIT_PHASE_MS, sceneForActivity(choice.id));
-      clock = endClock;
-      applyActivityEffects(choice);
-    } else {
-      await waitUntil(clock, clock + 30, "집에서 뒹굴뒹굴 쉬는 중", WAIT_PHASE_MS, { id: "rest" });
-      clock += 30;
-      logLine(`${minutesToClock(clock)} 그냥 쉬었다`);
-      diary("집에서 뒹굴뒹굴 쉬었다.");
-    }
+  if (gotSick) {
+    await presentChoice("event-panel", "🏠 집", [{ label: "😴 잠자러 가기", value: true }], {
+      body: "몸이 너무 안 좋아… 오늘은 일찍 자야겠다.",
+      speaker: "iroi",
+    });
+  } else {
+    clock = await eveningFreeTime(clock);
   }
 
   const stressRecovery = blocks.length === 0 ? NO_SCHEDULE_STRESS_RECOVERY : DAILY_STRESS_RECOVERY;
@@ -2991,6 +3157,31 @@ function showView(name) {
       state.map.setCenter(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
     }
   }
+}
+
+// 화면 설명 팝업 — 각 화면 제목 옆 "설명보기" 버튼
+function wireHelp() {
+  const modal = document.getElementById("help-modal");
+  if (!modal) return;
+  const close = () => {
+    modal.hidden = true;
+  };
+  document.querySelectorAll(".help-btn[data-help]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tpl = document.getElementById(`help-${btn.dataset.help}`);
+      document.getElementById("help-title").textContent = btn.dataset.title ?? "설명";
+      document.getElementById("help-body").innerHTML = tpl ? tpl.innerHTML : "";
+      modal.hidden = false;
+      document.getElementById("help-close").focus();
+    });
+  });
+  document.getElementById("help-close").addEventListener("click", close);
+  modal.addEventListener("click", (ev) => {
+    if (ev.target === modal) close();
+  });
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !modal.hidden) close();
+  });
 }
 
 function wireNav() {
@@ -3040,7 +3231,7 @@ function wireMovementControls() {
 }
 
 // 화면 파일 버전 — index.html의 ?v= 값과 같게 올려 주면 브라우저가 새 파일을 받아 간다
-const APP_VERSION = "20261111c";
+const APP_VERSION = "20261111d";
 
 function loadLocalScript(src) {
   return new Promise((resolve) => {
@@ -3169,6 +3360,7 @@ async function main() {
   wireScheduleEditor();
   wireMovementControls();
   wireNav();
+  wireHelp();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
   document.getElementById("new-game-btn").addEventListener("click", async () => {
     if (state.dayRunning) return;
