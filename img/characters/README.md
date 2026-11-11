@@ -26,5 +26,15 @@
 | `선생님` | `teacher` |
 | `나비정원 삼촌` | `butterfly_uncle` |
 | `경율이 삼촌` | `gyeongyul_uncle` |
+| `담임 선생님` | `homeroom_teacher` |
+| `방과후 선생님` | `afterschool_1` · `afterschool_2` · `afterschool_3` |
+| `태권도 사범님` | `taekwondo_master` |
+| `코딩 선생님` | `coding_teacher` |
+| `미술 선생님` | `art_teacher` |
+| `논술 선생님` | `essay_teacher` |
+| `수학 선생님` | `math_teacher` |
+| `수영장 코치님` | `swim_coach` |
+| `체육 코치님` | `sports_coach` |
 
+> `방과후 선생님`은 세 명이라, 각각 다른 사진을 쓰려면 `afterschool_1.png` ~ `afterschool_3.png`로 넣어 주세요.
 > `같은 반 친구`는 두 명이 이름이 같아서, 서로 다른 그림을 쓰려면 `friend_1.png`, `friend_2.png`처럼 id로 넣어 주세요.

@@ -16,6 +16,17 @@ const PORTRAIT_SPECS = {
   snack_owner: { name: "분식집 이모", skin: "#f3cba9", hair: "#3a2620", style: "bun", headscarf: "#e94e4e", mouth: "smile", cheeks: true, apron: "#fff1e0", shirt: "#f08a5d", bg: "#ffe6d6" },
   teacher: { name: "선생님", skin: "#f3cba9", hair: "#3a2a24", style: "bob", glasses: "round", mouth: "smile", shirt: "#5fa8a0", bg: "#dcf1ee" },
   butterfly_uncle: { name: "나비정원 삼촌", skin: "#e9bb93", hair: "#2a201c", style: "short", hat: "cap", hatColor: "#5fae6e", mouth: "grin", cheeks: true, shirt: "#5fae6e", bg: "#e3f4e0" },
+  homeroom_teacher: { name: "담임 선생님", skin: "#f6d2b5", hair: "#5a3a26", style: "bob", glasses: "round", mouth: "smile", cheeks: true, lashes: true, shirt: "#f5a3b5", bg: "#fde4ec" },
+  afterschool_1: { name: "방과후 선생님", skin: "#efc39e", hair: "#2b2422", style: "short", mouth: "grin", shirt: "#5fae6e", bg: "#e3f4e0" },
+  afterschool_2: { name: "방과후 선생님", skin: "#f7d6bc", hair: "#7a4a2a", style: "long", mouth: "smile", cheeks: true, lashes: true, earrings: true, shirt: "#ffd257", bg: "#fff4cc" },
+  afterschool_3: { name: "방과후 선생님", skin: "#f3cba9", hair: "#1f1a1c", style: "bun", glasses: "square", mouth: "smile", lashes: true, shirt: "#64b5f6", bg: "#e1f0fc" },
+  taekwondo_master: { name: "태권도 사범님", skin: "#e8b892", hair: "#1a1515", style: "spiky", mouth: "grin", dobok: true, shirt: "#f5f5f5", bg: "#fbd9d6" },
+  coding_teacher: { name: "코딩 선생님", skin: "#efc39e", hair: "#2b2422", style: "short", glasses: "square", mouth: "smile", headset: true, shirt: "#6d7a8a", bg: "#e3e9f2" },
+  art_teacher: { name: "미술 선생님", skin: "#f6d2b5", hair: "#8a4a2a", style: "long", hat: "beret", hatColor: "#c94b4b", mouth: "smile", cheeks: true, lashes: true, paint: true, shirt: "#ba68c8", bg: "#f3e5f8" },
+  essay_teacher: { name: "논술 선생님", skin: "#f3cba9", hair: "#3a2a24", style: "bun", glasses: "round", mouth: "smile", lashes: true, shirt: "#c8a46a", bg: "#f7eedc" },
+  math_teacher: { name: "수학 선생님", skin: "#efc39e", hair: "#3a3330", style: "short", glasses: "square", mustache: true, mouth: "smile", tie: "#3d5a8a", shirt: "#ffffff", bg: "#e6eef8" },
+  swim_coach: { name: "수영장 코치님", skin: "#d9a074", hair: "#1f1a1c", style: "short", hat: "swimcap", hatColor: "#3d7be0", goggles: true, mouth: "grin", whistle: true, shirt: "#1f6fbf", bg: "#d6f0fb" },
+  sports_coach: { name: "체육 코치님", skin: "#e3b08a", hair: "#1f1a1c", style: "short", hat: "cap", hatColor: "#d9534f", mouth: "grin", whistle: true, shirt: "#d9534f", bg: "#fde0dd" },
   gyeongyul_uncle: { name: "경율이 삼촌", skin: "#efc39e", hair: "#2b2422", style: "short", glasses: "square", mouth: "smile", shirt: "#e0a43b", bg: "#fdf0d2" },
 };
 
@@ -53,6 +64,15 @@ function paintPortrait(spec) {
     r(20, 26, 1, 2, spec.apron);
   }
   if (spec.tie) r(15, 26, 2, 6, spec.tie);
+  if (spec.dobok) {
+    r(12, 25, 2, 6, "#d9d9d9");
+    r(18, 25, 2, 6, "#d9d9d9");
+    r(6, 29, 20, 2, "#1a1a1a");
+  }
+  if (spec.whistle) {
+    r(15, 25, 1, 3, "#e8c34a");
+    r(14, 28, 3, 2, "#c0c0c8");
+  }
   if (spec.badge) r(9, 28, 2, 2, "#e8c34a");
   // 긴 머리는 어깨 뒤로
   if (spec.style === "long") {
@@ -108,8 +128,26 @@ function paintPortrait(spec) {
   } else if (spec.hat === "cap") {
     r(8, 3, 16, 6, spec.hatColor);
     r(6, 8, 12, 2, shade(spec.hatColor, -30));
+  } else if (spec.hat === "beret") {
+    r(8, 3, 17, 4, spec.hatColor);
+    r(10, 2, 12, 1, spec.hatColor);
+    r(16, 1, 1, 1, spec.hatColor);
+  } else if (spec.hat === "swimcap") {
+    oval(16, 8, 9, 5, spec.hatColor);
+    r(7, 9, 18, 2, spec.hatColor);
   }
   if (spec.headscarf) r(8, 4, 16, 5, spec.headscarf);
+  if (spec.goggles) {
+    r(9, 9, 6, 2, "#7cc8f0");
+    r(17, 9, 6, 2, "#7cc8f0");
+    r(15, 9, 2, 1, "#2a2030");
+  }
+  if (spec.headset) {
+    r(6, 10, 2, 7, "#3b3b45");
+    r(24, 10, 2, 7, "#3b3b45");
+    r(8, 4, 16, 1, "#3b3b45");
+    r(9, 19, 4, 1, "#3b3b45");
+  }
 
   // 눈썹
   if (spec.brows === "angry") {
@@ -122,7 +160,7 @@ function paintPortrait(spec) {
     r(12, 11, 2, 1, dark);
     r(18, 11, 2, 1, dark);
     r(20, 12, 2, 1, dark);
-  } else if (!spec.hat || spec.hat === "cap") {
+  } else if (!spec.hat || spec.hat === "cap" || spec.hat === "beret") {
     r(10, 12, 4, 1, shade(hair, 10));
     r(18, 12, 4, 1, shade(hair, 10));
   }
@@ -166,6 +204,10 @@ function paintPortrait(spec) {
   if (spec.cheeks) {
     r(9, 18, 2, 1, "#f4a3a0");
     r(21, 18, 2, 1, "#f4a3a0");
+  }
+  if (spec.paint) {
+    r(20, 19, 2, 1, "#64b5f6");
+    r(22, 18, 1, 1, "#ffd54f");
   }
   if (spec.bandaid) {
     r(21, 18, 3, 2, "#f2d39a");

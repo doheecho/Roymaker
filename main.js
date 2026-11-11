@@ -2838,7 +2838,21 @@ function scaleGrowth(perHour, hours) {
 }
 
 // 정규수업: 자율독서 → 교시별 과목 → 중간놀이/점심 … 요일별 마지막 교시까지
-async function runSchoolBlock(block, clock, dow) {
+// ── 선생님 인사 ──
+const AFTERSCHOOL_TEACHERS = ["afterschool_1", "afterschool_2", "afterschool_3"];
+
+// 같은 과목은 늘 같은 선생님이 맡도록 이름으로 골라 준다
+function teacherFor(key) {
+  let h = 0;
+  for (const ch of String(key)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AFTERSCHOOL_TEACHERS[h % AFTERSCHOOL_TEACHERS.length];
+}
+
+function teacherSays(speaker, heading, body, label = "▶") {
+  return presentChoice("event-panel", heading, [{ label, value: true }], { body, speaker });
+}
+
+async function runSchoolBlock(block, clock, dow, wasLate = false) {
   const timetable = state.school?.timetable?.[dow] ?? [];
   const segments = (state.school?.segments ?? []).filter((seg) => seg.endMin <= block.endMin);
 
@@ -2847,6 +2861,15 @@ async function runSchoolBlock(block, clock, dow) {
     diary("학교에 너무 일찍 도착해서 교문 앞에서 기다렸다.");
     clock = block.startMin;
   }
+
+  await teacherSays(
+    "homeroom_teacher",
+    "🏫 교실",
+    wasLate
+      ? "\"로이야, 오늘은 조금 늦었네? 내일은 조금만 더 일찍 오자. 자, 오늘 하루도 즐겁게 공부해 보자~\""
+      : "\"로이야, 좋은 아침! 오늘 하루도 즐겁게 공부하자~\"",
+    "네, 선생님!"
+  );
 
   const learned = [];
   let ateLunch = false;
@@ -2909,6 +2932,7 @@ async function runSchoolBlock(block, clock, dow) {
   renderStats(state.character);
   if (learned.length) diary(`학교에서 ${josa(learned.join(", "), "을/를")} 했다.`);
   if (ateLunch) diary("점심 급식을 맛있게 먹었다.");
+  await teacherSays("homeroom_teacher", "🏫 교실", "\"오늘 하루도 공부하느라 고생 많았어~ 내일도 웃으면서 만나자!\"", "안녕히 계세요!");
   logLine(`${minutesToClock(block.endMin)} 정규수업 끝 (${WEEKDAY_LABELS[dow] ?? ""}요일 ${segments.filter((s) => s.type === "period").length}교시까지)`);
   return Math.max(clock, block.endMin);
 }
@@ -2925,6 +2949,12 @@ async function runAfterschoolBlock(block, clock) {
     await waitUntil(clock, block.startMin, "방과후 시작 전 휴식", SEGMENT_PHASE_MS, { id: "play" });
     clock = block.startMin;
   }
+  await teacherSays(
+    teacherFor(block.courseId ?? name),
+    `${course?.icon ?? "🎒"} 방과후 수업`,
+    `"로이야, 안녕! 오늘의 방과후 수업은 ${josa(name, "이야/야")}~ 즐겁게 배워 보자!"`,
+    "네, 좋아요!"
+  );
   const phases = [
     { start: block.startMin, end: p1End, label: `방과후 1차시 · ${name}`, scene: sceneForCourse(block.courseId) },
     { start: p1End, end: p2Start, label: "방과후 쉬는 시간", scene: { id: "play" } },
@@ -2955,6 +2985,16 @@ async function runCareBlock(block, clock) {
   const program = careProgramById(block.programId);
   const start = Math.max(clock, block.startMin);
   const label = `늘봄 ${slot.name}${program ? ` · ${program.name}` : ""}`;
+  await teacherSays(
+    teacherFor(block.programId ?? slot.id),
+    `${slot.icon} ${slot.name}`,
+    slot.id === "morning"
+      ? "\"로이 일찍 왔구나, 좋은 아침! 수업 시작 전까지 책 읽으면서 기다리자~\""
+      : program
+      ? `"로이야, 어서 와! 오늘 ${slot.name} 시간엔 ${josa(program.name, "을/를")} 해 볼 거야~ 재미있게 해 보자!"`
+      : `"로이야, 어서 와! 오늘도 ${slot.name} 시간 즐겁게 보내자~"`,
+    "네!"
+  );
   await waitUntil(start, block.endMin, label, WAIT_PHASE_MS, sceneForCare(slot, block.programId));
   const hours = Math.max(0, (block.endMin - start) / 60);
 
@@ -3236,7 +3276,7 @@ async function runDay(blocks) {
       }
 
       if (block.kind === "school") {
-        clock = await runSchoolBlock(block, clock, dow);
+        clock = await runSchoolBlock(block, clock, dow, !alreadyThere && schoolWasLate);
       } else if (block.kind === "afterschool") {
         clock = await runAfterschoolBlock(block, clock);
       } else if (block.kind === "care") {
@@ -3244,6 +3284,17 @@ async function runDay(blocks) {
       } else {
         clock = Math.max(clock, block.startMin);
         const registered = block.kind === "academy" && isRegisteredSlot(block.academyId, dow, block.startMin);
+        if (block.kind === "academy") {
+          const cat = state.categoryMap[place.academy.categoryId];
+          await teacherSays(
+            cat?.teacher ?? "teacher",
+            `${cat?.icon ?? "🏫"} ${place.name}`,
+            registered
+              ? `"${cat?.greeting ?? "로이야, 어서 와! 오늘도 열심히 해 보자~"}"`
+              : "\"어? 로이야, 오늘은 네 수업 시간이 아닌데? 그럼 자율학습 하고 가렴~\"",
+            "네!"
+          );
+        }
         const waitLabel =
           block.kind === "activity" ? `${place.activity.name} 중` : registered ? `${place.name} 수업` : `${place.name} 자율학습`;
         const scene =
@@ -3273,7 +3324,7 @@ async function runDay(blocks) {
             { label: "🚌 하원버스 타고 집으로", value: "shuttle" },
             { label: "🚶 하원버스 안 타고 개별 이동", value: "walk" },
           ],
-          { body: "오늘 수업 끝! 로이는 하원버스 타고 갈 거니?", speaker: "teacher", speakerName: `${place.name} 선생님` }
+          { body: "\"오늘 수업 끝! 수고했어. 로이는 하원버스 타고 갈 거니?\"", speaker: state.categoryMap[place.academy.categoryId]?.teacher ?? "teacher" }
         );
         if (how === "shuttle") {
           logLine(`${minutesToClock(clock)} 하원버스 탑승`);
@@ -3421,7 +3472,7 @@ function wireMovementControls() {
 }
 
 // 화면 파일 버전 — index.html의 ?v= 값과 같게 올려 주면 브라우저가 새 파일을 받아 간다
-const APP_VERSION = "20261111f";
+const APP_VERSION = "20261111g";
 
 function loadLocalScript(src) {
   return new Promise((resolve) => {

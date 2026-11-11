@@ -8,7 +8,9 @@
       "agility": 1,
       "diligence": 1
     },
-    "staminaCost": 15
+    "staminaCost": 15,
+    "teacher": "taekwondo_master",
+    "greeting": "이로이! 오늘도 건강하게 태권도를 배워볼까? 기합 크게 넣어 보자, 얍!"
   },
   {
     "id": "art",
@@ -18,7 +20,9 @@
       "expression": 2,
       "dexterity": 1
     },
-    "staminaCost": 8
+    "staminaCost": 8,
+    "teacher": "art_teacher",
+    "greeting": "로이 왔구나~ 오늘은 어떤 멋진 그림을 그려 볼까? 마음껏 표현해 보자!"
   },
   {
     "id": "math",
@@ -27,7 +31,9 @@
     "growth": {
       "math": 3
     },
-    "staminaCost": 6
+    "staminaCost": 6,
+    "teacher": "math_teacher",
+    "greeting": "로이야, 어서 와! 오늘도 차근차근 수학 문제를 풀어 보자. 틀려도 괜찮아~"
   },
   {
     "id": "essay_writing",
@@ -37,7 +43,9 @@
       "language": 2,
       "expression": 1
     },
-    "staminaCost": 6
+    "staminaCost": 6,
+    "teacher": "essay_teacher",
+    "greeting": "로이 왔니? 오늘은 재미있는 책을 읽고 생각을 글로 써 보자~"
   },
   {
     "id": "coding",
@@ -47,7 +55,9 @@
       "logic": 2,
       "digital": 1
     },
-    "staminaCost": 8
+    "staminaCost": 8,
+    "teacher": "coding_teacher",
+    "greeting": "로이야, 반가워! 오늘은 블록 코딩으로 로봇을 움직여 볼 거야. 같이 해 보자!"
   },
   {
     "id": "ball_sports",
@@ -57,7 +67,9 @@
       "agility": 2,
       "social": 1
     },
-    "staminaCost": 18
+    "staminaCost": 18,
+    "teacher": "sports_coach",
+    "greeting": "로이! 몸 풀고 시작하자. 오늘도 즐겁게 공 차 보는 거야!"
   },
   {
     "id": "premium_academic",
@@ -68,6 +80,20 @@
       "math": 2,
       "expression": 1
     },
-    "staminaCost": 10
+    "staminaCost": 10,
+    "teacher": "teacher",
+    "greeting": "로이야, 어서 오렴. 오늘 수업도 열심히 해 보자~"
+  },
+  {
+    "id": "swimming",
+    "label": "수영",
+    "icon": "🏊",
+    "growth": {
+      "stamina": 2,
+      "agility": 1
+    },
+    "staminaCost": 16,
+    "teacher": "swim_coach",
+    "greeting": "로이 왔구나! 준비 운동 꼼꼼히 하고, 오늘도 물이랑 친해져 보자~"
   }
 ]

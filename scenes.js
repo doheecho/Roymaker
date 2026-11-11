@@ -363,6 +363,18 @@ const SCENES = {
     drawActor(ctx, spriteFrame("up", false, t), 52, 34 + (Math.floor(t * 4) % 2));
     sR(ctx, 58, 52, 12, 4, "#3b3f45");
   },
+  swim(ctx, t) {
+    sR(ctx, 0, 0, SCENE_W, 30, "#e3f4fb");
+    sR(ctx, 0, 30, SCENE_W, 50, "#4fa8e0");
+    for (let i = 0; i < 6; i++) sR(ctx, ((i * 26 + t * 12) % (SCENE_W + 20)) - 10, 36 + (i % 3) * 12, 12, 1, "#a9dcf7");
+    sR(ctx, 0, 52, SCENE_W, 1, "#ff7a52");
+    const x = ((t * 22) % (SCENE_W + 30)) - 26;
+    const bob = Math.sin(t * 6) * 1.5;
+    drawActor(ctx, spriteFrame("right", false, t), x, 22 + bob);
+    sR(ctx, x - 4, 44 + bob, 34, 16, "#4fa8e0");
+    const splash = Math.floor(t * 6) % 2;
+    sR(ctx, x + (splash ? 26 : -4), 40 + bob, 3, 2, "#ffffff");
+  },
   rest(ctx, t) {
     bgRoom(ctx, "#e6e0f5", "#c8955c", "#a9773f");
     sR(ctx, 26, 30, 4, 30, "#8a5a32");
@@ -430,6 +442,7 @@ const ACADEMY_SCENES = {
   essay_writing: { id: "study", symbols: ["가", "나", "다", "✎"] },
   coding: { id: "computer" },
   ball_sports: { id: "soccer" },
+  swimming: { id: "swim" },
   premium_academic: { id: "study", symbols: ["A+", "★", "π", "∑"] },
 };
 
