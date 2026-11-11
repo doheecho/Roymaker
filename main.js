@@ -1318,6 +1318,8 @@ function presentChoice(panelId, heading, options, { body = null, tone = null, sp
     const h = document.createElement("p");
     h.className = "choice-heading";
     h.textContent = heading;
+    // 이름표와 같은 말("📞 엄마" 등)이면 제목은 숨겨서 이름이 두 번 나오지 않게
+    if (spec && heading.includes(speakerName ?? spec.name)) h.hidden = true;
     main.appendChild(h);
 
     const bodyEl = document.createElement("p");
@@ -3037,7 +3039,47 @@ function wireMovementControls() {
   });
 }
 
+// 화면 파일 버전 — index.html의 ?v= 값과 같게 올려 주면 브라우저가 새 파일을 받아 간다
+const APP_VERSION = "20261111b";
+
+function loadLocalScript(src) {
+  return new Promise((resolve) => {
+    const el = document.createElement("script");
+    el.src = `${src}?v=${APP_VERSION}`;
+    el.onload = () => resolve(true);
+    el.onerror = () => {
+      console.warn(`${src}를 불러오지 못했다`);
+      resolve(false);
+    };
+    document.head.appendChild(el);
+  });
+}
+
+// 브라우저가 예전 index.html을 캐시해 두었어도 대화창 얼굴·일정 애니메이션이 동작하도록 보충한다
+async function ensureUiModules() {
+  if (typeof portraitSpec !== "function") await loadLocalScript("portraits.js");
+  if (typeof showScene !== "function") await loadLocalScript("scenes.js");
+  const wrap = document.querySelector(".map-wrap");
+  if (wrap && !document.getElementById("scene-panel")) {
+    const panel = document.createElement("div");
+    panel.id = "scene-panel";
+    panel.className = "scene-panel";
+    panel.hidden = true;
+    panel.innerHTML =
+      '<canvas id="scene-canvas" width="128" height="80" aria-label="일정 애니메이션"></canvas><p id="scene-caption" class="scene-caption"></p>';
+    wrap.appendChild(panel);
+  }
+  if (wrap && !document.getElementById("event-panel")) {
+    const panel = document.createElement("div");
+    panel.id = "event-panel";
+    panel.className = "map-overlay-panel pm-dialog";
+    panel.hidden = true;
+    wrap.appendChild(panel);
+  }
+}
+
 async function main() {
+  await ensureUiModules();
   renderClock();
   setInterval(renderClock, 1000 * 30);
   const cloudReadyPromise = initCloudSave(); // 데이터 로딩과 동시에 진행 — 느려도 게임 시작을 막지 않음

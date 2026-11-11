@@ -923,3 +923,4 @@ li:last-child { border-bottom: none; }
   text-overflow: ellipsis;
 }
 .map-overlay-panel.pm-dialog[hidden] { display: none; }
+.pm-dialog .choice-heading[hidden] { display: none; }
