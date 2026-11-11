@@ -322,7 +322,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261111k";
+const DATA_VERSION = "20261111l";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2936,12 +2936,12 @@ function triggerIllness() {
   diary("너무 무리했는지 몸살이 나서 남은 일정을 못 하고 집에 왔다.");
 }
 
+// 허기 회복은 이제 아침밥/저녁밥(serveBreakfast/serveDinner/lateDinnerTalk)이 맡는다 — 여기서는 잠들기 전 기력·스트레스만 추가로 회복
 function applyEndOfDay(stressRecovery) {
-  state.character.condition.hunger = 90;
   state.character.condition.staminaNow = Math.min(100, state.character.condition.staminaNow + 10);
   state.character.condition.stress = Math.max(0, state.character.condition.stress - stressRecovery);
   renderStats(state.character);
-  logLine("저녁밥을 먹고 하루를 마쳤다");
+  logLine("하루를 마쳤다");
 }
 
 function scaleGrowth(perHour, hours) {
@@ -3219,7 +3219,77 @@ function halfGrowth(growth) {
   return out;
 }
 
-async function eveningFreeTime(clock, pendingTalk = null) {
+// ── 아침밥 · 저녁밥 (2026-11 추가) ──
+const DINNER_MIN = 19 * 60;
+const MEAL_EFFECT = { hunger: 45, staminaNow: 20, stress: -15 };
+const LATE_DINNER_DILIGENCE_PENALTY = 1;
+
+async function serveBreakfast() {
+  await presentChoice("event-panel", "🍚 아침밥", [{ label: "▶", value: true }], {
+    body: "\"로이야, 일어났니? 아침밥 다 차려놨어, 얼른 와서 먹자~\"",
+    speaker: "mom",
+  });
+  const applied = applyEffect(MEAL_EFFECT);
+  renderStats(state.character);
+  logLine(`🍚 엄마가 차려주신 아침밥을 먹었다 (${appliedText(applied)})`);
+  diary("아침에 엄마가 차려주신 밥을 든든하게 먹고 하루를 시작했다.");
+  await presentChoice("event-panel", "🍚 아침밥", [{ label: "▶", value: true }], {
+    body: `"잘 먹었습니다! 오늘도 힘내야지~"\n(${appliedText(applied)})`,
+    speaker: "iroi",
+  });
+}
+
+// 7시까지 집에 있었으면(또는 이미 와 있으면) 자동으로 저녁밥을 먹는다 — 선택 없음
+async function serveDinner() {
+  await presentChoice("event-panel", "🍚 저녁밥", [{ label: "▶", value: true }], {
+    body: "\"로이야, 저녁 다 됐다! 어서 와서 먹어~\"",
+    speaker: "mom",
+  });
+  const applied = applyEffect(MEAL_EFFECT);
+  renderStats(state.character);
+  logLine(`🍚 엄마가 차려주신 저녁밥을 먹었다 (${appliedText(applied)})`);
+  diary("저녁에 엄마가 차려주신 밥을 맛있게 먹었다.");
+  await presentChoice("event-panel", "🍚 저녁밥", [{ label: "▶", value: true }], {
+    body: `"잘 먹었습니다! 든든하다~"\n(${appliedText(applied)})`,
+    speaker: "iroi",
+  });
+}
+
+// 7시가 지나서야 집에 들어온 경우 — 밥을 먹을지 말지 고를 수 있다(먹으면 성실성 소폭 하락)
+async function lateDinnerTalk() {
+  const eatIt = await presentChoice(
+    "event-panel",
+    "🏠 집",
+    [
+      { label: "응 엄마, 배고파요… 밥 차려주세요", value: true },
+      { label: "괜찮아요 엄마!", value: false },
+    ],
+    { body: "\"로이야, 밥은 먹었니? 왜 이렇게 늦게 들어왔어, 배고프겠다…\"", speaker: "mom" }
+  );
+  if (!eatIt) {
+    await presentChoice("event-panel", "🏠 집", [{ label: "▶", value: true }], {
+      body: "\"괜찮아요 엄마!\"",
+      speaker: "iroi",
+    });
+    logLine("엄마가 밥은 먹었는지 물었지만 괜찮다고 했다");
+    diary("늦게 들어왔는데 엄마가 밥은 먹었냐고 물으셨다. 괜찮다고 했다.");
+    return;
+  }
+  await presentChoice("event-panel", "🏠 집", [{ label: "▶", value: true }], {
+    body: "\"응 엄마, 배고파요… 밥 차려주세요.\"",
+    speaker: "iroi",
+  });
+  const applied = applyEffect({ ...MEAL_EFFECT, diligence: -LATE_DINNER_DILIGENCE_PENALTY });
+  renderStats(state.character);
+  logLine(`🍚 너무 늦게 들어와서 엄마가 그제서야 저녁밥을 차려주셨다 (${appliedText(applied)})`);
+  diary("너무 늦게 들어와서 죄송했지만, 엄마가 그래도 저녁밥을 차려주셨다.");
+  await presentChoice("event-panel", "🍚 저녁밥", [{ label: "▶", value: true }], {
+    body: `"고마워요 엄마ㅠ"\n(${appliedText(applied)})`,
+    speaker: "iroi",
+  });
+}
+
+async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
   state.gameMinutesToday = 0;
   const talkIfDue = async (force) => {
     if (pendingTalk && (force || clock >= pendingTalk.at)) {
@@ -3228,10 +3298,18 @@ async function eveningFreeTime(clock, pendingTalk = null) {
       clock = await eveningTalkWithMom(clock, talk.skipped);
     }
   };
+  const dinnerIfDue = async (force) => {
+    if (needsDinner && !state.dinnerDone && (force || clock >= DINNER_MIN)) {
+      state.dinnerDone = true;
+      await serveDinner();
+    }
+  };
   for (;;) {
     await talkIfDue(false);
+    await dinnerIfDue(false);
     if (clock >= BEDTIME_MIN) {
       await talkIfDue(true);
+      await dinnerIfDue(true);
       await presentChoice("event-panel", "🌙 밤", [{ label: "😴 잠자러 가기", value: true }], {
         body: `벌써 ${minutesToClock(clock)}이야! 이제 자야겠다.`,
         speaker: "iroi",
@@ -3247,11 +3325,12 @@ async function eveningFreeTime(clock, pendingTalk = null) {
         { label: "🎮 집에서 게임을 한다", value: "game" },
         { label: "😴 그냥 잔다", value: "sleep" },
       ],
-      { body: `${minutesToClock(clock)} · 오늘 일정이 다 끝났다! 이제 뭘 할까?`, speaker: "iroi" }
+      { body: `${minutesToClock(clock)} · 특별히 해야할 일은 없는 것 같네? 이제 뭘 할까?`, speaker: "iroi" }
     );
     if (pick === "sleep") {
-      // 일찍 자려고 해도, 빼먹은 일정 얘기는 엄마가 자기 전에 꼭 하신다
+      // 일찍 자려고 해도, 빼먹은 일정 얘기나 저녁밥은 자기 전에 꼭 하신다
       await talkIfDue(true);
+      await dinnerIfDue(true);
       logLine(`${minutesToClock(clock)} 잠자리에 들었다`);
       return clock;
     }
@@ -3354,6 +3433,7 @@ async function runDay(blocks) {
   state.lastEventClock = -Infinity;
   state.calledToday = new Set();
   state.companyVisitedToday = false;
+  state.dinnerDone = false;
   state.placeEvents.forEach((pe) => {
     pe.doneToday = false;
     pe.dwell = 0;
@@ -3375,6 +3455,8 @@ async function runDay(blocks) {
     logLine("오늘은 아무 일정도 없다 — 집에서 하루를 보냈다");
     diary("오늘은 아무 일정 없이 집에서 푹 쉬었다.");
   }
+
+  await serveBreakfast();
 
   try {
     for (const block of blocks) {
@@ -3517,12 +3599,21 @@ async function runDay(blocks) {
       speaker: "iroi",
     });
   } else {
+    // 7시까지 집에 왔으면 저녁밥은 자유 시간 중 자동으로 먹는다(needsDinner).
+    // 7시가 지나서야 집에 들어온 거면 지금 바로 "밥은 먹었니" 대화가 뜬다.
+    let needsDinner = false;
+    if (clock > DINNER_MIN) {
+      state.dinnerDone = true;
+      await lateDinnerTalk();
+    } else {
+      needsDinner = true;
+    }
     // 빼먹은 일정이 끝날 시각이 지난 뒤, 집에 있을 때 엄마와의 대화가 열린다
     const pendingTalk =
       cancelledEarly && skippedBlocks.length
         ? { at: Math.max(...skippedBlocks.map((b) => b.endMin)), skipped: skippedBlocks }
         : null;
-    clock = await eveningFreeTime(clock, pendingTalk);
+    clock = await eveningFreeTime(clock, pendingTalk, needsDinner);
   }
 
   const stressRecovery = blocks.length === 0 ? NO_SCHEDULE_STRESS_RECOVERY : DAILY_STRESS_RECOVERY;

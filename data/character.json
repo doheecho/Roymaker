@@ -34,7 +34,7 @@
   },
   "condition": {
     "hunger": 80,
-    "staminaNow": 80,
+    "staminaNow": 100,
     "stress": 0
   },
   "wallet": 5000
