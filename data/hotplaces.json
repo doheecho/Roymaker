@@ -65,7 +65,9 @@
           "math": 1
         }
       }
-    ]
+    ],
+    "speaker": "stationery_owner",
+    "greeting": "어서 오렴~ 오늘은 뭐 사러 왔니?"
   },
   {
     "id": "snackbar",
@@ -102,7 +104,9 @@
           "hunger": 10
         }
       }
-    ]
+    ],
+    "speaker": "snack_owner",
+    "greeting": "어서 와! 떡볶이 금방 나왔어~"
   },
   {
     "id": "playground",
@@ -128,6 +132,8 @@
           "stress": -12
         }
       }
-    ]
+    ],
+    "speaker": "friend_1",
+    "greeting": "로이야! 우리 술래잡기 할 건데 같이 할래?"
   }
 ]

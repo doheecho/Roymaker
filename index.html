@@ -91,7 +91,11 @@
         <h2>🗺️ 지도</h2>
         <div class="map-wrap">
           <div id="map"></div>
-          <div id="event-panel" class="transport-choice map-overlay-panel" hidden></div>
+          <div id="scene-panel" class="scene-panel" hidden>
+            <canvas id="scene-canvas" width="128" height="80" aria-label="일정 애니메이션"></canvas>
+            <p id="scene-caption" class="scene-caption"></p>
+          </div>
+          <div id="event-panel" class="map-overlay-panel pm-dialog" hidden></div>
           <button type="button" id="phone-btn" class="phone-btn" hidden>📱 휴대전화</button>
           <div id="dpad" class="dpad" hidden>
             <button type="button" data-dir="up" aria-label="위로 이동">▲</button>
@@ -102,8 +106,6 @@
         </div>
 
         <div id="day-run" hidden>
-          <div id="transport-choice" class="transport-choice" hidden></div>
-          <div id="home-confirm" class="transport-choice" hidden></div>
           <p id="day-status" class="day-status">—</p>
           <ul id="day-log"></ul>
         </div>
@@ -139,6 +141,8 @@
 
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=8d5cf5d494acc41a8002c036c0249f9a&libraries=services"></script>
   <script src="firebase-config.js"></script>
+  <script src="portraits.js"></script>
+  <script src="scenes.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
