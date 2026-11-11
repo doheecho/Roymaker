@@ -50,11 +50,11 @@
     "monthlyFee": null
   },
   {
-    "id": "tbd_apgujeong_premium",
-    "name": "(미정) 압구정 프리미엄 아카데미",
+    "id": "elite_academy_main",
+    "name": "엘리트어학원 본관",
     "categoryId": "premium_academic",
     "region": "apgujeong",
-    "address": null,
+    "address": "서울 강남구 논현로168길 36",
     "location": { "lat": null, "lng": null, "etaMinFromHome": 35, "mode": "transit" },
     "hours": { "open": "17:00", "close": "21:00" },
     "monthlyFee": null
