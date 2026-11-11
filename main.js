@@ -76,7 +76,7 @@ const HOME_SCHOOL_WALK_MIN = 10;
 let SCHOOL_START_MIN = 8 * 60 + 30;
 let SCHOOL_LATE_MIN = 8 * 60 + 50;
 const MORNING_CARE_LATE_MIN = 9 * 60;
-const SEGMENT_PHASE_MS = 650;
+const SEGMENT_PHASE_MS = 1400;
 const AFTERSCHOOL_STRESS = 8;
 const AUTONOMOUS_STUDY_STRESS = 6;
 const AUTONOMOUS_STUDY_EFFECT = { focus: 1, diligence: 1, staminaNow: -3 };
@@ -96,7 +96,7 @@ const FIREBASE_SDK_VERSION = "10.14.1";
 const SLEEP_FADE_MS = 900;
 const SLEEP_HOLD_MS = 700;
 const ACADEMY_LESSON_MIN = 60;
-const WAIT_PHASE_MS = 2200;
+const WAIT_PHASE_MS = 3000;
 const MOVE_SPEED_MPS = 60;
 const GAME_MIN_PER_REAL_SEC = 1.0;
 const ARRIVAL_RADIUS_M = 20;
@@ -785,6 +785,7 @@ function nearbyStationId(list) {
 }
 
 function walkTo(target, startClock, label, { allowEarlyHome = false } = {}) {
+  if (typeof hideScene === "function") hideScene();
   return new Promise((resolve, reject) => {
     let clock = startClock;
     let last = performance.now();
@@ -1047,6 +1048,7 @@ async function runRandomEvent(clock) {
   const choice = await presentChoice("event-panel", event.title, options, {
     body: fillTemplate(event.text, vars),
     tone: "event",
+    speaker: event.speaker ?? "iroi",
   });
 
   let result = choice.result;
@@ -1067,6 +1069,7 @@ async function runRandomEvent(clock) {
   await presentChoice("event-panel", result.crisis ? "⚠️ 위기 발생" : "결과", [{ label: "계속 걷기", value: true }], {
     body: `${fillTemplate(result.text, vars)}${effectNote}`,
     tone: result.crisis ? "danger" : "event",
+    speaker: result.speaker ?? event.resultSpeaker ?? "iroi",
   });
   return result.minutes ?? 0;
 }
@@ -1083,8 +1086,9 @@ async function visitHotplace(place, clock) {
     });
   });
   const item = await presentChoice("event-panel", `${place.icon} ${place.name}`, options, {
-    body: `지금 ${minutesToClock(clock)} · 용돈 ${state.character.wallet}원. 무엇을 할까요?`,
+    body: `${place.greeting ?? "무엇을 할까?"}\n(지금 ${minutesToClock(clock)} · 용돈 ${state.character.wallet}원)`,
     tone: "hot",
+    speaker: place.speaker ?? "iroi",
   });
   if (!item) return 0;
   state.character.wallet -= item.price;
@@ -1109,8 +1113,9 @@ async function openPhone(clock) {
       .forEach((c) => options.push({ label: `${c.icon} ${c.name}`, value: c, group, hint: c.note }));
   });
   const contact = await presentChoice("event-panel", "📱 휴대전화", options, {
-    body: `${minutesToClock(clock)} · 누구에게 전화할까요?`,
+    body: `${minutesToClock(clock)} · 누구한테 전화하지?`,
     tone: "phone",
+    speaker: "iroi",
   });
   if (!contact) return 0;
 
@@ -1149,6 +1154,8 @@ async function openPhone(clock) {
   await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
     body: `"${line}"${effectNote}`,
     tone: "phone",
+    speaker: contact.portrait ?? contact.id,
+    speakerName: contact.name,
   });
   return state.phone?.callMinutes ?? 2;
 }
@@ -1162,6 +1169,7 @@ async function runPlaceMemory(pe, clock) {
   await presentChoice("event-panel", `${pe.icon} ${pe.title}`, [{ label: "다시 걷기", value: true }], {
     body: `${pe.text}\n\n"${line}"\n(${appliedText(applied)})`,
     tone: "event",
+    speaker: "iroi",
   });
   return pe.minutes ?? 0;
 }
@@ -1181,6 +1189,8 @@ async function placeSpecialCall(pe, contact, clock) {
   await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
     body: `"${line}"${note}`,
     tone: call.tone ?? "phone",
+    speaker: contact.portrait ?? contact.id,
+    speakerName: contact.name,
   });
   return state.phone?.callMinutes ?? 2;
 }
@@ -1189,9 +1199,15 @@ async function placeSpecialCall(pe, contact, clock) {
 async function visitParentsCompany(contact, visit) {
   state.companyVisitedToday = true;
   const who = contact.name;
-  await presentChoice("event-panel", `📞 ${who}`, [{ label: "기다리기", value: true }], {
-    body: `"${who}! 나 지금 ${who} 회사 앞이야. 잠깐 나와 줄 수 있어?"\n\n"뭐? 로이가 여기까지 왔다고? 금방 나갈게!"`,
+  await presentChoice("event-panel", `📞 ${who}`, [{ label: "▶", value: true }], {
+    body: `"${who}! 나 지금 ${who} 회사 앞이야. 잠깐 나와 줄 수 있어?"`,
     tone: "phone",
+    speaker: "iroi",
+  });
+  await presentChoice("event-panel", `📞 ${who}`, [{ label: "기다리기", value: true }], {
+    body: "\"뭐? 로이가 여기까지 왔다고? 금방 나갈게!\"",
+    tone: "phone",
+    speaker: contact.id,
   });
 
   const snacks = [...visit.snacks].sort(() => Math.random() - 0.5).slice(0, visit.pickCount);
@@ -1212,8 +1228,9 @@ async function visitParentsCompany(contact, visit) {
       `회사 식권으로 받은 ${josa(snackPlain, "을/를")} 간식으로 선물해 줘서 맛있게 먹었다.`
   );
   await presentChoice("event-panel", `🏢 ${visit.placeName} 앞`, [{ label: "😋 맛있게 먹기", value: true }], {
-    body: `${josa(who, "이/가")} 회사에서 나와 꼭 안아 주었다! 회사 식권으로 받은 간식을 선물로 줬다.\n${snackNames}\n(${appliedText(applied)})`,
+    body: `(${josa(who, "이/가")} 회사에서 나와 꼭 안아 주었다!)\n"우리 로이 왔어? 회사 식권으로 받은 간식이야, 맛있게 먹어!"\n${snackNames}\n(${appliedText(applied)})`,
     tone: "event",
+    speaker: contact.id,
   });
   return visit.minutes;
 }
@@ -1229,8 +1246,9 @@ async function offerMomCompanyOptions(contact, visit, clock) {
       { label: "📵 그냥 끊는다", value: null },
     ],
     {
-      body: `${minutesToClock(clock)} · ${visit.placeName} 근처다. ${contact.name}에게 뭐라고 할까요?`,
+      body: `${minutesToClock(clock)} · ${visit.placeName} 근처다. ${contact.name}한테 뭐라고 하지?`,
       tone: "phone",
+      speaker: "iroi",
     }
   );
   if (choice === "visit") return visitParentsCompany(contact, visit);
@@ -1258,30 +1276,60 @@ async function persuadeMomLeaveWork(contact, visit) {
   await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: success ? "야호!" : "알겠어요", value: true }], {
     body: `"${line}"${note}`,
     tone: success ? "event" : "phone",
+    speaker: contact.id,
   });
   return state.phone?.callMinutes ?? 2;
 }
 
-// 공용 선택창 — options: [{ label, value, disabled, hint, group }]
-function presentChoice(panelId, heading, options, { body = null, tone = null } = {}) {
+// 공용 대화창 (프린세스 메이커 2 메시지 창 스타일)
+// options: [{ label, value, disabled, hint, group }]
+// speaker: 초상화 id (iroi, mom, dad, …) — 없으면 해설(초상화 없음). speakerName으로 이름표만 바꿀 수 있다.
+const TYPE_MS = 22;
+
+function presentChoice(panelId, heading, options, { body = null, tone = null, speaker = null, speakerName = null } = {}) {
+  if (typeof hideScene === "function") hideScene();
   return new Promise((resolve) => {
-    const panel = document.getElementById(panelId);
-    panel.hidden = false;
-    panel.innerHTML = "";
+    const panel = document.getElementById("event-panel");
+    const spec = speaker && typeof portraitSpec === "function" ? portraitSpec(speaker) : null;
+    panel.className = `map-overlay-panel pm-dialog${spec ? "" : " no-portrait"}`;
     panel.dataset.tone = tone ?? "";
+    panel.innerHTML = "";
+    panel.hidden = false;
+
+    if (spec) {
+      const frame = document.createElement("div");
+      frame.className = "pm-portrait";
+      frame.style.background = spec.bg ?? "#3d4a78";
+      frame.appendChild(portraitElement(speaker));
+      panel.appendChild(frame);
+    }
+
+    const main = document.createElement("div");
+    main.className = "pm-main";
+    panel.appendChild(main);
+
+    if (spec) {
+      const name = document.createElement("div");
+      name.className = "pm-name";
+      name.textContent = speakerName ?? spec.name;
+      main.appendChild(name);
+    }
 
     const h = document.createElement("p");
     h.className = "choice-heading";
     h.textContent = heading;
-    panel.appendChild(h);
+    main.appendChild(h);
 
-    if (body) {
-      const b = document.createElement("p");
-      b.className = "choice-body";
-      b.textContent = body;
-      panel.appendChild(b);
-    }
+    const bodyEl = document.createElement("p");
+    bodyEl.className = "choice-body";
+    main.appendChild(bodyEl);
 
+    const choices = document.createElement("div");
+    choices.className = "pm-choices";
+    choices.hidden = true;
+    main.appendChild(choices);
+
+    let timer = 0;
     let row = null;
     let currentGroup;
     options.forEach((opt) => {
@@ -1291,11 +1339,11 @@ function presentChoice(panelId, heading, options, { body = null, tone = null } =
           const g = document.createElement("p");
           g.className = "choice-group";
           g.textContent = opt.group;
-          panel.appendChild(g);
+          choices.appendChild(g);
         }
         row = document.createElement("div");
         row.className = "chip-row";
-        panel.appendChild(row);
+        choices.appendChild(row);
       }
       const btn = document.createElement("button");
       btn.type = "button";
@@ -1303,7 +1351,9 @@ function presentChoice(panelId, heading, options, { body = null, tone = null } =
       btn.disabled = !!opt.disabled;
       btn.textContent = opt.label;
       if (opt.hint) btn.title = opt.hint;
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        clearInterval(timer);
         panel.hidden = true;
         resolve(opt.value);
       });
@@ -1320,67 +1370,77 @@ function presentChoice(panelId, heading, options, { body = null, tone = null } =
         row.appendChild(btn);
       }
     });
+
+    // 한 글자씩 써 내려가기 — 대화창을 누르면 바로 다 보인다
+    const full = body ?? "";
+    let shown = 0;
+    const finish = () => {
+      clearInterval(timer);
+      bodyEl.textContent = full;
+      bodyEl.classList.add("done");
+      choices.hidden = false;
+    };
+    panel.onclick = (ev) => {
+      if (ev.target.closest("button")) return;
+      if (!choices.hidden) return;
+      finish();
+    };
+    if (!full) {
+      finish();
+    } else {
+      timer = setInterval(() => {
+        shown += 1;
+        bodyEl.textContent = full.slice(0, shown);
+        if (shown >= full.length) finish();
+      }, TYPE_MS);
+    }
   });
 }
 
-async function waitUntil(startClock, endClock, label, durationMs = WAIT_PHASE_MS) {
+async function waitUntil(startClock, endClock, label, durationMs = WAIT_PHASE_MS, scene = null) {
   setStatus(`${minutesToClock(startClock)} · ${label}`);
+  if (scene && typeof showScene === "function") showScene(scene, `${minutesToClock(startClock)} · ${label}`);
   await animate(durationMs, (t) => {
-    setStatus(`${minutesToClock(startClock + (endClock - startClock) * t)} · ${label}`);
+    const text = `${minutesToClock(startClock + (endClock - startClock) * t)} · ${label}`;
+    setStatus(text);
+    if (scene && typeof setSceneCaption === "function") setSceneCaption(text);
   });
   setStatus(`${minutesToClock(endClock)} · ${label}`);
 }
 
 function chooseRideDestination(kind, currentStation, stations) {
-  return new Promise((resolve) => {
-    const panel = document.getElementById("transport-choice");
-    panel.hidden = false;
-    panel.innerHTML = "";
-
-    const modeLabel = kind === "bus" ? "버스를" : "지하철을";
-    const fare = kind === "bus" ? BUS_FARE : SUBWAY_FARE;
-
-    const heading = document.createElement("p");
-    heading.textContent = `${currentStation.name} 도착 — ${modeLabel} 타고 어디로 갈까요?`;
-    panel.appendChild(heading);
-
-    const row = document.createElement("div");
-    row.className = "chip-row";
-
-    function addOption(label, value, disabled) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "transport-btn";
-      btn.textContent = label;
-      btn.disabled = !!disabled;
-      btn.addEventListener("click", () => {
-        panel.hidden = true;
-        resolve(value);
-      });
-      row.appendChild(btn);
-    }
-
-    addOption("그냥 걷기", null, false);
-    stations
-      .filter((s) => s.id !== currentStation.id)
-      .forEach((s) => addOption(`${s.name} (${fare}원)`, s, state.character.wallet < fare));
-
-    panel.appendChild(row);
-  });
+  const modeLabel = kind === "bus" ? "버스" : "지하철";
+  const fare = kind === "bus" ? BUS_FARE : SUBWAY_FARE;
+  return presentChoice(
+    "event-panel",
+    `${kind === "bus" ? "🚌" : "🚇"} ${currentStation.name}`,
+    [
+      { label: "🚶 그냥 걷기", value: null },
+      ...stations
+        .filter((st) => st.id !== currentStation.id)
+        .map((st) => ({ label: `${st.name} (${fare}원)`, value: st, disabled: state.character.wallet < fare })),
+    ],
+    { body: `${currentStation.name}에 왔다! ${josa(modeLabel, "을/를")} 타고 어디로 갈까? (용돈 ${state.character.wallet}원)`, speaker: "iroi" }
+  );
 }
 
 function confirmGoHomeEarly() {
-  return presentChoice("home-confirm", "일정을 취소하고 집에 들어갑니다", [
-    { label: "예", value: true },
-    { label: "아니오", value: false },
-  ]);
+  return presentChoice(
+    "event-panel",
+    "🏠 우리집 앞",
+    [
+      { label: "예 — 일정을 취소하고 집에 들어간다", value: true },
+      { label: "아니오 — 가던 길을 간다", value: false },
+    ],
+    { body: "어? 집 앞까지 와 버렸네… 오늘 남은 일정은 그만하고 집에 들어갈까?", speaker: "iroi" }
+  );
 }
 
 function chooseHomeActivity(homeActivities) {
-  return presentChoice("home-confirm", "집에서 무엇을 할까요?", [
+  return presentChoice("event-panel", "🏠 집", [
     ...homeActivities.map((activity) => ({ label: activity.name, value: activity })),
     { label: "그냥 쉬기", value: null },
-  ]);
+  ], { body: "집에 왔다! 이제 뭐 하지?", speaker: "iroi" });
 }
 
 async function rideTransit(target, startClock, label) {
@@ -2618,20 +2678,30 @@ async function runSchoolBlock(block, clock, dow) {
       continue;
     }
 
-    await waitUntil(Math.max(seg.startMin, clock), seg.endMin, segLabel, SEGMENT_PHASE_MS);
+    let topic = null;
+    if (seg.type === "period" && subject) {
+      if (subject.id === "creative_activity") {
+        topic = subject.topics[state.creativeCount % subject.topics.length];
+        state.creativeCount += 1;
+      } else {
+        topic = pickRandom(subject.topics);
+      }
+    }
+    const scene =
+      seg.type === "period"
+        ? sceneForSubject(subject, topic)
+        : seg.type === "lunch"
+        ? { id: "cafeteria" }
+        : seg.type === "reading"
+        ? { id: "reading" }
+        : { id: "play" };
+    await waitUntil(Math.max(seg.startMin, clock), seg.endMin, topic ? `${segLabel} — ${topic}` : segLabel, SEGMENT_PHASE_MS, scene);
     clock = seg.endMin;
 
     if (seg.type === "period") {
       if (!subject) {
         logLine(`${seg.label} — 자습`);
         continue;
-      }
-      let topic;
-      if (subject.id === "creative_activity") {
-        topic = subject.topics[state.creativeCount % subject.topics.length];
-        state.creativeCount += 1;
-      } else {
-        topic = pickRandom(subject.topics);
       }
       const applied = applyEffect(subject.growth);
       renderStats(state.character);
@@ -2671,17 +2741,17 @@ async function runAfterschoolBlock(block, clock) {
   const name = course?.name ?? "방과후";
 
   if (clock < block.startMin) {
-    await waitUntil(clock, block.startMin, "방과후 시작 전 휴식", SEGMENT_PHASE_MS);
+    await waitUntil(clock, block.startMin, "방과후 시작 전 휴식", SEGMENT_PHASE_MS, { id: "play" });
     clock = block.startMin;
   }
   const phases = [
-    { start: block.startMin, end: p1End, label: `방과후 1차시 · ${name}` },
-    { start: p1End, end: p2Start, label: "방과후 쉬는 시간" },
-    { start: p2Start, end: block.endMin, label: `방과후 2차시 · ${name}` },
+    { start: block.startMin, end: p1End, label: `방과후 1차시 · ${name}`, scene: sceneForCourse(block.courseId) },
+    { start: p1End, end: p2Start, label: "방과후 쉬는 시간", scene: { id: "play" } },
+    { start: p2Start, end: block.endMin, label: `방과후 2차시 · ${name}`, scene: sceneForCourse(block.courseId) },
   ];
   for (const phase of phases) {
     if (phase.end <= clock) continue;
-    await waitUntil(Math.max(phase.start, clock), phase.end, phase.label, SEGMENT_PHASE_MS);
+    await waitUntil(Math.max(phase.start, clock), phase.end, phase.label, SEGMENT_PHASE_MS, phase.scene);
     clock = phase.end;
   }
 
@@ -2704,7 +2774,7 @@ async function runCareBlock(block, clock) {
   const program = careProgramById(block.programId);
   const start = Math.max(clock, block.startMin);
   const label = `늘봄 ${slot.name}${program ? ` · ${program.name}` : ""}`;
-  await waitUntil(start, block.endMin, label);
+  await waitUntil(start, block.endMin, label, WAIT_PHASE_MS, sceneForCare(slot, block.programId));
   const hours = Math.max(0, (block.endMin - start) / 60);
 
   const effect = applyEffect(slot.effect ? { ...slot.effect } : scaleGrowth(program?.growthPerHour, hours));
@@ -2817,7 +2887,11 @@ async function runDay(blocks) {
         const registered = block.kind === "academy" && isRegisteredSlot(block.academyId, dow, block.startMin);
         const waitLabel =
           block.kind === "activity" ? `${place.activity.name} 중` : registered ? `${place.name} 수업` : `${place.name} 자율학습`;
-        await waitUntil(clock, block.endMin, waitLabel);
+        const scene =
+          block.kind === "activity"
+            ? sceneForActivity(place.activity.id)
+            : sceneForAcademy(place.academy.categoryId, registered);
+        await waitUntil(clock, block.endMin, waitLabel, WAIT_PHASE_MS, scene);
         clock = block.endMin;
         if (block.kind === "activity") applyActivityEffects(place.activity);
         else if (registered) applyAcademyEffects(place.academy);
@@ -2832,10 +2906,15 @@ async function runDay(blocks) {
 
       // 학원 수업이 끝나면 하원버스 or 개별 이동
       if (block.kind === "academy") {
-        const how = await presentChoice("transport-choice", `${place.name} 끝 — 어떻게 갈까요?`, [
-          { label: "🚌 하원버스 타고 집으로", value: "shuttle" },
-          { label: "🚶 하원버스 안 타고 개별 이동", value: "walk" },
-        ]);
+        const how = await presentChoice(
+          "event-panel",
+          `${place.name} 끝`,
+          [
+            { label: "🚌 하원버스 타고 집으로", value: "shuttle" },
+            { label: "🚶 하원버스 안 타고 개별 이동", value: "walk" },
+          ],
+          { body: "오늘 수업 끝! 로이는 하원버스 타고 갈 거니?", speaker: "teacher", speakerName: `${place.name} 선생님` }
+        );
         if (how === "shuttle") {
           logLine(`${minutesToClock(clock)} 하원버스 탑승`);
           clock = await rideTransit(state.positions.home, clock, "하원버스로 집까지 이동");
@@ -2866,10 +2945,12 @@ async function runDay(blocks) {
     if (choice) {
       logLine(`${minutesToClock(clock)} 집에서 ${choice.name} 시작`);
       const endClock = clock + choice.durationMin;
-      await waitUntil(clock, endClock, `${choice.name} 중`);
+      await waitUntil(clock, endClock, `${choice.name} 중`, WAIT_PHASE_MS, sceneForActivity(choice.id));
       clock = endClock;
       applyActivityEffects(choice);
     } else {
+      await waitUntil(clock, clock + 30, "집에서 뒹굴뒹굴 쉬는 중", WAIT_PHASE_MS, { id: "rest" });
+      clock += 30;
       logLine(`${minutesToClock(clock)} 그냥 쉬었다`);
       diary("집에서 뒹굴뒹굴 쉬었다.");
     }
@@ -2889,6 +2970,7 @@ async function runDay(blocks) {
   summaryEl.textContent = `Day ${state.day} 완료 — ${schoolPart}${sickPart}${cancelPart}${deltaText} 허기 ${state.character.condition.hunger} · 기력 ${state.character.condition.staminaNow} · 스트레스 ${state.character.condition.stress}`;
 
   setStatus(`Day ${state.day} 끝 — 오늘의 일기를 쓰고 잠자리에 들어요`);
+  if (typeof hideScene === "function") hideScene();
   showDiary({ delta, gotSick });
 }
 

@@ -798,3 +798,128 @@ li:last-child { border-bottom: none; }
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 .ride-bubble[hidden] { display: none; }
+
+/* ── 대화창 (프린세스 메이커 2 메시지 창 스타일) ── */
+.map-overlay-panel.pm-dialog {
+  top: auto;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  max-width: none;
+  max-height: calc(100% - 20px);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, #2b3170 0%, #1b1f4d 100%);
+  border: 3px solid #e8d49a;
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px #6b5a2e, inset 0 0 0 2px #1b1f4d, inset 0 0 0 3px #b89d5a, 0 10px 24px rgba(0, 0, 0, 0.45);
+  color: #fdf8ea;
+  cursor: default;
+}
+.pm-dialog[data-tone="danger"] { background: linear-gradient(180deg, #6b2230 0%, #3a1220 100%); }
+.pm-dialog[data-tone="phone"] { background: linear-gradient(180deg, #1f4d4a 0%, #12302e 100%); }
+.pm-dialog[data-tone="hot"] { background: linear-gradient(180deg, #5a3a1c 0%, #33200f 100%); }
+.pm-portrait {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border: 3px solid #e8d49a;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px #6b5a2e, inset 0 0 0 2px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.pm-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.pm-portrait canvas { width: 96px; height: 96px; image-rendering: pixelated; image-rendering: crisp-edges; }
+.pm-main { flex: 1; min-width: 0; }
+.pm-name {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 1px 12px;
+  font-family: "Jua", sans-serif;
+  font-size: 14px;
+  color: #2b2208;
+  background: linear-gradient(180deg, #f4e4b0, #d9bf72);
+  border: 1px solid #6b5a2e;
+  border-radius: 3px;
+}
+.pm-dialog .choice-heading { margin: 0 0 4px; font-family: "Jua", sans-serif; font-size: 12px; color: #e8d49a; }
+.pm-dialog .choice-body {
+  margin: 0 0 10px;
+  min-height: 2.8em;
+  font-family: "Gowun Dodum", sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #fdf8ea;
+  white-space: pre-line;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+}
+.pm-dialog .choice-body:not(.done)::after { content: "▌"; color: #e8d49a; animation: pm-blink 0.6s steps(2) infinite; }
+.pm-dialog .choice-body.done::after { content: " ▼"; font-size: 11px; color: #e8d49a; animation: pm-blink 0.9s steps(2) infinite; }
+@keyframes pm-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pm-dialog .choice-body::after { animation: none; }
+}
+.pm-choices[hidden] { display: none; }
+.pm-choices .chip-row { margin-top: 0; gap: 6px; align-items: flex-start; }
+.pm-choices .chip-row + .chip-row { margin-top: 6px; }
+.pm-choices .choice-group { margin: 8px 0 4px; font-size: 11.5px; color: #e8d49a; }
+.pm-dialog .transport-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid #b89d5a;
+  border-radius: 3px;
+  color: #fdf8ea;
+  box-shadow: none;
+  padding: 6px 12px 6px 22px;
+  position: relative;
+}
+.pm-dialog .transport-btn::before { content: "▶"; position: absolute; left: 8px; font-size: 9px; top: 50%; transform: translateY(-50%); color: transparent; }
+.pm-dialog .transport-btn:hover:not(:disabled),
+.pm-dialog .transport-btn:focus-visible { background: rgba(232, 212, 154, 0.22); outline: none; }
+.pm-dialog .transport-btn:hover:not(:disabled)::before,
+.pm-dialog .transport-btn:focus-visible::before { color: #ffe9a8; }
+.pm-dialog .transport-btn:disabled { opacity: 0.4; }
+.pm-dialog .choice-hint { color: #cfc4a0; }
+@media (max-width: 560px) {
+  .pm-portrait { width: 64px; height: 64px; }
+  .pm-portrait canvas { width: 64px; height: 64px; }
+  .pm-dialog .choice-body { font-size: 13.5px; }
+}
+
+/* ── 일정 애니메이션 창 ── */
+.scene-panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 15;
+  width: min(300px, calc(100% - 20px));
+  padding: 6px 6px 4px;
+  background: #1b1f4d;
+  border: 3px solid #e8d49a;
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px #6b5a2e, 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+.scene-panel[hidden] { display: none; }
+.scene-panel canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 128 / 80;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 1px solid #6b5a2e;
+  background: #fff;
+}
+.scene-caption {
+  margin: 4px 2px 0;
+  font-family: "Jua", sans-serif;
+  font-size: 12.5px;
+  color: #fdf8ea;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-overlay-panel.pm-dialog[hidden] { display: none; }

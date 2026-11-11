@@ -44,7 +44,8 @@
           "minutes": 3
         }
       }
-    ]
+    ],
+    "speaker": "bully"
   },
   {
     "id": "poor_friend",
@@ -75,7 +76,8 @@
           "minutes": 0
         }
       }
-    ]
+    ],
+    "speaker": "crying_friend"
   },
   {
     "id": "found_coin",
@@ -98,7 +100,8 @@
           "minutes": 0
         }
       }
-    ]
+    ],
+    "speaker": "iroi"
   },
   {
     "id": "friend_meet",
@@ -140,7 +143,8 @@
           "minutes": 0
         }
       }
-    ]
+    ],
+    "speaker": "friend_1"
   },
   {
     "id": "stranger",
@@ -200,7 +204,8 @@
           "minutes": 5
         }
       }
-    ]
+    ],
+    "speaker": "stranger"
   },
   {
     "id": "lost_item",
@@ -246,15 +251,24 @@
           "minutes": 0
         }
       }
-    ]
+    ],
+    "speaker": "iroi"
   },
   {
     "id": "butterfly_uncle",
     "weight": 1,
-    "locationBoost": { "placeName": "강동역", "radiusM": 1000, "multiplier": 12 },
+    "locationBoost": {
+      "placeName": "강동역",
+      "radiusM": 1000,
+      "multiplier": 12
+    },
     "title": "🦋 나비정원 삼촌을 만났다!",
     "text": "저 멀리서 낯익은 얼굴이 보인다 — 나비정원에서 늘 반갑게 맞아주시던 삼촌이다!",
-    "amounts": [3000, 5000, 7000],
+    "amounts": [
+      3000,
+      5000,
+      7000
+    ],
     "choices": [
       {
         "label": "😊 반갑게 다가간다",
@@ -270,14 +284,20 @@
           "minutes": 10
         }
       }
-    ]
+    ],
+    "speaker": "butterfly_uncle",
+    "resultSpeaker": "butterfly_uncle"
   },
   {
     "id": "gyeongyul_uncle",
     "weight": 2,
     "title": "🙂 낯익은 아저씨를 만났다",
     "text": "저쪽에서 어떤 아저씨가 로이를 보고 손을 흔든다. 어? 경율이 삼촌 맞나…?",
-    "amounts": [2000, 3000, 5000],
+    "amounts": [
+      2000,
+      3000,
+      5000
+    ],
     "choices": [
       {
         "label": "🤔 긴가민가하며 다가간다",
@@ -291,6 +311,8 @@
           "minutes": 5
         }
       }
-    ]
+    ],
+    "speaker": "gyeongyul_uncle",
+    "resultSpeaker": "gyeongyul_uncle"
   }
 ]
