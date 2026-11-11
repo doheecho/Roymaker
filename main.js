@@ -269,6 +269,15 @@ function isRegisteredSlot(academyId, dow, startMin) {
   return !!reg && reg.days.includes(dow) && reg.startMin === startMin;
 }
 
+// 주초 일괄 등록을 놓쳤어도 당일 학원에서 바로 정식 등록할 수 있게 한다 — 이후 주에도 계속 적용되도록 active/pending 둘 다 갱신
+function registerAcademyNow(academyId, dow, startMin) {
+  const current = state.registrations.active[academyId];
+  const days = current && current.startMin === startMin ? [...new Set([...current.days, dow])].sort() : [dow];
+  state.registrations.active[academyId] = { days, startMin };
+  state.registrations.pending[academyId] = { days: [...days], startMin };
+  saveGame();
+}
+
 // 하루 기본 시간표: 등교일이면 학교, 그리고 이번 주에 등록된 학원 수업
 function buildDefaultBlocks(dayNumber) {
   const blocks = [];
@@ -310,7 +319,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261111h";
+const DATA_VERSION = "20261111i";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -1087,7 +1096,7 @@ async function runRandomEvent(clock) {
   return result.minutes ?? 0;
 }
 
-const INTRO_SHOW_MS = 1500;
+const INTRO_SHOW_MS = 2500;
 const INTRO_FADE_MS = 500;
 
 // 매장/장소 전용 인트로 이미지(img/characters/intro_{id}.*)가 있으면 지도 중앙에 잠깐 띄웠다가 사라진다.
@@ -3327,18 +3336,48 @@ async function runDay(blocks) {
         clock = await runCareBlock(block, clock);
       } else {
         clock = Math.max(clock, block.startMin);
-        const registered = block.kind === "academy" && isRegisteredSlot(block.academyId, dow, block.startMin);
+        let registered = block.kind === "academy" && isRegisteredSlot(block.academyId, dow, block.startMin);
         if (block.kind === "academy") {
           const cat = state.categoryMap[place.academy.categoryId];
           await maybeShowIntro(cat?.introId);
-          await teacherSays(
-            cat?.teacher ?? "teacher",
-            `${cat?.icon ?? "🏫"} ${place.name}`,
-            registered
-              ? `"${cat?.greeting ?? "로이야, 어서 와! 오늘도 열심히 해 보자~"}"`
-              : "\"어? 로이야, 오늘은 네 수업 시간이 아닌데? 그럼 자율학습 하고 가렴~\"",
-            "네!"
-          );
+          if (registered) {
+            await teacherSays(
+              cat?.teacher ?? "teacher",
+              `${cat?.icon ?? "🏫"} ${place.name}`,
+              `"${cat?.greeting ?? "로이야, 어서 와! 오늘도 열심히 해 보자~"}"`,
+              "네!"
+            );
+          } else {
+            const wantsToRegister = await presentChoice(
+              "event-panel",
+              `${cat?.icon ?? "🏫"} ${place.name}`,
+              [
+                { label: "네, 이 시간에 바로 등록할래요", value: true },
+                { label: "아니요, 오늘은 자율학습만 할게요", value: false },
+              ],
+              {
+                body: "\"어? 로이야, 오늘은 네 수업 시간이 아닌데? 지금 이 시간으로 바로 등록해서 수업 들을까?\"",
+                speaker: cat?.teacher ?? "teacher",
+              }
+            );
+            if (wantsToRegister) {
+              registerAcademyNow(block.academyId, dow, block.startMin);
+              registered = true;
+              await teacherSays(
+                cat?.teacher ?? "teacher",
+                `${cat?.icon ?? "🏫"} ${place.name}`,
+                `"좋아! 오늘부터 이 시간에 등록됐어. ${cat?.greeting ?? "어서 와! 오늘도 열심히 해 보자~"}"`,
+                "네!"
+              );
+            } else {
+              await teacherSays(
+                cat?.teacher ?? "teacher",
+                `${cat?.icon ?? "🏫"} ${place.name}`,
+                "\"알겠어, 그럼 오늘은 자율학습 하고 가렴~\"",
+                "네!"
+              );
+            }
+          }
         }
         const waitLabel =
           block.kind === "activity" ? `${place.activity.name} 중` : registered ? `${place.name} 수업` : `${place.name} 자율학습`;
