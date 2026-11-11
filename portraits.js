@@ -230,3 +230,67 @@ function portraitElement(id) {
   c.setAttribute("aria-label", spec.name);
   return c;
 }
+
+// ── 직접 넣은 캐릭터 이미지 (img/characters/) ──
+// 파일 이름을 캐릭터 이름(예: 엄마.png, 이로이.jpg) 또는 id(예: mom.png)로 넣으면 그 그림으로 바뀐다.
+const CHARACTER_DIR = "img/characters/";
+const CHARACTER_EXTS = ["png", "jpg", "jpeg", "webp", "gif"];
+const CHARACTER_REPO = "doheecho/Roymaker";
+const customPortraitCache = {};
+let characterListing = null; // Map(이름 → 파일명) | false(목록을 못 받음)
+let characterListingPromise = null;
+
+// GitHub에서 폴더 목록을 한 번 받아 온다 (실패하면 파일을 하나씩 찾아본다)
+function loadCharacterListing() {
+  characterListingPromise ??= (async () => {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${CHARACTER_REPO}/contents/${CHARACTER_DIR.replace(/\/$/, "")}`, {
+        headers: { Accept: "application/vnd.github+json" },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const items = await res.json();
+      characterListing = new Map();
+      items
+        .filter((it) => it.type === "file" && /\.(png|jpe?g|webp|gif)$/i.test(it.name))
+        .forEach((it) => characterListing.set(it.name.replace(/\.[^.]+$/, "").normalize("NFC").trim(), it.name));
+    } catch (err) {
+      characterListing = false;
+    }
+  })();
+  return characterListingPromise;
+}
+
+function probeImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
+async function resolveCustomPortrait(id) {
+  if (id in customPortraitCache) return customPortraitCache[id];
+  const spec = portraitSpec(id);
+  const names = [...new Set([id, spec?.name].filter(Boolean).map((n) => n.normalize("NFC")))];
+  await loadCharacterListing();
+  let url = null;
+  if (characterListing) {
+    const hit = names.map((n) => characterListing.get(n)).find(Boolean);
+    if (hit) url = CHARACTER_DIR + encodeURIComponent(hit);
+  } else {
+    outer: for (const n of names) {
+      for (const form of [...new Set([n, n.normalize("NFD")])]) {
+        for (const ext of CHARACTER_EXTS) {
+          const candidate = `${CHARACTER_DIR}${encodeURIComponent(form)}.${ext}`;
+          if (await probeImage(candidate)) {
+            url = candidate;
+            break outer;
+          }
+        }
+      }
+    }
+  }
+  customPortraitCache[id] = url;
+  return url;
+}

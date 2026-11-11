@@ -1358,6 +1358,15 @@ function presentChoice(panelId, heading, options, { body = null, tone = null, sp
       frame.style.background = spec.bg ?? "#3d4a78";
       frame.appendChild(portraitElement(speaker));
       panel.appendChild(frame);
+      if (typeof resolveCustomPortrait === "function") {
+        resolveCustomPortrait(speaker).then((url) => {
+          if (!url || !frame.isConnected) return;
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = speakerName ?? spec.name;
+          frame.replaceChildren(img);
+        });
+      }
     }
 
     const main = document.createElement("div");
@@ -1720,7 +1729,7 @@ function renderStatusView() {
   const hasDelta = Object.keys(delta).length > 0;
 
   profile.innerHTML = `
-    <img class="status-avatar" src="img/character-face.png" alt="${character.name}">
+    <img class="status-avatar" src="${PORTRAIT_SPECS?.iroi?.image ?? "img/character-face.png"}" alt="${character.name}">
     <div class="status-info">
       <p class="status-name">${character.name} <span class="muted">초등학교 ${character.grade}학년</span></p>
       <p class="muted">${formatGameDate(gameDateForDay(state.day))} · Day ${state.day} · 💰 ${character.wallet}원</p>
@@ -2353,7 +2362,7 @@ function afterschoolCourseById(id) {
 function rangeForSpec(spec, rowStartMin, day) {
   const vacation = vacationOf(day);
   const weekday = isWeekday(day);
-  if (spec.kind === "school") return { ...schoolTimesFor(day), invalid: !!vacation };
+  if (spec.kind === "school") return { ...schoolTimesFor(day), invalid: !!vacation || !weekday };
   if (spec.kind === "afterschool") {
     const t = afterschoolTimesFor(day);
     return { startMin: t.startMin, endMin: t.endMin, invalid: !weekday || !!vacation };
@@ -2444,7 +2453,7 @@ function renderPalette() {
   const vacationDays = days.filter((d) => isWeekday(d) && vacationOf(d));
   const school = paletteGroup(el, "🏫 학교 수업");
 
-  if (days.some((d) => !vacationOf(d))) {
+  if (days.some((d) => isWeekday(d) && !vacationOf(d))) {
     school.row.appendChild(
       createChip(SCHOOL_ICON, "정규수업", { kind: "school" }, "chip-school", "08:30 등교 (08:50 넘으면 지각)\n월·금 12:50 하교 / 화·수·목 13:40 하교")
     );
@@ -2986,11 +2995,11 @@ async function eveningTalkWithMom(clock, skipped) {
   const names = [...new Set(skipped.map((b) => blockDisplay(b).label.replace(/ \((등록 수업|자율학습)\)$/, "")))];
   const what = names.length ? names.join(", ") : "오늘 일정";
   const good = recentLogicGain() >= LOGIC_GAIN_FOR_EXCUSE;
-  await presentChoice("event-panel", "🌇 저녁 — 엄마와 대화", [{ label: "▶", value: true }], {
+  await presentChoice("event-panel", "🏠 엄마와 대화", [{ label: "▶", value: true }], {
     body: `"로이야, 오늘 ${josa(what, "을/를")} 안 가고 집에 왔다며? 무슨 일 있었어?"`,
     speaker: "mom",
   });
-  await presentChoice("event-panel", "🌇 저녁 — 엄마와 대화", [{ label: "▶", value: true }], {
+  await presentChoice("event-panel", "🏠 엄마와 대화", [{ label: "▶", value: true }], {
     body: good
       ? "\"엄마, 그게… 오늘 너무 피곤하고 머리도 아파서 무리하면 내일 더 힘들 것 같았어. 그래서 오늘은 쉬고 내일 더 열심히 하려고 집에 왔어.\""
       : "\"엄마… 그냥… 가기 싫어서… 집에 왔어…\"",
@@ -3008,7 +3017,7 @@ async function eveningTalkWithMom(clock, skipped) {
       ? `${josa(what, "을/를")} 안 가고 집에 온 이유를 엄마한테 잘 설명했더니, 엄마가 걱정하면서 잘했다고 해 주셨다.`
       : `이유 없이 ${josa(what, "을/를")} 빼먹어서 엄마한테 혼났다. 다음부터는 계획을 꼭 지켜야지.`
   );
-  await presentChoice("event-panel", "🌇 저녁 — 엄마와 대화", [{ label: good ? "고마워 엄마!" : "죄송해요…", value: true }], {
+  await presentChoice("event-panel", "🏠 엄마와 대화", [{ label: good ? "고마워 엄마!" : "죄송해요…", value: true }], {
     body: `${reply}\n(${appliedText(applied)})`,
     tone: good ? "event" : "danger",
     speaker: "mom",
@@ -3041,10 +3050,19 @@ function halfGrowth(growth) {
   return out;
 }
 
-async function eveningFreeTime(clock) {
+async function eveningFreeTime(clock, pendingTalk = null) {
   state.gameMinutesToday = 0;
+  const talkIfDue = async (force) => {
+    if (pendingTalk && (force || clock >= pendingTalk.at)) {
+      const talk = pendingTalk;
+      pendingTalk = null;
+      clock = await eveningTalkWithMom(clock, talk.skipped);
+    }
+  };
   for (;;) {
+    await talkIfDue(false);
     if (clock >= BEDTIME_MIN) {
+      await talkIfDue(true);
       await presentChoice("event-panel", "🌙 밤", [{ label: "😴 잠자러 가기", value: true }], {
         body: `벌써 ${minutesToClock(clock)}이야! 이제 자야겠다.`,
         speaker: "iroi",
@@ -3063,6 +3081,8 @@ async function eveningFreeTime(clock) {
       { body: `${minutesToClock(clock)} · 오늘 일정이 다 끝났다! 이제 뭘 할까?`, speaker: "iroi" }
     );
     if (pick === "sleep") {
+      // 일찍 자려고 해도, 빼먹은 일정 얘기는 엄마가 자기 전에 꼭 하신다
+      await talkIfDue(true);
       logLine(`${minutesToClock(clock)} 잠자리에 들었다`);
       return clock;
     }
@@ -3280,17 +3300,18 @@ async function runDay(blocks) {
     logLine(`${minutesToClock(clock)} 집 도착`);
   }
 
-  if (cancelledEarly && !gotSick) {
-    clock = await eveningTalkWithMom(clock, skippedBlocks);
-  }
-
   if (gotSick) {
     await presentChoice("event-panel", "🏠 집", [{ label: "😴 잠자러 가기", value: true }], {
       body: "몸이 너무 안 좋아… 오늘은 일찍 자야겠다.",
       speaker: "iroi",
     });
   } else {
-    clock = await eveningFreeTime(clock);
+    // 빼먹은 일정이 끝날 시각이 지난 뒤, 집에 있을 때 엄마와의 대화가 열린다
+    const pendingTalk =
+      cancelledEarly && skippedBlocks.length
+        ? { at: Math.max(...skippedBlocks.map((b) => b.endMin)), skipped: skippedBlocks }
+        : null;
+    clock = await eveningFreeTime(clock, pendingTalk);
   }
 
   const stressRecovery = blocks.length === 0 ? NO_SCHEDULE_STRESS_RECOVERY : DAILY_STRESS_RECOVERY;
@@ -3400,7 +3421,7 @@ function wireMovementControls() {
 }
 
 // 화면 파일 버전 — index.html의 ?v= 값과 같게 올려 주면 브라우저가 새 파일을 받아 간다
-const APP_VERSION = "20261111e";
+const APP_VERSION = "20261111f";
 
 function loadLocalScript(src) {
   return new Promise((resolve) => {
@@ -3438,8 +3459,20 @@ async function ensureUiModules() {
   }
 }
 
+// img/characters/ 에 이로이 이미지가 있으면 사이드바·능력치 화면 얼굴도 바꾼다
+async function applyCustomIroiImage() {
+  if (typeof resolveCustomPortrait !== "function") return;
+  const url = await resolveCustomPortrait("iroi");
+  if (!url) return;
+  PORTRAIT_SPECS.iroi.image = url;
+  document.querySelectorAll("img.char-avatar, img.status-avatar").forEach((img) => {
+    img.src = url;
+  });
+}
+
 async function main() {
   await ensureUiModules();
+  applyCustomIroiImage();
   const cloudReadyPromise = initCloudSave(); // 데이터 로딩과 동시에 진행 — 느려도 게임 시작을 막지 않음
 
   const [
