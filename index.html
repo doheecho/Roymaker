@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111b">
+<link rel="stylesheet" href="style.css?v=20261111c">
 </head>
 <body>
   <header>
@@ -107,6 +107,9 @@
         </div>
 
         <div id="day-run" hidden>
+          <!-- 예전 버전 main.js 호환용 (지금은 모든 선택창이 지도 위 대화창으로 뜬다) -->
+          <div id="transport-choice" class="transport-choice" hidden></div>
+          <div id="home-confirm" class="transport-choice" hidden></div>
           <p id="day-status" class="day-status">—</p>
           <ul id="day-log"></ul>
         </div>
@@ -141,9 +144,9 @@
   <div id="sleep-fade" class="sleep-fade" hidden><span>Zzz…</span></div>
 
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=8d5cf5d494acc41a8002c036c0249f9a&libraries=services"></script>
-  <script src="firebase-config.js?v=20261111b"></script>
-  <script src="portraits.js?v=20261111b"></script>
-  <script src="scenes.js?v=20261111b"></script>
-  <script src="main.js?v=20261111b"></script>
+  <script src="firebase-config.js?v=20261111c"></script>
+  <script src="portraits.js?v=20261111c"></script>
+  <script src="scenes.js?v=20261111c"></script>
+  <script src="main.js?v=20261111c"></script>
 </body>
 </html>

@@ -3040,7 +3040,7 @@ function wireMovementControls() {
 }
 
 // 화면 파일 버전 — index.html의 ?v= 값과 같게 올려 주면 브라우저가 새 파일을 받아 간다
-const APP_VERSION = "20261111b";
+const APP_VERSION = "20261111c";
 
 function loadLocalScript(src) {
   return new Promise((resolve) => {
