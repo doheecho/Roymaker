@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111d">
+<link rel="stylesheet" href="style.css?v=20261111e">
 </head>
 <body>
   <header>
@@ -16,7 +16,10 @@
     <h1>이로이의 하루</h1>
     <span id="game-date" class="game-date">—</span>
     <span id="day-counter" class="day-counter">Day 1</span>
-    <p id="clock" class="clock">—</p>
+    <div class="save-buttons">
+      <button type="button" id="save-btn" class="save-btn">💾 저장</button>
+      <button type="button" id="load-btn" class="save-btn">📂 불러오기</button>
+    </div>
   </header>
 
   <main>
@@ -136,6 +139,15 @@
     </section>
   </main>
 
+  <div id="slot-modal" class="help-modal" hidden>
+    <div class="help-card slot-card" role="dialog" aria-modal="true" aria-labelledby="slot-title">
+      <h3 id="slot-title">💾 저장하기</h3>
+      <p id="slot-note" class="slot-note"></p>
+      <ol id="slot-list" class="slot-list"></ol>
+      <button type="button" id="slot-close" class="help-close">닫기</button>
+    </div>
+  </div>
+
   <div id="help-modal" class="help-modal" hidden>
     <div class="help-card" role="dialog" aria-modal="true" aria-labelledby="help-title">
       <h3 id="help-title">설명</h3>
@@ -162,9 +174,9 @@
   <div id="sleep-fade" class="sleep-fade" hidden><span>Zzz…</span></div>
 
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=8d5cf5d494acc41a8002c036c0249f9a&libraries=services"></script>
-  <script src="firebase-config.js?v=20261111d"></script>
-  <script src="portraits.js?v=20261111d"></script>
-  <script src="scenes.js?v=20261111d"></script>
-  <script src="main.js?v=20261111d"></script>
+  <script src="firebase-config.js?v=20261111e"></script>
+  <script src="portraits.js?v=20261111e"></script>
+  <script src="scenes.js?v=20261111e"></script>
+  <script src="main.js?v=20261111e"></script>
 </body>
 </html>

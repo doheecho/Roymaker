@@ -307,12 +307,6 @@ async function loadJSON(path) {
   return res.json();
 }
 
-function renderClock() {
-  const el = document.getElementById("clock");
-  const now = new Date();
-  el.textContent = now.toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" });
-}
-
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
@@ -1793,6 +1787,7 @@ function buildSaveData() {
     ui: { afterschoolCourse: state.ui.afterschoolCourse, careProgram: state.ui.careProgram },
     lastDay: state.lastDay ?? null,
     weekPlan: state.weekPlan,
+    logicHistory: state.logicHistory ?? [],
   };
 }
 
@@ -1808,6 +1803,7 @@ function applySaveData(data) {
   if (data.ui?.careProgram) state.ui.careProgram = data.ui.careProgram;
   state.lastDay = data.lastDay ?? null;
   state.weekPlan = data.weekPlan ?? {};
+  state.logicHistory = data.logicHistory ?? [];
 }
 
 function saveGame() {
@@ -1863,6 +1859,113 @@ async function loadFromCloud() {
     console.warn("클라우드 불러오기 실패 — 이 기기 저장을 대신 확인합니다", err);
     return false;
   }
+}
+
+// ── 저장 슬롯 (최대 20개, 이 브라우저에 저장) ──
+const SLOT_KEY = "roymaker-slots-v1";
+const SLOT_COUNT = 20;
+
+function readSlots() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(SLOT_KEY) ?? "[]");
+    return Array.from({ length: SLOT_COUNT }, (_, i) => arr[i] ?? null);
+  } catch (err) {
+    console.warn("저장 슬롯 읽기 실패", err);
+    return Array(SLOT_COUNT).fill(null);
+  }
+}
+
+function writeSlots(slots) {
+  try {
+    localStorage.setItem(SLOT_KEY, JSON.stringify(slots));
+    return true;
+  } catch (err) {
+    console.warn("저장 슬롯 쓰기 실패", err);
+    return false;
+  }
+}
+
+function slotSummary(slot) {
+  const d = gameDateForDay(slot.data.day);
+  const saved = new Date(slot.savedAt);
+  const savedText = `${saved.getMonth() + 1}/${saved.getDate()} ${pad2(saved.getHours())}:${pad2(saved.getMinutes())}`;
+  return `Day ${slot.data.day} · ${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 ${WEEKDAY_LABELS[d.getUTCDay()]}요일 · 💰${slot.data.wallet}원 (저장 ${savedText})`;
+}
+
+function openSlotModal(mode) {
+  const modal = document.getElementById("slot-modal");
+  const list = document.getElementById("slot-list");
+  const note = document.getElementById("slot-note");
+  document.getElementById("slot-title").textContent = mode === "save" ? "💾 저장하기" : "📂 불러오기";
+  note.textContent =
+    mode === "save"
+      ? state.dayRunning
+        ? "일과가 진행 중일 때는 저장할 수 없어요. 하루를 마치고 저장해 주세요."
+        : "저장할 칸을 고르세요. 이미 저장된 칸은 덮어씁니다."
+      : state.dayRunning
+      ? "일과가 진행 중일 때는 불러올 수 없어요."
+      : "불러올 칸을 고르세요. 지금 진행 상황은 사라집니다(자동 저장분 제외).";
+  list.innerHTML = "";
+  readSlots().forEach((slot, i) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "slot-btn";
+    btn.innerHTML = `<strong>${i + 1}</strong><span>${slot ? slotSummary(slot) : "— 빈 칸 —"}</span>`;
+    btn.disabled = state.dayRunning || (mode === "load" && !slot);
+    btn.addEventListener("click", () => {
+      if (mode === "save") saveToSlot(i);
+      else loadFromSlot(i);
+    });
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+  modal.hidden = false;
+}
+
+function closeSlotModal() {
+  document.getElementById("slot-modal").hidden = true;
+}
+
+function saveToSlot(i) {
+  if (state.dayRunning) return;
+  const slots = readSlots();
+  if (slots[i] && !window.confirm(`${i + 1}번 칸에 덮어쓸까요?\n(${slotSummary(slots[i])})`)) return;
+  slots[i] = { savedAt: Date.now(), data: JSON.parse(JSON.stringify(buildSaveData())) };
+  if (writeSlots(slots)) {
+    openSlotModal("save");
+    document.getElementById("slot-note").textContent = `✅ ${i + 1}번 칸에 저장했어요.`;
+  }
+}
+
+function loadFromSlot(i) {
+  if (state.dayRunning) return;
+  const slot = readSlots()[i];
+  if (!slot) return;
+  if (!window.confirm(`${i + 1}번 칸을 불러올까요?\n(${slotSummary(slot)})`)) return;
+  applySaveData(JSON.parse(JSON.stringify(slot.data)));
+  renderDayHeader();
+  pruneWeekPlan();
+  renderAcademies(state.academies, state.categoryMap);
+  renderTimetable();
+  renderStats(state.character);
+  renderShop();
+  saveGame();
+  closeSlotModal();
+  showView("schedule");
+}
+
+function wireSlots() {
+  document.getElementById("save-btn").addEventListener("click", () => openSlotModal("save"));
+  document.getElementById("load-btn").addEventListener("click", () => openSlotModal("load"));
+  document.getElementById("slot-close").addEventListener("click", closeSlotModal);
+  const modal = document.getElementById("slot-modal");
+  modal.addEventListener("click", (ev) => {
+    if (ev.target === modal) closeSlotModal();
+  });
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !modal.hidden) closeSlotModal();
+  });
 }
 
 function loadGame() {
@@ -2286,10 +2389,11 @@ function rangeForSpec(spec, rowStartMin, day) {
   return { startMin, endMin, invalid: outsideHours };
 }
 
-function createChip(icon, label, spec, extraClass) {
+function createChip(icon, label, spec, extraClass, tooltip = "") {
   const chip = document.createElement("div");
   chip.className = `chip${extraClass ? ` ${extraClass}` : ""}`;
   chip.innerHTML = `<span class="chip-icon">${icon}</span><span>${label}</span>`;
+  if (tooltip) chip.title = tooltip;
   makeDraggable(chip, spec);
   return chip;
 }
@@ -2341,20 +2445,30 @@ function renderPalette() {
   const school = paletteGroup(el, "🏫 학교 수업");
 
   if (days.some((d) => !vacationOf(d))) {
-    school.row.appendChild(createChip(SCHOOL_ICON, "정규수업 (월·금 ~12:50 / 화~목 ~13:40)", { kind: "school" }, "chip-school"));
+    school.row.appendChild(
+      createChip(SCHOOL_ICON, "정규수업", { kind: "school" }, "chip-school", "08:30 등교 (08:50 넘으면 지각)\n월·금 12:50 하교 / 화·수·목 13:40 하교")
+    );
   }
 
   if (schoolDays.length) {
     const course = afterschoolCourseById(state.ui.afterschoolCourse);
     school.row.appendChild(
-      createChip(course?.icon ?? "🎒", "방과후 수업", { kind: "afterschool" }, "chip-afterschool")
+      createChip(
+        course?.icon ?? "🎒",
+        "방과후 수업",
+        { kind: "afterschool" },
+        "chip-afterschool",
+        `${course?.name ?? ""}\n마지막 수업 20분 뒤 시작 · 40분 + 10분 휴식 + 40분\n${course ? signedEffectText(course.growth) : ""}`
+      )
     );
   }
 
   const careSlots = (state.neulbom?.slots ?? []).filter((slot) => (slot.vacationOnly ? vacationDays.length : schoolDays.length));
   careSlots.forEach((slot) => {
     const timeText = slot.start ? `${slot.start}–${slot.end}` : `~${slot.end}`;
-    school.row.appendChild(createChip(slot.icon, `${slot.name} (${timeText})`, { kind: "care", careSlot: slot.id }, "chip-care"));
+    school.row.appendChild(
+      createChip(slot.icon, slot.name, { kind: "care", careSlot: slot.id }, "chip-care", `${timeText}\n${slot.description ?? ""}`)
+    );
   });
 
   if (schoolDays.length || vacationDays.length) {
@@ -2385,13 +2499,14 @@ function renderPalette() {
 
   const acts = paletteGroup(el, "🧹 활동");
   state.activities.forEach((activity) => {
-    const hoursText = activity.hours ? ` · ${activity.hours.open}~${activity.hours.close}` : "";
+    const hoursText = activity.hours ? `\n운영 ${activity.hours.open}~${activity.hours.close}` : "";
     acts.row.appendChild(
       createChip(
         activity.icon,
-        `${activity.name} (${activity.durationMin}분${hoursText})`,
+        activity.name,
         { kind: "activity", activityId: activity.id, durationMin: activity.durationMin },
-        "chip-activity"
+        "chip-activity",
+        `${activity.durationMin}분${hoursText}\n${signedEffectText(activity.effect)}`
       )
     );
   });
@@ -2401,14 +2516,14 @@ function renderPalette() {
     .filter((a) => a.location.etaMinFromHome != null)
     .forEach((academy) => {
       const category = state.categoryMap[academy.categoryId];
-      const suffix = academy.location.mode === "walk" ? "" : " · 버스/지하철 권장";
-      const hoursText = academy.hours ? ` · ${academy.hours.open}~${academy.hours.close}` : "";
+      const hoursText = academy.hours ? `운영 ${academy.hours.open}~${academy.hours.close}` : "운영시간 미정";
       acads.row.appendChild(
         createChip(
           category.icon ?? "🏫",
-          `${academy.name} (${ACADEMY_LESSON_MIN}분${hoursText}${suffix})`,
+          academy.name,
           { kind: "academy", academyId: academy.id },
-          "chip-academy"
+          "chip-academy",
+          `${category.label} · 수업 ${ACADEMY_LESSON_MIN}분\n${hoursText}\n${signedEffectText(category.growth)}`
         )
       );
     });
@@ -2856,6 +2971,51 @@ function lateThresholdFor(block) {
   return block.startMin;
 }
 
+// ── 계획을 어기고 일찍 집에 온 날 저녁, 엄마와의 대화 ──
+const LOGIC_LOOKBACK_DAYS = 7;
+const LOGIC_GAIN_FOR_EXCUSE = 2;
+
+// 최근 7일 사이 논리가 얼마나 올랐나
+function recentLogicGain() {
+  const hist = state.logicHistory ?? [];
+  const oldest = hist.length ? Math.min(...hist.map((h) => h.logic)) : state.character.stats.logic ?? 0;
+  return (state.character.stats.logic ?? 0) - oldest;
+}
+
+async function eveningTalkWithMom(clock, skipped) {
+  const names = [...new Set(skipped.map((b) => blockDisplay(b).label.replace(/ \((등록 수업|자율학습)\)$/, "")))];
+  const what = names.length ? names.join(", ") : "오늘 일정";
+  const good = recentLogicGain() >= LOGIC_GAIN_FOR_EXCUSE;
+  await presentChoice("event-panel", "🌇 저녁 — 엄마와 대화", [{ label: "▶", value: true }], {
+    body: `"로이야, 오늘 ${josa(what, "을/를")} 안 가고 집에 왔다며? 무슨 일 있었어?"`,
+    speaker: "mom",
+  });
+  await presentChoice("event-panel", "🌇 저녁 — 엄마와 대화", [{ label: "▶", value: true }], {
+    body: good
+      ? "\"엄마, 그게… 오늘 너무 피곤하고 머리도 아파서 무리하면 내일 더 힘들 것 같았어. 그래서 오늘은 쉬고 내일 더 열심히 하려고 집에 왔어.\""
+      : "\"엄마… 그냥… 가기 싫어서… 집에 왔어…\"",
+    speaker: "iroi",
+  });
+  const effect = good ? { stress: -10, staminaNow: 10 } : { stress: 10, delinquency: 2 };
+  const applied = applyEffect(effect);
+  renderStats(state.character);
+  const reply = good
+    ? "\"그랬구나… 많이 힘들었지? 엄마한테 차근차근 이유를 설명해 줘서 고마워. 몸이 안 좋을 땐 쉬는 게 맞아. 잘했어, 오늘은 푹 쉬자.\""
+    : "\"로이야, 정해진 약속을 이유 없이 안 지키면 안 돼. 선생님도 기다리셨을 거야. 다음부터는 꼭 계획대로 하자, 알았지?\"";
+  logLine(`🌇 엄마와 대화 — ${good ? "이유를 잘 설명해서 엄마가 걱정하며 잘했다고 했다" : "이유 없이 계획을 어겨서 꾸중을 들었다"} (${appliedText(applied)})`);
+  diary(
+    good
+      ? `${josa(what, "을/를")} 안 가고 집에 온 이유를 엄마한테 잘 설명했더니, 엄마가 걱정하면서 잘했다고 해 주셨다.`
+      : `이유 없이 ${josa(what, "을/를")} 빼먹어서 엄마한테 혼났다. 다음부터는 계획을 꼭 지켜야지.`
+  );
+  await presentChoice("event-panel", "🌇 저녁 — 엄마와 대화", [{ label: good ? "고마워 엄마!" : "죄송해요…", value: true }], {
+    body: `${reply}\n(${appliedText(applied)})`,
+    tone: good ? "event" : "danger",
+    speaker: "mom",
+  });
+  return clock;
+}
+
 // ── 일정이 다 끝난 뒤의 자유 시간 ──
 const BEDTIME_MIN = 22 * 60;
 const HOMEWORK_MIN = 60;
@@ -3001,6 +3161,7 @@ async function runDay(blocks) {
   setSpriteFacing("down", false);
   state.eventsToday = 0;
   state.recentStranger = null;
+  state.logicHistory = [...(state.logicHistory ?? []).filter((h) => h.day >= state.day - LOGIC_LOOKBACK_DAYS), { day: state.day, logic: state.character.stats.logic ?? 0 }];
   state.lastEventClock = -Infinity;
   state.calledToday = new Set();
   state.companyVisitedToday = false;
@@ -3018,6 +3179,8 @@ async function runDay(blocks) {
   let schoolWasLate = false;
   let gotSick = false;
   let cancelledEarly = false;
+  let doneBlocks = 0;
+  let skippedBlocks = [];
 
   if (blocks.length === 0) {
     logLine("오늘은 아무 일정도 없다 — 집에서 하루를 보냈다");
@@ -3074,6 +3237,7 @@ async function runDay(blocks) {
         else applyAutonomousStudy(place.academy);
       }
 
+      doneBlocks += 1;
       if (state.character.condition.stress >= STRESS_ILLNESS_THRESHOLD) {
         triggerIllness();
         gotSick = true;
@@ -3104,6 +3268,7 @@ async function runDay(blocks) {
   } catch (err) {
     if (!(err instanceof DayCancelledEarly)) throw err;
     cancelledEarly = true;
+    skippedBlocks = blocks.slice(doneBlocks);
     clock = err.clock;
     logLine(`${minutesToClock(clock)} 일정을 취소하고 집으로 돌아왔다`);
     diary("가던 길에 마음이 바뀌어서 남은 일정을 취소하고 집으로 돌아왔다.");
@@ -3113,6 +3278,10 @@ async function runDay(blocks) {
     logLine(`${minutesToClock(clock)} 집으로 귀가 이동`);
     clock = await travelTo(state.positions.home, clock, "집");
     logLine(`${minutesToClock(clock)} 집 도착`);
+  }
+
+  if (cancelledEarly && !gotSick) {
+    clock = await eveningTalkWithMom(clock, skippedBlocks);
   }
 
   if (gotSick) {
@@ -3231,7 +3400,7 @@ function wireMovementControls() {
 }
 
 // 화면 파일 버전 — index.html의 ?v= 값과 같게 올려 주면 브라우저가 새 파일을 받아 간다
-const APP_VERSION = "20261111d";
+const APP_VERSION = "20261111e";
 
 function loadLocalScript(src) {
   return new Promise((resolve) => {
@@ -3271,8 +3440,6 @@ async function ensureUiModules() {
 
 async function main() {
   await ensureUiModules();
-  renderClock();
-  setInterval(renderClock, 1000 * 30);
   const cloudReadyPromise = initCloudSave(); // 데이터 로딩과 동시에 진행 — 느려도 게임 시작을 막지 않음
 
   const [
@@ -3361,6 +3528,7 @@ async function main() {
   wireMovementControls();
   wireNav();
   wireHelp();
+  wireSlots();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
   document.getElementById("new-game-btn").addEventListener("click", async () => {
     if (state.dayRunning) return;
