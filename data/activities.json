@@ -1,7 +1,7 @@
 [
   {
     "id": "chore_30",
-    "name": "집안일 돕기",
+    "name": "집안일 30분",
     "icon": "🧹",
     "durationMin": 30,
     "location": "home",
@@ -18,7 +18,7 @@
   },
   {
     "id": "chore_60",
-    "name": "집안일 돕기",
+    "name": "집안일 1시간",
     "icon": "🧹",
     "durationMin": 60,
     "location": "home",
