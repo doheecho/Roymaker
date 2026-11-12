@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261112f">
+<link rel="stylesheet" href="style.css?v=20261113a">
 </head>
 <body>
   <header>
@@ -36,7 +36,8 @@
       <div id="condition"></div>
 
       <nav class="nav-buttons">
-        <button type="button" class="nav-btn active" data-view="schedule">📅 주간 일정</button>
+        <button type="button" class="nav-btn active" data-view="home">🏠 내 방</button>
+        <button type="button" class="nav-btn" data-view="schedule">📅 주간 일정</button>
         <button type="button" class="nav-btn" data-view="status">📊 능력치</button>
         <button type="button" class="nav-btn" data-view="academy">🏫 학원정보</button>
         <button type="button" class="nav-btn" data-view="activity">🧹 활동정보</button>
@@ -46,7 +47,16 @@
     </section>
 
     <section id="main-view" class="panel">
-      <div id="view-schedule" class="view">
+      <div id="view-home" class="view">
+        <div class="room-scene">
+          <img class="room-bg" src="img/characters/room_1.jpg" alt="이로이의 방">
+          <div class="room-char-wrap">
+            <img id="room-char" class="room-char" src="img/characters/roy_n_9_stand.png" alt="방 안에 서 있는 이로이">
+          </div>
+        </div>
+      </div>
+
+      <div id="view-schedule" class="view" hidden>
         <div class="view-head">
           <h2>📅 이번 주 일정 짜기</h2>
           <button type="button" class="help-btn" data-help="schedule" data-title="📅 이번 주 일정 짜기">❓ 설명보기</button>
@@ -194,7 +204,7 @@
   <script src="firebase-config.js?v=20261112f"></script>
   <script src="portraits.js?v=20261112f"></script>
   <script src="scenes.js?v=20261112f"></script>
-  <script src="main.js?v=20261112f"></script>
+  <script src="main.js?v=20261113a"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

@@ -1074,3 +1074,56 @@ li:last-child { border-bottom: none; }
   header { flex-wrap: wrap; }
   .save-buttons { width: 100%; justify-content: flex-end; }
 }
+
+/* ===== 메인 화면: 이로이의 방 ===== */
+#main-view[data-view="home"] { padding: 0; }
+#main-view[data-view="home"]::before { z-index: 2; }
+#view-home { height: 100%; }
+.room-scene {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  overflow: hidden;
+  background: #e9dcc8;
+}
+.room-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+.room-char-wrap {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  height: 82%;
+  transform: translateX(-50%);
+  animation: roy-sway 4.5s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+.room-char {
+  display: block;
+  height: 100%;
+  width: auto;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.25));
+  transform-origin: 50% 100%;
+  animation: roy-breathe 3s ease-in-out infinite;
+}
+@keyframes roy-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.012) translateY(-2px); }
+}
+@keyframes roy-sway {
+  0%, 100% { transform: translateX(-50%) rotate(-0.8deg); }
+  50% { transform: translateX(-50%) rotate(0.8deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-char-wrap, .room-char { animation: none; }
+}
+@media (max-width: 880px) {
+  .room-scene { min-height: 0; aspect-ratio: 4 / 3; }
+  .room-char-wrap { height: 85%; }
+}

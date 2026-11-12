@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261112f";
+const DATA_VERSION = "20261113a";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2361,7 +2361,7 @@ function loadFromSlot(i) {
   renderShop();
   saveGame();
   closeSlotModal();
-  showView("schedule");
+  showView("home");
 }
 
 function wireSlots() {
@@ -3199,7 +3199,7 @@ function sleepAndAdvance() {
   setTimeout(() => {
     document.getElementById("diary-overlay").hidden = true;
     advanceToNextDay();
-    showView("schedule");
+    showView("home");
     window.scrollTo(0, 0);
     fade.classList.remove("on");
     setTimeout(() => {
@@ -3959,7 +3959,7 @@ async function runTravel(destination) {
   renderShop();
   document.getElementById("day-summary").hidden = false;
   document.getElementById("day-summary").textContent = `${destination.name} 여행에서 돌아왔다 — Day ${state.day}부터 다시 일상이 시작된다.`;
-  showView("schedule");
+  showView("home");
 }
 
 async function runDay(blocks) {
@@ -4185,6 +4185,8 @@ async function runDay(blocks) {
 }
 
 function showView(name) {
+  // 캐시된 옛 index.html에는 "내 방" 화면이 없으니 그때는 주간 일정으로 대신 연다
+  if (!document.getElementById(`view-${name}`)) name = "schedule";
   document.querySelectorAll(".view").forEach((el) => {
     el.hidden = el.id !== `view-${name}`;
   });
@@ -4193,12 +4195,22 @@ function showView(name) {
   });
   document.getElementById("main-view").dataset.view = name;
 
+  if (name === "home") randomizeRoomCharacter();
+
   if (name === "map" && state.map) {
     state.map.relayout();
     if (state.charPos) {
       state.map.setCenter(new kakao.maps.LatLng(state.charPos.lat, state.charPos.lng));
     }
   }
+}
+
+// 메인 화면(내 방) — 들어올 때마다 안경 쓴/안 쓴 이로이 중 하나를 무작위로 보여준다
+const ROOM_CHAR_IMAGES = ["img/characters/roy_n_9_stand.png", "img/characters/roy_g_9_stand.png"];
+function randomizeRoomCharacter() {
+  const img = document.getElementById("room-char");
+  if (!img) return;
+  img.src = ROOM_CHAR_IMAGES[Math.floor(Math.random() * ROOM_CHAR_IMAGES.length)];
 }
 
 // 화면 설명 팝업 — 각 화면 제목 옆 "설명보기" 버튼
@@ -4230,7 +4242,7 @@ function wireNav() {
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.addEventListener("click", () => showView(btn.dataset.view));
   });
-  showView("schedule");
+  showView("home");
 }
 
 function wireScheduleEditor() {
