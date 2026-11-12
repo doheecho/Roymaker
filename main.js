@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261112e";
+const DATA_VERSION = "20261112f";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -3906,27 +3906,24 @@ async function runTravel(destination) {
   logLine(`✈️ ${destination.name}(으)로 ${totalDays}일간 가족여행을 떠났다!`);
   diary(`${josa(destination.name, "을/를")} 가족과 함께 여행했다.`);
 
-  const images = await resolveTravelImageUrls(destination.id);
-
-  for (let i = 0; i < totalDays; i++) {
+  // 날짜는 화면 전환 없이 한 번에 다 지나간다 — 중간에 월요일이 껴 있으면 등록 확정·주간 용돈만 조용히 처리
+  for (let i = 1; i < totalDays; i++) {
     const travelDay = startDay + i;
-    if (i > 0) {
-      state.day = travelDay;
-      if (weekdayOf(travelDay) === 1) {
-        state.registrations.active = JSON.parse(JSON.stringify(state.registrations.pending));
-        applyEffect({ wallet: WEEKLY_ALLOWANCE }, { modifier: false });
-        renderStats(state.character);
-        logLine(`💰 여행 중에도 이번 주 용돈 ${WEEKLY_ALLOWANCE}원이 들어왔다`);
-      }
+    state.day = travelDay;
+    if (weekdayOf(travelDay) === 1) {
+      state.registrations.active = JSON.parse(JSON.stringify(state.registrations.pending));
+      applyEffect({ wallet: WEEKLY_ALLOWANCE }, { modifier: false });
+      renderStats(state.character);
+      logLine(`💰 여행 중에도 이번 주 용돈 ${WEEKLY_ALLOWANCE}원이 들어왔다`);
     }
-    const dayLabel = `${i + 1}일차 · ${WEEKDAY_LABELS[weekdayOf(travelDay)]}요일`;
-    logLine(`${destination.icon} ${destination.name} 여행 — ${dayLabel}`);
-    if (images.length) await showTravelImageUrl(images[i % images.length]);
   }
+  logLine(`${destination.icon} ${destination.name} 여행 — 마지막 날`);
+  const images = await resolveTravelImageUrls(destination.id);
+  if (images.length) await showTravelImageUrl(pickRandom(images));
 
   state.day = startDay + totalDays;
 
-  // 매일 대화를 끊지 않고, 여행이 다 끝난 뒤 가족 대화를 몰아서 한 번에 보여준다
+  // 여행 마지막 날, 가족 대화를 몰아서 한 번에 보여준다
   const recapCount = Math.min(3, TRAVEL_FAMILY_LINES.length);
   const recapLines = [...TRAVEL_FAMILY_LINES].sort(() => Math.random() - 0.5).slice(0, recapCount);
   for (const line of recapLines) {
