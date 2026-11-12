@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261112c";
+const DATA_VERSION = "20261112d";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -1160,7 +1160,7 @@ const TRAVEL_IMAGE_MAX_VARIANTS = 8;
 // 한 여행지에 올려 둔 이미지를 전부 찾는다 — travel_{id}(기본) + travel_{id}_2, _3 ... 순서로, 있는 것만 모은다
 async function resolveTravelImageUrls(id) {
   if (!id || typeof resolveCustomPortrait !== "function") return [];
-  const candidates = [id, ...Array.from({ length: TRAVEL_IMAGE_MAX_VARIANTS - 1 }, (_, i) => `${id}_${i + 2}`)];
+  const candidates = [id, ...Array.from({ length: TRAVEL_IMAGE_MAX_VARIANTS - 1 }, (_, i) => `${id}_${i + 1}`)];
   const urls = await Promise.all(candidates.map((c) => resolveCustomPortrait(`travel_${c}`)));
   return urls.filter(Boolean);
 }
