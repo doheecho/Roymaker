@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111l">
+<link rel="stylesheet" href="style.css?v=20261112b">
 </head>
 <body>
   <header>
@@ -64,7 +64,10 @@
           <div id="timetable"></div>
         </div>
 
-        <button type="button" id="start-day-btn">일과 시작</button>
+        <div class="day-start-row">
+          <button type="button" id="start-day-btn">일과 시작</button>
+          <button type="button" id="travel-btn" hidden>✈️ 여행 가기</button>
+        </div>
       </div>
 
       <div id="view-status" class="view" hidden>
@@ -153,6 +156,15 @@
     </div>
   </div>
 
+  <div id="travel-modal" class="help-modal" hidden>
+    <div class="help-card slot-card" role="dialog" aria-modal="true" aria-labelledby="travel-title">
+      <h3 id="travel-title">✈️ 여행 가기</h3>
+      <p id="travel-note" class="slot-note">여행을 가면 이번 주(또는 다음 2주)의 학교·학원·활동을 모두 쉬고 부모님과 함께 떠난다.</p>
+      <div id="travel-list" class="travel-list"></div>
+      <button type="button" id="travel-close" class="help-close">닫기</button>
+    </div>
+  </div>
+
   <div id="help-modal" class="help-modal" hidden>
     <div class="help-card" role="dialog" aria-modal="true" aria-labelledby="help-title">
       <h3 id="help-title">설명</h3>
@@ -179,10 +191,10 @@
   <div id="sleep-fade" class="sleep-fade" hidden><span>Zzz…</span></div>
 
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=8d5cf5d494acc41a8002c036c0249f9a&libraries=services"></script>
-  <script src="firebase-config.js?v=20261111l"></script>
-  <script src="portraits.js?v=20261111l"></script>
-  <script src="scenes.js?v=20261111l"></script>
-  <script src="main.js?v=20261111l"></script>
+  <script src="firebase-config.js?v=20261112b"></script>
+  <script src="portraits.js?v=20261112b"></script>
+  <script src="scenes.js?v=20261112b"></script>
+  <script src="main.js?v=20261112b"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

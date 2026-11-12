@@ -278,10 +278,11 @@ main {
 .tt-preview-ok { border-color: var(--good); background: rgba(76, 175, 110, 0.15); }
 .tt-preview-bad { border-color: var(--bad); background: rgba(216, 92, 92, 0.15); }
 
+.day-start-row { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
 #start-day-btn {
   font-family: "Jua", sans-serif;
   font-size: 14.5px;
-  margin-top: 14px;
   padding: 11px 26px;
   border: none;
   border-radius: 999px;
@@ -292,6 +293,38 @@ main {
 }
 #start-day-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--accent-ink); }
 #start-day-btn:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+
+#travel-btn {
+  font-family: "Jua", sans-serif;
+  font-size: 14.5px;
+  padding: 11px 26px;
+  border: none;
+  border-radius: 999px;
+  background: #4fa3c4;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #2f7693;
+}
+#travel-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #2f7693; }
+#travel-btn:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+
+.travel-group-heading { margin: 10px 0 6px; font-family: "Jua", sans-serif; font-size: 13px; color: #e8d49a; }
+.travel-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.travel-dest-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(232, 212, 154, 0.15);
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
+.travel-dest-btn:hover:not(:disabled) { background: rgba(232, 212, 154, 0.3); }
+.travel-dest-btn:disabled { opacity: 0.4; cursor: default; }
+.travel-dest-icon { font-size: 16px; }
 
 .transport-choice {
   margin-bottom: 12px;

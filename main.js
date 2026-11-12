@@ -161,6 +161,7 @@ const state = {
   hotplaces: [],
   parks: [],
   parkFriends: [],
+  travel: [],
   sprite: { dir: "down", frame: null, drawnDir: "down", cache: null, movingAt: 0, riding: null, canvas: null, bubble: null },
   places: {},
   companyVisitedToday: false,
@@ -195,6 +196,16 @@ const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
 function gameDateForDay(dayNumber) {
   return new Date(GAME_START_DATE_UTC + (dayNumber - 1) * 86400000);
+}
+
+// 봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월 — 여행지 계절 제한에 쓴다
+const SEASON_LABELS = { spring: "봄", summer: "여름", autumn: "가을", winter: "겨울" };
+function seasonForDay(dayNumber) {
+  const m = gameDateForDay(dayNumber).getUTCMonth(); // 0=1월
+  if (m >= 2 && m <= 4) return "spring";
+  if (m >= 5 && m <= 7) return "summer";
+  if (m >= 8 && m <= 10) return "autumn";
+  return "winter";
 }
 
 function gameDateKey(date) {
@@ -235,6 +246,13 @@ function isParentAtWork(clock) {
   if (!isWeekday(state.day)) return false;
   if (state.holidaySet.has(gameDateKey(gameDateForDay(state.day)))) return false;
   return clock >= 9 * 60 && clock < 16 * 60;
+}
+
+// 엄마한테 "오늘 일찍 퇴근할 수 있어?" 라고 물어볼 수 있는 시간대(§15-2) — isParentAtWork보다 넓은 8~18시
+function isWeekdayWorkHours8to18(clock) {
+  if (!isWeekday(state.day)) return false;
+  if (state.holidaySet.has(gameDateKey(gameDateForDay(state.day)))) return false;
+  return clock >= 8 * 60 && clock < 18 * 60;
 }
 
 function clockToMinutes(text) {
@@ -322,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261111l";
+const DATA_VERSION = "20261112b";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -986,7 +1004,11 @@ function walkTo(target, startClock, label, { allowEarlyHome = false, roam = fals
       if (nearPark && nearPark.dist <= ARRIVAL_RADIUS_M && nearPark.id !== suppressed.park) {
         suppressed.park = nearPark.id;
         logLine(`${minutesToClock(clock)} ${nearPark.icon} ${nearPark.name} 안으로 들어갔다`);
-        pauseFor(() => visitPark(nearPark, clock));
+        if (state.friendMeetup && state.friendMeetup.parkId === nearPark.id) {
+          pauseFor(() => meetFriendAtPark(nearPark, state.friendMeetup, clock));
+        } else {
+          pauseFor(() => visitPark(nearPark, clock));
+        }
         return;
       }
       if (!nearPark || nearPark.dist > DEPART_RADIUS_M) suppressed.park = null;
@@ -1131,6 +1153,25 @@ async function maybeShowIntro(id) {
   panel.classList.remove("fade-out");
 }
 
+// 여행 날짜별 이미지(img/characters/travel_{id}.*) — 매일 같은 이미지를 5초간 띄운다(없으면 생략)
+const TRAVEL_IMAGE_MS = 5000;
+async function showTravelImage(id) {
+  if (!id || typeof resolveCustomPortrait !== "function") return;
+  const url = await resolveCustomPortrait(`travel_${id}`);
+  if (!url) return;
+  const panel = document.getElementById("intro-panel");
+  if (!panel) return;
+  panel.innerHTML = `<img src="${url}" alt="">`;
+  panel.classList.remove("fade-out");
+  panel.hidden = false;
+  await new Promise((r) => setTimeout(r, TRAVEL_IMAGE_MS));
+  panel.classList.add("fade-out");
+  await new Promise((r) => setTimeout(r, INTRO_FADE_MS));
+  panel.hidden = true;
+  panel.innerHTML = "";
+  panel.classList.remove("fade-out");
+}
+
 async function visitHotplace(place, clock) {
   await maybeShowIntro(place.id);
   const options = [{ label: "그냥 지나가기", value: null }];
@@ -1227,6 +1268,234 @@ async function visitPark(park, clock) {
   return variant.minutes ?? 20;
 }
 
+// ── 친구에게 전화해서 공원에서 만나기로 약속(2026-11 추가) ──
+const FRIEND_INVITE_RADIUS_M = 300;
+const FRIEND_INVITE_ACCEPT_CHANCE = 0.6;
+const FRIEND_MEETUP_MINUTES = 60;
+const FRIEND_MEETUP_EFFECT = { social: 2, agility: 1, staminaNow: -12, stress: -15 };
+
+async function inviteFriendCall(contact, clock) {
+  const nearPark = nearestStation(state.charPos, state.parks);
+  if (!nearPark || nearPark.dist > FRIEND_INVITE_RADIUS_M) {
+    await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
+      body: "\"어? 지금 근처에 만날 만한 공원이 없나 봐~ 다음에 놀자!\"",
+      tone: "phone",
+      speaker: contact.portrait ?? contact.id,
+      speakerName: contact.name,
+    });
+    logLine(`📱 ${contact.name}에게 전화했지만 근처에 만날 공원이 없어서 다음에 놀기로 했다`);
+    return 0;
+  }
+  const accepted = Math.random() < FRIEND_INVITE_ACCEPT_CHANCE;
+  if (!accepted) {
+    const busy = recentInsaGain() >= INSA_GAIN_FOR_BUSY_EXCUSE;
+    const line = busy ? "아쉬운데 엄마가 시킨 게 있어서 지금은 못 가ㅠ 담에 보자!" : "음… 다음에 놀자.";
+    await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
+      body: `"${line}"`,
+      tone: "phone",
+      speaker: contact.portrait ?? contact.id,
+      speakerName: contact.name,
+    });
+    logLine(`📱 ${contact.name}에게 ${nearPark.name}에서 놀자고 전화했지만 거절당했다`);
+    diary(`${contact.name}에게 같이 놀자고 전화했는데 다음에 놀자고 했다.`);
+    return 0;
+  }
+  await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
+    body: `"좋아! 지금 ${nearPark.name}으로 갈게~"`,
+    tone: "phone",
+    speaker: contact.portrait ?? contact.id,
+    speakerName: contact.name,
+  });
+  logLine(`📱 ${contact.name}에게 전화해서 ${nearPark.name}에서 만나기로 했다`);
+  diary(`${contact.name}에게 전화해서 ${nearPark.name}에서 만나기로 약속했다.`);
+  state.friendMeetup = { parkId: nearPark.id, contactId: contact.id, contactName: contact.name };
+  return 0;
+}
+
+async function meetFriendAtPark(park, meetup, clock) {
+  state.friendMeetup = null;
+  const speaker = meetup.contactId;
+  await presentChoice("event-panel", `🧒 ${park.name}`, [{ label: "▶", value: true }], {
+    body: `"${meetup.contactName}아! 여기야 여기~"`,
+    speaker: "iroi",
+  });
+  const end = clock + FRIEND_MEETUP_MINUTES;
+  await waitUntil(clock, end, `${park.name}에서 ${meetup.contactName}이랑 노는 중`, WAIT_PHASE_MS, { id: "play" });
+  const applied = applyEffect(FRIEND_MEETUP_EFFECT);
+  renderStats(state.character);
+  logLine(`${park.name}에서 ${meetup.contactName}이랑 ${FRIEND_MEETUP_MINUTES}분 동안 놀았다 — ${appliedText(applied)}`);
+  diary(`${meetup.contactName}을(를) ${park.name}에서 만나서 신나게 놀았다.`);
+  await presentChoice("event-panel", `🧒 ${park.name}`, [{ label: "▶ 계속 걷기", value: true }], {
+    body: `"진짜 재밌었다! 다음에 또 놀자~"\n(${appliedText(applied)})`,
+    tone: "event",
+    speaker,
+  });
+  return FRIEND_MEETUP_MINUTES;
+}
+
+// ── 엄마한테 전화 — 일찍 퇴근 졸라보기(2026-11 추가) ──
+const MOM_EARLY_HOME_LOGIC_THRESHOLD = 20;
+const MOM_DATE_CLOCK = 17 * 60 + 30;
+const MOM_DATE_MINUTES = 90;
+const MOM_DATE_EFFECT = { stress: -15, social: 2, staminaNow: 10, selfEsteem: 1 };
+
+async function callMomOptions(contact, clock) {
+  const choice = await presentChoice(
+    "event-panel",
+    "📞 엄마",
+    [
+      { label: "엄마 보고 싶어서 전화했어, 사랑해!", value: "love" },
+      { label: "엄마! 오늘 일찍 퇴근할 수 있어?", value: "ask" },
+    ],
+    { body: `${minutesToClock(clock)} · 엄마한테 전화했다. 뭐라고 할까?`, tone: "phone", speaker: "iroi" }
+  );
+  if (choice === "love") {
+    logLine("📱 엄마에게 전화해서 사랑한다고 말했다");
+    diary("엄마한테 전화해서 사랑한다고 말했다. 엄마도 사랑한다고 해 주셨다.");
+    await presentChoice("event-panel", "📞 엄마", [{ label: "끊기", value: true }], {
+      body: "\"우리 로이, 엄마도 보고 싶었어~ 사랑해 💕\"",
+      tone: "phone",
+      speaker: "mom",
+    });
+    return state.phone?.callMinutes ?? 2;
+  }
+  const hasEveningPlan = planFor(state.day).some((b) => b.startMin >= 17 * 60);
+  if (hasEveningPlan) {
+    logLine("📱 엄마에게 일찍 퇴근할 수 있냐고 물었지만 오늘은 저녁 일정이 있어서 거절당했다");
+    await presentChoice("event-panel", "📞 엄마", [{ label: "끊기", value: true }], {
+      body: "\"로이야 미안, 오늘은 저녁에도 일이 있어서 평소처럼 퇴근할 것 같아ㅠ 이따 집에서 보자, 사랑해!\"",
+      tone: "phone",
+      speaker: "mom",
+    });
+    return state.phone?.callMinutes ?? 2;
+  }
+  const chance = Math.min(0.9, Math.max(0.1, (state.character.stats.logic ?? 0) / (MOM_EARLY_HOME_LOGIC_THRESHOLD * 2)));
+  const success = Math.random() < chance;
+  if (success) {
+    state.momEarlyHomeToday = true;
+    logLine("📱 엄마에게 일찍 퇴근할 수 있냐고 물었더니 승낙했다");
+    diary("엄마한테 일찍 퇴근해 달라고 졸랐더니 들어주셨다! 오늘은 엄마랑 같이 뭔가 할 수 있을 것 같다.");
+    await presentChoice("event-panel", "📞 엄마", [{ label: "야호!", value: true }], {
+      body: "\"그래? 음… 알았어, 엄마가 오늘은 특별히 서둘러서 일찍 퇴근할게! 이따 집에서 보자~\"",
+      tone: "event",
+      speaker: "mom",
+    });
+  } else {
+    logLine("📱 엄마에게 일찍 퇴근할 수 있냐고 물었지만 거절당했다");
+    await presentChoice("event-panel", "📞 엄마", [{ label: "끊기", value: true }], {
+      body: "\"로이야 미안해, 엄마 아직 회사에서 할 일이 남았어. 이따 퇴근하고 꼭 같이 놀자! 사랑해 💕\"",
+      tone: "phone",
+      speaker: "mom",
+    });
+  }
+  return state.phone?.callMinutes ?? 2;
+}
+
+async function momDateEvent(clock) {
+  await maybeShowIntro("datewithmom");
+  await presentChoice("event-panel", "🚗 엄마와의 외출", [{ label: "좋아요!", value: true }], {
+    body: "\"로이야! 엄마 오늘 일찍 왔어~ 우리 같이 나가서 맛있는 거 먹고 올까?\"",
+    tone: "event",
+    speaker: "mom",
+  });
+  const end = clock + MOM_DATE_MINUTES;
+  await waitUntil(clock, end, "엄마와 외출 중", WAIT_PHASE_MS, { id: "play" });
+  const applied = applyEffect(MOM_DATE_EFFECT);
+  renderStats(state.character);
+  logLine(`🚗 엄마가 일찍 퇴근해서 함께 외출했다 (${appliedText(applied)})`);
+  diary("엄마가 일찍 퇴근해서 같이 나가서 맛있는 걸 먹고 즐거운 시간을 보냈다.");
+  await presentChoice("event-panel", "🚗 엄마와의 외출", [{ label: "▶", value: true }], {
+    body: `"오늘 엄마랑 같이 있어서 너무 좋았어!"\n(${appliedText(applied)})`,
+    speaker: "iroi",
+  });
+  return end;
+}
+
+// ── 나비정원 삼촌한테 전화 — 집에 놀러오라고 조르기(2026-11 추가) ──
+const UNCLE_PARTY_CLOCK = 19 * 60;
+const UNCLE_PARTY_MINUTES = 120;
+const UNCLE_PARTY_EFFECT = { stress: -10, staminaNow: 10, social: 2, insa: 2 };
+
+async function callButterflyUncle(contact, clock) {
+  if (!(isWeekday(state.day) && clock < 18 * 60)) {
+    const line = pickRandom(contact.lines);
+    const firstCall = !state.calledToday.has(contact.id);
+    state.calledToday.add(contact.id);
+    const effect = firstCall ? contact.effect ?? {} : {};
+    const applied = applyEffect(effect);
+    renderStats(state.character);
+    const effectNote = Object.keys(applied).length ? ` (${appliedText(applied)})` : "";
+    logLine(`📱 ${contact.name}에게 전화 — "${line}"${effectNote}`);
+    diary(`${contact.name}에게 전화를 했다. "${line}"`);
+    await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "끊기", value: true }], {
+      body: `"${line}"${effectNote}`,
+      tone: "phone",
+      speaker: contact.portrait ?? contact.id,
+      speakerName: contact.name,
+    });
+    return state.phone?.callMinutes ?? 2;
+  }
+  await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "▶", value: true }], {
+    body: "\"삼촌! 우리집에 와!\"",
+    speaker: "iroi",
+  });
+  await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "▶", value: true }], {
+    body: "\"삼촌도 너무 가고 싶은데… 지금 회사라서 못 가ㅠ\"",
+    tone: "phone",
+    speaker: contact.portrait ?? contact.id,
+    speakerName: contact.name,
+  });
+  await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "▶", value: true }], {
+    body: "\"그럼 퇴근하고 우리집에 와! 나 로블록스 레벨 175야!\"",
+    speaker: "iroi",
+  });
+  const isFriday = weekdayOf(state.day) === 5;
+  if (isFriday) {
+    state.unclePartyPending = true;
+    logLine(`📱 나비정원 삼촌에게 전화해서 집에 놀러오라고 했다 — 오늘(금) 저녁에 오기로 했다`);
+    diary("나비정원 삼촌한테 전화해서 집에 놀러오라고 졸랐다. 삼촌이 오늘 저녁에 오기로 했다!");
+    await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "야호!", value: true }], {
+      body: "\"오, 레벨 175?! 삼촌이 아빠랑 바로 얘기해 볼게… 그래, 좋아! 오늘 19시까지 집으로 갈게~\"",
+      tone: "event",
+      speaker: contact.portrait ?? contact.id,
+      speakerName: contact.name,
+    });
+  } else {
+    const applied = applyEffect({ stress: 2 });
+    renderStats(state.character);
+    logLine(`📱 나비정원 삼촌에게 전화해서 집에 놀러오라고 했지만 오늘은 못 온다고 했다 (${appliedText(applied)})`);
+    diary("나비정원 삼촌한테 놀러오라고 전화했는데, 오늘은 바쁘다고 못 온다고 하셔서 시무룩해졌다.");
+    await presentChoice("event-panel", `📞 ${contact.name}`, [{ label: "칫, 알겠어요…", value: true }], {
+      body: `"삼촌이 아빠랑 얘기해 봤는데… 오늘은 회사 일이 너무 많아서 못 갈 것 같아. 미안해, 다음에 꼭 갈게!"\n(${appliedText(applied)})`,
+      tone: "danger",
+      speaker: contact.portrait ?? contact.id,
+      speakerName: contact.name,
+    });
+  }
+  return state.phone?.callMinutes ?? 2;
+}
+
+async function unclePartyEvent(clock) {
+  await maybeShowIntro("uncleparty");
+  const end = clock + UNCLE_PARTY_MINUTES;
+  await waitUntil(clock, end, "엄마·아빠·나비정원 삼촌과 저녁 파티 중", WAIT_PHASE_MS, { id: "play" });
+  state.dinnerDone = true;
+  const partyTotal = { ...MEAL_EFFECT };
+  Object.entries(UNCLE_PARTY_EFFECT).forEach(([k, v]) => {
+    partyTotal[k] = (partyTotal[k] ?? 0) + v;
+  });
+  const applied = applyEffect(partyTotal);
+  renderStats(state.character);
+  logLine(`🎉 나비정원 삼촌이 집에 놀러와서 엄마·아빠와 함께 즐거운 저녁 파티를 했다 (${appliedText(applied)})`);
+  diary("나비정원 삼촌이 집에 놀러와서 엄마, 아빠랑 다 같이 맛있는 저녁을 먹으며 신나게 놀았다.");
+  await presentChoice("event-panel", "🎉 가족 파티", [{ label: "▶", value: true }], {
+    body: `"오늘 진짜 최고의 저녁이었어!"\n(${appliedText(applied)})`,
+    tone: "event",
+    speaker: "iroi",
+  });
+  return end;
+}
+
 async function openPhone(clock) {
   const contacts = state.phone?.contacts ?? [];
   const groups = [...new Set(contacts.map((c) => c.group))];
@@ -1277,6 +1546,12 @@ async function openPhone(clock) {
       distanceMeters(state.charPos, pe.pos) <= pe.callRadiusM
   );
   if (placeCall) return placeSpecialCall(placeCall, contact, clock);
+
+  if (contact.id === "friend_1" || contact.id === "friend_2") return inviteFriendCall(contact, clock);
+
+  if (contact.id === "mom" && isWeekdayWorkHours8to18(clock)) return callMomOptions(contact, clock);
+
+  if (contact.id === "butterfly_uncle") return callButterflyUncle(contact, clock);
 
   const line = pickRandom(contact.lines);
   const firstCall = !state.calledToday.has(contact.id);
@@ -1910,6 +2185,8 @@ function buildSaveData() {
     lastDay: state.lastDay ?? null,
     weekPlan: state.weekPlan,
     logicHistory: state.logicHistory ?? [],
+    diligenceHistory: state.diligenceHistory ?? [],
+    insaHistory: state.insaHistory ?? [],
   };
 }
 
@@ -1926,6 +2203,8 @@ function applySaveData(data) {
   state.lastDay = data.lastDay ?? null;
   state.weekPlan = data.weekPlan ?? {};
   state.logicHistory = data.logicHistory ?? [];
+  state.diligenceHistory = data.diligenceHistory ?? [];
+  state.insaHistory = data.insaHistory ?? [];
 }
 
 function saveGame() {
@@ -2087,6 +2366,71 @@ function wireSlots() {
   });
   window.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape" && !modal.hidden) closeSlotModal();
+  });
+}
+
+function openTravelModal() {
+  const modal = document.getElementById("travel-modal");
+  const list = document.getElementById("travel-list");
+  list.innerHTML = "";
+  const season = seasonForDay(state.day);
+  ["near", "far"].forEach((category) => {
+    const heading = document.createElement("h4");
+    heading.className = "travel-group-heading";
+    heading.textContent = category === "near" ? "가까운 여행지 (5일)" : "먼 여행지 (12일)";
+    list.appendChild(heading);
+    const row = document.createElement("div");
+    row.className = "travel-row";
+    (state.travel ?? [])
+      .filter((d) => d.category === category)
+      .forEach((dest) => {
+        const blocked = dest.blockedSeasons?.includes(season);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "travel-dest-btn";
+        btn.disabled = blocked;
+        btn.innerHTML = `<span class="travel-dest-icon">${dest.icon}</span><span>${dest.name}</span>`;
+        btn.title = blocked ? `지금(${SEASON_LABELS[season]})은 갈 수 없는 계절이에요` : `${dest.durationDays}일간 여행`;
+        btn.addEventListener("click", () => {
+          if (!window.confirm(`${dest.name}(으)로 ${dest.durationDays}일간 여행을 떠날까요? 그동안 학교·학원·활동은 모두 쉽니다.`)) return;
+          closeTravelModal();
+          startTravel(dest);
+        });
+        row.appendChild(btn);
+      });
+    list.appendChild(row);
+  });
+  modal.hidden = false;
+}
+
+function closeTravelModal() {
+  document.getElementById("travel-modal").hidden = true;
+}
+
+function startTravel(destination) {
+  if (state.dayRunning) return;
+  state.dayRunning = true;
+  document.getElementById("start-day-btn").disabled = true;
+  document.getElementById("travel-btn").disabled = true;
+  renderShop();
+  showView("map");
+  runTravel(destination);
+}
+
+function wireTravel() {
+  const btn = document.getElementById("travel-btn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    if (state.dayRunning) return;
+    openTravelModal();
+  });
+  document.getElementById("travel-close").addEventListener("click", closeTravelModal);
+  const modal = document.getElementById("travel-modal");
+  modal.addEventListener("click", (ev) => {
+    if (ev.target === modal) closeTravelModal();
+  });
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !modal.hidden) closeTravelModal();
   });
 }
 
@@ -2763,6 +3107,8 @@ function renderTimetable() {
         : "🌤️ 주말이에요 — 오늘 하루 일정만 짜요. 월요일이 되면 새 한 주 일정을 짠다.";
   }
   document.getElementById("start-day-btn").textContent = `오늘(${WEEKDAY_LABELS[weekdayOf(state.day)]}) 일과 시작`;
+  const travelBtn = document.getElementById("travel-btn");
+  if (travelBtn) travelBtn.hidden = weekdayOf(state.day) !== 1; // 여행은 월요일에만 떠날 수 있다
 
   renderPalette();
 }
@@ -3140,12 +3486,30 @@ function lateThresholdFor(block) {
 // ── 계획을 어기고 일찍 집에 온 날 저녁, 엄마와의 대화 ──
 const LOGIC_LOOKBACK_DAYS = 7;
 const LOGIC_GAIN_FOR_EXCUSE = 2;
+const DILIGENCE_LOOKBACK_DAYS = 7;
+const DILIGENCE_GAIN_FOR_PARTY = 1;
+const INSA_LOOKBACK_DAYS = 7;
+const INSA_GAIN_FOR_BUSY_EXCUSE = 1;
 
 // 최근 7일 사이 논리가 얼마나 올랐나
 function recentLogicGain() {
   const hist = state.logicHistory ?? [];
   const oldest = hist.length ? Math.min(...hist.map((h) => h.logic)) : state.character.stats.logic ?? 0;
   return (state.character.stats.logic ?? 0) - oldest;
+}
+
+// 최근 7일 사이 성실성이 얼마나 올랐나 — 금/토 밤 파티 허락 여부 판정(§10-5)
+function recentDiligenceGain() {
+  const hist = state.diligenceHistory ?? [];
+  const oldest = hist.length ? Math.min(...hist.map((h) => h.diligence)) : state.character.stats.diligence ?? 0;
+  return (state.character.stats.diligence ?? 0) - oldest;
+}
+
+// 최근 7일 사이 인싸력이 얼마나 올랐나 — 친구에게 전화했을 때 거절 대사 톤 판정
+function recentInsaGain() {
+  const hist = state.insaHistory ?? [];
+  const oldest = hist.length ? Math.min(...hist.map((h) => h.insa)) : state.character.stats.insa ?? 0;
+  return (state.character.stats.insa ?? 0) - oldest;
 }
 
 // 차비가 없어서 일정을 못 갔다고 인정해 주는 용돈 기준 — 이 미만이면 논리 능력치 변명 대신 차비 부족 사유로 처리
@@ -3197,6 +3561,8 @@ async function eveningTalkWithMom(clock, skipped) {
 // ── 일정이 다 끝난 뒤의 자유 시간 ──
 const BEDTIME_MIN = 22 * 60;
 const HOMEWORK_MIN = 60;
+const HOMEWORK_PRAISE_MIN = 120;
+const HOMEWORK_PRAISE_BONUS_CHANCE = 0.5;
 const GAME_SESSION_MIN = 60;
 const GAME_SCOLD_MIN = 120;
 const HOMEWORK_SYMBOLS = {
@@ -3289,8 +3655,55 @@ async function lateDinnerTalk() {
   });
 }
 
+// ── 금/토 밤 9시 파티 요청(2026-11 추가) ──
+const PARTY_WEEKDAYS = [5, 6]; // 금, 토
+const PARTY_MIN = 21 * 60;
+const PARTY_MINUTES = 60;
+const PARTY_GOOD_EFFECT = { stress: -15 };
+const PARTY_BAD_EFFECT = { stress: 10, delinquency: 2 };
+
+async function askForParty(clock) {
+  state.partyDone = true;
+  await presentChoice("event-panel", "🎉 파티", [{ label: "▶", value: true }], {
+    body: "\"엄마, 저 오늘 파티하고 싶어요!\"",
+    speaker: "iroi",
+  });
+  const good = recentDiligenceGain() >= DILIGENCE_GAIN_FOR_PARTY;
+  const isFriday = weekdayOf(state.day) === 5;
+  const end = clock + PARTY_MINUTES;
+  if (good) {
+    await waitUntil(clock, end, isFriday ? "엄마랑 \"나 혼자 산다\" 보는 중" : "엄마랑 예능 프로그램 보는 중", WAIT_PHASE_MS, { id: "play" });
+    const applied = applyEffect(PARTY_GOOD_EFFECT);
+    renderStats(state.character);
+    const showLine = isFriday
+      ? "\"그래, 우리 로이 요즘 열심히 했으니까! 같이 \\\"나 혼자 산다\\\" 보면서 기안84 형 일상 구경하자~\""
+      : "\"그래, 우리 로이 요즘 열심히 했으니까! 재밌는 예능 프로그램 보면서 같이 파티하자~\"";
+    logLine(`🎉 엄마와 함께 파티를 즐겼다 (${appliedText(applied)})`);
+    diary(isFriday ? "엄마랑 \"나 혼자 산다\"를 보면서 즐거운 금요일 밤 파티를 했다." : "엄마랑 재밌는 예능 프로그램을 보면서 토요일 밤 파티를 했다.");
+    await presentChoice("event-panel", "🎉 파티", [{ label: "신난다!", value: true }], {
+      body: `${showLine}\n(${appliedText(applied)})`,
+      tone: "event",
+      speaker: "mom",
+    });
+  } else {
+    await waitUntil(clock, end, "엄마·아빠한테 혼나는 중", WAIT_PHASE_MS, { id: "rest" });
+    const applied = applyEffect(PARTY_BAD_EFFECT);
+    renderStats(state.character);
+    logLine(`엄마·아빠한테 이 밤에 무슨 파티냐고 혼났다 (${appliedText(applied)})`);
+    diary("밤늦게 파티하고 싶다고 했다가 엄마, 아빠한테 혼났다.");
+    await presentChoice("event-panel", "🎉 파티", [{ label: "죄송해요…", value: true }], {
+      body: `"이 밤에 무슨 파티야? 얼른 들어가서 자!"\n"아빠도 한마디 하자면 — 요즘 좀 느슨해진 것 같은데, 정신 차려야지."\n(${appliedText(applied)})`,
+      tone: "danger",
+      speaker: "mom",
+    });
+  }
+  return end;
+}
+
 async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
   state.gameMinutesToday = 0;
+  state.homeworkMinutesToday = 0;
+  state.homeworkPraiseDone = false;
   const talkIfDue = async (force) => {
     if (pendingTalk && (force || clock >= pendingTalk.at)) {
       const talk = pendingTalk;
@@ -3304,39 +3717,61 @@ async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
       await serveDinner();
     }
   };
+  const momDateIfDue = async (force) => {
+    if (state.momEarlyHomeToday && !state.momDateDone && (force || clock >= MOM_DATE_CLOCK)) {
+      state.momDateDone = true;
+      clock = await momDateEvent(clock);
+    }
+  };
+  const unclePartyIfDue = async (force) => {
+    if (state.unclePartyPending && (force || clock >= UNCLE_PARTY_CLOCK)) {
+      state.unclePartyPending = false;
+      clock = await unclePartyEvent(clock);
+    }
+  };
   for (;;) {
     await talkIfDue(false);
     await dinnerIfDue(false);
+    await momDateIfDue(false);
+    await unclePartyIfDue(false);
     if (clock >= BEDTIME_MIN) {
       await talkIfDue(true);
       await dinnerIfDue(true);
+      await momDateIfDue(true);
+      await unclePartyIfDue(true);
       await presentChoice("event-panel", "🌙 밤", [{ label: "😴 잠자러 가기", value: true }], {
         body: `벌써 ${minutesToClock(clock)}이야! 이제 자야겠다.`,
         speaker: "iroi",
       });
       return clock;
     }
-    const pick = await presentChoice(
-      "event-panel",
-      "🏠 집",
-      [
-        { label: "🏃 밖에 나가서 논다", value: "out" },
-        { label: "📚 집에서 숙제를 한다", value: "homework" },
-        { label: "🎮 집에서 게임을 한다", value: "game" },
-        { label: "😴 그냥 잔다", value: "sleep" },
-      ],
-      { body: `${minutesToClock(clock)} · 특별히 해야할 일은 없는 것 같네? 이제 뭘 할까?`, speaker: "iroi" }
-    );
+    const canParty = PARTY_WEEKDAYS.includes(weekdayOf(state.day)) && clock >= PARTY_MIN && !state.partyDone;
+    const options = [
+      { label: "🏃 밖에 나가서 논다", value: "out" },
+      { label: "📚 집에서 숙제를 한다", value: "homework" },
+      { label: "🎮 집에서 게임을 한다", value: "game" },
+      { label: "📱 휴대전화를 연다", value: "phone" },
+    ];
+    if (canParty) options.push({ label: "🎉 엄마한테 파티하자고 말한다", value: "party" });
+    options.push({ label: "😴 그냥 잔다", value: "sleep" });
+    const pick = await presentChoice("event-panel", "🏠 집", options, {
+      body: `${minutesToClock(clock)} · 특별히 해야할 일은 없는 것 같네? 이제 뭘 할까?`,
+      speaker: "iroi",
+    });
     if (pick === "sleep") {
       // 일찍 자려고 해도, 빼먹은 일정 얘기나 저녁밥은 자기 전에 꼭 하신다
       await talkIfDue(true);
       await dinnerIfDue(true);
+      await momDateIfDue(true);
+      await unclePartyIfDue(true);
       logLine(`${minutesToClock(clock)} 잠자리에 들었다`);
       return clock;
     }
     if (pick === "out") clock = await playOutside(clock);
     else if (pick === "homework") clock = await doHomework(clock);
     else if (pick === "game") clock = await playGame(clock);
+    else if (pick === "phone") clock += await openPhone(clock);
+    else if (pick === "party") clock = await askForParty(clock);
   }
 }
 
@@ -3367,7 +3802,28 @@ async function doHomework(clock) {
     body: `${subject.label} 숙제 끝! 오늘은 ${josa(topic, "을/를")} 공부했어. 뿌듯하다~\n(${appliedText(applied)})`,
     speaker: "iroi",
   });
+  state.homeworkMinutesToday = (state.homeworkMinutesToday ?? 0) + HOMEWORK_MIN;
+  if (state.homeworkMinutesToday >= HOMEWORK_PRAISE_MIN && !state.homeworkPraiseDone) {
+    state.homeworkPraiseDone = true;
+    await praiseHomework(end);
+  }
   return end;
+}
+
+// 시키지 않았는데 하루에 숙제를 2시간 넘게 하면 엄마가 기특해하며 칭찬한다(하루 1번)
+async function praiseHomework(clock) {
+  const bonus = Math.random() < HOMEWORK_PRAISE_BONUS_CHANCE ? pickRandom([1000, 2000, 3000, 5000]) : 0;
+  const effect = bonus ? { selfEsteem: 2, stress: -8, diligence: 1, wallet: bonus } : { selfEsteem: 2, stress: -8, diligence: 1 };
+  const applied = applyEffect(effect);
+  renderStats(state.character);
+  const bonusLine = bonus ? ` 기특한 마음에 친구들이랑 맛있는 거 사 먹으라고 용돈도 ${bonus}원 주셨다.` : "";
+  logLine(`🌟 엄마가 시키지 않았는데 숙제를 열심히 한 걸 보고 칭찬해 주셨다.${bonusLine} (${appliedText(applied)})`);
+  diary(`오늘 숙제를 많이 했더니 엄마가 기특하다고 칭찬해 주셨다.${bonusLine}`);
+  await presentChoice("event-panel", "🌟 칭찬", [{ label: "헤헤, 고마워요 엄마!", value: true }], {
+    body: `"우리 로이, 시키지도 않았는데 혼자 이렇게 열심히 공부하다니! 너무 이쁘고 잘했어~"${bonus ? `\n"기특해서 그러는데, 친구들이랑 맛있는 거 사 먹어~" (용돈 +${bonus}원)` : ""}\n(${appliedText(applied)})`,
+    tone: "event",
+    speaker: "mom",
+  });
 }
 
 async function playGame(clock) {
@@ -3419,6 +3875,80 @@ function blockPlace(block) {
   return { pos: state.positions.academies[block.academyId], name: academy.name, academy };
 }
 
+// ── 여행(2026-11 추가) — 한 주(또는 두 주)를 통째로 건너뛰고 날짜 단위로 진행된다 ──
+const TRAVEL_FAMILY_LINES = [
+  { speaker: "iroi", body: "엄마, 아빠! 여기 진짜 신기하다! 다음엔 또 어디 가?" },
+  { speaker: "mom", body: "우리 로이, 오늘 진짜 즐거워 보이네~ 엄마도 너무 행복하다." },
+  { speaker: "dad", body: "자, 사진 찍자! 다 같이 \"김치~\"!" },
+  { speaker: "iroi", body: "아빠, 나 저거 먹어보고 싶어요! 맛있을 것 같아요!" },
+  { speaker: "mom", body: "로이야, 오늘 많이 걸어서 피곤하지? 그래도 재밌었지?" },
+  { speaker: "dad", body: "우리 가족 여행은 언제나 최고야. 로이 덕분에 더 재밌어." },
+  { speaker: "iroi", body: "진짜 꿈만 같아! 학교 친구들한테 자랑해야지~" },
+  { speaker: "mom", body: "조심히 다니고, 엄마 아빠 손 꼭 잡고 다니자~" },
+];
+const TRAVEL_EFFECT_NEAR = { stress: -30, social: 3, selfEsteem: 2 };
+const TRAVEL_EFFECT_FAR = { stress: -40, social: 5, selfEsteem: 4, language: 2, perception: 2 };
+
+async function runTravel(destination) {
+  const startDay = state.day;
+  const totalDays = destination.durationDays;
+  document.getElementById("day-run").hidden = false;
+  document.getElementById("day-summary").hidden = true;
+  document.getElementById("day-log").innerHTML = "";
+  logLine(`✈️ ${destination.name}(으)로 ${totalDays}일간 가족여행을 떠났다!`);
+  diary(`${josa(destination.name, "을/를")} 가족과 함께 여행했다.`);
+
+  for (let i = 0; i < totalDays; i++) {
+    const travelDay = startDay + i;
+    if (i > 0) {
+      state.day = travelDay;
+      if (weekdayOf(travelDay) === 1) {
+        state.registrations.active = JSON.parse(JSON.stringify(state.registrations.pending));
+        applyEffect({ wallet: WEEKLY_ALLOWANCE }, { modifier: false });
+        renderStats(state.character);
+        logLine(`💰 여행 중에도 이번 주 용돈 ${WEEKLY_ALLOWANCE}원이 들어왔다`);
+      }
+    }
+    const dayLabel = `${i + 1}일차 · ${WEEKDAY_LABELS[weekdayOf(travelDay)]}요일`;
+    logLine(`${destination.icon} ${destination.name} 여행 — ${dayLabel}`);
+    await showTravelImage(destination.id);
+    const line = pickRandom(TRAVEL_FAMILY_LINES);
+    await presentChoice("event-panel", `${destination.icon} ${destination.name} — ${dayLabel}`, [{ label: "▶", value: true }], {
+      body: `"${line.body}"`,
+      tone: "event",
+      speaker: line.speaker,
+    });
+  }
+
+  state.day = startDay + totalDays;
+  const effect = destination.category === "far" ? TRAVEL_EFFECT_FAR : TRAVEL_EFFECT_NEAR;
+  const applied = applyEffect(effect);
+  state.character.condition.hunger = 100;
+  state.character.condition.staminaNow = 100;
+  renderStats(state.character);
+  logLine(`✈️ 즐거운 여행을 마치고 집으로 돌아왔다 (${appliedText(applied)})`);
+  diary(`${josa(destination.name, "을/를")} 가족과 함께 다녀왔다. 정말 즐거운 여행이었다!`);
+  await presentChoice("event-panel", "✈️ 여행에서 돌아옴", [{ label: "▶", value: true }], {
+    body: `"우리 가족 여행 진짜 최고였어! 다음에 또 가자!"\n(${appliedText(applied)})`,
+    tone: "event",
+    speaker: "iroi",
+  });
+
+  renderDayHeader();
+  renderAcademies(state.academies, state.categoryMap);
+  pruneWeekPlan();
+  renderTimetable();
+  renderStats(state.character);
+  saveGame();
+  state.dayRunning = false;
+  document.getElementById("start-day-btn").disabled = false;
+  document.getElementById("travel-btn").disabled = false;
+  renderShop();
+  document.getElementById("day-summary").hidden = false;
+  document.getElementById("day-summary").textContent = `${destination.name} 여행에서 돌아왔다 — Day ${state.day}부터 다시 일상이 시작된다.`;
+  showView("schedule");
+}
+
 async function runDay(blocks) {
   document.getElementById("day-run").hidden = false;
   document.getElementById("day-summary").hidden = true;
@@ -3430,10 +3960,17 @@ async function runDay(blocks) {
   state.eventsToday = 0;
   state.recentStranger = null;
   state.logicHistory = [...(state.logicHistory ?? []).filter((h) => h.day >= state.day - LOGIC_LOOKBACK_DAYS), { day: state.day, logic: state.character.stats.logic ?? 0 }];
+  state.diligenceHistory = [...(state.diligenceHistory ?? []).filter((h) => h.day >= state.day - DILIGENCE_LOOKBACK_DAYS), { day: state.day, diligence: state.character.stats.diligence ?? 0 }];
+  state.insaHistory = [...(state.insaHistory ?? []).filter((h) => h.day >= state.day - INSA_LOOKBACK_DAYS), { day: state.day, insa: state.character.stats.insa ?? 0 }];
   state.lastEventClock = -Infinity;
   state.calledToday = new Set();
   state.companyVisitedToday = false;
   state.dinnerDone = false;
+  state.partyDone = false;
+  state.momEarlyHomeToday = false;
+  state.momDateDone = false;
+  state.unclePartyPending = false;
+  state.friendMeetup = null;
   state.placeEvents.forEach((pe) => {
     pe.doneToday = false;
     pe.dwell = 0;
@@ -3801,6 +4338,7 @@ async function main() {
     phone,
     placeEvents,
     parkFriends,
+    travel,
   ] = await Promise.all([
     loadJSON("data/character.json"),
     loadJSON("data/academies.json"),
@@ -3818,8 +4356,10 @@ async function main() {
     loadJSON("data/phone.json"),
     loadJSON("data/place_events.json"),
     loadJSON("data/park_friends.json"),
+    loadJSON("data/travel.json"),
   ]);
   state.parkFriends = parkFriends;
+  state.travel = travel;
 
   school.segments = school.segments.map((seg) => ({
     ...seg,
@@ -3874,6 +4414,7 @@ async function main() {
   wireNav();
   wireHelp();
   wireSlots();
+  wireTravel();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
   document.getElementById("new-game-btn").addEventListener("click", async () => {
     if (state.dayRunning) return;
