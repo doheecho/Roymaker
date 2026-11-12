@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261112b";
+const DATA_VERSION = "20261112c";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -1153,11 +1153,19 @@ async function maybeShowIntro(id) {
   panel.classList.remove("fade-out");
 }
 
-// 여행 날짜별 이미지(img/characters/travel_{id}.*) — 매일 같은 이미지를 5초간 띄운다(없으면 생략)
+// 여행 날짜별 이미지(img/characters/travel_{id}.*, travel_{id}_2.*, travel_{id}_3.* ...) — 5초간 띄운다(없으면 생략)
 const TRAVEL_IMAGE_MS = 5000;
-async function showTravelImage(id) {
-  if (!id || typeof resolveCustomPortrait !== "function") return;
-  const url = await resolveCustomPortrait(`travel_${id}`);
+const TRAVEL_IMAGE_MAX_VARIANTS = 8;
+
+// 한 여행지에 올려 둔 이미지를 전부 찾는다 — travel_{id}(기본) + travel_{id}_2, _3 ... 순서로, 있는 것만 모은다
+async function resolveTravelImageUrls(id) {
+  if (!id || typeof resolveCustomPortrait !== "function") return [];
+  const candidates = [id, ...Array.from({ length: TRAVEL_IMAGE_MAX_VARIANTS - 1 }, (_, i) => `${id}_${i + 2}`)];
+  const urls = await Promise.all(candidates.map((c) => resolveCustomPortrait(`travel_${c}`)));
+  return urls.filter(Boolean);
+}
+
+async function showTravelImageUrl(url) {
   if (!url) return;
   const panel = document.getElementById("intro-panel");
   if (!panel) return;
@@ -3898,6 +3906,8 @@ async function runTravel(destination) {
   logLine(`✈️ ${destination.name}(으)로 ${totalDays}일간 가족여행을 떠났다!`);
   diary(`${josa(destination.name, "을/를")} 가족과 함께 여행했다.`);
 
+  const images = await resolveTravelImageUrls(destination.id);
+
   for (let i = 0; i < totalDays; i++) {
     const travelDay = startDay + i;
     if (i > 0) {
@@ -3911,7 +3921,7 @@ async function runTravel(destination) {
     }
     const dayLabel = `${i + 1}일차 · ${WEEKDAY_LABELS[weekdayOf(travelDay)]}요일`;
     logLine(`${destination.icon} ${destination.name} 여행 — ${dayLabel}`);
-    await showTravelImage(destination.id);
+    if (images.length) await showTravelImageUrl(images[i % images.length]);
     const line = pickRandom(TRAVEL_FAMILY_LINES);
     await presentChoice("event-panel", `${destination.icon} ${destination.name} — ${dayLabel}`, [{ label: "▶", value: true }], {
       body: `"${line.body}"`,
