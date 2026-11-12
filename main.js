@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261112d";
+const DATA_VERSION = "20261112e";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -3922,15 +3922,21 @@ async function runTravel(destination) {
     const dayLabel = `${i + 1}일차 · ${WEEKDAY_LABELS[weekdayOf(travelDay)]}요일`;
     logLine(`${destination.icon} ${destination.name} 여행 — ${dayLabel}`);
     if (images.length) await showTravelImageUrl(images[i % images.length]);
-    const line = pickRandom(TRAVEL_FAMILY_LINES);
-    await presentChoice("event-panel", `${destination.icon} ${destination.name} — ${dayLabel}`, [{ label: "▶", value: true }], {
+  }
+
+  state.day = startDay + totalDays;
+
+  // 매일 대화를 끊지 않고, 여행이 다 끝난 뒤 가족 대화를 몰아서 한 번에 보여준다
+  const recapCount = Math.min(3, TRAVEL_FAMILY_LINES.length);
+  const recapLines = [...TRAVEL_FAMILY_LINES].sort(() => Math.random() - 0.5).slice(0, recapCount);
+  for (const line of recapLines) {
+    await presentChoice("event-panel", `${destination.icon} ${destination.name} 여행`, [{ label: "▶", value: true }], {
       body: `"${line.body}"`,
       tone: "event",
       speaker: line.speaker,
     });
   }
 
-  state.day = startDay + totalDays;
   const effect = destination.category === "far" ? TRAVEL_EFFECT_FAR : TRAVEL_EFFECT_NEAR;
   const applied = applyEffect(effect);
   state.character.condition.hunger = 100;
