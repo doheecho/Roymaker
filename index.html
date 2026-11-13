@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261113a">
+<link rel="stylesheet" href="style.css?v=20261113b">
 </head>
 <body>
   <header>
@@ -53,6 +53,7 @@
           <div class="room-char-wrap">
             <img id="room-char" class="room-char" src="img/characters/roy_n_9_stand.png" alt="방 안에 서 있는 이로이">
           </div>
+          <button type="button" id="room-travel-btn" class="room-travel-btn">✈️ 여행 가기</button>
         </div>
       </div>
 
@@ -204,7 +205,7 @@
   <script src="firebase-config.js?v=20261112f"></script>
   <script src="portraits.js?v=20261112f"></script>
   <script src="scenes.js?v=20261112f"></script>
-  <script src="main.js?v=20261113a"></script>
+  <script src="main.js?v=20261113b"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

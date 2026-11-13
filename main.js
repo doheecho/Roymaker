@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113a";
+const DATA_VERSION = "20261113b";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2420,6 +2420,7 @@ function startTravel(destination) {
   state.dayRunning = true;
   document.getElementById("start-day-btn").disabled = true;
   document.getElementById("travel-btn").disabled = true;
+  syncRoomTravelButton();
   renderShop();
   showView("map");
   runTravel(destination);
@@ -3117,6 +3118,7 @@ function renderTimetable() {
   document.getElementById("start-day-btn").textContent = `오늘(${WEEKDAY_LABELS[weekdayOf(state.day)]}) 일과 시작`;
   const travelBtn = document.getElementById("travel-btn");
   if (travelBtn) travelBtn.hidden = weekdayOf(state.day) !== 1; // 여행은 월요일에만 떠날 수 있다
+  syncRoomTravelButton();
 
   renderPalette();
 }
@@ -3956,6 +3958,7 @@ async function runTravel(destination) {
   state.dayRunning = false;
   document.getElementById("start-day-btn").disabled = false;
   document.getElementById("travel-btn").disabled = false;
+  syncRoomTravelButton();
   renderShop();
   document.getElementById("day-summary").hidden = false;
   document.getElementById("day-summary").textContent = `${destination.name} 여행에서 돌아왔다 — Day ${state.day}부터 다시 일상이 시작된다.`;
@@ -4195,7 +4198,10 @@ function showView(name) {
   });
   document.getElementById("main-view").dataset.view = name;
 
-  if (name === "home") randomizeRoomCharacter();
+  if (name === "home") {
+    randomizeRoomCharacter();
+    syncRoomTravelButton();
+  }
 
   if (name === "map" && state.map) {
     state.map.relayout();
@@ -4211,6 +4217,26 @@ function randomizeRoomCharacter() {
   const img = document.getElementById("room-char");
   if (!img) return;
   img.src = ROOM_CHAR_IMAGES[Math.floor(Math.random() * ROOM_CHAR_IMAGES.length)];
+}
+
+// 내 방 화면의 여행 버튼 — 주간 일정 화면의 여행 버튼(월요일에만 보임)과 같은 상태를 따라간다
+function syncRoomTravelButton() {
+  const roomBtn = document.getElementById("room-travel-btn");
+  const travelBtn = document.getElementById("travel-btn");
+  if (!roomBtn || !travelBtn) return;
+  const monday = !travelBtn.hidden;
+  roomBtn.disabled = !monday || travelBtn.disabled || state.dayRunning;
+  roomBtn.textContent = monday ? "✈️ 여행 가기" : "✈️ 여행은 월요일에만";
+  roomBtn.title = monday ? "이번 주 여행을 떠난다" : "여행은 월요일에만 떠날 수 있어요";
+}
+
+function wireRoomTravel() {
+  const roomBtn = document.getElementById("room-travel-btn");
+  const travelBtn = document.getElementById("travel-btn");
+  if (!roomBtn || !travelBtn) return;
+  roomBtn.addEventListener("click", () => {
+    if (!roomBtn.disabled) travelBtn.click();
+  });
 }
 
 // 화면 설명 팝업 — 각 화면 제목 옆 "설명보기" 버튼
@@ -4440,6 +4466,7 @@ async function main() {
   wireHelp();
   wireSlots();
   wireTravel();
+  wireRoomTravel();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
   document.getElementById("new-game-btn").addEventListener("click", async () => {
     if (state.dayRunning) return;
