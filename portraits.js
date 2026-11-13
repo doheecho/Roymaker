@@ -29,6 +29,7 @@ const PORTRAIT_SPECS = {
   essay_teacher: { name: "논술 선생님", skin: "#f3cba9", hair: "#3a2a24", style: "bun", glasses: "round", mouth: "smile", lashes: true, shirt: "#c8a46a", bg: "#f7eedc" },
   math_teacher: { name: "수학 선생님", skin: "#efc39e", hair: "#3a3330", style: "short", glasses: "square", mustache: true, mouth: "smile", tie: "#3d5a8a", shirt: "#ffffff", bg: "#e6eef8" },
   swim_coach: { name: "수영장 코치님", skin: "#d9a074", hair: "#1f1a1c", style: "short", hat: "swimcap", hatColor: "#3d7be0", goggles: true, mouth: "grin", whistle: true, shirt: "#1f6fbf", bg: "#d6f0fb" },
+  teacher_badminton: { name: "배드민턴 선생님", skin: "#e3b08a", hair: "#1f1a1c", style: "short", hat: "cap", hatColor: "#2f9e6e", mouth: "grin", whistle: true, shirt: "#2f9e6e", bg: "#dcf3e8" },
   sports_coach: { name: "체육 코치님", skin: "#e3b08a", hair: "#1f1a1c", style: "short", hat: "cap", hatColor: "#d9534f", mouth: "grin", whistle: true, shirt: "#d9534f", bg: "#fde0dd" },
   gyeongyul_uncle: { name: "경율이 삼촌", skin: "#efc39e", hair: "#2b2422", style: "short", glasses: "square", mouth: "smile", shirt: "#e0a43b", bg: "#fdf0d2" },
   alba_mcdonalds: { name: "맥도날드 알바생", skin: "#f3cba9", hair: "#2b2422", style: "short", hat: "cap", hatColor: "#d9534f", mouth: "grin", cheeks: true, shirt: "#ffd257", bg: "#fff1bf" },

@@ -58,7 +58,7 @@ const STAT_INFO = {
   focus: "한 가지에 오래 집중하는 힘. 한자·주산·바둑·자율학습으로 오른다.",
   expression: "그림·음악·몸짓으로 표현하는 힘. 미술·음악·댄스·연극으로 오른다.",
   social: "친구와 어울리고 협동하는 힘. 창의적 체험활동·친구 돕기·함께 놀기로 오른다.",
-  diligence: "약속과 규칙을 지키는 생활 태도. 바른 생활·등록 수업으로 오르고 지각하면 떨어진다.",
+  diligence: "약속과 규칙을 지키는 생활 태도. 바른 생활·학원 수업으로 오르고 지각하면 떨어진다.",
   insa: "친구들 사이의 인기. 포켓몬카드·반갑게 인사·방송댄스로 오른다.",
   selfEsteem: "스스로를 믿는 마음. 친구 돕기·위기 대처·분실물 신고로 오른다.",
   digital: "컴퓨터와 디지털 도구를 다루는 힘. 컴퓨터(ICT)·AI·코딩으로 오른다.",
@@ -291,12 +291,12 @@ function isRegisteredSlot(academyId, dow, startMin) {
 }
 
 // 주초 일괄 등록을 놓쳤어도 당일 학원에서 바로 정식 등록할 수 있게 한다 — 이후 주에도 계속 적용되도록 active/pending 둘 다 갱신
-function registerAcademyNow(academyId, dow, startMin) {
-  const current = state.registrations.active[academyId];
-  const days = current && current.startMin === startMin ? [...new Set([...current.days, dow])].sort() : [dow];
-  state.registrations.active[academyId] = { days, startMin };
-  state.registrations.pending[academyId] = { days: [...days], startMin };
-  saveGame();
+// 학원 수업을 들을 수 있는지 — 등록 여부와 상관없이 그 학원 운영시간 안이면 수업을 듣는다
+function academyClassOpen(academy, dow, startMin, endMin = startMin + ACADEMY_LESSON_MIN) {
+  if (!academy) return false;
+  if (isRegisteredSlot(academy.id, dow, startMin)) return true;
+  if (!academy.hours) return true;
+  return startMin >= clockToMinutes(academy.hours.open) && endMin <= clockToMinutes(academy.hours.close);
 }
 
 // 하루 기본 시간표: 등교일이면 학교, 그리고 이번 주에 등록된 학원 수업
@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113c";
+const DATA_VERSION = "20261113d";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -3017,7 +3017,7 @@ function renderPalette() {
     );
   });
 
-  const acads = paletteGroup(el, "🏢 학원 — 정해진 수업시간이 아닐 때에 가면 자율학습을 한다. 각 수업은 60분 진행한다.");
+  const acads = paletteGroup(el, "🏢 학원 — 등록하지 않아도 운영시간 안이면 언제든 수업을 듣는다. 각 수업은 60분 진행한다.");
   state.academies
     .filter((a) => a.location.etaMinFromHome != null)
     .forEach((academy) => {
@@ -3052,10 +3052,10 @@ function blockDisplay(block, day = state.day) {
     return { icon: activity.icon, label: activity.name, cls: "tt-activity" };
   }
   const academy = state.academies.find((a) => a.id === block.academyId);
-  const registered = isRegisteredSlot(academy.id, dow, block.startMin);
+  const inClass = academyClassOpen(academy, dow, block.startMin, block.endMin);
   return {
     icon: state.categoryMap[academy.categoryId]?.icon ?? "🏫",
-    label: `${academy.name}${registered ? " (등록 수업)" : " (자율학습)"}`,
+    label: `${academy.name}${inClass ? " (수업)" : " (자율학습)"}`,
     cls: "tt-academy",
   };
 }
@@ -3291,17 +3291,17 @@ function applyAcademyEffects(academy) {
   addStress(ACADEMY_STRESS);
   renderStats(state.character);
 
-  logLine(`${academy.name} 등록 수업 완료 — ${appliedText(applied)}`);
+  logLine(`${academy.name} 수업 완료 — ${appliedText(applied)}`);
   diary(`${josa(academy.name, "에서/에서")} 열심히 수업을 들었다.`);
 }
 
-// 운영시간 안이지만 사전 등록하지 않은 시간에 간 경우 — 자율학습
+// 운영시간 밖에 간 경우 — 자율학습
 function applyAutonomousStudy(academy) {
   const applied = applyEffect(AUTONOMOUS_STUDY_EFFECT);
   state.character.condition.hunger = Math.max(0, state.character.condition.hunger - 10);
   addStress(AUTONOMOUS_STUDY_STRESS);
   renderStats(state.character);
-  logLine(`${academy.name} — 등록된 수업 시간이 아니라 자율학습을 했다 (${appliedText(applied)})`);
+  logLine(`${academy.name} — 수업 시간이 아니라 자율학습을 했다 (${appliedText(applied)})`);
   diary(`${josa(academy.name, "에/에")} 갔는데 내 수업 시간이 아니라서 혼자 자습을 했다.`);
 }
 
@@ -3557,7 +3557,7 @@ function recentInsaGain() {
 const NO_FARE_WALLET_THRESHOLD = 1000;
 
 async function eveningTalkWithMom(clock, skipped) {
-  const names = [...new Set(skipped.map((b) => blockDisplay(b).label.replace(/ \((등록 수업|자율학습)\)$/, "")))];
+  const names = [...new Set(skipped.map((b) => blockDisplay(b).label.replace(/ \((등록 수업|수업|자율학습)\)$/, "")))];
   const what = names.length ? names.join(", ") : "오늘 일정";
   const noFare = state.character.wallet < NO_FARE_WALLET_THRESHOLD;
   const good = !noFare && recentLogicGain() >= LOGIC_GAIN_FOR_EXCUSE;
@@ -4078,7 +4078,7 @@ async function runDay(blocks) {
         clock = await runCareBlock(block, clock);
       } else {
         clock = Math.max(clock, block.startMin);
-        let registered = block.kind === "academy" && isRegisteredSlot(block.academyId, dow, block.startMin);
+        let registered = block.kind === "academy" && academyClassOpen(place.academy, dow, block.startMin, block.endMin);
         if (block.kind === "academy") {
           const cat = state.categoryMap[place.academy.categoryId];
           await maybeShowIntro(cat?.introId);
@@ -4090,35 +4090,13 @@ async function runDay(blocks) {
               "네!"
             );
           } else {
-            const wantsToRegister = await presentChoice(
-              "event-panel",
+            const hours = place.academy.hours;
+            await teacherSays(
+              cat?.teacher ?? "teacher",
               `${cat?.icon ?? "🏫"} ${place.name}`,
-              [
-                { label: "네, 이 시간에 바로 등록할래요", value: true },
-                { label: "아니요, 오늘은 자율학습만 할게요", value: false },
-              ],
-              {
-                body: "\"어? 로이야, 오늘은 네 수업 시간이 아닌데? 지금 이 시간으로 바로 등록해서 수업 들을까?\"",
-                speaker: cat?.teacher ?? "teacher",
-              }
+              `"어? 로이야, 지금은 수업 시간이 아니야${hours ? `(수업은 ${hours.open}~${hours.close})` : ""}. 오늘은 자율학습 하고 가렴~"`,
+              "네!"
             );
-            if (wantsToRegister) {
-              registerAcademyNow(block.academyId, dow, block.startMin);
-              registered = true;
-              await teacherSays(
-                cat?.teacher ?? "teacher",
-                `${cat?.icon ?? "🏫"} ${place.name}`,
-                `"좋아! 오늘부터 이 시간에 등록됐어. ${cat?.greeting ?? "어서 와! 오늘도 열심히 해 보자~"}"`,
-                "네!"
-              );
-            } else {
-              await teacherSays(
-                cat?.teacher ?? "teacher",
-                `${cat?.icon ?? "🏫"} ${place.name}`,
-                "\"알겠어, 그럼 오늘은 자율학습 하고 가렴~\"",
-                "네!"
-              );
-            }
           }
         }
         const waitLabel =

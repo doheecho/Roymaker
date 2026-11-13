@@ -122,7 +122,7 @@
       "focus": 1
     },
     "staminaCost": 14,
-    "teacher": "sports_coach",
+    "teacher": "teacher_badminton",
     "greeting": "로이! 라켓 꽉 잡고, 셔틀콕 끝까지 보는 거야. 오늘도 신나게 쳐 보자!",
     "introId": "badminton"
   }
