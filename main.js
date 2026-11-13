@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113l";
+const DATA_VERSION = "20261113n";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2443,7 +2443,8 @@ function wireSlots() {
 
 // 여행 길이별 안내 문구
 function travelNoteFor(days) {
-  return `여행을 가면 이번 주 ${days}일간의 학교·학원·활동을 모두 쉬고 부모님과 함께 떠난다.`;
+  const span = days > 7 ? `다음주 일요일까지 ${days}일간` : `이번 주 ${days}일간`;
+  return `여행을 가면 ${span}의 학교·학원·활동을 모두 쉬고 부모님과 함께 떠난다.`;
 }
 
 function openTravelModal() {
