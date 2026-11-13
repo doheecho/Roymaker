@@ -95,6 +95,35 @@
     },
     "staminaCost": 16,
     "teacher": "swim_coach",
-    "greeting": "로이 왔구나! 준비 운동 꼼꼼히 하고, 오늘도 물이랑 친해져 보자~"
+    "greeting": "로이 왔구나! 준비 운동 꼼꼼히 하고, 오늘도 물이랑 친해져 보자~",
+    "introId": "swimming"
+  },
+  {
+    "id": "premium_essay",
+    "label": "프리미엄 논술 (대치)",
+    "icon": "✒️",
+    "growth": {
+      "language": 3,
+      "expression": 2,
+      "logic": 1
+    },
+    "staminaCost": 10,
+    "teacher": "essay_teacher",
+    "greeting": "로이 왔구나, 어서 오렴. 오늘은 책을 깊이 읽고 내 생각을 논리 있게 써 보자~",
+    "introId": "nonsul"
+  },
+  {
+    "id": "badminton",
+    "label": "배드민턴",
+    "icon": "🏸",
+    "growth": {
+      "agility": 2,
+      "stamina": 1,
+      "focus": 1
+    },
+    "staminaCost": 14,
+    "teacher": "sports_coach",
+    "greeting": "로이! 라켓 꽉 잡고, 셔틀콕 끝까지 보는 거야. 오늘도 신나게 쳐 보자!",
+    "introId": "badminton"
   }
 ]

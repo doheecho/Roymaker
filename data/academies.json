@@ -58,5 +58,35 @@
     "location": { "lat": null, "lng": null, "etaMinFromHome": 35, "mode": "transit" },
     "hours": { "open": "17:00", "close": "21:00" },
     "monthlyFee": null
+  },
+  {
+    "id": "nonsul_hwarang",
+    "name": "논술화랑",
+    "categoryId": "premium_essay",
+    "region": "daechi",
+    "address": "서울 강남구 선릉로64길 14",
+    "location": { "lat": null, "lng": null, "etaMinFromHome": 35, "mode": "transit" },
+    "hours": { "open": "17:00", "close": "21:00" },
+    "monthlyFee": null
+  },
+  {
+    "id": "blue_lagoon_seongdong",
+    "name": "블루라군 성동점",
+    "categoryId": "swimming",
+    "region": "local",
+    "address": "서울 성동구 왕십리로 280",
+    "location": { "lat": null, "lng": null, "etaMinFromHome": 15, "mode": "transit" },
+    "hours": { "open": "16:00", "close": "20:00" },
+    "monthlyFee": null
+  },
+  {
+    "id": "yeollin_geumho_badminton",
+    "name": "열린금호교육문화관",
+    "categoryId": "badminton",
+    "region": "local",
+    "address": "서울 성동구 무수막길 69",
+    "location": { "lat": null, "lng": null, "etaMinFromHome": 10, "mode": "walk" },
+    "hours": { "open": "16:00", "close": "20:00" },
+    "monthlyFee": null
   }
 ]

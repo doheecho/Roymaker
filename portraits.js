@@ -337,6 +337,36 @@ function probeImage(url) {
   });
 }
 
+// 이미 찾아 둔 결과가 있으면 바로 돌려준다(없으면 undefined) — 대화창이 기다리지 않고 그릴 수 있게
+function cachedCustomPortrait(id) {
+  return id in customPortraitCache ? customPortraitCache[id] : undefined;
+}
+
+// 사진을 미리 받아 두는 곳 — 같은 주소의 <img>는 이 덕분에 기다림 없이 뜬다
+const preloadedPortraits = {};
+function preloadPortraitImage(url) {
+  if (!url) return Promise.resolve(false);
+  if (!preloadedPortraits[url]) {
+    const img = new Image();
+    img.decoding = "async";
+    preloadedPortraits[url] = new Promise((resolve) => {
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+    });
+    preloadedPortraits[url].img = img;
+    img.src = url;
+  }
+  return preloadedPortraits[url];
+}
+
+// 게임 시작 뒤 대화에 나오는 인물 사진들을 한 장씩 미리 받아 둔다
+async function preloadAllCustomPortraits() {
+  for (const id of Object.keys(PORTRAIT_SPECS)) {
+    const url = await resolveCustomPortrait(id);
+    if (url) await preloadPortraitImage(url);
+  }
+}
+
 async function resolveCustomPortrait(id) {
   if (id in customPortraitCache) return customPortraitCache[id];
   const spec = portraitSpec(id);

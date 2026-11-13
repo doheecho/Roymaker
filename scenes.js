@@ -162,6 +162,29 @@ const SCENES = {
     const bx = SCENE_W - ((t % 1.6) / 1.6) * (SCENE_W + 10);
     sR(ctx, bx, 44, 7, 7, "#e53935");
   },
+  badminton(ctx, t) {
+    bgRoom(ctx, "#dfe8f2", "#c9a46c", "#b38b55");
+    // 코트 선 + 네트
+    sR(ctx, 0, 70, SCENE_W, 1, "#ffffff");
+    sR(ctx, 79, 38, 2, 34, "#6b6b6b");
+    for (let y = 40; y < 56; y += 3) sR(ctx, 80, y, 1, 2, "#f5f5f5");
+    sR(ctx, 79, 38, 2, 2, "#ffffff");
+    const period = 1.8;
+    const ph = (t % period) / period;
+    const swing = ph < 0.15 || ph > 0.85;
+    drawActor(ctx, spriteFrame("right", swing, t), 34, 24);
+    // 라켓
+    const ry = swing ? 31 : 37;
+    sR(ctx, 56, ry + 6, 1, 8, "#555");
+    sR(ctx, 54, ry, 5, 6, "#e04a5f");
+    sR(ctx, 55, ry + 1, 3, 4, "#fbe9ec");
+    // 셔틀콕: 라켓 → 네트 너머 → 다시 라켓으로 포물선
+    const half = ph < 0.5 ? ph * 2 : (1 - ph) * 2;
+    const sx = 59 + half * 60;
+    const sy = 33 - Math.sin(half * Math.PI) * 20;
+    sR(ctx, sx, sy, 3, 2, "#ffffff");
+    sR(ctx, sx + (ph < 0.5 ? -1 : 3), sy, 1, 2, "#f2c14e");
+  },
   jumprope(ctx, t) {
     bgOutdoor(ctx, t);
     const phase = (t * 1.6) % 1;
@@ -444,6 +467,8 @@ const ACADEMY_SCENES = {
   ball_sports: { id: "soccer" },
   swimming: { id: "swim" },
   premium_academic: { id: "study", symbols: ["A+", "★", "π", "∑"] },
+  premium_essay: { id: "study", symbols: ["논", "술", "✎", "A+"] },
+  badminton: { id: "badminton" },
 };
 
 const ACTIVITY_SCENES = {

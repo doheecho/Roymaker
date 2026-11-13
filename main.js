@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113b";
+const DATA_VERSION = "20261113c";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -1728,6 +1728,46 @@ async function persuadeMomLeaveWork(contact, visit) {
 // speaker: 초상화 id (iroi, mom, dad, …) — 없으면 해설(초상화 없음). speakerName으로 이름표만 바꿀 수 있다.
 const TYPE_MS = 22;
 
+// 대화창 초상화 — 직접 넣은 사진이 있으면 사진이 다 받아진 뒤에만 보여준다.
+// (예전엔 기본 그림을 먼저 그렸다가 사진으로 바꿔서 0.5초쯤 기본 그림이 비쳤다)
+const PORTRAIT_FALLBACK_MS = 2000;
+function fillPortraitFrame(frame, speaker, alt) {
+  const showImage = (url) => {
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = alt;
+    frame.replaceChildren(img);
+  };
+  const showDrawn = () => {
+    const el = portraitElement(speaker);
+    if (el) frame.replaceChildren(el);
+  };
+  if (typeof resolveCustomPortrait !== "function") return showDrawn();
+  const known = typeof cachedCustomPortrait === "function" ? cachedCustomPortrait(speaker) : undefined;
+  if (known === null) return showDrawn();
+  const ready = (url) => (typeof preloadPortraitImage === "function" ? preloadPortraitImage(url) : Promise.resolve(true));
+
+  let settled = false;
+  // 인터넷이 아주 느릴 때만 기본 그림을 먼저 보여준다
+  const fallbackTimer = setTimeout(() => {
+    if (!settled && frame.isConnected && !frame.firstChild) showDrawn();
+  }, PORTRAIT_FALLBACK_MS);
+  (known !== undefined ? Promise.resolve(known) : resolveCustomPortrait(speaker)).then(async (url) => {
+    if (!url) {
+      settled = true;
+      clearTimeout(fallbackTimer);
+      if (frame.isConnected && !frame.firstChild) showDrawn();
+      return;
+    }
+    const ok = await ready(url);
+    settled = true;
+    clearTimeout(fallbackTimer);
+    if (!frame.isConnected) return;
+    if (ok) showImage(url);
+    else if (!frame.firstChild) showDrawn();
+  });
+}
+
 function presentChoice(panelId, heading, options, { body = null, tone = null, speaker = null, speakerName = null } = {}) {
   if (typeof hideScene === "function") hideScene();
   return new Promise((resolve) => {
@@ -1742,17 +1782,8 @@ function presentChoice(panelId, heading, options, { body = null, tone = null, sp
       const frame = document.createElement("div");
       frame.className = "pm-portrait";
       frame.style.background = spec.bg ?? "#3d4a78";
-      frame.appendChild(portraitElement(speaker));
       panel.appendChild(frame);
-      if (typeof resolveCustomPortrait === "function") {
-        resolveCustomPortrait(speaker).then((url) => {
-          if (!url || !frame.isConnected) return;
-          const img = document.createElement("img");
-          img.src = url;
-          img.alt = speakerName ?? spec.name;
-          frame.replaceChildren(img);
-        });
-      }
+      fillPortraitFrame(frame, speaker, speakerName ?? spec.name);
     }
 
     const main = document.createElement("div");
@@ -4370,6 +4401,8 @@ async function applyCustomIroiImage() {
 async function main() {
   await ensureUiModules();
   applyCustomIroiImage();
+  // 대화창 인물 사진을 뒤에서 미리 받아 둔다(게임 시작은 막지 않음)
+  if (typeof preloadAllCustomPortraits === "function") setTimeout(() => preloadAllCustomPortraits(), 1500);
   const cloudReadyPromise = initCloudSave(); // 데이터 로딩과 동시에 진행 — 느려도 게임 시작을 막지 않음
 
   const [
