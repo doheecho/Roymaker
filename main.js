@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113n";
+const DATA_VERSION = "20261113o";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -3881,6 +3881,8 @@ async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
   state.gameMinutesToday = 0;
   state.homeworkMinutesToday = 0;
   state.homeworkPraiseDone = false;
+  state.readingCountToday = 0;
+  state.readingPraiseDone = false;
   const talkIfDue = async (force) => {
     if (pendingTalk && (force || clock >= pendingTalk.at)) {
       const talk = pendingTalk;
@@ -4017,7 +4019,27 @@ async function readAtHome(clock) {
     body: `『${book}』 다 읽었다! 이야기가 머릿속에 계속 떠오른다~\n(${appliedText(applied)})`,
     speaker: "iroi",
   });
+  state.readingCountToday = (state.readingCountToday ?? 0) + 1;
+  if (state.readingCountToday >= READING_PRAISE_COUNT && !state.readingPraiseDone) {
+    state.readingPraiseDone = true;
+    await praiseReading(book);
+  }
   return end;
+}
+
+// 하루에 집에서 독서를 2번 이상 하면 엄마가 칭찬한다(하루 1번)
+const READING_PRAISE_COUNT = 2;
+const READING_PRAISE_EFFECT = { selfEsteem: 2, language: 1, logic: 1, diligence: 1 };
+async function praiseReading(book) {
+  const applied = applyEffect(READING_PRAISE_EFFECT);
+  renderStats(state.character);
+  logLine(`🌟 집에서 책을 열심히 읽는 걸 보고 엄마가 칭찬해 주셨다 (${appliedText(applied)})`);
+  diary("오늘 책을 여러 권 읽었더니 엄마가 책 읽는 로이가 최고라고 칭찬해 주셨다.");
+  await presentChoice("event-panel", "🌟 칭찬", [{ label: "헤헤, 책 읽는 거 재밌어요!", value: true }], {
+    body: `"어머, 우리 로이가 오늘 책을 벌써 몇 권째 읽는 거야? 『${book}』도 다 읽었네!\n이렇게 스스로 책 읽는 로이가 엄마는 너무 자랑스러워~"\n(${appliedText(applied)})`,
+    tone: "event",
+    speaker: "mom",
+  });
 }
 
 // 시키지 않았는데 하루에 숙제를 2시간 넘게 하면 엄마가 기특해하며 칭찬한다(하루 1번)
