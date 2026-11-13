@@ -101,7 +101,7 @@
         <template id="help-academy"><p>
           동네 학원들의 이름·운영시간·위치·성장 효과다. 학원은 <strong>매주 일정을 미리 등록</strong>한다 — 요일과
           시작 시각을 고르면 <strong>다음 주 월요일부터</strong> 적용되고, 등록된 수업은 매일 시간표에 자동으로 올라간다.
-          운영시간 밖에는 들어갈 수 없고, 운영시간 안이지만 등록하지 않은 시간에 가면 자율학습만 한다.
+          등록하지 않아도 운영시간 안이면 언제 가든 수업을 들을 수 있다.
           수업이 끝나면 하원버스를 타고 집으로 가거나 개별적으로 이동할 수 있다.
         </p></template>
         <ul id="academies"></ul>
@@ -203,9 +203,9 @@
 
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=8d5cf5d494acc41a8002c036c0249f9a&libraries=services"></script>
   <script src="firebase-config.js?v=20261112f"></script>
-  <script src="portraits.js?v=20261113c"></script>
+  <script src="portraits.js?v=20261113d"></script>
   <script src="scenes.js?v=20261113c"></script>
-  <script src="main.js?v=20261113c"></script>
+  <script src="main.js?v=20261113d"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
