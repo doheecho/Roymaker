@@ -17,6 +17,7 @@ const PORTRAIT_SPECS = {
   crying_friend: { name: "친구", skin: "#f9d6bb", hair: "#5a3a26", style: "bob", brows: "sad", mouth: "frown", tears: true, shirt: "#7fc4e8", bg: "#d9effa" },
   stationery_owner: { name: "문구점 아저씨", skin: "#efc39e", hair: "#6d6560", style: "bald", mustache: true, mouth: "smile", apron: "#f0e6c8", shirt: "#7a9e5a", bg: "#e6f2d9" },
   snack_owner: { name: "분식집 이모", skin: "#f3cba9", hair: "#3a2620", style: "bun", headscarf: "#e94e4e", mouth: "smile", cheeks: true, apron: "#fff1e0", shirt: "#f08a5d", bg: "#ffe6d6" },
+  library_teacher: { name: "도서관 선생님", skin: "#f3cba9", hair: "#3a2a24", style: "bob", glasses: "round", mouth: "smile", lashes: true, shirt: "#8fb36b", bg: "#eef5e3" },
   teacher: { name: "선생님", skin: "#f3cba9", hair: "#3a2a24", style: "bob", glasses: "round", mouth: "smile", shirt: "#5fa8a0", bg: "#dcf1ee" },
   butterfly_uncle: { name: "나비정원 삼촌", skin: "#e9bb93", hair: "#2a201c", style: "short", hat: "cap", hatColor: "#5fae6e", mouth: "grin", cheeks: true, shirt: "#5fae6e", bg: "#e3f4e0" },
   homeroom_teacher: { name: "담임 선생님", skin: "#f6d2b5", hair: "#5a3a26", style: "bob", glasses: "round", mouth: "smile", cheeks: true, lashes: true, shirt: "#f5a3b5", bg: "#fde4ec" },

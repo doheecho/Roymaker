@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113o";
+const DATA_VERSION = "20261113p";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -834,6 +834,7 @@ function walkTo(target, startClock, label, { allowEarlyHome = false, roam = fals
       subway: nearbyStationId(state.stations.subway),
       hotplace: nearbyStationId(state.hotplaces),
       park: nearbyStationId(state.parks),
+      library: nearbyStationId(state.libraries ?? []),
     };
 
     function pause() {
@@ -1012,6 +1013,15 @@ function walkTo(target, startClock, label, { allowEarlyHome = false, roam = fals
         return;
       }
       if (!nearPark || nearPark.dist > DEPART_RADIUS_M) suppressed.park = null;
+
+      const nearLib = nearestStation(state.charPos, state.libraries ?? []);
+      if (nearLib && nearLib.dist <= ARRIVAL_RADIUS_M && nearLib.id !== suppressed.library) {
+        suppressed.library = nearLib.id;
+        logLine(`${minutesToClock(clock)} ${nearLib.icon} ${nearLib.name} 앞에 도착했다`);
+        pauseFor(() => visitLibrary(nearLib, clock));
+        return;
+      }
+      if (!nearLib || nearLib.dist > DEPART_RADIUS_M) suppressed.library = null;
 
       // 돌발사건: 실제로 걸은 게임 1분마다 한 번씩 판정
       while (walkedMinAcc >= 1) {
@@ -1232,6 +1242,101 @@ async function visitHotplace(place, clock) {
 }
 
 // 공원에 들어가면 친구를 만나는 이벤트 — 매번 놀자는 친구 중 하나를 랜덤으로 뽑는다(weight로 빈도 조절)
+// ── 도서관(2026-11-13 추가) — 일정 등록 없이, 운영시간에 들어가면 1시간씩 책을 읽는다 ──
+const LIBRARY_OPEN_MIN = 9 * 60;
+const LIBRARY_CLOSE_MIN = 18 * 60;
+const LIBRARY_HOUR_MIN = 60;
+const LIBRARY_HOUR_EFFECT = { language: 1, focus: 1, perception: 1, staminaNow: -3, stress: -2 };
+const LIBRARY_PRAISE_CHANCE = 0.5;
+const LIBRARY_PRAISE_EFFECT = { selfEsteem: 2, diligence: 1, logic: 1 };
+const LIBRARY_BOOKS = [
+  "Why? 인체",
+  "Why? 곤충",
+  "마법천자문",
+  "그리스 로마 신화",
+  "수학도둑",
+  "어린이 과학동아",
+  "전천당",
+  "샬롯의 거미줄",
+  "나무 집",
+  "한국사 만화",
+  "세계 지도 백과",
+  "꼬마 니콜라",
+];
+
+async function visitLibrary(lib, clock) {
+  if (clock < LIBRARY_OPEN_MIN || clock + LIBRARY_HOUR_MIN > LIBRARY_CLOSE_MIN) {
+    await presentChoice("event-panel", `${lib.icon} ${lib.name}`, [{ label: "▶ 계속 걷기", value: true }], {
+      body: `도서관 문이 닫혀 있다… (운영 ${minutesToClock(LIBRARY_OPEN_MIN)}~${minutesToClock(LIBRARY_CLOSE_MIN)})`,
+      speaker: "iroi",
+    });
+    return 0;
+  }
+  const enter = await presentChoice(
+    "event-panel",
+    `${lib.icon} ${lib.name}`,
+    [
+      { label: "📖 들어가서 책 읽을래요", value: true, hint: "1시간씩 읽고, 더 볼지 고를 수 있어요" },
+      { label: "다음에 올게요", value: false },
+    ],
+    { body: "\"어서 오렴~ 읽고 싶은 책 골라서 조용히 읽고 가렴.\"", speaker: "library_teacher" }
+  );
+  if (!enter) return 0;
+  await maybeShowIntro("library");
+
+  let t = clock;
+  let hours = 0;
+  const books = [];
+  for (;;) {
+    const book = pickRandom(LIBRARY_BOOKS.filter((b) => !books.includes(b))) ?? pickRandom(LIBRARY_BOOKS);
+    books.push(book);
+    const end = t + LIBRARY_HOUR_MIN;
+    await waitUntil(t, end, `📚 도서관에서 『${book}』 읽는 중`, WAIT_PHASE_MS, { id: "reading" });
+    t = end;
+    hours += 1;
+    const applied = applyEffect(LIBRARY_HOUR_EFFECT);
+    renderStats(state.character);
+    logLine(`${minutesToClock(t)} 도서관에서 『${book}』${josa(book, "을/를").slice(book.length)} 읽었다 (${appliedText(applied)})`);
+    const canMore = t + LIBRARY_HOUR_MIN <= LIBRARY_CLOSE_MIN;
+    const more = await presentChoice(
+      "event-panel",
+      `${lib.icon} ${lib.name}`,
+      [
+        { label: "📖 한 시간 더 읽기", value: true, disabled: !canMore, hint: canMore ? "" : "곧 문 닫을 시간이에요" },
+        { label: "🚪 그만 보고 나가기", value: false },
+      ],
+      { body: `${minutesToClock(t)} · 『${book}』 다 읽었다! 재밌다~\n(${appliedText(applied)})`, speaker: "iroi" }
+    );
+    if (!more) break;
+  }
+  state.libraryHoursToday = (state.libraryHoursToday ?? 0) + hours;
+  diary(`도서관에 가서 ${hours}시간 동안 책을 읽었다. ${books.map((b) => `『${b}』`).join(", ")}${josa(books[books.length - 1], "을/를").slice(books[books.length - 1].length)} 읽었다.`);
+  await presentChoice("event-panel", `${lib.icon} ${lib.name}`, [{ label: "▶ 계속 걷기", value: true }], {
+    body: "\"또 오렴~ 조심히 가!\"",
+    speaker: "library_teacher",
+  });
+  return t - clock;
+}
+
+// 도서관에 다녀온 날, 집에 있을 때 엄마나 아빠가 스스로 공부하고 왔다며 칭찬할 수도 있다(하루 1번 판정)
+async function libraryPraise() {
+  const parent = Math.random() < 0.5 ? "mom" : "dad";
+  const applied = applyEffect(LIBRARY_PRAISE_EFFECT);
+  renderStats(state.character);
+  const who = parent === "mom" ? "엄마" : "아빠";
+  logLine(`🌟 도서관에서 스스로 공부하고 온 걸 ${who}가 칭찬해 주셨다 (${appliedText(applied)})`);
+  diary(`도서관에 다녀왔다고 했더니 ${who}가 스스로 공부하고 왔다고 칭찬해 주셨다.`);
+  const line =
+    parent === "mom"
+      ? "로이 오늘 도서관 다녀왔다며? 누가 시키지도 않았는데 스스로 공부하고 오다니, 정말 대견하다~"
+      : "우리 로이가 혼자 도서관에 가서 책을 읽고 왔다고? 아빠가 다 뿌듯하네! 최고야!";
+  await presentChoice("event-panel", "🌟 칭찬", [{ label: "헤헤, 또 갈 거예요!", value: true }], {
+    body: `"${line}"\n(${appliedText(applied)})`,
+    tone: "event",
+    speaker: parent,
+  });
+}
+
 async function visitPark(park, clock) {
   const variant = pickWeighted(state.parkFriends);
   const accepted = await presentChoice(
@@ -2073,6 +2178,8 @@ async function renderMap(character, academies, activities, csvRows, hotplaces) {
 
   // 공원에 들어가면 친구를 만나는 이벤트가 발동한다(walkTo 참고)
   state.parks = csvRows.filter((r) => r.type === "park").map((r) => ({ id: r.id, name: r.name, pos: r.pos, icon: "🌳" }));
+  // 도서관: place.csv에서 이름에 "도서관"이 들어간 장소(지금은 성동구립금호도서관)
+  state.libraries = csvRows.filter((r) => r.name.includes("도서관")).map((r) => ({ id: r.id, name: r.name, pos: r.pos, icon: "📚" }));
 
   for (const place of hotplaces) {
     const fromCsv = csvPlace(place.name);
@@ -3908,7 +4015,14 @@ async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
       clock = await unclePartyEvent(clock);
     }
   };
+  const libraryPraiseIfDue = async () => {
+    if ((state.libraryHoursToday ?? 0) > 0 && !state.libraryPraiseChecked && isAtHome()) {
+      state.libraryPraiseChecked = true;
+      if (Math.random() < LIBRARY_PRAISE_CHANCE) await libraryPraise();
+    }
+  };
   for (;;) {
+    await libraryPraiseIfDue();
     await talkIfDue(false);
     await dinnerIfDue(false);
     await momDateIfDue(false);
@@ -4231,6 +4345,8 @@ async function runDay(blocks) {
   state.partyDone = false;
   state.momEarlyHomeToday = false;
   state.momDateDone = false;
+  state.libraryHoursToday = 0;
+  state.libraryPraiseChecked = false;
   state.unclePartyPending = false;
   state.friendMeetup = null;
   state.placeEvents.forEach((pe) => {
