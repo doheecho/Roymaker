@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261113h">
+<link rel="stylesheet" href="style.css?v=20261113e">
 </head>
 <body>
   <header>
@@ -51,9 +51,7 @@
         <div class="room-scene">
           <img class="room-bg" src="img/characters/room_1.jpg" alt="이로이의 방">
           <div class="room-char-wrap">
-            <div id="room-char-turn" class="room-char-turn" title="이로이를 좌우로 끌거나 톡 눌러 보세요">
-              <img id="room-char" class="room-char" src="img/characters/roy_n_9_stand.png" alt="방 안에 서 있는 이로이" draggable="false">
-            </div>
+            <img id="room-char" class="room-char" src="img/characters/roy_n_9_stand.png" alt="방 안에 서 있는 이로이">
           </div>
           <button type="button" id="room-travel-btn" class="room-travel-btn">✈️ 여행 가기</button>
         </div>
@@ -208,7 +206,7 @@
   <script src="firebase-config.js?v=20261112f"></script>
   <script src="portraits.js?v=20261113d"></script>
   <script src="scenes.js?v=20261113c"></script>
-  <script src="main.js?v=20261113h"></script>
+  <script src="main.js?v=20261113g"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113h";
+const DATA_VERSION = "20261113g";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -4314,50 +4314,6 @@ function randomizeRoomCharacter() {
   img.src = ROOM_CHAR_IMAGES[Math.floor(Math.random() * ROOM_CHAR_IMAGES.length)];
 }
 
-// 내 방 이로이 만지기 — 좌우로 끌면 그쪽으로 몸을 돌리고(최대 ±40°), 놓으면 튕기며 제자리로.
-// 그냥 톡 누르면 폴짝 뛴다. (한 장짜리 그림이라 진짜 뒤돌기 대신 입체처럼 기울이는 정도)
-const ROOM_TURN_MAX_DEG = 40;
-function wireRoomCharacter() {
-  const el = document.getElementById("room-char-turn");
-  if (!el) return;
-  let startX = 0;
-  let dragging = false;
-  let moved = false;
-  const setTurn = (deg) => {
-    el.style.transform = `perspective(900px) rotateY(${deg}deg)`;
-  };
-  el.addEventListener("pointerdown", (ev) => {
-    dragging = true;
-    moved = false;
-    startX = ev.clientX;
-    el.classList.remove("springing", "hop");
-    el.setPointerCapture?.(ev.pointerId);
-  });
-  el.addEventListener("pointermove", (ev) => {
-    if (!dragging) return;
-    const dx = ev.clientX - startX;
-    if (Math.abs(dx) > 4) moved = true;
-    const deg = Math.max(-ROOM_TURN_MAX_DEG, Math.min(ROOM_TURN_MAX_DEG, dx * 0.35));
-    setTurn(deg);
-  });
-  const release = () => {
-    if (!dragging) return;
-    dragging = false;
-    if (moved) {
-      el.classList.add("springing");
-      setTurn(0);
-    } else {
-      el.style.transform = "";
-      void el.offsetWidth; // 애니메이션 다시 시작
-      el.classList.add("hop");
-    }
-  };
-  el.addEventListener("pointerup", release);
-  el.addEventListener("pointercancel", release);
-  el.addEventListener("transitionend", () => el.classList.remove("springing"));
-  el.addEventListener("animationend", () => el.classList.remove("hop"));
-}
-
 // 내 방 화면의 여행 버튼 — 주간 일정 화면의 여행 버튼(월요일에만 보임)과 같은 상태를 따라간다
 function syncRoomTravelButton() {
   const roomBtn = document.getElementById("room-travel-btn");
@@ -4608,7 +4564,6 @@ async function main() {
   wireSlots();
   wireTravel();
   wireRoomTravel();
-  wireRoomCharacter();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
   document.getElementById("new-game-btn").addEventListener("click", async () => {
     if (state.dayRunning) return;
