@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113g";
+const DATA_VERSION = "20261113i";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -4314,6 +4314,25 @@ function randomizeRoomCharacter() {
   img.src = ROOM_CHAR_IMAGES[Math.floor(Math.random() * ROOM_CHAR_IMAGES.length)];
 }
 
+// 설치한 앱(PWA)을 아직 예전 설정(standalone)으로 열었을 때만, 첫 터치에 전체화면으로 바꾼다.
+// manifest가 fullscreen으로 적용되면 이미 전체화면이라 아무것도 하지 않는다.
+function wireAppFullscreen() {
+  const isInstalledWindow = window.matchMedia?.("(display-mode: standalone)").matches;
+  const el = document.documentElement;
+  if (!isInstalledWindow || !el.requestFullscreen) return;
+  const goFullscreen = () => {
+    if (document.fullscreenElement) return;
+    el.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+  };
+  document.addEventListener("pointerdown", goFullscreen, { once: true });
+  // 다른 앱에 갔다 오면 전체화면이 풀리므로, 돌아와서 다시 터치하면 또 전체화면으로
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !document.fullscreenElement) {
+      document.addEventListener("pointerdown", goFullscreen, { once: true });
+    }
+  });
+}
+
 // 내 방 화면의 여행 버튼 — 주간 일정 화면의 여행 버튼(월요일에만 보임)과 같은 상태를 따라간다
 function syncRoomTravelButton() {
   const roomBtn = document.getElementById("room-travel-btn");
@@ -4564,6 +4583,7 @@ async function main() {
   wireSlots();
   wireTravel();
   wireRoomTravel();
+  wireAppFullscreen();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
   document.getElementById("new-game-btn").addEventListener("click", async () => {
     if (state.dayRunning) return;
