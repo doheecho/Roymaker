@@ -1198,11 +1198,11 @@ li:last-child { border-bottom: none; }
 .travel-confirm-yes { border: none; background: #4fa3c4; color: #fff; box-shadow: 0 3px 0 #2f7693; }
 .travel-confirm-no { border: 1px solid rgba(232, 212, 154, 0.6); background: transparent; color: inherit; }
 
-/* 지도: 이로이 얼굴 버튼(누르면 기본 축척 + 이로이 정중앙) — 방향키 바로 위 */
+/* 지도: 이로이 얼굴 버튼(누르면 기본 축척 + 이로이 정중앙) — 지도 안 오른쪽 위 */
 .map-recenter-btn {
   position: absolute;
-  right: 18px;
-  bottom: 178px;
+  top: 12px;
+  right: 12px;
   z-index: 10;
   width: 46px;
   height: 46px;
