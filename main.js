@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113f";
+const DATA_VERSION = "20261113g";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -3222,11 +3222,36 @@ function showDiary({ delta, gotSick }) {
   document.getElementById("sleep-btn").focus();
 }
 
+// 화면 전체가 어두워지며 문구(text)가 떴다가, 어두운 동안 duringDark()를 실행하고 다시 밝아진다
+function screenFade(text, duringDark) {
+  return new Promise((resolve) => {
+    const fade = document.getElementById("sleep-fade");
+    if (!fade) {
+      Promise.resolve(duringDark?.()).then(resolve);
+      return;
+    }
+    const label = fade.querySelector("span");
+    if (label) label.textContent = text;
+    fade.hidden = false;
+    requestAnimationFrame(() => fade.classList.add("on"));
+    setTimeout(async () => {
+      await duringDark?.();
+      fade.classList.remove("on");
+      setTimeout(() => {
+        fade.hidden = true;
+        resolve();
+      }, SLEEP_FADE_MS);
+    }, SLEEP_FADE_MS + SLEEP_HOLD_MS);
+  });
+}
+
 // 잠자기: 화면이 잠시 어두워졌다가 다음 날 일정 화면으로
 function sleepAndAdvance() {
   const fade = document.getElementById("sleep-fade");
   const btn = document.getElementById("sleep-btn");
   btn.disabled = true;
+  const label = fade.querySelector("span");
+  if (label) label.textContent = "Zzz…";
   fade.hidden = false;
   requestAnimationFrame(() => fade.classList.add("on"));
   setTimeout(() => {
@@ -4013,20 +4038,26 @@ async function runTravel(destination) {
     speaker: "iroi",
   });
 
-  renderDayHeader();
-  renderAcademies(state.academies, state.categoryMap);
-  pruneWeekPlan();
-  renderTimetable();
-  renderStats(state.character);
-  saveGame();
-  state.dayRunning = false;
-  document.getElementById("start-day-btn").disabled = false;
-  document.getElementById("travel-btn").disabled = false;
-  syncRoomTravelButton();
-  renderShop();
-  document.getElementById("day-summary").hidden = false;
-  document.getElementById("day-summary").textContent = `${destination.name} 여행에서 돌아왔다 — Day ${state.day}부터 다시 일상이 시작된다.`;
-  showView("home");
+  // 잠잘 때처럼 화면이 어두워지며 "집으로 무사히 돌아왔다…" 문구와 함께 내 방으로 돌아온다
+  await screenFade("집으로 무사히 돌아왔다…", () => {
+    if (typeof hideScene === "function") hideScene();
+    document.getElementById("event-panel").hidden = true;
+    renderDayHeader();
+    renderAcademies(state.academies, state.categoryMap);
+    pruneWeekPlan();
+    renderTimetable();
+    renderStats(state.character);
+    saveGame();
+    state.dayRunning = false;
+    document.getElementById("start-day-btn").disabled = false;
+    document.getElementById("travel-btn").disabled = false;
+    syncRoomTravelButton();
+    renderShop();
+    document.getElementById("day-summary").hidden = false;
+    document.getElementById("day-summary").textContent = `${destination.name} 여행에서 돌아왔다 — Day ${state.day}부터 다시 일상이 시작된다.`;
+    showView("home");
+    window.scrollTo(0, 0);
+  });
 }
 
 // 일과 진행 중 지도 좌상단의 "다음 일정" 표시 — block이면 그 일정, "home"이면 귀가, null이면 숨김
