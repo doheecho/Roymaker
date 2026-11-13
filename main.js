@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113k";
+const DATA_VERSION = "20261113l";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2441,9 +2441,16 @@ function wireSlots() {
   });
 }
 
+// 여행 길이별 안내 문구
+function travelNoteFor(days) {
+  return `여행을 가면 이번 주 ${days}일간의 학교·학원·활동을 모두 쉬고 부모님과 함께 떠난다.`;
+}
+
 function openTravelModal() {
   const modal = document.getElementById("travel-modal");
   const list = document.getElementById("travel-list");
+  const note = document.getElementById("travel-note");
+  if (note) note.hidden = true; // 목록에서는 여행지 묶음마다 안내를 따로 보여준다
   list.innerHTML = "";
   const season = seasonForDay(state.day);
   ["near", "far"].forEach((category) => {
@@ -2451,6 +2458,11 @@ function openTravelModal() {
     heading.className = "travel-group-heading";
     heading.textContent = category === "near" ? "가까운 여행지 (7일 · 월~일)" : "먼 여행지 (14일 · 월~다음 주 일요일)";
     list.appendChild(heading);
+    const groupDays = (state.travel ?? []).find((d) => d.category === category)?.durationDays ?? (category === "near" ? 7 : 14);
+    const groupNote = document.createElement("p");
+    groupNote.className = "travel-group-note";
+    groupNote.textContent = travelNoteFor(groupDays);
+    list.appendChild(groupNote);
     const row = document.createElement("div");
     row.className = "travel-row";
     (state.travel ?? [])
@@ -2489,7 +2501,7 @@ function showTravelConfirm(dest) {
   q.textContent = `${josa(dest.name, "으로/로")} ${dest.durationDays}일간 여행을 떠날까요?`;
   const sub = document.createElement("p");
   sub.className = "travel-confirm-sub";
-  sub.textContent = "그동안 학교·학원·활동은 모두 쉽니다.";
+  sub.textContent = travelNoteFor(dest.durationDays);
   const row = document.createElement("div");
   row.className = "travel-confirm-row";
   const yes = document.createElement("button");
