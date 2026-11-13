@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113e";
+const DATA_VERSION = "20261113f";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -3790,6 +3790,7 @@ async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
     const options = [
       { label: "🏃 밖에 나가서 논다", value: "out" },
       { label: "📚 집에서 숙제를 한다", value: "homework" },
+      { label: "📖 집에서 독서를 한다", value: "reading" },
       { label: "🎮 집에서 게임을 한다", value: "game" },
       { label: "📱 휴대전화를 연다", value: "phone" },
     ];
@@ -3810,6 +3811,7 @@ async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
     }
     if (pick === "out") clock = await playOutside(clock);
     else if (pick === "homework") clock = await doHomework(clock);
+    else if (pick === "reading") clock = await readAtHome(clock);
     else if (pick === "game") clock = await playGame(clock);
     else if (pick === "phone") clock += await openPhone(clock);
     else if (pick === "party") clock = await askForParty(clock);
@@ -3848,6 +3850,37 @@ async function doHomework(clock) {
     state.homeworkPraiseDone = true;
     await praiseHomework(end);
   }
+  return end;
+}
+
+// 집에서 독서 — 60분 동안 책을 읽고 언어·집중력·표현력이 조금 오르고 마음이 차분해진다
+const HOME_READING_MIN = 60;
+const HOME_READING_BOOKS = [
+  "마법천자문",
+  "흔한남매",
+  "안녕 자두야",
+  "Why? 공룡",
+  "Why? 우주",
+  "어린왕자",
+  "샬롯의 거미줄",
+  "찰리와 초콜릿 공장",
+  "전천당",
+  "이상한 과자 가게",
+  "세계 명작 동화",
+  "한국사 만화",
+];
+async function readAtHome(clock) {
+  const book = pickRandom(HOME_READING_BOOKS);
+  const end = clock + HOME_READING_MIN;
+  await waitUntil(clock, end, `📖 집에서 『${book}』 읽는 중`, WAIT_PHASE_MS, { id: "reading" });
+  const applied = applyEffect({ language: 1, focus: 1, expression: 1, stress: -4 });
+  renderStats(state.character);
+  logLine(`${minutesToClock(end)} 집에서 『${book}』${josa(book, "을/를").slice(book.length)} 읽었다 (${appliedText(applied)})`);
+  diary(`집에서 『${book}』${josa(book, "을/를").slice(book.length)} 읽었다. 책 읽는 시간이 즐거웠다.`);
+  await presentChoice("event-panel", "📖 독서", [{ label: "▶", value: true }], {
+    body: `『${book}』 다 읽었다! 이야기가 머릿속에 계속 떠오른다~\n(${appliedText(applied)})`,
+    speaker: "iroi",
+  });
   return end;
 }
 
