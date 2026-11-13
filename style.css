@@ -1167,3 +1167,28 @@ li:last-child { border-bottom: none; }
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
   pointer-events: none;
 }
+
+/* 내 방 이로이 만지기: 끌면 좌우로 돌고, 놓으면 튕기며 복귀, 톡 누르면 폴짝 */
+.room-char-turn {
+  height: 100%;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  transform-origin: 50% 100%;
+}
+.room-char-turn:active { cursor: grabbing; }
+.room-char-turn.springing { transition: transform 0.7s cubic-bezier(0.34, 1.8, 0.5, 1); }
+.room-char-turn.hop { animation: roy-hop 0.55s ease-out; }
+@keyframes roy-hop {
+  0% { transform: translateY(0) scale(1, 1); }
+  20% { transform: translateY(0) scale(1.04, 0.95); }
+  50% { transform: translateY(-7%) scale(0.98, 1.03); }
+  80% { transform: translateY(0) scale(1.03, 0.97); }
+  100% { transform: translateY(0) scale(1, 1); }
+}
+.room-char { -webkit-user-drag: none; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .room-char-turn.springing { transition: none; }
+  .room-char-turn.hop { animation: none; }
+}
