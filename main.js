@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113d";
+const DATA_VERSION = "20261113e";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -3996,6 +3996,23 @@ async function runTravel(destination) {
   showView("home");
 }
 
+// 일과 진행 중 지도 좌상단의 "다음 일정" 표시 — block이면 그 일정, "home"이면 귀가, null이면 숨김
+function setNextSchedule(next) {
+  const el = document.getElementById("next-schedule");
+  if (!el) return;
+  if (!next) {
+    el.hidden = true;
+    return;
+  }
+  if (next === "home") {
+    el.textContent = "다음 일정: 🏠 집으로 귀가";
+  } else {
+    const { icon, label } = blockDisplay(next);
+    el.textContent = `다음 일정: ${minutesToClock(next.startMin)} ${icon ?? ""} ${label}`.replace(/\s+/g, " ");
+  }
+  el.hidden = false;
+}
+
 async function runDay(blocks) {
   document.getElementById("day-run").hidden = false;
   document.getElementById("day-summary").hidden = true;
@@ -4043,10 +4060,11 @@ async function runDay(blocks) {
   await serveBreakfast();
 
   try {
-    for (const block of blocks) {
+    for (const [blockIndex, block] of blocks.entries()) {
       const place = blockPlace(block);
       const { label: blockLabel } = blockDisplay(block);
       const alreadyThere = distanceMeters(state.charPos, place.pos) <= ARRIVAL_RADIUS_M;
+      setNextSchedule(block); // 가는 중엔 지금 가는 일정이 '다음 일정'
 
       if (alreadyThere) {
         logLine(`${minutesToClock(clock)} ${place.name}에서 이어서 ${blockLabel}`);
@@ -4069,6 +4087,8 @@ async function runDay(blocks) {
           diary("학교에 늦지 않게 도착했다.");
         }
       }
+
+      setNextSchedule(blocks[blockIndex + 1] ?? "home"); // 도착했으면 그다음 일정을 보여준다
 
       if (block.kind === "school") {
         clock = await runSchoolBlock(block, clock, dow, !alreadyThere && schoolWasLate);
@@ -4149,12 +4169,14 @@ async function runDay(blocks) {
     diary("가던 길에 마음이 바뀌어서 남은 일정을 취소하고 집으로 돌아왔다.");
   }
 
+  setNextSchedule("home");
   if (!isAtHome()) {
     logLine(`${minutesToClock(clock)} 집으로 귀가 이동`);
     clock = await travelTo(state.positions.home, clock, "집");
     logLine(`${minutesToClock(clock)} 집 도착`);
   }
 
+  setNextSchedule(null); // 집에 오면 오늘 일정은 끝
   if (gotSick) {
     await presentChoice("event-panel", "🏠 집", [{ label: "😴 잠자러 가기", value: true }], {
       body: "몸이 너무 안 좋아… 오늘은 일찍 자야겠다.",

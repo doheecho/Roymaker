@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261113c">
+<link rel="stylesheet" href="style.css?v=20261113e">
 </head>
 <body>
   <header>
@@ -120,6 +120,7 @@
         <h2>🗺️ 지도</h2>
         <div class="map-wrap">
           <div id="map"></div>
+          <div id="next-schedule" class="next-schedule" hidden></div>
           <div id="intro-panel" class="intro-panel" hidden></div>
           <div id="scene-panel" class="scene-panel" hidden>
             <canvas id="scene-canvas" width="128" height="80" aria-label="일정 애니메이션"></canvas>
@@ -205,7 +206,7 @@
   <script src="firebase-config.js?v=20261112f"></script>
   <script src="portraits.js?v=20261113d"></script>
   <script src="scenes.js?v=20261113c"></script>
-  <script src="main.js?v=20261113d"></script>
+  <script src="main.js?v=20261113e"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
