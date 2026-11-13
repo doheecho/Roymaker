@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113j";
+const DATA_VERSION = "20261113k";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -4432,6 +4432,19 @@ function wireAppFullscreen() {
   });
 }
 
+// 지도의 이로이 얼굴 버튼 — 누르면 기본 축척으로 돌아가고 이로이를 지도 정중앙에 둔다
+function wireMapRecenter() {
+  const btn = document.getElementById("map-recenter-btn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    if (!state.map) return;
+    const pos = state.charPos ?? state.positions.home;
+    if (!pos) return;
+    state.map.setLevel(MAP_ZOOM_LEVEL);
+    state.map.setCenter(new kakao.maps.LatLng(pos.lat, pos.lng));
+  });
+}
+
 // 내 방 화면의 여행 버튼 — 주간 일정 화면의 여행 버튼(월요일에만 보임)과 같은 상태를 따라간다
 function syncRoomTravelButton() {
   const roomBtn = document.getElementById("room-travel-btn");
@@ -4576,7 +4589,7 @@ async function applyCustomIroiImage() {
   const url = await resolveCustomPortrait("iroi");
   if (!url) return;
   PORTRAIT_SPECS.iroi.image = url;
-  document.querySelectorAll("img.char-avatar, img.status-avatar").forEach((img) => {
+  document.querySelectorAll("img.char-avatar, img.status-avatar, img.map-recenter-face").forEach((img) => {
     img.src = url;
   });
 }
@@ -4683,6 +4696,7 @@ async function main() {
   wireSlots();
   wireTravel();
   wireRoomTravel();
+  wireMapRecenter();
   wireAppFullscreen();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
   document.getElementById("rest-day-btn")?.addEventListener("click", restWholeDay);
