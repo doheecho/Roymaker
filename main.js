@@ -340,7 +340,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113i";
+const DATA_VERSION = "20261113j";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -1341,6 +1341,35 @@ async function meetFriendAtPark(park, meetup, clock) {
   return FRIEND_MEETUP_MINUTES;
 }
 
+// ── 주말에 집에서 엄마·아빠한테 전화 — 같은 집에 있는데 전화하는 개그(2026-11 추가) ──
+async function weekendHomeGagCall(contact) {
+  const parent = contact.portrait ?? contact.id;
+  const parentName = contact.name;
+  const lines = [
+    { speaker: parent, name: parentName, text: "응 로이 어디야?", reply: "▶" },
+    { speaker: "iroi", name: null, text: "내 방에 있어요", reply: "▶" },
+    { speaker: parent, name: parentName, text: "응? 방에서 왜 전화를 했어?", reply: "▶" },
+    { speaker: "iroi", name: null, text: "그냥 심심해서 ㅋ", reply: "▶" },
+    { speaker: parent, name: parentName, text: "그래..ㅋㅋ", reply: "끊기" },
+  ];
+  for (const line of lines) {
+    await presentChoice("event-panel", `📞 ${parentName}`, [{ label: line.reply, value: true }], {
+      body: `"${line.text}"`,
+      tone: "phone",
+      speaker: line.speaker,
+      speakerName: line.name ?? undefined,
+    });
+  }
+  const firstCall = !state.calledToday.has(contact.id);
+  state.calledToday.add(contact.id);
+  const applied = applyEffect(firstCall ? { stress: -3 } : {});
+  renderStats(state.character);
+  const effectNote = Object.keys(applied).length ? ` (${appliedText(applied)})` : "";
+  logLine(`📱 집에 있는데 심심해서 ${parentName}한테 전화했다 ㅋ${effectNote}`);
+  diary(`심심해서 집에 있는 ${parentName}한테 내 방에서 전화를 걸었다. ${parentName}가 어이없어하셨다 ㅋㅋ`);
+  return state.phone?.callMinutes ?? 2;
+}
+
 // ── 엄마한테 전화 — 일찍 퇴근 졸라보기(2026-11 추가) ──
 const MOM_EARLY_HOME_LOGIC_THRESHOLD = 20;
 const MOM_DATE_CLOCK = 17 * 60 + 30;
@@ -1544,6 +1573,10 @@ async function openPhone(clock) {
       return offerMomCompanyOptions(contact, visit, clock);
     }
     return visitParentsCompany(contact, visit);
+  }
+
+  if ((contact.id === "mom" || contact.id === "dad") && !isWeekday(state.day) && isAtHome()) {
+    return weekendHomeGagCall(contact);
   }
 
   const placeCall = state.placeEvents.find(
@@ -2416,7 +2449,7 @@ function openTravelModal() {
   ["near", "far"].forEach((category) => {
     const heading = document.createElement("h4");
     heading.className = "travel-group-heading";
-    heading.textContent = category === "near" ? "가까운 여행지 (5일)" : "먼 여행지 (12일)";
+    heading.textContent = category === "near" ? "가까운 여행지 (7일 · 월~일)" : "먼 여행지 (14일 · 월~다음 주 일요일)";
     list.appendChild(heading);
     const row = document.createElement("div");
     row.className = "travel-row";
@@ -2430,11 +2463,7 @@ function openTravelModal() {
         btn.disabled = blocked;
         btn.innerHTML = `<span class="travel-dest-icon">${dest.icon}</span><span>${dest.name}</span>`;
         btn.title = blocked ? `지금(${SEASON_LABELS[season]})은 갈 수 없는 계절이에요` : `${dest.durationDays}일간 여행`;
-        btn.addEventListener("click", () => {
-          if (!window.confirm(`${dest.name}(으)로 ${dest.durationDays}일간 여행을 떠날까요? 그동안 학교·학원·활동은 모두 쉽니다.`)) return;
-          closeTravelModal();
-          startTravel(dest);
-        });
+        btn.addEventListener("click", () => showTravelConfirm(dest));
         row.appendChild(btn);
       });
     list.appendChild(row);
@@ -2446,10 +2475,47 @@ function closeTravelModal() {
   document.getElementById("travel-modal").hidden = true;
 }
 
+// 여행지를 누르면 브라우저 확인창 대신 여행 창 안에서 예/아니오를 묻는다
+function showTravelConfirm(dest) {
+  const list = document.getElementById("travel-list");
+  list.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "travel-confirm";
+  const icon = document.createElement("div");
+  icon.className = "travel-confirm-icon";
+  icon.textContent = dest.icon;
+  const q = document.createElement("p");
+  q.className = "travel-confirm-text";
+  q.textContent = `${josa(dest.name, "으로/로")} ${dest.durationDays}일간 여행을 떠날까요?`;
+  const sub = document.createElement("p");
+  sub.className = "travel-confirm-sub";
+  sub.textContent = "그동안 학교·학원·활동은 모두 쉽니다.";
+  const row = document.createElement("div");
+  row.className = "travel-confirm-row";
+  const yes = document.createElement("button");
+  yes.type = "button";
+  yes.className = "travel-confirm-yes";
+  yes.textContent = "예, 떠날래요!";
+  yes.addEventListener("click", () => {
+    closeTravelModal();
+    startTravel(dest);
+  });
+  const no = document.createElement("button");
+  no.type = "button";
+  no.className = "travel-confirm-no";
+  no.textContent = "아니오";
+  no.addEventListener("click", () => openTravelModal());
+  row.append(yes, no);
+  box.append(icon, q, sub, row);
+  list.appendChild(box);
+  yes.focus();
+}
+
 function startTravel(destination) {
   if (state.dayRunning) return;
   state.dayRunning = true;
   document.getElementById("start-day-btn").disabled = true;
+  document.getElementById("rest-day-btn")?.setAttribute("disabled", "");
   document.getElementById("travel-btn").disabled = true;
   syncRoomTravelButton();
   renderShop();
@@ -3245,6 +3311,37 @@ function screenFade(text, duringDark) {
   });
 }
 
+// 하루 일정 짤 때 "오늘은 아무것도 안 한다" — 일과를 건너뛰고 바로 하루를 마친 뒤 Zzz…로 다음 날
+const REST_DAY_MESSAGE_MS = 1800;
+async function restWholeDay() {
+  if (state.dayRunning) return;
+  state.dayRunning = true;
+  const buttons = ["start-day-btn", "rest-day-btn", "travel-btn"].map((id) => document.getElementById(id)).filter(Boolean);
+  buttons.forEach((b) => (b.disabled = true));
+  syncRoomTravelButton();
+  const statsAtStart = { ...state.character.stats };
+  logLine("😴 오늘은 아무것도 안 하고 집에서 뒹굴뒹굴 쉬었다");
+  applyEndOfDay(NO_SCHEDULE_STRESS_RECOVERY);
+  state.lastDay = { day: state.day, delta: statDelta(statsAtStart, state.character.stats) };
+
+  const fade = document.getElementById("sleep-fade");
+  const label = fade.querySelector("span");
+  if (label) label.textContent = "오늘은 아무것도 안 하고 하루가 끝났다…";
+  fade.hidden = false;
+  requestAnimationFrame(() => fade.classList.add("on"));
+  await new Promise((r) => setTimeout(r, SLEEP_FADE_MS + REST_DAY_MESSAGE_MS));
+  if (label) label.textContent = "Zzz…";
+  await new Promise((r) => setTimeout(r, SLEEP_HOLD_MS + 600));
+  advanceToNextDay();
+  showView("home");
+  window.scrollTo(0, 0);
+  fade.classList.remove("on");
+  await new Promise((r) => setTimeout(r, SLEEP_FADE_MS));
+  fade.hidden = true;
+  buttons.forEach((b) => (b.disabled = false));
+  syncRoomTravelButton();
+}
+
 // 잠자기: 화면이 잠시 어두워졌다가 다음 날 일정 화면으로
 function sleepAndAdvance() {
   const fade = document.getElementById("sleep-fade");
@@ -3289,6 +3386,7 @@ function advanceToNextDay() {
   state.dayRunning = false;
   const startBtn = document.getElementById("start-day-btn");
   startBtn.disabled = false;
+  document.getElementById("rest-day-btn")?.removeAttribute("disabled");
   renderShop();
 }
 
@@ -4050,6 +4148,7 @@ async function runTravel(destination) {
     saveGame();
     state.dayRunning = false;
     document.getElementById("start-day-btn").disabled = false;
+    document.getElementById("rest-day-btn")?.removeAttribute("disabled");
     document.getElementById("travel-btn").disabled = false;
     syncRoomTravelButton();
     renderShop();
@@ -4390,6 +4489,7 @@ function wireScheduleEditor() {
     if (state.dayRunning) return;
     state.dayRunning = true;
     document.getElementById("start-day-btn").disabled = true;
+  document.getElementById("rest-day-btn")?.setAttribute("disabled", "");
     renderShop();
     showView("map");
     const blocksForToday = planFor(state.day).map((b) => ({ ...b }));
@@ -4585,6 +4685,7 @@ async function main() {
   wireRoomTravel();
   wireAppFullscreen();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);
+  document.getElementById("rest-day-btn")?.addEventListener("click", restWholeDay);
   document.getElementById("new-game-btn").addEventListener("click", async () => {
     if (state.dayRunning) return;
     if (!window.confirm("저장된 진행 상황을 지우고 Day 1부터 새로 시작할까요?")) return;

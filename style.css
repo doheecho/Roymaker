@@ -1167,3 +1167,33 @@ li:last-child { border-bottom: none; }
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
   pointer-events: none;
 }
+
+#rest-day-btn {
+  font-family: "Jua", sans-serif;
+  font-size: 14.5px;
+  padding: 11px 22px;
+  border: none;
+  border-radius: 999px;
+  background: #8a8fb3;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #5f648a;
+}
+#rest-day-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #5f648a; }
+#rest-day-btn:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+
+/* 여행지 선택 후 여행 창 안의 예/아니오 */
+.travel-confirm { text-align: center; padding: 10px 4px 4px; }
+.travel-confirm-icon { font-size: 40px; line-height: 1; margin-bottom: 8px; }
+.travel-confirm-text { margin: 0 0 4px; font-family: "Jua", sans-serif; font-size: 17px; }
+.travel-confirm-sub { margin: 0 0 14px; font-size: 13px; opacity: 0.8; }
+.travel-confirm-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.travel-confirm-row button {
+  font-family: "Jua", sans-serif;
+  font-size: 14.5px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.travel-confirm-yes { border: none; background: #4fa3c4; color: #fff; box-shadow: 0 3px 0 #2f7693; }
+.travel-confirm-no { border: 1px solid rgba(232, 212, 154, 0.6); background: transparent; color: inherit; }
