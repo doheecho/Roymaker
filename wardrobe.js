@@ -518,7 +518,7 @@ function wardrobeCard(item, wardrobe) {
   if (Object.keys(item.effect).length) {
     const eff = document.createElement("div");
     eff.className = "wardrobe-effect";
-    eff.textContent = `입고 있으면 매일: ${signedEffectText(item.effect)}`;
+    eff.textContent = signedEffectText(item.effect);
     card.appendChild(eff);
   }
   const badge = document.createElement("div");
@@ -544,7 +544,7 @@ function renderClothingShop(listEl) {
     const row = document.createElement("div");
     row.className = "item-row";
     const icon = WARDROBE_SLOTS.find((s) => s.id === item.slot)?.label.split(" ")[0] ?? "🎁";
-    const eff = Object.keys(item.effect).length ? ` (입고 있으면 매일 ${signedEffectText(item.effect)})` : "";
+    const eff = Object.keys(item.effect).length ? ` (${signedEffectText(item.effect)})` : "";
     row.innerHTML = `<span class="item-icon">${icon}</span><span><strong></strong> — ${item.price}원<br><span class="muted"></span></span>`;
     row.querySelector("strong").textContent = item.name;
     row.querySelector(".muted").textContent = `${item.description}${eff}`;
