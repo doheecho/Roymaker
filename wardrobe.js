@@ -20,6 +20,8 @@ const WARDROBE_SLOTS = [
 // 우선도가 같을 때 겹치는 순서(뒤에 있을수록 위): 신발 → 하의 → 상의 → 기타
 const WARDROBE_LAYER_ORDER = ["shoe", "bot", "top", "etc"];
 const WARDROBE_DRAG_START_PX = 6;
+// 테스트 기간: true면 돈·구매와 상관없이 모든 옷을 입어 볼 수 있다(정식 때 false로 바꾸면 구매한 옷만)
+const WARDROBE_FREE_FOR_TEST = true;
 
 function emptyWardrobe() {
   return { owned: [], equipped: { top: null, bot: null, shoe: null, etc: null } };
@@ -151,6 +153,7 @@ function clothingById(id) {
 }
 
 function ownsClothing(item) {
+  if (WARDROBE_FREE_FOR_TEST) return true;
   return item.price === 0 || ensureWardrobeState().owned.includes(item.id);
 }
 
@@ -486,7 +489,7 @@ function renderClothingShop(listEl) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "shop-buy-btn";
-    btn.textContent = owned ? "보유 중" : "구매";
+    btn.textContent = WARDROBE_FREE_FOR_TEST ? "테스트 중" : owned ? "보유 중" : "구매";
     btn.disabled = owned || state.dayRunning || state.character.wallet < item.price;
     btn.addEventListener("click", () => {
       if (ownsClothing(item) || state.dayRunning || state.character.wallet < item.price) return;
