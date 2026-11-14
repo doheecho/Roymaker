@@ -179,6 +179,7 @@ const state = {
   events: [],
   phone: null,
   safetyEducated: false,
+  taekwondoDobokGiven: false,
   creativeCount: 0,
   eventsToday: 0,
   lastEventClock: -Infinity,
@@ -2464,6 +2465,7 @@ function buildSaveData() {
     wallet: state.character.wallet,
     registrations: state.registrations,
     safetyEducated: state.safetyEducated,
+    taekwondoDobokGiven: state.taekwondoDobokGiven,
     creativeCount: state.creativeCount,
     ui: { afterschoolCourse: state.ui.afterschoolCourse, careProgram: state.ui.careProgram },
     lastDay: state.lastDay ?? null,
@@ -2483,6 +2485,7 @@ function applySaveData(data) {
   state.character.wallet = data.wallet;
   state.registrations = data.registrations ?? { active: {}, pending: {} };
   state.safetyEducated = !!data.safetyEducated;
+  state.taekwondoDobokGiven = !!data.taekwondoDobokGiven;
   state.creativeCount = data.creativeCount ?? 0;
   if (data.ui?.afterschoolCourse) state.ui.afterschoolCourse = data.ui.afterschoolCourse;
   if (data.ui?.careProgram) state.ui.careProgram = data.ui.careProgram;
@@ -4729,6 +4732,19 @@ async function runDay(blocks) {
         if (block.kind === "academy") {
           const cat = state.categoryMap[place.academy.categoryId];
           await maybeShowIntro(cat?.introId);
+          if (cat?.id === "martial_arts" && !state.taekwondoDobokGiven) {
+            state.taekwondoDobokGiven = true;
+            const wardrobe = ensureWardrobeState();
+            if (!wardrobe.owned.includes("set_15")) wardrobe.owned.push("set_15");
+            await teacherSays(
+              cat?.teacher ?? "taekwondo_master",
+              `${cat?.icon ?? "🥋"} ${place.name}`,
+              `"로이는 태권도 학원에 처음 오는구나? 자 이 태권도 도복을 받으렴! 앞으로 도장에 올 때는 이 도복을 입고 와야 해!"`,
+              "네!"
+            );
+            logLine(`${minutesToClock(clock)} 태권도 사범님께 태권도복을 선물 받았다`);
+            diary("태권도 학원에 처음 가서 사범님께 태권도복을 선물로 받았다!");
+          }
           if (registered) {
             await teacherSays(
               cat?.teacher ?? "teacher",
