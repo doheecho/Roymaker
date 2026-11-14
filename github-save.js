@@ -184,9 +184,24 @@ function renderGitHubBox() {
 function wireGitHubSave() {
   const box = document.getElementById("gh-box");
   if (!box) return;
+  // 토큰만 붙여 넣어도, 연결 링크(…#gh=토큰)를 통째로 붙여 넣어도 토큰을 찾아낸다
+  const extractToken = (text) => (String(text ?? "").match(/(ghp_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|gho_[A-Za-z0-9]+)/) || [])[1] || "";
+  document.getElementById("gh-paste")?.addEventListener("click", async () => {
+    let text = "";
+    try {
+      text = await navigator.clipboard.readText();
+    } catch (err) {
+      setGitHubStatus("⚠️ 클립보드를 읽지 못했어요. 아래 칸을 길게 눌러 붙여 넣고 '연결'을 눌러 주세요");
+      return;
+    }
+    const token = extractToken(text);
+    if (!token) return setGitHubStatus("⚠️ 복사한 내용에 토큰이 없어요. 연결 링크나 ghp_로 시작하는 토큰을 먼저 복사해 주세요");
+    document.getElementById("gh-token").value = token;
+    document.getElementById("gh-connect").click();
+  });
   document.getElementById("gh-connect").addEventListener("click", async () => {
     const input = document.getElementById("gh-token");
-    const token = input.value.trim();
+    const token = extractToken(input.value) || input.value.trim();
     if (!/^(ghp_|github_pat_|gho_)/.test(token)) {
       setGitHubStatus("⚠️ 토큰은 ghp_ 또는 github_pat_ 로 시작해요. 다시 복사해 붙여 넣어 주세요");
       return;

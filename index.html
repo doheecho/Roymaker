@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261114p">
+<link rel="stylesheet" href="style.css?v=20261114r">
 </head>
 <body>
   <header>
@@ -204,10 +204,13 @@
             <li>깃허브에 로그인한 상태로 <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=roymaker-save" target="_blank" rel="noopener">여기를 눌러 토큰 만들기 페이지</a>를 열어요. (gist 칸이 이미 체크돼 있어요)</li>
             <li>Expiration(만료)은 <b>No expiration</b>으로 고르고, 맨 아래 초록색 <b>Generate token</b>을 눌러요.</li>
             <li>나온 <b>ghp_</b>로 시작하는 글자를 복사해서 아래 칸에 붙여 넣고 <b>연결</b>을 눌러요.</li>
-            <li>다른 기기는 연결된 기기에서 <b>🔗 다른 기기 연결 링크 복사</b>로 받은 링크를 열기만 하면 자동으로 연결돼요.</li>
+            <li>다른 기기는 연결 링크를 열거나, 링크(또는 토큰)를 복사한 뒤 위의 <b>📋 복사한 링크로 연결</b>만 누르면 돼요.</li>
           </ol>
           <div class="transfer-btns">
-            <input id="gh-token" class="gh-token" type="password" autocomplete="off" placeholder="ghp_로 시작하는 토큰 붙여 넣기">
+            <button type="button" id="gh-paste" class="transfer-btn gh-paste-btn">📋 복사한 링크로 연결</button>
+          </div>
+          <div class="transfer-btns">
+            <input id="gh-token" class="gh-token" type="password" autocomplete="off" placeholder="토큰(ghp_…) 또는 연결 링크 붙여 넣기">
             <button type="button" id="gh-connect" class="transfer-btn">연결</button>
           </div>
         </div>
@@ -279,7 +282,7 @@
   <script src="portraits.js?v=20261113p"></script>
   <script src="scenes.js?v=20261113c"></script>
   <script src="wardrobe.js?v=20261114k"></script>
-  <script src="github-save.js?v=20261114q"></script>
+  <script src="github-save.js?v=20261114r"></script>
   <script src="main.js?v=20261114p"></script>
   <script>
     if ("serviceWorker" in navigator) {

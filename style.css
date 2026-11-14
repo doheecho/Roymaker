@@ -1455,3 +1455,4 @@ li:last-child { border-bottom: none; }
 @media (max-width: 880px) {
   .room-bubble { max-width: 160px; font-size: 13px; padding: 7px 10px; }
 }
+.gh-paste-btn { font-weight: 700; background: rgba(255, 217, 138, 0.18); margin-bottom: 6px; }
