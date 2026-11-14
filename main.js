@@ -152,6 +152,8 @@ const state = {
   academies: [],
   activities: [],
   items: [],
+  clothing: [],
+  wardrobe: { owned: [], equipped: { top: null, bot: null, etc: null } },
   categoryMap: {},
   positions: { home: null, school: null, academies: {}, activities: {} },
   stations: { subway: [], bus: [] },
@@ -340,7 +342,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261113p";
+const DATA_VERSION = "20261114a";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2366,6 +2368,7 @@ function buildSaveData() {
     logicHistory: state.logicHistory ?? [],
     diligenceHistory: state.diligenceHistory ?? [],
     insaHistory: state.insaHistory ?? [],
+    wardrobe: state.wardrobe,
   };
 }
 
@@ -2384,6 +2387,7 @@ function applySaveData(data) {
   state.logicHistory = data.logicHistory ?? [];
   state.diligenceHistory = data.diligenceHistory ?? [];
   state.insaHistory = data.insaHistory ?? [];
+  state.wardrobe = data.wardrobe ?? { owned: [], equipped: { top: null, bot: null, etc: null } };
 }
 
 function saveGame() {
@@ -2867,6 +2871,7 @@ function renderShop() {
     li.appendChild(buyBtn);
     el.appendChild(li);
   });
+  if (typeof renderClothingShop === "function") renderClothingShop(el);
 }
 
 function minutesToRow(min) {
@@ -3568,6 +3573,7 @@ function triggerIllness() {
 
 // 허기 회복은 이제 아침밥/저녁밥(serveBreakfast/serveDinner/lateDinnerTalk)이 맡는다 — 여기서는 잠들기 전 기력·스트레스만 추가로 회복
 function applyEndOfDay(stressRecovery) {
+  if (typeof applyWardrobeDailyEffects === "function") applyWardrobeDailyEffects();
   state.character.condition.staminaNow = Math.min(100, state.character.condition.staminaNow + 10);
   state.character.condition.stress = Math.max(0, state.character.condition.stress - stressRecovery);
   renderStats(state.character);
@@ -4559,6 +4565,12 @@ function showView(name) {
 // 메인 화면(내 방) — 들어올 때마다 안경 쓴/안 쓴 이로이 중 하나를 무작위로 보여준다
 const ROOM_CHAR_IMAGES = ["img/characters/roy_n_9_stand.png", "img/characters/roy_g_9_stand.png"];
 function randomizeRoomCharacter() {
+  // 옷장(wardrobe.js)이 있으면 나이별 사진 + 입은 옷까지 그린다
+  if (typeof refreshRoomAvatar === "function") {
+    refreshRoomAvatar(true);
+    if (typeof renderWardrobe === "function") renderWardrobe(); // 상점에서 산 옷이 바로 보이게
+    return;
+  }
   const img = document.getElementById("room-char");
   if (!img) return;
   img.src = ROOM_CHAR_IMAGES[Math.floor(Math.random() * ROOM_CHAR_IMAGES.length)];
@@ -4708,6 +4720,7 @@ function loadLocalScript(src) {
 async function ensureUiModules() {
   if (typeof portraitSpec !== "function") await loadLocalScript("portraits.js");
   if (typeof showScene !== "function") await loadLocalScript("scenes.js");
+  if (typeof wireWardrobe !== "function") await loadLocalScript("wardrobe.js");
   const wrap = document.querySelector(".map-wrap");
   if (wrap && !document.getElementById("intro-panel")) {
     const panel = document.createElement("div");
@@ -4757,6 +4770,7 @@ async function main() {
     academies,
     categories,
     items,
+    clothing,
     activities,
     stations,
     holidays,
@@ -4775,6 +4789,7 @@ async function main() {
     loadJSON("data/academies.json"),
     loadJSON("data/academy_categories.json"),
     loadJSON("data/items.json"),
+    typeof loadClothingItems === "function" ? loadClothingItems() : Promise.resolve([]),
     loadJSON("data/activities.json"),
     loadStations("place.csv"),
     loadJSON("data/holidays.json"),
@@ -4812,6 +4827,7 @@ async function main() {
   state.character = character;
   state.academies = academies;
   state.items = items;
+  state.clothing = clothing;
   state.activities = activities;
   state.categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
   state.holidaySet = new Set(holidays.map((h) => h.date));
@@ -4847,6 +4863,7 @@ async function main() {
   wireSlots();
   wireTravel();
   wireRoomTravel();
+  if (typeof wireWardrobe === "function") wireWardrobe();
   wireMapRecenter();
   wireAppFullscreen();
   document.getElementById("sleep-btn").addEventListener("click", sleepAndAdvance);

@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261113m">
+<link rel="stylesheet" href="style.css?v=20261114a">
 </head>
 <body>
   <header>
@@ -51,9 +51,29 @@
         <div class="room-scene">
           <img class="room-bg" src="img/characters/room_1.jpg" alt="이로이의 방">
           <div class="room-char-wrap">
-            <img id="room-char" class="room-char" src="img/characters/roy_n_9_stand.png" alt="방 안에 서 있는 이로이">
+            <div id="room-avatar" class="room-avatar">
+              <img id="room-char" class="room-char" src="img/characters/roy_n_9_stand.png" alt="방 안에 서 있는 이로이" draggable="false">
+              <img class="room-layer" data-slot="bot" alt="" draggable="false" hidden>
+              <img class="room-layer" data-slot="top" alt="" draggable="false" hidden>
+              <img class="room-layer" data-slot="etc" alt="" draggable="false" hidden>
+            </div>
           </div>
+          <button type="button" id="wardrobe-btn" class="wardrobe-btn">👕 옷장</button>
           <button type="button" id="room-travel-btn" class="room-travel-btn">✈️ 여행 가기</button>
+          <aside id="wardrobe-panel" class="wardrobe-panel" hidden aria-label="옷장">
+            <div class="wardrobe-head">
+              <strong>👕 옷장</strong>
+              <span class="wardrobe-head-btns">
+                <button type="button" id="wardrobe-undress" class="wardrobe-mini-btn">모두 벗기</button>
+                <button type="button" id="wardrobe-close" class="wardrobe-mini-btn" aria-label="옷장 닫기">✕</button>
+              </span>
+            </div>
+            <p class="wardrobe-tip">누르거나 로이에게 끌어다 놓으면 입어요 · 입은 옷을 다시 누르면 벗어요</p>
+            <p id="wardrobe-note" class="wardrobe-note" hidden></p>
+            <section class="wardrobe-section"><h4>👕 상의</h4><div class="wardrobe-list" data-slot="top"></div></section>
+            <section class="wardrobe-section"><h4>👖 하의</h4><div class="wardrobe-list" data-slot="bot"></div></section>
+            <section class="wardrobe-section"><h4>🎒 기타</h4><div class="wardrobe-list" data-slot="etc"></div></section>
+          </aside>
         </div>
       </div>
 
@@ -210,7 +230,8 @@
   <script src="firebase-config.js?v=20261112f"></script>
   <script src="portraits.js?v=20261113p"></script>
   <script src="scenes.js?v=20261113c"></script>
-  <script src="main.js?v=20261113p"></script>
+  <script src="wardrobe.js?v=20261114a"></script>
+  <script src="main.js?v=20261114a"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
