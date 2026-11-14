@@ -53,6 +53,7 @@
           <div class="room-char-wrap">
             <div id="room-avatar" class="room-avatar">
               <img id="room-char" class="room-char" src="img/characters/roy_n_9_stand.png" alt="방 안에 서 있는 이로이" draggable="false">
+              <img class="room-layer" data-slot="shoe" alt="" draggable="false" hidden>
               <img class="room-layer" data-slot="bot" alt="" draggable="false" hidden>
               <img class="room-layer" data-slot="top" alt="" draggable="false" hidden>
               <img class="room-layer" data-slot="etc" alt="" draggable="false" hidden>
@@ -72,6 +73,7 @@
             <p id="wardrobe-note" class="wardrobe-note" hidden></p>
             <section class="wardrobe-section"><h4>👕 상의</h4><div class="wardrobe-list" data-slot="top"></div></section>
             <section class="wardrobe-section"><h4>👖 하의</h4><div class="wardrobe-list" data-slot="bot"></div></section>
+            <section class="wardrobe-section"><h4>👟 신발</h4><div class="wardrobe-list" data-slot="shoe"></div></section>
             <section class="wardrobe-section"><h4>🎒 기타</h4><div class="wardrobe-list" data-slot="etc"></div></section>
           </aside>
         </div>
@@ -230,8 +232,8 @@
   <script src="firebase-config.js?v=20261112f"></script>
   <script src="portraits.js?v=20261113p"></script>
   <script src="scenes.js?v=20261113c"></script>
-  <script src="wardrobe.js?v=20261114c"></script>
-  <script src="main.js?v=20261114c"></script>
+  <script src="wardrobe.js?v=20261114d"></script>
+  <script src="main.js?v=20261114d"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

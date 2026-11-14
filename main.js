@@ -153,7 +153,7 @@ const state = {
   activities: [],
   items: [],
   clothing: [],
-  wardrobe: { owned: [], equipped: { top: null, bot: null, etc: null } },
+  wardrobe: { owned: [], equipped: { top: null, bot: null, shoe: null, etc: null } },
   categoryMap: {},
   positions: { home: null, school: null, academies: {}, activities: {} },
   stations: { subway: [], bus: [] },
@@ -342,7 +342,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261114c";
+const DATA_VERSION = "20261114d";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2387,7 +2387,7 @@ function applySaveData(data) {
   state.logicHistory = data.logicHistory ?? [];
   state.diligenceHistory = data.diligenceHistory ?? [];
   state.insaHistory = data.insaHistory ?? [];
-  state.wardrobe = data.wardrobe ?? { owned: [], equipped: { top: null, bot: null, etc: null } };
+  state.wardrobe = data.wardrobe ?? { owned: [], equipped: { top: null, bot: null, shoe: null, etc: null } };
 }
 
 function saveGame() {

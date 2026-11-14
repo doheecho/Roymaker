@@ -2,7 +2,8 @@
 // 이로이 기본 사진: img/roy/roy_n_09.png(안경 미착용, 9살), roy_g_09.png(안경 착용, 9살) … 나이별로 두 자리 숫자.
 // 옷·아이템 그림: img/item/top_01_09.png(상의, 9살용), bot_01_09.png(하의), etc_01_09.png(기타) … — 끝의 _09는 몇 살 몸에 맞춘 그림인지
 //   ※ 옷 그림은 이로이 기본 사진과 "같은 크기의 투명 PNG"로, 입혀질 자리에 그려 둔다 — 그대로 위에 겹쳐서 입힌다.
-// 아이템 이름·설명·가격·효과: 루트의 item.csv (id · 이름 · 설명 · 가격 · 효과)
+// 아이템 정보: 루트의 item.csv (id · 이름 · 설명 · 우선도 · 가격 · 효과) — 제목줄 이름으로 칸을 찾으므로 칸 순서는 바뀌어도 된다
+// 우선도: 1이 가장 위에 그려진다(1 > 2 > 3). 비워 두면 상의 1 · 하의 2 · 신발 3 · 기타 1
 // main.js의 state / applyEffect / renderStats / saveGame / logLine 등을 그대로 쓴다.
 
 const ROY_IMAGE_DIR = "img/roy/";
@@ -11,16 +12,17 @@ const ITEM_IMAGE_EXTS = ["png", "webp", "jpg"];
 const ROY_BASE_AGE = 9; // 게임 시작일(2026-03-01)의 나이 — 매년 3월 1일에 한 살씩 먹는다
 const ROY_LEGACY_IMAGES = { n: "img/characters/roy_n_9_stand.png", g: "img/characters/roy_g_9_stand.png" };
 const WARDROBE_SLOTS = [
-  { id: "top", label: "👕 상의", prefix: "top" },
-  { id: "bot", label: "👖 하의", prefix: "bot" },
-  { id: "etc", label: "🎒 기타", prefix: "etc" },
+  { id: "top", label: "👕 상의", prefix: "top", priority: 1 },
+  { id: "bot", label: "👖 하의", prefix: "bot", priority: 2 },
+  { id: "shoe", label: "👟 신발", prefix: "shoe", priority: 3 },
+  { id: "etc", label: "🎒 기타", prefix: "etc", priority: 1 },
 ];
-// 겹치는 순서: 몸 → 하의 → 상의 → 기타
-const WARDROBE_LAYER_ORDER = ["bot", "top", "etc"];
+// 우선도가 같을 때 겹치는 순서(뒤에 있을수록 위): 신발 → 하의 → 상의 → 기타
+const WARDROBE_LAYER_ORDER = ["shoe", "bot", "top", "etc"];
 const WARDROBE_DRAG_START_PX = 6;
 
 function emptyWardrobe() {
-  return { owned: [], equipped: { top: null, bot: null, etc: null } };
+  return { owned: [], equipped: { top: null, bot: null, shoe: null, etc: null } };
 }
 
 function ensureWardrobeState() {
@@ -45,7 +47,7 @@ function royAgeForDay(day) {
 }
 
 // ── item.csv 읽기 ──
-// 형식: 첫 줄은 제목줄(id, 이름, 설명, 가격, 효과). 구분은 탭 또는 쉼표(쉼표가 든 칸은 "따옴표"로 감싼다).
+// 형식: 첫 줄은 제목줄(id, 이름, 설명, 우선도, 가격, 효과 — 칸 순서는 자유). 구분은 탭 또는 쉼표(쉼표가 든 칸은 "따옴표"로 감싼다).
 // #으로 시작하는 줄은 메모로 보고 건너뛴다. 가격이 비었거나 0이면 처음부터 가지고 있는 아이템.
 // 효과 예: "언어+1 자존감+1" 또는 "language+1; selfEsteem+1" — 입고 있는 동안 하루가 끝날 때마다 한 번 적용.
 function parseCsvLine(line, delimiter) {
@@ -104,11 +106,26 @@ async function loadClothingItems(path = "item.csv") {
     const lines = text.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith("#"));
     if (lines.length < 2) return [];
     const delimiter = lines[0].includes("\t") ? "\t" : ",";
+    const header = parseCsvLine(lines[0], delimiter).map((h) => h.toLowerCase());
+    const col = (names, fallback) => {
+      const i = header.findIndex((h) => names.includes(h));
+      return i >= 0 ? i : fallback;
+    };
+    const C = {
+      id: col(["id", "아이디"], 0),
+      name: col(["이름", "name"], 1),
+      description: col(["설명", "description"], 2),
+      priority: col(["우선도", "우선순위", "priority"], -1),
+      price: col(["가격", "price"], 3),
+      effect: col(["효과", "effect"], 4),
+    };
     return lines.slice(1).flatMap((line, i) => {
-      const [id, name, description, price, effectText] = parseCsvLine(line, delimiter);
+      const cells = parseCsvLine(line, delimiter);
+      const cell = (k) => (C[k] >= 0 ? cells[C[k]] ?? "" : "");
+      const [id, name, description, price, effectText] = [cell("id"), cell("name"), cell("description"), cell("price"), cell("effect")];
       const slot = id ? slotForItemId(id) : null;
       if (!slot) {
-        console.warn(`item.csv ${i + 2}번째 줄을 건너뜀(id는 top_/bot_/etc_로 시작해야 함): ${line}`);
+        console.warn(`item.csv ${i + 2}번째 줄을 건너뜀(id는 top_/bot_/shoe_/etc_로 시작해야 함): ${line}`);
         return [];
       }
       return [
@@ -119,6 +136,7 @@ async function loadClothingItems(path = "item.csv") {
           description: description || "",
           price: Math.max(0, Number(price) || 0),
           effect: parseItemEffect(effectText),
+          priority: [1, 2, 3].includes(Number(cell("priority"))) ? Number(cell("priority")) : null,
         },
       ];
     });
@@ -252,6 +270,7 @@ async function refreshRoomAvatar(rerollGlasses = false) {
     if (!layer) continue;
     const itemId = wardrobe.equipped[slot];
     const src = itemId ? await resolveItemImage(itemId, age) : null;
+    layer.style.zIndex = String(layerZIndex(slot, itemId));
     if (src) {
       layer.src = src;
       layer.hidden = false;
@@ -260,6 +279,14 @@ async function refreshRoomAvatar(rerollGlasses = false) {
       layer.hidden = true;
     }
   }
+}
+
+// 겹치는 높이: 우선도 1이 가장 위(1 > 2 > 3), 같으면 신발 → 하의 → 상의 → 기타 순으로 위
+function layerZIndex(slot, itemId) {
+  const item = itemId ? clothingById(itemId) : null;
+  const def = WARDROBE_SLOTS.find((s) => s.id === slot)?.priority ?? 2;
+  const priority = item?.priority ?? def;
+  return (4 - priority) * 10 + WARDROBE_LAYER_ORDER.indexOf(slot) + 1;
 }
 
 // ── 입기 / 벗기 ──
