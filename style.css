@@ -1128,7 +1128,6 @@ li:last-child { border-bottom: none; }
   pointer-events: none;
   user-select: none;
 }
-.room-avatar.drop-ready { outline: 3px dashed rgba(255, 255, 255, 0.85); outline-offset: -6px; border-radius: 18px; }
 @keyframes roy-breathe {
   0%, 100% { transform: scaleY(1); }
   50% { transform: scaleY(1.012) translateY(-2px); }
@@ -1313,8 +1312,7 @@ li:last-child { border-bottom: none; }
   background: #fff;
   border: 2px solid transparent;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  cursor: grab;
-  touch-action: pan-y;
+  cursor: pointer;
   user-select: none;
 }
 .wardrobe-card.worn { border-color: #7a5cc7; background: #f3eeff; }
@@ -1334,20 +1332,6 @@ li:last-child { border-bottom: none; }
 .wardrobe-effect { font-size: 10.5px; color: #4a7a3a; }
 .wardrobe-badge { font-size: 11px; font-weight: 700; color: #7a5cc7; }
 .wardrobe-card.locked .wardrobe-badge { color: #8a6d3b; }
-.wardrobe-ghost {
-  position: fixed;
-  z-index: 5000;
-  width: 72px;
-  height: 72px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 34px;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  opacity: 0.85;
-}
-.wardrobe-ghost img { max-width: 100%; max-height: 100%; }
 .shop-section-head { font-weight: 700; padding-top: 10px; border-top: 1px dashed var(--line); }
 @media (max-width: 880px) {
   .wardrobe-panel { width: 58%; padding: 8px; }

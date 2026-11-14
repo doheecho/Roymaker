@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261114f">
+<link rel="stylesheet" href="style.css?v=20261114h">
 </head>
 <body>
   <header>
@@ -66,10 +66,11 @@
               <strong>👕 옷장</strong>
               <span class="wardrobe-head-btns">
                 <button type="button" id="wardrobe-undress" class="wardrobe-mini-btn">모두 벗기</button>
+                <button type="button" id="wardrobe-glasses" class="wardrobe-mini-btn">👓 안경 쓰기</button>
                 <button type="button" id="wardrobe-close" class="wardrobe-mini-btn" aria-label="옷장 닫기">✕</button>
               </span>
             </div>
-            <p class="wardrobe-tip">누르거나 로이에게 끌어다 놓으면 입어요 · 입은 옷을 다시 누르면 벗어요</p>
+            <p class="wardrobe-tip">누르면 입어요 · 입은 옷을 다시 누르면 벗어요</p>
             <p id="wardrobe-note" class="wardrobe-note" hidden></p>
             <section class="wardrobe-section"><h4>🧥 코디</h4><div class="wardrobe-list" data-slot="set"></div></section>
             <section class="wardrobe-section"><h4>👕 상의</h4><div class="wardrobe-list" data-slot="top"></div></section>
@@ -233,7 +234,7 @@
   <script src="firebase-config.js?v=20261112f"></script>
   <script src="portraits.js?v=20261113p"></script>
   <script src="scenes.js?v=20261113c"></script>
-  <script src="wardrobe.js?v=20261114g"></script>
+  <script src="wardrobe.js?v=20261114h"></script>
   <script src="main.js?v=20261114g"></script>
   <script>
     if ("serviceWorker" in navigator) {

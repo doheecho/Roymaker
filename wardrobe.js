@@ -22,7 +22,6 @@ const WARDROBE_SLOTS = [
 ];
 // 우선도가 같을 때 겹치는 순서(뒤에 있을수록 위): 신발 → 하의 → 상의 → 기타
 const WARDROBE_LAYER_ORDER = ["shoe", "bot", "top", "etc"];
-const WARDROBE_DRAG_START_PX = 6;
 // 테스트 기간: true면 돈·구매와 상관없이 모든 옷을 입어 볼 수 있다(정식 때 false로 바꾸면 구매한 옷만)
 const WARDROBE_FREE_FOR_TEST = true;
 
@@ -277,7 +276,10 @@ let roomGlasses = false;
 async function refreshRoomAvatar(rerollGlasses = false) {
   const base = document.getElementById("room-char");
   if (!base) return;
-  if (rerollGlasses) roomGlasses = Math.random() < 0.5;
+  const chosen = ensureWardrobeState().glasses;
+  if (typeof chosen === "boolean") roomGlasses = chosen; // 옷장에서 안경을 직접 쓰거나 벗었으면 그대로 유지
+  else if (rerollGlasses) roomGlasses = Math.random() < 0.5;
+  syncGlassesButton();
   const age = royAgeForDay(state.day ?? 1);
   const wardrobeNow = ensureWardrobeState();
   // 코디 세트를 입었으면 몸 사진 대신 코디 사진을 통째로 보여주고, 다른 옷 레이어는 숨긴다
@@ -311,6 +313,20 @@ function layerZIndex(slot, itemId) {
   const def = WARDROBE_SLOTS.find((s) => s.id === slot)?.priority ?? 2;
   const priority = item?.priority ?? def;
   return (4 - priority) * 10 + WARDROBE_LAYER_ORDER.indexOf(slot) + 1;
+}
+
+// ── 안경 쓰기 / 벗기 ──
+function syncGlassesButton() {
+  const btn = document.getElementById("wardrobe-glasses");
+  if (btn) btn.textContent = roomGlasses ? "👓 안경 벗기" : "👓 안경 쓰기";
+}
+
+function toggleGlasses() {
+  roomGlasses = !roomGlasses;
+  ensureWardrobeState().glasses = roomGlasses;
+  refreshRoomAvatar();
+  renderWardrobe();
+  saveGame();
 }
 
 // ── 입기 / 벗기 ──
@@ -395,7 +411,7 @@ function wardrobeCard(item, wardrobe) {
   const card = document.createElement("div");
   card.className = `wardrobe-card${worn ? " worn" : ""}${owned ? "" : " locked"}`;
   card.dataset.itemId = item.id;
-  card.title = owned ? (worn ? "누르면 벗어요" : "누르거나 로이에게 끌어다 놓으면 입어요") : `상점에서 ${item.price}원`;
+  card.title = owned ? (worn ? "누르면 벗어요" : "누르면 입어요") : `상점에서 ${item.price}원`;
 
   const thumb = document.createElement("div");
   thumb.className = "wardrobe-thumb";
@@ -431,69 +447,8 @@ function wardrobeCard(item, wardrobe) {
   badge.textContent = worn ? "✅ 입는 중" : owned ? "" : `🔒 ${item.price}원`;
   if (badge.textContent) card.appendChild(badge);
 
-  wireWardrobeCardDrag(card, item);
+  card.addEventListener("click", () => equipClothing(item.id));
   return card;
-}
-
-// 누르면 입기/벗기, 끌어서 로이 몸 위에 놓아도 입기 (마우스·터치 모두)
-function wireWardrobeCardDrag(card, item) {
-  let start = null;
-  let ghost = null;
-  card.addEventListener("pointerdown", (ev) => {
-    if (ev.button !== undefined && ev.button !== 0) return;
-    start = { x: ev.clientX, y: ev.clientY, id: ev.pointerId };
-  });
-  card.addEventListener("pointermove", (ev) => {
-    if (!start || ev.pointerId !== start.id) return;
-    const moved = Math.hypot(ev.clientX - start.x, ev.clientY - start.y);
-    if (!ghost && moved > WARDROBE_DRAG_START_PX && ownsClothing(item)) {
-      // 세로 스크롤 중이면 끌기로 보지 않는다
-      if (Math.abs(ev.clientY - start.y) > Math.abs(ev.clientX - start.x) * 1.5 && ev.pointerType !== "mouse") {
-        start = null;
-        return;
-      }
-      card.setPointerCapture?.(ev.pointerId);
-      ghost = document.createElement("div");
-      ghost.className = "wardrobe-ghost";
-      const src = card.querySelector(".wardrobe-thumb img")?.src;
-      if (src) {
-        const img = document.createElement("img");
-        img.src = src;
-        ghost.appendChild(img);
-      } else {
-        ghost.textContent = card.querySelector(".wardrobe-thumb")?.textContent ?? "🎁";
-      }
-      document.body.appendChild(ghost);
-      document.getElementById("room-avatar")?.classList.add("drop-ready");
-    }
-    if (ghost) {
-      ghost.style.left = `${ev.clientX}px`;
-      ghost.style.top = `${ev.clientY}px`;
-    }
-  });
-  const end = (ev) => {
-    if (!start) return;
-    const wasDrag = !!ghost;
-    if (ghost) {
-      ghost.remove();
-      ghost = null;
-      const avatar = document.getElementById("room-avatar");
-      avatar?.classList.remove("drop-ready");
-      const r = avatar?.getBoundingClientRect();
-      const onRoy = r && ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-      const wardrobe = ensureWardrobeState();
-      if (onRoy && wardrobe.equipped[item.slot] !== item.id) equipClothing(item.id);
-    }
-    start = null;
-    if (!wasDrag && ev.type === "pointerup") equipClothing(item.id);
-  };
-  card.addEventListener("pointerup", end);
-  card.addEventListener("pointercancel", () => {
-    ghost?.remove();
-    ghost = null;
-    document.getElementById("room-avatar")?.classList.remove("drop-ready");
-    start = null;
-  });
 }
 
 // ── 상점: 옷·아이템 사기 ──
@@ -558,4 +513,6 @@ function wireWardrobe() {
   });
   document.getElementById("wardrobe-close")?.addEventListener("click", closeWardrobe);
   document.getElementById("wardrobe-undress")?.addEventListener("click", unequipAll);
+  document.getElementById("wardrobe-glasses")?.addEventListener("click", toggleGlasses);
+  syncGlassesButton();
 }
