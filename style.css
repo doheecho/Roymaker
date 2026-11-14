@@ -841,7 +841,7 @@ li:last-child { border-bottom: none; }
 .char-sprite.face-left .char-photo-wrap { transform: scaleX(-1); }
 .char-photo {
   display: block;
-  height: 76px;
+  height: 72px;
   width: auto;
   transform-origin: 50% 100%;
   filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.95)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
