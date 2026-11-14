@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261114r">
+<link rel="stylesheet" href="style.css?v=20261114t">
 </head>
 <body>
   <header>
@@ -150,7 +150,15 @@
         <h2>🗺️ 지도</h2>
         <div class="map-wrap">
           <div id="map"></div>
-          <div id="next-schedule" class="next-schedule" hidden></div>
+          <div id="next-schedule" class="next-schedule" role="button" tabindex="0" title="눌러서 목적지 확인" hidden></div>
+          <div id="dest-confirm" class="dest-confirm" hidden>
+            <p class="dest-confirm-q">다음 일정 목적지를 확인할까요?</p>
+            <p class="dest-confirm-name">📍 <span id="dest-confirm-name"></span></p>
+            <div class="dest-confirm-btns">
+              <button type="button" id="dest-yes">예</button>
+              <button type="button" id="dest-no">아니오</button>
+            </div>
+          </div>
           <button type="button" id="map-recenter-btn" class="map-recenter-btn" title="이로이 위치로 (기본 축척)" aria-label="이로이 위치로 지도 옮기기">
             <img class="map-recenter-face" src="img/character-face.png" alt="">
           </button>
@@ -283,7 +291,7 @@
   <script src="scenes.js?v=20261113c"></script>
   <script src="wardrobe.js?v=20261114k"></script>
   <script src="github-save.js?v=20261114r"></script>
-  <script src="main.js?v=20261114s"></script>
+  <script src="main.js?v=20261114t"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

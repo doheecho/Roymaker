@@ -1206,8 +1206,10 @@ li:last-child { border-bottom: none; }
   font-weight: 700;
   line-height: 1.35;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
-  pointer-events: none;
+  cursor: pointer;
 }
+.next-schedule:hover { background: rgba(48, 58, 108, 0.95); }
+.next-schedule::after { content: " 🔍"; opacity: 0.8; }
 
 #rest-day-btn {
   font-family: "Jua", sans-serif;
@@ -1456,3 +1458,53 @@ li:last-child { border-bottom: none; }
   .room-bubble { max-width: 160px; font-size: 13px; padding: 7px 10px; }
 }
 .gh-paste-btn { font-weight: 700; background: rgba(255, 217, 138, 0.18); margin-bottom: 6px; }
+
+/* 학원 아이콘 옆 이름표 */
+.square-label { left: 26px; }
+
+/* 다음 일정 목적지: 파란 형광 점멸 */
+.dest-glow { z-index: 5; }
+.dest-glow .bus-label,
+.dest-glow .square-badge,
+.dest-glow .bus-badge {
+  animation: dest-glow 1s ease-in-out infinite;
+}
+.dest-glow .bus-label { border-color: #3aa0ff; }
+@keyframes dest-glow {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(58, 160, 255, 0.95), 0 0 8px 3px rgba(58, 160, 255, 0.85); }
+  50% { box-shadow: 0 0 0 2px rgba(58, 160, 255, 0.25), 0 0 2px 0 rgba(58, 160, 255, 0.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dest-glow .bus-label, .dest-glow .square-badge, .dest-glow .bus-badge { animation: none; box-shadow: 0 0 0 3px #3aa0ff; }
+}
+
+/* 다음 일정 목적지 확인 창 */
+.dest-confirm {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  z-index: 20;
+  min-width: 220px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: linear-gradient(#2a3270, #1c2150);
+  color: #fff;
+  border: 2px solid #c9a46c;
+  box-shadow: 0 0 0 2px #1c2150, 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+.dest-confirm[hidden] { display: none; }
+.dest-confirm-q { margin: 0 0 4px; font-family: "Jua", sans-serif; font-size: 15px; }
+.dest-confirm-name { margin: 0 0 10px; font-size: 13px; color: #ffd98a; }
+.dest-confirm-btns { display: flex; gap: 8px; }
+.dest-confirm-btns button {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 6px;
+  border: 1px solid #c9a46c;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dest-confirm-btns button:hover { background: rgba(201, 164, 108, 0.3); }

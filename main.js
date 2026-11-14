@@ -344,7 +344,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261114s";
+const DATA_VERSION = "20261114t";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -790,14 +790,35 @@ const MARKER_SQUARE = { H: "우리집", school: "금북초", A: "학원" };
 // 동그라미 배지에 유형 글자 그대로 쓰기 애매한 것만 별도 지정 (나머지는 type 그대로: B/S/P)
 const MARKER_BADGE = { park: "공" };
 
+// 지도 아이콘을 기억해 두었다가, 다음 일정의 목적지 아이콘을 파랗게 깜빡이게 한다
+function registerMapMarker(el, position, type, name) {
+  state.mapMarkers ??= [];
+  state.mapMarkers.push({ el, pos: { lat: position.lat, lng: position.lng }, type, name });
+}
+const DEST_GLOW_RADIUS_M = 60;
+function setDestinationGlow(pos, name = null) {
+  (state.mapMarkers ?? []).forEach((m) => m.el.classList.remove("dest-glow"));
+  if (!pos) return;
+  let best = null;
+  (state.mapMarkers ?? []).forEach((m) => {
+    const d = distanceMeters(pos, m.pos);
+    // 버스정류장·지하철역보다는 집·학교·학원·장소 아이콘을 우선
+    // 좌표가 같은 아이콘이 여럿이면(예: 같은 건물의 학원들) 이름이 같은 아이콘을 우선
+    const score = d + (m.type === "B" || m.type === "S" ? 40 : 0) - (name && m.name === name ? 1000 : 0);
+    if (d <= DEST_GLOW_RADIUS_M && (!best || score < best.score)) best = { m, score };
+  });
+  if (best) best.m.el.classList.add("dest-glow");
+}
+
 function createStationOverlay(map, position, type, name, address) {
   const el = document.createElement("div");
   el.className = `bus-stop-marker station-${type}`;
   const kindName = `${MARKER_KIND[type] ?? ""} — ${name}`;
   el.title = address ? `${kindName}\n${address}` : kindName;
   el.innerHTML = MARKER_SQUARE[type]
-    ? `<span class="square-badge">${MARKER_SQUARE[type]}</span>`
+    ? `<span class="square-badge">${MARKER_SQUARE[type]}</span>${type === "A" ? `<span class="bus-label square-label">${name}</span>` : ""}`
     : `<span class="bus-badge">${MARKER_BADGE[type] ?? type}</span><span class="bus-label">${name}</span>`;
+  registerMapMarker(el, position, type, name);
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
@@ -810,6 +831,7 @@ function createHotplaceOverlay(map, position, place) {
   el.className = "bus-stop-marker station-P";
   el.title = place.realName ? `${place.name} — ${place.realName}` : place.name;
   el.innerHTML = `<span class="bus-badge">P</span><span class="bus-label">${place.icon} ${place.name}</span>`;
+  registerMapMarker(el, position, "P", place.name);
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
@@ -4574,15 +4596,46 @@ function setNextSchedule(next) {
   if (!el) return;
   if (!next) {
     el.hidden = true;
+    state.nextDest = null;
+    setDestinationGlow(null);
+    hideDestConfirm();
     return;
   }
   if (next === "home") {
     el.textContent = "다음 일정: 🏠 집으로 귀가";
+    state.nextDest = { pos: state.positions.home, name: "집" };
   } else {
     const { icon, label } = blockDisplay(next);
     el.textContent = `다음 일정: ${minutesToClock(next.startMin)} ${icon ?? ""} ${label}`.replace(/\s+/g, " ");
+    const place = blockPlace(next);
+    state.nextDest = place?.pos ? { pos: place.pos, name: place.name } : null;
   }
   el.hidden = false;
+  setDestinationGlow(state.nextDest?.pos ?? null, state.nextDest?.name === "집" ? null : state.nextDest?.name);
+}
+
+// 상단 "다음 일정"을 누르면: "다음 일정 목적지를 확인할까요?" → 예: 지도를 목적지로 옮김 / 아니오: 닫기
+function showDestConfirm() {
+  const box = document.getElementById("dest-confirm");
+  if (!box || !state.nextDest) return;
+  document.getElementById("dest-confirm-name").textContent = state.nextDest.name;
+  box.hidden = false;
+  document.getElementById("dest-yes").focus();
+}
+function hideDestConfirm() {
+  const box = document.getElementById("dest-confirm");
+  if (box) box.hidden = true;
+}
+function wireDestConfirm() {
+  document.getElementById("next-schedule")?.addEventListener("click", showDestConfirm);
+  document.getElementById("dest-yes")?.addEventListener("click", () => {
+    hideDestConfirm();
+    const pos = state.nextDest?.pos;
+    if (!pos || !state.map) return;
+    state.map.setLevel(MAP_ZOOM_LEVEL);
+    state.map.setCenter(new kakao.maps.LatLng(pos.lat, pos.lng));
+  });
+  document.getElementById("dest-no")?.addEventListener("click", hideDestConfirm);
 }
 
 async function runDay(blocks) {
@@ -5211,6 +5264,7 @@ async function main() {
   wireSlots();
   wireTravel();
   wireRoomTravel();
+  wireDestConfirm();
   document.getElementById("apply-academy-week-btn")?.addEventListener("click", applyAcademyScheduleThisWeek);
   document.getElementById("room-avatar")?.addEventListener("click", sayRoomLine);
   if (typeof wireWardrobe === "function") wireWardrobe();
