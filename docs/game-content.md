@@ -893,6 +893,16 @@ isParentAtWork(시각) = 평일(월~금) AND 공휴일 아님 AND 09:00 ≤ 시�
   - `saveGame()`은 항상 로컬(`localStorage`)에 먼저 쓰고, `state.cloud.ready`면 같은 데이터를 Firestore에도 `.set()`한다 — 둘 중 하나가 실패해도 나머지 한쪽은 정상 저장된다.
   - `firebase-config.js`의 `apiKey`가 비어 있거나, SDK 로드/인증이 실패하면(`FirebaseError` 등) `state.cloud.ready`가 `false`로 남고 콘솔에 경고만 찍힌 채 평소처럼 로컬 전용으로 동작한다 — 설정 실수로 게임이 멈추지 않는다.
 
+### 21-0. 깃허브로 자동 저장 (2026-11-14 추가, `github-save.js`)
+💾 저장 / 📂 불러오기 창 맨 위 **☁️ 깃허브로 자동 저장** 칸. 기기마다 한 번 **gist 권한 토큰**을 붙여 넣으면 된다.
+- 토큰 만들기: 창 안의 링크(`github.com/settings/tokens/new?scopes=gist&description=roymaker-save`, gist가 미리 체크됨) → Expiration은 No expiration → Generate token → `ghp_…` 복사 → 칸에 붙여 넣고 **연결**. 토큰은 그 기기 브라우저(localStorage `roymaker-gh-token`)에만 저장되고 코드·저장소에는 올라가지 않는다.
+- 연결하면 그 깃허브 계정에 비공개 Gist(`roymaker-save.json`, 설명 "roymaker-save …")를 찾거나 새로 만든다.
+- **자동 저장**: `saveGame()`·20칸 저장이 바뀔 때마다 2.5초 뒤 진행 상황+20칸 저장(옷장 포함)을 Gist에 올린다(`markLocalSaved` → `pushToGitHub`). 상태: `☁️ 깃허브에 저장됨 (시각, Day N)`.
+- **자동 불러오기**: 게임을 열 때 Gist의 저장 시각이 이 기기의 마지막 저장 시각(`roymaker-local-saved-at`)보다 최신이면 그걸 불러온다(`pullFromGitHub`). 처음 연결한 기기에 세이브가 이미 있고 Gist가 비어 있으면 이 기기 것을 올린다.
+- 버튼: ⬆️ 지금 깃허브에 저장 · ⬇️ 깃허브에서 불러오기(확인 후 강제로 불러옴) · 연결 끊기(Gist는 그대로 남음).
+- 🔄 새 게임을 누르면 그 시점을 최신으로 표시해서 깃허브의 예전 세이브로 되돌아가지 않고, 깃허브 세이브도 새 게임으로 바뀐다(확인창에 안내).
+- 오류: 토큰이 틀리면 `토큰이 맞지 않아요`, gist 권한이 없으면 `토큰에 gist 권한이 없어요`.
+
 ### 21-1-1. 다른 기기로 옮기기 (2026-11-14 추가, Firebase 없이)
 💾 저장 / 📂 불러오기 창 위쪽 **📱 다른 기기로 옮기기** 칸(`wireTransfer`).
 - **📤 내보내기**: 지금 진행 상황(자동 저장분) + 20칸 저장을 통째로 `roymaker-save-day{N}-{날짜}.txt` 파일로 내려받고, 같은 내용의 **세이브 코드**(`ROY2:`로 시작, 약 700자 — gzip 압축 후 base64, 압축 못 하는 브라우저면 `ROY1:`)를 클립보드에 복사한다. 아래 칸에도 코드가 보여서 길게 눌러 복사할 수 있다.

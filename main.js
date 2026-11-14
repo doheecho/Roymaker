@@ -342,7 +342,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261114n";
+const DATA_VERSION = "20261114o";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2418,6 +2418,7 @@ function saveGame() {
   if (state.cloud.ready) {
     state.cloud.docRef.set(data).catch((err) => console.warn("클라우드 저장 실패 — 이 기기엔 저장됐어요", err));
   }
+  if (typeof markLocalSaved === "function") markLocalSaved(); // 깃허브 자동 저장(github-save.js)
 }
 
 function loadScript(src) {
@@ -2480,6 +2481,7 @@ function readSlots() {
 function writeSlots(slots) {
   try {
     localStorage.setItem(SLOT_KEY, JSON.stringify(slots));
+    if (typeof markLocalSaved === "function") markLocalSaved();
     return true;
   } catch (err) {
     console.warn("저장 슬롯 쓰기 실패", err);
@@ -4858,6 +4860,7 @@ async function ensureUiModules() {
   if (typeof portraitSpec !== "function") await loadLocalScript("portraits.js");
   if (typeof showScene !== "function") await loadLocalScript("scenes.js");
   if (typeof wireWardrobe !== "function") await loadLocalScript("wardrobe.js");
+  if (typeof initGitHubSave !== "function") await loadLocalScript("github-save.js");
   const wrap = document.querySelector(".map-wrap");
   if (wrap && !document.getElementById("intro-panel")) {
     const panel = document.createElement("div");
@@ -5013,9 +5016,18 @@ async function main() {
   document.getElementById("rest-day-btn")?.addEventListener("click", restWholeDay);
   document.getElementById("new-game-btn").addEventListener("click", async () => {
     if (state.dayRunning) return;
-    if (!window.confirm("저장된 진행 상황을 지우고 Day 1부터 새로 시작할까요?")) return;
+    const ghOn = (() => {
+      try {
+        return !!localStorage.getItem("roymaker-gh-token");
+      } catch (err) {
+        return false;
+      }
+    })();
+    if (!window.confirm(`저장된 진행 상황을 지우고 Day 1부터 새로 시작할까요?${ghOn ? "\n(깃허브 자동 저장이 연결돼 있어서 깃허브 세이브도 새 게임으로 바뀌어요. 20칸 저장은 그대로 남아요)" : ""}`)) return;
     try {
       localStorage.removeItem(SAVE_KEY);
+      // 깃허브에 남은 예전 세이브가 다시 불러와지지 않게, 새 게임을 이 기기의 최신 상태로 표시
+      localStorage.setItem("roymaker-local-saved-at", String(Date.now()));
     } catch (err) {
       console.warn(err);
     }
@@ -5033,6 +5045,8 @@ async function main() {
       ? `☁️ 클라우드에 저장된 진행 상황(Day ${state.day})을 불러왔어요.`
       : `💾 이 기기에 저장된 진행 상황(Day ${state.day})을 불러왔어요.`;
   }
+  // 깃허브 자동 저장이 연결돼 있으면, 깃허브 쪽이 더 최신일 때 불러온다(게임 시작은 막지 않음)
+  if (typeof initGitHubSave === "function") initGitHubSave();
 }
 
 main();
