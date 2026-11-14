@@ -79,7 +79,9 @@ const HOME_SCHOOL_WALK_MIN = 10;
 let SCHOOL_START_MIN = 8 * 60 + 30;
 let SCHOOL_LATE_MIN = 8 * 60 + 50;
 const MORNING_CARE_LATE_MIN = 9 * 60;
-const SEGMENT_PHASE_MS = 1400;
+// 수업·쉬는 시간 연출 속도 — 2026-11 1.5배 빠르게(1400 → 933ms, 3000 → 2000ms)
+const PHASE_SPEEDUP = 1.5;
+const SEGMENT_PHASE_MS = Math.round(1400 / PHASE_SPEEDUP);
 const AFTERSCHOOL_STRESS = 8;
 const AUTONOMOUS_STUDY_STRESS = 6;
 const AUTONOMOUS_STUDY_EFFECT = { focus: 1, diligence: 1, staminaNow: -3 };
@@ -99,7 +101,7 @@ const FIREBASE_SDK_VERSION = "10.14.1";
 const SLEEP_FADE_MS = 900;
 const SLEEP_HOLD_MS = 700;
 const ACADEMY_LESSON_MIN = 60;
-const WAIT_PHASE_MS = 3000;
+const WAIT_PHASE_MS = Math.round(3000 / PHASE_SPEEDUP);
 const MOVE_SPEED_MPS = 60;
 const GAME_MIN_PER_REAL_SEC = 1.0;
 const ARRIVAL_RADIUS_M = 20;
@@ -342,7 +344,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261114p";
+const DATA_VERSION = "20261114s";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -1466,6 +1468,62 @@ async function meetFriendAtPark(park, meetup, clock) {
   return FRIEND_MEETUP_MINUTES;
 }
 
+// ── 저녁 7시 이후 밖에서 엄마·아빠한테 전화 — "어디야? 얼른 조심히 들어와"(2026-11 추가) ──
+const PARENTS_HOME_MIN = 19 * 60; // 이 시각부터 부모님이 집에 계신다
+function nearbyPlaceName() {
+  const pos = state.charPos;
+  if (!pos) return null;
+  const candidates = [
+    ...Object.entries(state.places ?? {}).map(([name, p]) => ({ name, pos: p })),
+    ...(state.hotplaces ?? []).map((h) => ({ name: h.name, pos: h.pos })),
+    ...(state.parks ?? []).map((p) => ({ name: p.name, pos: p.pos })),
+    ...(state.libraries ?? []).map((l) => ({ name: l.name, pos: l.pos })),
+    ...[...(state.stations?.subway ?? []), ...(state.stations?.bus ?? [])].map((s) => ({ name: s.name, pos: s.pos })),
+  ].filter((c) => c.pos);
+  let best = null;
+  candidates.forEach((c) => {
+    const d = distanceMeters(pos, c.pos);
+    if (!best || d < best.d) best = { name: c.name, d };
+  });
+  return best && best.d <= 400 ? best.name : null;
+}
+
+// 대화용 시각: 20:30 → "8시 반", 19:05 → "7시 5분"
+function spokenTime(clock) {
+  const h24 = Math.floor(clock / 60) % 24;
+  const m = Math.round(clock % 60);
+  const h = h24 % 12 === 0 ? 12 : h24 % 12;
+  return m === 0 ? `${h}시` : m === 30 ? `${h}시 반` : `${h}시 ${m}분`;
+}
+
+async function eveningComeHomeCall(contact, clock) {
+  const parent = contact.portrait ?? contact.id;
+  const parentName = contact.name;
+  const where = nearbyPlaceName();
+  const lines = [
+    { speaker: parent, name: parentName, text: `로이야, 벌써 ${spokenTime(clock)}인데 지금 어디야? 밖이 깜깜하잖아!` },
+    { speaker: "iroi", name: null, text: where ? `${where} 근처예요!` : "아직 밖이에요… 동네에 있어요!" },
+    {
+      speaker: parent,
+      name: parentName,
+      text: parentName === "엄마" ? "엄마 아빠 다 집에 왔어. 얼른 조심히 들어와~ 차 조심하고!" : "아빠 집에 왔어. 너무 늦었다, 얼른 조심히 들어오렴. 길 건널 때 꼭 좌우 살피고!",
+    },
+    { speaker: "iroi", name: null, text: "네, 금방 들어갈게요!", reply: "끊기" },
+  ];
+  for (const line of lines) {
+    await presentChoice("event-panel", `📞 ${parentName}`, [{ label: line.reply ?? "▶", value: true }], {
+      body: `"${line.text}"`,
+      tone: "phone",
+      speaker: line.speaker,
+      speakerName: line.name ?? undefined,
+    });
+  }
+  state.calledToday.add(contact.id);
+  logLine(`📱 ${minutesToClock(clock)} ${parentName}한테 전화했더니 얼른 조심히 들어오라고 하셨다`);
+  diary(`늦게까지 밖에 있다가 ${parentName}한테 전화했더니 얼른 조심히 들어오라고 하셨다.`);
+  return state.phone?.callMinutes ?? 2;
+}
+
 // ── 주말에 집에서 엄마·아빠한테 전화 — 같은 집에 있는데 전화하는 개그(2026-11 추가) ──
 async function weekendHomeGagCall(contact) {
   const parent = contact.portrait ?? contact.id;
@@ -1700,8 +1758,13 @@ async function openPhone(clock) {
     return visitParentsCompany(contact, visit);
   }
 
-  if ((contact.id === "mom" || contact.id === "dad") && !isWeekday(state.day) && isAtHome()) {
+  // 주말 또는 저녁 7시 이후(부모님이 집에 계실 때) 집에서 엄마·아빠한테 걸면 같은 집 전화 개그
+  if ((contact.id === "mom" || contact.id === "dad") && isAtHome() && (!isWeekday(state.day) || clock >= PARENTS_HOME_MIN)) {
     return weekendHomeGagCall(contact);
+  }
+  // 저녁 7시 이후 밖에서 걸면: 어디냐고 묻고 얼른 조심히 들어오라고 하신다
+  if ((contact.id === "mom" || contact.id === "dad") && !isAtHome() && clock >= PARENTS_HOME_MIN) {
+    return eveningComeHomeCall(contact, clock);
   }
 
   const placeCall = state.placeEvents.find(
