@@ -220,6 +220,16 @@ function wireGitHubSave() {
     await pullFromGitHub({ force: true });
     if (typeof openSlotModal === "function" && !document.getElementById("slot-modal").hidden) openSlotModal("load");
   });
+  document.getElementById("gh-link")?.addEventListener("click", async () => {
+    const link = connectLink();
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setGitHubStatus("🔗 연결 링크를 복사했어요. 카카오톡 '나와의 채팅' 등으로 보내서 다른 기기에서 열면 자동으로 연결돼요. (링크 안에 토큰이 있으니 남에게 보내지 마세요)");
+    } catch (err) {
+      window.prompt("이 링크를 복사해서 다른 기기에서 여세요", link);
+    }
+  });
   document.getElementById("gh-disconnect").addEventListener("click", () => {
     if (!window.confirm("이 기기에서 깃허브 연결을 끊을까요? (깃허브에 올라간 세이브는 그대로 남아요)")) return;
     ghSet(GH_TOKEN_KEY, null);
@@ -230,9 +240,33 @@ function wireGitHubSave() {
   renderGitHubBox();
 }
 
+// 연결 링크: 게임 주소 뒤에 #gh=토큰 을 붙여 열면 그 기기에 토큰을 저장하고 주소창에서는 지운다
+// (토큰을 저장소·코드에 넣으면 깃허브가 공개 토큰으로 보고 바로 폐기하므로, 링크로만 옮긴다)
+function takeTokenFromLink() {
+  const m = (location.hash || "").match(/[#&]gh=([A-Za-z0-9_]+)/);
+  if (!m) return false;
+  const token = m[1];
+  try {
+    history.replaceState(null, "", location.pathname + location.search);
+  } catch (err) {
+    location.hash = "";
+  }
+  if (!/^(ghp_|github_pat_|gho_)/.test(token)) return false;
+  if (ghGet(GH_TOKEN_KEY) !== token) ghSet(GH_GIST_KEY, null);
+  ghSet(GH_TOKEN_KEY, token);
+  return true;
+}
+
+function connectLink() {
+  const token = ghGet(GH_TOKEN_KEY);
+  return token ? `${location.origin}${location.pathname}#gh=${token}` : null;
+}
+
 // 게임 시작 때: 연결돼 있으면 깃허브 쪽이 최신인지 확인해서 불러온다
 async function initGitHubSave() {
+  const fromLink = takeTokenFromLink();
   wireGitHubSave();
+  if (fromLink) setGitHubStatus("🔗 연결 링크로 깃허브에 연결했어요. 세이브를 확인하는 중…");
   if (!ghGet(GH_TOKEN_KEY)) return;
   if (!ghGet(GH_LOCAL_SAVED_AT_KEY) && ghGet("roymaker-save-v2")) ghSet(GH_LOCAL_SAVED_AT_KEY, "1"); // 예전 세이브는 아주 오래된 것으로 취급
   await pullFromGitHub();
