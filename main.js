@@ -180,6 +180,8 @@ const state = {
   phone: null,
   safetyEducated: false,
   taekwondoDobokGiven: false,
+  examLastFinishedAt: 0,
+  examMonthKey: null,
   creativeCount: 0,
   eventsToday: 0,
   lastEventClock: -Infinity,
@@ -345,7 +347,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261114u";
+const DATA_VERSION = "20261114v";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2466,6 +2468,8 @@ function buildSaveData() {
     registrations: state.registrations,
     safetyEducated: state.safetyEducated,
     taekwondoDobokGiven: state.taekwondoDobokGiven,
+    examLastFinishedAt: state.examLastFinishedAt,
+    examMonthKey: state.examMonthKey,
     creativeCount: state.creativeCount,
     ui: { afterschoolCourse: state.ui.afterschoolCourse, careProgram: state.ui.careProgram },
     lastDay: state.lastDay ?? null,
@@ -2486,6 +2490,8 @@ function applySaveData(data) {
   state.registrations = data.registrations ?? { active: {}, pending: {} };
   state.safetyEducated = !!data.safetyEducated;
   state.taekwondoDobokGiven = !!data.taekwondoDobokGiven;
+  state.examLastFinishedAt = data.examLastFinishedAt ?? 0;
+  state.examMonthKey = data.examMonthKey ?? null;
   state.creativeCount = data.creativeCount ?? 0;
   if (data.ui?.afterschoolCourse) state.ui.afterschoolCourse = data.ui.afterschoolCourse;
   if (data.ui?.careProgram) state.ui.careProgram = data.ui.careProgram;
@@ -4876,6 +4882,8 @@ function showView(name) {
     syncRoomTravelButton();
   }
 
+  if (name === "exam" && typeof renderExamView === "function") renderExamView();
+
   if (name === "map" && state.map) {
     state.map.relayout();
     if (state.charPos) {
@@ -5035,6 +5043,101 @@ function wireRoomTravel() {
   roomBtn.addEventListener("click", () => {
     if (!roomBtn.disabled) travelBtn.click();
   });
+}
+
+// ── 월말 시험 — playground/ 에 그대로 넣은 이로이놀이터를 iframe으로 띄우고,
+// 같은 출처라 바로 읽히는 그 앱의 localStorage(gameHistory)로 이번 시험 성적을 매긴다 ──
+const EXAM_SUBJECTS = [
+  { id: "hanja", label: "한자공부", icon: "🈶", gameIds: ["hanjaQuiz"], stat: "language" },
+  {
+    id: "coding",
+    label: "코딩 사고 놀이",
+    icon: "💻",
+    gameIds: [
+      "hamburgerMaker",
+      "codeTrace",
+      "blockCoding",
+      "conditionalRobot",
+      "logicGate",
+      "cleanbot",
+      "variableScore",
+      "functionFinder",
+      "efficiencyGuess",
+    ],
+    stat: "digital",
+  },
+];
+// 라운드가 높을수록 구간별로 보상이 커진다(목록의 첫 번째로 맞는 구간을 쓴다)
+const EXAM_TIERS = [
+  { min: 7, label: "최우수", stat: 15, wallet: 6000 },
+  { min: 4, label: "우수", stat: 8, wallet: 3000 },
+  { min: 1, label: "참여", stat: 3, wallet: 1000 },
+];
+function examTierFor(round) {
+  return EXAM_TIERS.find((t) => round >= t.min) ?? null;
+}
+function currentGameMonthKey() {
+  const d = gameDateForDay(state.day ?? 1);
+  return `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+}
+function readPlaygroundHistory() {
+  try {
+    return JSON.parse(localStorage.getItem("gameHistory") || "[]");
+  } catch (err) {
+    return [];
+  }
+}
+// 과목별로, 지난 시험 이후(sinceTs) 이로이놀이터에서 쌓인 기록 중 최고 라운드를 찾는다
+function computeExamResults(sinceTs) {
+  const history = readPlaygroundHistory();
+  return EXAM_SUBJECTS.map((subject) => {
+    const rounds = history
+      .filter((rec) => subject.gameIds.includes(rec.gameId) && new Date(rec.date).getTime() > sinceTs)
+      .map((rec) => Number(rec.round) || 0);
+    const best = rounds.length ? Math.max(...rounds) : 0;
+    return { subject, best, tier: best > 0 ? examTierFor(best) : null };
+  });
+}
+
+function renderExamView() {
+  const note = document.getElementById("exam-note");
+  const playArea = document.getElementById("exam-play-area");
+  const result = document.getElementById("exam-result");
+  if (!note || !playArea || !result) return;
+  const taken = state.examMonthKey === currentGameMonthKey();
+  result.hidden = true;
+  if (taken) {
+    note.textContent = "이번 달 시험은 이미 봤어요. 다음 달에 다시 볼 수 있어요.";
+    playArea.hidden = true;
+  } else {
+    note.textContent = '아래 이로이놀이터에서 한자공부 · 코딩 사고 놀이 게임을 해 보자! 끝나면 "시험 끝내기"를 눌러.';
+    playArea.hidden = false;
+  }
+}
+
+function finishExam() {
+  if (state.examMonthKey === currentGameMonthKey()) return;
+  const results = computeExamResults(state.examLastFinishedAt ?? 0);
+  const lines = results.map(({ subject, best, tier }) => {
+    if (!tier) return `${subject.icon} ${subject.label} — 이번엔 안 한 것 같아요.`;
+    const applied = applyEffect({ [subject.stat]: tier.stat, wallet: tier.wallet }, { modifier: false });
+    return `${subject.icon} ${subject.label} — 최고 ${best}라운드 (${tier.label}) · ${appliedText(applied)}`;
+  });
+  renderStats(state.character);
+  state.examLastFinishedAt = Date.now();
+  state.examMonthKey = currentGameMonthKey();
+  saveGame();
+
+  const result = document.getElementById("exam-result");
+  result.innerHTML = lines.map((l) => `<p>${l}</p>`).join("");
+  result.hidden = false;
+  document.getElementById("exam-play-area").hidden = true;
+  document.getElementById("exam-note").textContent = "수고했어! 다음 달에 또 시험을 볼 수 있어요.";
+  logLine("📝 월말 시험을 봤다");
+}
+
+function wireExam() {
+  document.getElementById("exam-finish-btn")?.addEventListener("click", finishExam);
 }
 
 // 화면 설명 팝업 — 각 화면 제목 옆 "설명보기" 버튼
@@ -5299,6 +5402,7 @@ async function main() {
   wireSlots();
   wireTravel();
   wireRoomTravel();
+  wireExam();
   wireDestConfirm();
   document.getElementById("apply-academy-week-btn")?.addEventListener("click", applyAcademyScheduleThisWeek);
   document.getElementById("room-avatar")?.addEventListener("click", sayRoomLine);

@@ -1,0 +1,665 @@
+:root {
+    --primary: #1428A0;
+    --primary-hover: #0b1c7a;
+    --bg-color: #f3f4f6;
+    --card-bg: #ffffff;
+    --text-main: #1f2937;
+    --good: #10b981;
+    --bad: #ef4444;
+}
+* { box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+}
+.app-container {
+    background-color: var(--card-bg);
+    width: 100%;
+    max-width: 620px;
+    border-radius: 1rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+.header-banner {
+    background-color: var(--primary);
+    color: white;
+    height: 4.5rem;
+    padding: 0.4rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+h1 { font-size: 1.1rem; margin: 0; text-align: left; }
+.header-title { display: flex; align-items: center; gap: 0.55rem; }
+.header-icon { height: 3.6rem; width: auto; border-radius: 0.4rem; display: block; flex-shrink: 0; }
+.meta-progress-bar {
+    background: #eef2ff;
+    color: var(--primary);
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-align: center;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid #e0e7ff;
+}
+.home-btn {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    padding: 0.4rem 0.8rem;
+    border-radius: 0.4rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: bold;
+    display: none;
+}
+.home-btn:hover { background: rgba(255,255,255,0.3); }
+.header-actions { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+#soundBtn, #readHelpBtn { display: inline-block; font-size: 1rem; padding: 0.3rem 0.55rem; line-height: 1; }
+.content-padding { padding: 1.3rem 1.4rem 1.6rem 1.4rem; text-align: center; }
+
+.category-block { margin-bottom: 1.4rem; text-align: left; scroll-margin-top: 12px; }
+.category-title { font-size: 1rem; font-weight: 800; color: var(--primary); margin-bottom: 0.6rem; }
+/* 홈 화면 카테고리 바로가기 칩 (가로 스크롤) */
+.cat-nav { display: flex; gap: 0.4rem; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 0.4rem; margin-bottom: 0.9rem; scrollbar-width: none; }
+.cat-nav::-webkit-scrollbar { display: none; }
+.cat-chip {
+    flex: 0 0 auto;
+    background: #eef2ff;
+    color: var(--primary);
+    border: 2px solid #c7d2fe;
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-family: inherit;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.cat-chip:active { background: #c7d2fe; }
+.tile-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.7rem; }
+.game-tile {
+    background: #f8fafc;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 0.9rem 0.8rem;
+    cursor: pointer;
+    text-align: left;
+}
+.game-tile:hover { border-color: var(--primary); background: #eef2ff; }
+.game-tile .tile-emoji { font-size: 1.8rem; display: block; margin-bottom: 0.3rem; }
+.game-tile .tile-name { font-weight: 700; font-size: 0.92rem; }
+.game-tile .tile-desc { font-size: 0.76rem; color: #6b7280; margin-top: 0.2rem; }
+.game-tile .tile-best { font-size: 0.72rem; font-weight: 800; color: #b45309; margin-top: 0.3rem; }
+.sticker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 0.5rem; }
+.sticker { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; padding: 0.4rem 0.2rem; border-radius: 0.6rem; background: #f1f5f9; cursor: pointer; filter: grayscale(1); opacity: 0.55; }
+.sticker > span:first-child { font-size: 1.5rem; }
+.sticker .sticker-name { font-size: 0.6rem; font-weight: 700; color: #64748b; text-align: center; line-height: 1.15; }
+.sticker.got { background: #fef3c7; border: 2px solid #f59e0b; filter: none; opacity: 1; }
+.sticker.got .sticker-name { color: #92400e; }
+
+.game-title-box {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--primary);
+    margin-bottom: 0.4rem;
+}
+.game-sub-desc {
+    font-size: 0.88rem;
+    color: #6b7280;
+    margin-bottom: 1rem;
+}
+.status-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #4b5563;
+    margin-bottom: 0.8rem;
+}
+.msg-box {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+    padding: 0.7rem;
+    border-radius: 0.5rem;
+    font-size: 0.92rem;
+    margin: 0.8rem 0;
+    font-weight: 700;
+    display: none;
+}
+.msg-box.bad { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.action-btn {
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.2rem;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    margin-top: 0.6rem;
+}
+.action-btn:hover { background-color: var(--primary-hover); }
+.action-btn.secondary { background-color: #6b7280; }
+
+/* 기억력: 카드 짝맞추기 */
+.memory-grid { display: grid; gap: 0.5rem; justify-content: center; margin-bottom: 1rem; }
+.memory-card {
+    width: 90px; height: 90px;
+    background: var(--primary);
+    border-radius: 0.6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.7rem;
+    cursor: pointer;
+    user-select: none;
+}
+.memory-card.flipped { background: #fff; border: 2px solid var(--primary); }
+.memory-card.matched { background: #d1fae5; border: 2px solid var(--good); cursor: default; }
+
+/* 접근성: 아래 게임 칸들은 <button> 으로 렌더된다. 브라우저 기본 버튼 스타일만 지우고
+   크기·색·테두리는 각 클래스 규칙을 그대로 쓰도록 둔다. */
+button.memory-card, button.flash-item, button.row-box,
+button.cube3d-option-box, button.maze-cell, button.sequence-answer-slot {
+    margin: 0;
+    padding: 0;
+    font-family: inherit;
+    line-height: 1;
+    color: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+}
+button.memory-card { border: none; }
+/* 위 게임 칸 버튼들은 '눌러도 되는 것/안 되는 것'을 클래스·인라인 스타일로 이미 표현하므로
+   브라우저 기본 disabled 흐리기를 끈다. */
+button.cube3d-option-box[disabled], button.maze-cell[disabled], button.sequence-answer-slot[disabled] {
+    opacity: 1;
+    cursor: default;
+}
+button.cube3d-option-box { padding: 0.3rem; }
+
+/* 기억력: 순서 기억하기(사이먼) */
+.simon-grid { display: grid; grid-template-columns: repeat(2, 90px); grid-template-rows: repeat(2, 90px); gap: 0.6rem; justify-content: center; margin-bottom: 1rem; }
+.simon-btn {
+    width: 90px; height: 90px;
+    border-radius: 0.75rem;
+    font-size: 2rem;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    border: 3px solid transparent;
+    opacity: 0.55;
+}
+.simon-btn.lit { opacity: 1; border-color: #fff; box-shadow: 0 0 15px rgba(0,0,0,0.3); transform: scale(1.05); }
+.simon-btn.pressed { opacity: 1; transform: scale(0.90); box-shadow: inset 0 4px 12px rgba(0,0,0,0.45); border-color: #fff; }
+
+/* 공간지각: 미로 */
+.maze-wrap { display: flex; flex-direction: column; align-items: center; }
+.maze-grid { display: grid; margin-bottom: 1rem; background: #fff; }
+.maze-cell { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; box-sizing: border-box; }
+.maze-controls { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(2, 50px); gap: 0.3rem; justify-content: center; }
+.maze-btn { font-size: 1.3rem; border: none; border-radius: 0.4rem; background: var(--primary); color: white; cursor: pointer; }
+.maze-btn:active { background: var(--primary-hover); }
+
+/* 공통 옵션 버튼(MCQ 스타일 놀이) */
+.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 1rem; }
+.options-grid.single-col { grid-template-columns: 1fr; }
+.opt-btn {
+    background-color: #ffffff;
+    border: 2px solid #e5e7eb;
+    padding: 0.85rem 0.6rem;
+    font-size: 1.4rem;
+    border-radius: 0.6rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+.opt-btn.text-opt { font-size: 0.95rem; text-align: left; }
+.opt-btn:hover { border-color: var(--primary); background: #eef2ff; }
+.opt-btn.correct { background-color: var(--good); color: white; border-color: var(--good); }
+.opt-btn.wrong { background-color: var(--bad); color: white; border-color: var(--bad); }
+
+.big-display { font-size: 3.5rem; margin-bottom: 1rem; }
+.hint-display { font-size: 1.6rem; font-weight: 800; letter-spacing: 0.3rem; background: #f8fafc; border: 2px dashed var(--primary); border-radius: 0.6rem; padding: 0.8rem; margin-bottom: 1rem; }
+
+.row-display { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.8rem; }
+.row-box { width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; background: #f8fafc; border: 2px solid #e5e7eb; border-radius: 0.5rem; }
+.row-box.clickable { cursor: pointer; }
+.row-box.clickable:hover { border-color: var(--primary); }
+.row-label { font-size: 0.78rem; color: #6b7280; font-weight: 700; margin-bottom: 0.3rem; text-align: left; }
+
+.timer-container {
+    width: 100%;
+    height: 10px;
+    background-color: #e5e7eb;
+    border-radius: 5px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+.timer-bar {
+    width: 100%;
+    height: 100%;
+    background-color: #ef4444;
+    transition: width 0.1s linear;
+}
+
+.number-grid { display: grid; grid-template-columns: repeat(4, 64px); gap: 0.5rem; justify-content: center; margin-bottom: 1rem; }
+.number-btn {
+    width: 64px; height: 64px;
+    border-radius: 0.6rem;
+    border: 2px solid #e5e7eb;
+    background: #fff;
+    font-size: 1.5rem;
+    font-weight: 800;
+    cursor: pointer;
+    color: var(--text-main);
+}
+.number-btn:hover { border-color: var(--primary); background: #eef2ff; }
+.number-btn.done { background: #d1fae5; color: #9ca3af; border-color: #a7f3d0; cursor: default; }
+.number-btn.empty { visibility: hidden; cursor: default; }
+.number-btn.wrong-flash { background: #fecaca; border-color: #ef4444; }
+.number-btn.reveal-correct { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+
+.setup-section-label { font-weight: 800; font-size: 0.92rem; margin-bottom: 0.5rem; color: #4b5563; text-align: left; }
+.setup-btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
+.setup-btn {
+    flex: 1;
+    min-width: 68px;
+    background-color: #ffffff;
+    border: 2px solid #d1d5db;
+    color: #4b5563;
+    padding: 0.6rem 0.4rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+    border-radius: 0.5rem;
+    cursor: pointer;
+}
+.setup-btn.active { background-color: var(--primary); border-color: var(--primary); color: white; }
+
+/* 공간지각: 톱니바퀴 회전 방향 맞추기 */
+@keyframes gearSpinCW { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes gearSpinCCW { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+@keyframes gearHighlightPulse {
+    0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.55); }
+    70% { box-shadow: 0 0 0 8px rgba(234, 179, 8, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); }
+}
+.gear-spin-cw { display: inline-block; animation: gearSpinCW 2.4s linear infinite; }
+.gear-spin-ccw { display: inline-block; animation: gearSpinCCW 2.4s linear infinite; }
+
+/* 공간지각: 접힌 종이 구멍 뚫기 */
+@keyframes paperPunchPop {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(1.4); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.paper-punch-pop { animation: paperPunchPop 0.5s ease; }
+/* 접히는 방향 화살표: 점선이 진행 방향으로 흐르는 마칭 앤츠 */
+@keyframes foldArrowMarch { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -20; } }
+.fold-arrow-dash { animation: foldArrowMarch 0.55s linear infinite; }
+
+/* 코딩: 조건문 로봇 / 명령 미리보기 - 명령이 실행될 때 그 방향으로 한 발 내딛는 모션 */
+@keyframes robotStepMove {
+    0% { transform: translate(var(--stepFromX, 0px), var(--stepFromY, 0px)) scale(0.9); }
+    55% { transform: translate(0, -7px) scale(1.06); }
+    100% { transform: translate(0, 0) scale(1); }
+}
+.robot-step-move { display: inline-block; animation: robotStepMove 0.42s ease-out; }
+@keyframes robotTurnWiggle {
+    0% { transform: rotate(0deg); }
+    45% { transform: rotate(var(--turnDeg, 20deg)); }
+    100% { transform: rotate(0deg); }
+}
+.robot-turn-wiggle { display: inline-block; animation: robotTurnWiggle 0.42s ease-out; }
+
+/* 공간지각: 빛과 거울 미로 */
+@keyframes lightSourceBlink {
+    0%, 100% { background: #fef9c3; }
+    50% { background: #dbeafe; }
+}
+.light-source-blink { animation: lightSourceBlink 1s ease-in-out infinite; }
+@keyframes lightTargetPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+}
+.light-target-success { display: inline-block; animation: lightTargetPulse 0.5s ease-in-out 2; }
+
+/* 코딩: 명령/재료 팔레트 (햄버거 만들기, 블록코딩, 변수 점수 만들기 공용) */
+.palette-row { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; margin-bottom: 1rem; }
+
+/* 코딩: 햄버거 만들기 - 좌(포장지)/우(후라이팬) 2분할 장면, 재료 원본은 전부 가로 677px 기준 */
+.burger-scene { display: flex; align-items: flex-end; justify-content: center; gap: 0.6rem; margin-bottom: 0.6rem; min-height: 40px; --iw: clamp(84px, 38vw, 150px); --ih: calc(var(--iw) * 200 / 677); --ph: calc(var(--iw) * 260 / 677); }
+.burger-col { flex: 1 1 0; min-width: 0; height: calc(var(--ph) * 2.5); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.burger-ing-img { display: block; margin: 0 auto; width: var(--iw); height: auto; }
+/* 재료가 위에서 아래로 떨어지며 자리를 잡음(굽기 재료가 팬에 떨어질 때도 동일하게 사용) */
+@keyframes burgerLayerDrop {
+    0% { opacity: 0; transform: translateY(-90px); }
+    70% { opacity: 1; transform: translateY(3px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+.burger-layer-pop { animation: burgerLayerDrop 0.5s ease-in; }
+/* 생재료 -> 구운 재료로 자연스럽게 스왑 + 살짝 지글거림 */
+@keyframes burgerPanSwap {
+    0% { opacity: 0.2; filter: brightness(1.4); transform: scale(0.92); }
+    100% { opacity: 1; filter: brightness(1); transform: scale(1); }
+}
+@keyframes burgerPanSizzle {
+    0%, 100% { transform: rotate(-1.5deg); }
+    50% { transform: rotate(1.5deg); }
+}
+.burger-pan-item-cooked { animation: burgerPanSwap 0.3s ease-out forwards, burgerPanSizzle 0.25s ease-in-out 0.3s infinite; }
+/* 구운 재료가 살포시 위로 떠올라 왼쪽 버거 위로 올라감 */
+@keyframes burgerPanRiseAway {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-50px); }
+}
+.burger-pan-item-riseaway { animation: burgerPanRiseAway 0.6s ease-out forwards; }
+/* 서빙하기: 완성된 버거가 좌측에서 중앙으로 1.5초간 부드럽게 이동(후라이팬 쪽은 이 시점에 함께 사라짐) */
+@keyframes burgerServePop {
+    0% { opacity: 0.5; transform: translateX(-25%); }
+    100% { opacity: 1; transform: translateX(0); }
+}
+.burger-serve-pop { animation: burgerServePop 1.5s cubic-bezier(0.22, 1, 0.36, 1); transform-origin: center bottom; }
+/* 중앙 이동이 끝난 뒤(1.5초 시점) 이어서 재료들이 꾹 눌려 압축됨 */
+@keyframes burgerSquish {
+    0% { height: var(--sq-h0); margin-top: var(--sq-m0); }
+    100% { height: var(--sq-h1); margin-top: var(--sq-m1); }
+}
+.burger-squish { animation: burgerSquish 0.45s ease-out 1.5s both; }
+
+/* ===== 패턴 매트릭스 ===== */
+.matrix-grid { display: grid; gap: 0.4rem; justify-content: center; margin-bottom: 1rem; }
+.matrix-cell { background: #f8fafc; border: 2px solid #d1d5db; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; width: 60px; height: 60px; }
+.matrix-cell.blank { background: #fff7ed; border: 3px dashed #f59e0b; color: #f59e0b; font-weight: 800; }
+
+/* ===== 위에서 본 모양 ===== */
+.topview-grid { display: grid; gap: 0.4rem; justify-content: center; margin-bottom: 1rem; }
+.topview-cell { width: 56px; height: 56px; background: #eef2ff; border: 2px solid var(--primary); border-radius: 0.4rem; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 800; color: var(--primary); }
+
+/* ===== 지도 찾기 ===== */
+.map-grid { display: grid; gap: 0.3rem; justify-content: center; margin-bottom: 1rem; }
+.map-cell { width: 56px; height: 56px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 0.3rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+
+/* ===== 시계 맞추기 ===== */
+.clock-face { width: 200px; height: 200px; border-radius: 50%; background: #fff; border: 4px solid var(--primary); position: relative; margin: 0 auto 1rem auto; touch-action: none; }
+.clock-tick { position: absolute; width: 4px; height: 10px; background: #9ca3af; left: 50%; top: 4px; transform-origin: 2px 96px; margin-left: -2px; }
+.clock-hand { position: absolute; left: 50%; top: 50%; background: var(--text-main); border-radius: 4px; transform-origin: 50% 100%; cursor: grab; }
+.clock-hand.hour { width: 6px; height: 50px; margin-left: -3px; margin-top: -50px; background: #1f2937; }
+.clock-hand.minute { width: 4px; height: 78px; margin-left: -2px; margin-top: -78px; background: #ef4444; }
+.clock-center-dot { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; background: var(--primary); border-radius: 50%; margin-left: -6px; margin-top: -6px; }
+
+/* ===== 동전 맞추기 ===== */
+.coin-row { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center; margin-bottom: 1rem; }
+.coin-btn { background: #fef3c7; border: 2px solid #f59e0b; border-radius: 50%; width: 70px; height: 70px; font-weight: 800; font-size: 0.95rem; cursor: pointer; color: #92400e; }
+.coin-btn:hover { background: #fde68a; }
+
+/* ===== 순간 기억하기 ===== */
+.flash-grid { display: grid; grid-template-columns: repeat(3, 60px); gap: 0.5rem; justify-content: center; margin-bottom: 1rem; }
+.flash-item { width: 60px; height: 60px; background: #f8fafc; border: 2px solid #e5e7eb; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; font-size: 1.7rem; cursor: pointer; }
+.flash-item.selected { border-color: var(--primary); background: #eef2ff; box-shadow: 0 0 0 3px rgba(20,40,160,0.15); }
+
+/* ===== 순서대로 자라기 ===== */
+.sequence-pool-row { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center; margin-bottom: 1rem; }
+.sequence-btn { background: #fff; border: 2px solid #e5e7eb; border-radius: 0.6rem; padding: 0.7rem; font-size: 1.6rem; cursor: pointer; }
+.sequence-btn.picked { opacity: 0.35; cursor: default; }
+.sequence-answer-row { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; margin-bottom: 1rem; min-height: 50px; }
+.sequence-answer-slot { width: 50px; height: 50px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+/* ===== 3D 블록 돌리기 ===== */
+.cube3d-scene {
+    width: 200px; height: 200px;
+    margin: 0 auto 0.6rem auto;
+    perspective: 650px;
+    position: relative;
+    touch-action: none;
+}
+.cube3d-scene.interactive { cursor: grab; }
+.cube3d-scene.interactive:active { cursor: grabbing; }
+.cube3d-group {
+    position: absolute; top: 50%; left: 50%;
+    width: 0; height: 0;
+    transform-style: preserve-3d;
+}
+.cube3d-unit {
+    position: absolute; top: 0; left: 0;
+    width: 0; height: 0;
+    transform-style: preserve-3d;
+}
+.cube3d-face {
+    position: absolute; top: -20px; left: -20px;
+    width: 40px; height: 40px;
+    box-sizing: border-box;
+    border: 1.5px solid rgba(0,0,0,0.3);
+    backface-visibility: hidden;
+}
+
+/* ===== 평면도로 입체 찾기 ===== */
+.proj-grid { display: grid; gap: 3px; justify-content: center; margin: 0 auto 1rem auto; }
+.proj-cell { width: 30px; height: 30px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 3px; }
+.proj-cell.filled { background: #8b5cf6; border-color: #6d28d9; }
+.cube3d-options-row { display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.cube3d-option-box { border: 2px solid #e5e7eb; border-radius: 0.6rem; padding: 0.3rem; cursor: pointer; background: #fff; }
+.cube3d-option-box:hover { border-color: var(--primary); }
+.cube3d-option-box.correct { border-color: #10b981; background: #d1fae5; }
+.cube3d-option-box.wrong { border-color: #ef4444; background: #fee2e2; }
+
+/* ===== 전개도 접어 상자 만들기: 정지된 3D 정육면체 미리보기(레벨2 보기, 레벨3 두 각도) ===== */
+.netfold-cube-scene { width: 120px; height: 120px; margin: 0 auto; perspective: 480px; position: relative; }
+.netfold-cube-group { position: absolute; top: 50%; left: 50%; width: 0; height: 0; transform-style: preserve-3d; }
+.netfold-cube-face { position: absolute; top: 50%; left: 50%; box-sizing: border-box; border: 1.5px solid rgba(0,0,0,0.25); background: #fff; display: flex; align-items: center; justify-content: center; backface-visibility: hidden; }
+
+/* ===== 방향 나침반 (문제 영역을 감싸는 모서리 라벨) ===== */
+.compass-frame {
+    position: relative;
+    padding: 30px 46px 34px 46px;
+    margin-bottom: 0.4rem;
+}
+.compass-corner {
+    position: absolute;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--primary);
+    background: #eef2ff;
+    border: 1.5px solid #c7d2fe;
+    border-radius: 0.4rem;
+    padding: 0.15rem 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    white-space: nowrap;
+    z-index: 3;
+}
+.compass-corner .arrow { font-size: 0.62rem; }
+.compass-back { top: 0; left: 0; }
+.compass-right { top: 0; right: 0; }
+.compass-front { bottom: 0; right: 0; }
+.compass-left { bottom: 0; left: 0; }
+.compass-corner.active {
+    background: #fef9c3;
+    border-color: #eab308;
+    color: #854d0e;
+    animation: compassPulse 1.1s infinite;
+}
+@keyframes compassPulse {
+    0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.55); }
+    70% { box-shadow: 0 0 0 8px rgba(234, 179, 8, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); }
+}
+
+/* ===== 언어 상식 퀴즈: 세계 나라·수도 맞추기 ===== */
+.worldquiz-flag-box {
+    width: 100%;
+    height: 150px;
+    border-radius: 0.6rem;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    background: #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
+}
+.worldquiz-flag-box img { max-width: 80%; max-height: 80%; object-fit: contain; }
+
+/* ===== 🔤 영어 놀이 ===== */
+@keyframes engShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+}
+.eng-shake { animation: engShake 0.45s ease; }
+.eng-ok { background: #d1fae5 !important; border-color: #10b981 !important; color: #065f46 !important; }
+.eng-no { background: #fee2e2 !important; border-color: #ef4444 !important; }
+
+.eng-speak-btn {
+    background: var(--primary); color: #fff; border: none;
+    padding: 0.6rem 1.2rem; border-radius: 999px; font-size: 1rem; font-weight: 800; cursor: pointer;
+}
+.eng-speak-btn:active { background: var(--primary-hover); }
+.eng-btn-row { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; align-items: center; margin: 0.6rem 0; }
+.eng-mini-btn {
+    background: #fff; border: 2px solid #d1d5db; color: #4b5563;
+    padding: 0.5rem 0.8rem; font-size: 0.85rem; font-weight: 800; border-radius: 0.5rem; cursor: pointer;
+}
+.eng-mini-btn:hover { border-color: var(--primary); background: #eef2ff; }
+.eng-speed-row {
+    display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; justify-content: center;
+    margin: 0.5rem 0; padding: 0.4rem; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 0.6rem;
+}
+.eng-speed-label { font-size: 0.78rem; font-weight: 800; color: #6b7280; margin-right: 0.2rem; }
+.eng-speed-btn {
+    background: #fff; border: 2px solid #d1d5db; color: #4b5563;
+    padding: 0.35rem 0.6rem; font-size: 0.8rem; font-weight: 700; border-radius: 0.45rem; cursor: pointer;
+}
+.eng-speed-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* 1. 듣고 그림 찾기 */
+.eng-pic-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin: 1rem 0; }
+.eng-pic-btn {
+    background: #fff; border: 2px solid #e5e7eb; border-radius: 0.8rem;
+    font-size: 2.6rem; padding: 1.1rem 0.4rem; cursor: pointer; line-height: 1.15; min-height: 92px;
+}
+.eng-pic-btn:hover { border-color: var(--primary); background: #eef2ff; }
+
+/* 2. 지시 따라하기 */
+.eng-board {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin: 0.8rem 0;
+}
+.eng-board-item {
+    background: #fff; border: 2px solid #e5e7eb; border-radius: 0.7rem;
+    font-size: 2.2rem; padding: 0.7rem 0; cursor: pointer; min-height: 64px;
+}
+.eng-board-item:hover:not([disabled]) { border-color: var(--primary); background: #eef2ff; }
+.eng-board-item[disabled] { cursor: default; }
+
+/* 3. 문장 만들기 */
+.eng-slot-row {
+    display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center;
+    min-height: 48px; padding: 0.6rem; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 0.6rem; margin: 0.6rem 0;
+}
+.eng-slot {
+    min-width: 44px; height: 38px; padding: 0 0.6rem; border-radius: 0.4rem; font-size: 0.95rem; font-weight: 700;
+    background: #fff; border: 2px solid #e5e7eb; color: #cbd5e1; cursor: default;
+}
+.eng-slot.filled { color: var(--text-main); border-color: var(--primary); background: #eef2ff; cursor: pointer; }
+.eng-wordpool { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: center; margin: 0.6rem 0; }
+.eng-word-card {
+    background: #fff; border: 2px solid #d1d5db; border-radius: 0.5rem;
+    padding: 0.5rem 0.8rem; font-size: 1rem; font-weight: 700; cursor: pointer;
+}
+.eng-word-card:hover:not([disabled]) { border-color: var(--primary); background: #eef2ff; }
+.eng-word-card.used { opacity: 0.25; cursor: default; }
+
+/* 4. 빈칸 채우기 */
+.eng-blank-sentence {
+    text-align: center; font-size: 1.3rem; font-weight: 700; line-height: 1.9;
+    background: #f8fafc; border: 2px solid #e5e7eb; border-radius: 0.6rem; padding: 0.8rem; margin: 0.6rem 0;
+}
+.eng-blank {
+    display: inline-block; min-width: 46px; border-bottom: 3px solid var(--primary); color: var(--primary); font-weight: 800;
+}
+
+/* 5. 단어 분류하기 */
+.eng-bin-row { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 0.8rem 0; }
+.eng-bin {
+    flex: 1 1 0; min-width: 90px; background: #eef2ff; border: 2px dashed var(--primary); color: var(--primary);
+    border-radius: 0.7rem; padding: 0.9rem 0.4rem; font-size: 0.9rem; font-weight: 800; cursor: pointer;
+}
+.eng-bin:hover { background: #e0e7ff; }
+.eng-sort-pool { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin: 0.6rem 0; }
+.eng-sort-card {
+    display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
+    background: #fff; border: 2px solid #e5e7eb; border-radius: 0.6rem; padding: 0.5rem 0.7rem; cursor: pointer; font-size: 1.9rem;
+}
+.eng-sort-card .eng-sort-w { font-size: 0.72rem; font-weight: 700; color: #6b7280; }
+.eng-sort-card.sel { border-color: var(--primary); background: #eef2ff; box-shadow: 0 0 0 3px rgba(20,40,160,0.15); }
+.eng-sort-card.done { opacity: 0.25; cursor: default; }
+
+/* 6. 반대말·비슷한말 짝짓기 */
+.eng-opp-grid { display: grid; gap: 0.5rem; margin: 0.8rem 0; }
+.eng-opp-card {
+    background: var(--primary); color: #fff; border: none; border-radius: 0.6rem;
+    min-height: 62px; font-size: 0.95rem; font-weight: 800; cursor: pointer; padding: 0.3rem;
+}
+.eng-opp-card.up { background: #fff; color: var(--text-main); border: 2px solid var(--primary); }
+.eng-opp-card.matched { background: #d1fae5; color: #065f46; border: 2px solid #10b981; cursor: default; }
+
+/* ===== 진실/거짓말 탐정 ===== */
+.tld-char-row { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; margin: 0.8rem 0; }
+.tld-char { background: #f8fafc; border: 2px solid #e5e7eb; border-radius: 0.8rem; padding: 0.7rem 0.6rem; max-width: 230px; text-align: center; }
+.tld-char-face { font-size: 1.15rem; font-weight: 800; }
+.tld-char-role { font-size: 0.82rem; font-weight: 800; margin-top: 0.15rem; color: #6b7280; }
+.tld-bubble { background: #fff; border: 2px solid #cbd5e1; border-radius: 0.7rem; padding: 0.5rem 0.7rem; font-size: 0.92rem; margin-top: 0.45rem; }
+.tld-door-row { display: flex; gap: 0.7rem; justify-content: center; margin: 1rem 0; }
+.tld-door { flex: 1; max-width: 120px; background: #fef3c7; border: 3px solid #d97706; border-radius: 0.6rem; padding: 1.1rem 0.4rem; font-size: 1.3rem; font-weight: 800; cursor: pointer; color: #92400e; line-height: 1.3; }
+.tld-door:hover { background: #fde68a; }
+.tld-door.correct { background: #d1fae5; border-color: #10b981; color: #065f46; }
+.tld-door.wrong { background: #fee2e2; border-color: #ef4444; }
+
+/* ===== 규칙 벗어난 것 찾기 ===== */
+.orr-grid { display: grid; gap: 0.6rem; justify-content: center; margin: 1rem 0; }
+.orr-item { background: #fff; border: 2px solid #e5e7eb; border-radius: 0.7rem; min-width: 66px; min-height: 66px; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 800; cursor: pointer; padding: 0.4rem; }
+.orr-item:hover { border-color: var(--primary); background: #eef2ff; }
+.orr-item.correct { border-color: #10b981; background: #d1fae5; }
+.orr-item.wrong { border-color: #ef4444; background: #fee2e2; }
+
+/* ===== 순간 포착 세기 ===== */
+.fcs-stage { position: relative; width: 100%; max-width: 320px; height: 220px; margin: 1rem auto; background: #f8fafc; border: 2px solid #e5e7eb; border-radius: 0.8rem; overflow: hidden; }
+.fcs-obj { position: absolute; }
+.fcs-obj.hl { box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.85); animation: fcsPulse 0.55s ease-in-out 3; }
+@keyframes fcsPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.28); } }
+.fcs-countdown { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2.4rem; font-weight: 800; color: var(--primary); }
+
+/* ===== 공용: 뜻풀이 팝업 모달 (오답 선택지 클릭 시 등) ===== */
+.meaning-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+}
+.meaning-modal-overlay.open { display: flex; }
+.meaning-modal-box {
+    background: #fff;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+.meaning-modal-box h3 { margin: 0 0 0.6rem 0; color: var(--primary); font-size: 1.05rem; }
+.meaning-modal-box p { margin: 0 0 1rem 0; font-size: 0.92rem; color: #4b5563; line-height: 1.5; text-align: left; word-break: keep-all; }
+.meaning-modal-box button {
+    background: var(--primary); color: #fff; border: none;
+    padding: 0.55rem 1.2rem; border-radius: 0.4rem; font-weight: 700; cursor: pointer; font-size: 0.9rem;
+}

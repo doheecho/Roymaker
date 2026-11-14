@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>두뇌 쑥쑥 놀이터 - 기억력·공간지각·한글·관찰력·감정놀이</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1428A0">
+    <link rel="icon" href="icon-512x512.png">
+    <link rel="apple-touch-icon" href="icon-512x512.png">
+</head>
+<body>
+    <div class="app-container">
+        <div class="header-banner">
+            <div class="header-title">
+                <img src="icon-512x512.png" alt="이로이" class="header-icon">
+                <h1>두뇌 쑥쑥 이로이 놀이터</h1>
+            </div>
+            <div class="header-actions">
+                <button class="home-btn" id="readHelpBtn" onclick="toggleReadHelp()" aria-label="설명 읽어주기 켜기" style="opacity:0.7;">📖</button>
+                <button class="home-btn" id="soundBtn" onclick="toggleSound()" aria-label="소리 끄기">🔊</button>
+                <button class="home-btn" id="homeBtn" onclick="goHome()">홈으로</button>
+            </div>
+        </div>
+        <div class="meta-progress-bar" id="metaProgressBar" style="display:none;"></div>
+        <div class="content-padding" id="mainArea"></div>
+    </div>
+
+    <!-- 공용 뜻풀이 팝업 모달 (오답 선택지 클릭 시 등에서 사용) -->
+    <div class="meaning-modal-overlay" id="meaningModalOverlay" onclick="if(event.target===this) closeMeaningModal();">
+        <div class="meaning-modal-box">
+            <h3 id="meaningModalTitle"></h3>
+            <p id="meaningModalDesc"></p>
+            <button onclick="closeMeaningModal()">확인</button>
+        </div>
+    </div>
+
+    <!-- 로딩 순서: main.js(전역 상태/유틸/라우터) → 카테고리별 게임 스크립트 -->
+    <script src="js/main.js"></script>
+    <script src="js/games/memory.js"></script>
+    <script src="js/games/spatial.js"></script>
+    <script src="js/games/hangul.js"></script>
+    <script src="js/games/hanja.js"></script>
+    <script src="js/games/proverb.js"></script>
+    <script src="js/games/worldquiz.js"></script>
+    <script src="js/games/observation.js"></script>
+    <script src="js/games/memoryroom.js"></script>
+    <script src="js/games/melody.js"></script>
+    <script src="js/games/logic.js"></script>
+    <script src="js/games/math.js"></script>
+    <script src="js/games/coding.js"></script>
+    <script src="js/games/english.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                // 페이지 로드 시점에 이미 제어 중인 SW가 있었는지 기록(첫 설치 때는 새로고침하지 않기 위함)
+                var hadController = !!navigator.serviceWorker.controller;
+                var reloaded = false;
+                navigator.serviceWorker.addEventListener('controllerchange', function () {
+                    if (reloaded || !hadController) return;
+                    reloaded = true;
+                    window.location.reload(); // 새 SW가 제어를 넘겨받으면 한 번 새로고침해 최신 코드 반영
+                });
+                navigator.serviceWorker.register('sw.js').catch(function (err) {
+                    console.warn('SW registration failed:', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html>

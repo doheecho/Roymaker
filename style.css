@@ -1512,3 +1512,41 @@ li:last-child { border-bottom: none; }
   cursor: pointer;
 }
 .dest-confirm-btns button:hover { background: rgba(201, 164, 108, 0.3); }
+
+/* ── 월말 시험 (이로이놀이터 내장) ── */
+.exam-frame-wrap {
+  border: 2px solid var(--accent2);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.exam-frame {
+  display: block;
+  width: 100%;
+  height: 70vh;
+  min-height: 480px;
+  border: 0;
+}
+.exam-finish-btn {
+  display: block;
+  margin: 10px auto 0;
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18), 0 6px 14px rgba(0, 0, 0, 0.2);
+}
+#exam-result {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: var(--accent4-soft);
+  border: 1px dashed var(--accent4);
+  border-radius: 10px;
+  color: var(--ink);
+  line-height: 1.7;
+}
+#exam-result.locked { background: #f2f2f2; border-style: solid; border-color: #ccc; }

@@ -1,0 +1,21 @@
+{
+  "id": "/Roy-s-world/",
+  "name": "두뇌 쑥쑥 이로이 놀이터",
+  "short_name": "이로이놀이터",
+  "description": "이로이를 위한 두뇌 훈련 게임 - 기억력, 공간지각, 한글, 관찰력, 논리, 수학, 코딩",
+  "start_url": "/Roy-s-world/index.html",
+  "scope": "/Roy-s-world/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ko",
+  "background_color": "#f3f4f6",
+  "theme_color": "#1428A0",
+  "icons": [
+    {
+      "src": "/Roy-s-world/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

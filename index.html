@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261114w">
+<link rel="stylesheet" href="style.css?v=20261114x">
 </head>
 <body>
   <header>
@@ -43,6 +43,7 @@
         <button type="button" class="nav-btn" data-view="activity">🧹 활동정보</button>
         <button type="button" class="nav-btn" data-view="map">🗺️ 지도</button>
         <button type="button" class="nav-btn" data-view="shop">🛍️ 상점</button>
+        <button type="button" class="nav-btn" data-view="exam">📝 월말시험</button>
       </nav>
     </section>
 
@@ -197,6 +198,22 @@
         <p id="shop-feedback" class="muted" hidden></p>
         <ul id="shop-items"></ul>
       </div>
+
+      <div id="view-exam" class="view" hidden>
+        <div class="view-head">
+          <h2>📝 월말 시험</h2>
+          <button type="button" class="help-btn" data-help="exam" data-title="📝 월말 시험">❓ 설명보기</button>
+        </div>
+        <template id="help-exam"><p>아래 <b>이로이놀이터</b>에서 <b>한자공부</b>와 <b>코딩 사고 놀이</b> 게임을 해 보자! 끝나면 "시험 끝내기"를 눌러서 결과를 받는다 — 각 과목에서 이번에 올라간 <b>최고 라운드</b>에 따라 능력치와 용돈을 받는다. 한 달에 한 번만 볼 수 있다.</p></template>
+        <p id="exam-note" class="muted"></p>
+        <div id="exam-play-area">
+          <div class="exam-frame-wrap">
+            <iframe id="exam-frame" class="exam-frame" title="이로이놀이터" src="playground/index.html" loading="lazy"></iframe>
+          </div>
+          <button type="button" id="exam-finish-btn" class="exam-finish-btn">✅ 시험 끝내기</button>
+        </div>
+        <div id="exam-result" class="exam-result" hidden></div>
+      </div>
     </section>
   </main>
 
@@ -291,7 +308,7 @@
   <script src="scenes.js?v=20261113c"></script>
   <script src="wardrobe.js?v=20261114n"></script>
   <script src="github-save.js?v=20261114r"></script>
-  <script src="main.js?v=20261114u"></script>
+  <script src="main.js?v=20261114v"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
