@@ -1127,7 +1127,7 @@ li:last-child { border-bottom: none; }
   height: 82%;
   transform: translateX(-50%) scale(var(--room-zoom, 1));
   animation: roy-sway 4.5s ease-in-out infinite;
-  transform-origin: 50% 100%;
+  transform-origin: 50% 12%;
 }
 /* 기본 몸 사진 + 옷 레이어를 한 덩어리로 숨쉬게 한다 */
 .room-avatar {
