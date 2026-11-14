@@ -1,6 +1,6 @@
 // ── 옷장 · 아바타 (2026-11 추가) ──
 // 이로이 기본 사진: img/roy/roy_n_09.png(안경 미착용, 9살), roy_g_09.png(안경 착용, 9살) … 나이별로 두 자리 숫자.
-// 옷·아이템 그림: img/item/top_01.png(상의), bot_01.png(하의), etc_01.png(기타) …
+// 옷·아이템 그림: img/item/top_01_09.png(상의, 9살용), bot_01_09.png(하의), etc_01_09.png(기타) … — 끝의 _09는 몇 살 몸에 맞춘 그림인지
 //   ※ 옷 그림은 이로이 기본 사진과 "같은 크기의 투명 PNG"로, 입혀질 자리에 그려 둔다 — 그대로 위에 겹쳐서 입힌다.
 // 아이템 이름·설명·가격·효과: 루트의 item.csv (id · 이름 · 설명 · 가격 · 효과)
 // main.js의 state / applyEffect / renderStats / saveGame / logLine 등을 그대로 쓴다.
@@ -175,8 +175,15 @@ async function resolveRoyBaseImage(glasses, age) {
   return (await firstExisting(candidates)) ?? ROY_LEGACY_IMAGES[g];
 }
 
-async function resolveItemImage(id) {
-  return firstExisting(ITEM_IMAGE_EXTS.map((ext) => `${ITEM_IMAGE_DIR}${id}.${ext}`));
+// 나이별 옷 그림: {id}_{나이 두 자리} — 그 나이 그림이 없으면 가까운 나이(아래쪽 먼저), 그래도 없으면 나이 없는 {id}
+async function resolveItemImage(id, age = royAgeForDay(state.day ?? 1)) {
+  const names = [];
+  for (let d = 0; d <= 12; d++) {
+    if (age - d >= 1) names.push(`${id}_${String(age - d).padStart(2, "0")}`);
+    if (d > 0) names.push(`${id}_${String(age + d).padStart(2, "0")}`);
+  }
+  names.push(id);
+  return firstExisting(names.flatMap((n) => ITEM_IMAGE_EXTS.map((ext) => `${ITEM_IMAGE_DIR}${n}.${ext}`)));
 }
 
 // 옷장 목록용 미리보기 — 옷 그림은 몸 크기 캔버스라 빈 곳이 많으므로, 그림이 있는 부분만 잘라 보여준다
@@ -244,7 +251,7 @@ async function refreshRoomAvatar(rerollGlasses = false) {
     const layer = document.querySelector(`#room-avatar .room-layer[data-slot="${slot}"]`);
     if (!layer) continue;
     const itemId = wardrobe.equipped[slot];
-    const src = itemId ? await resolveItemImage(itemId) : null;
+    const src = itemId ? await resolveItemImage(itemId, age) : null;
     if (src) {
       layer.src = src;
       layer.hidden = false;
