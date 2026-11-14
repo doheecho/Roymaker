@@ -5109,6 +5109,25 @@ function wireMovementControls() {
   });
 }
 
+// 엔터/스페이스로 대화창 진행 — 글자가 써지는 중이면 바로 다 보여주고,
+// 선택지가 하나뿐이면 그걸 누른 것으로 친다. 선택지가 여러 개면(분기) 직접 눌러야 한다.
+function wireDialogKeys() {
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    if (["INPUT", "TEXTAREA", "BUTTON"].includes(document.activeElement?.tagName)) return;
+    const panel = document.getElementById("event-panel");
+    if (!panel || panel.hidden) return;
+    ev.preventDefault();
+    const choices = panel.querySelector(".pm-choices");
+    if (choices?.hidden) {
+      panel.click(); // 아직 타이핑 중이면 눌러서 바로 다 보여주는 것과 같다
+      return;
+    }
+    const enabled = [...(choices?.querySelectorAll("button") ?? [])].filter((b) => !b.disabled);
+    if (enabled.length === 1) enabled[0].click();
+  });
+}
+
 // 화면 파일 버전 — index.html의 ?v= 값과 같게 올려 주면 브라우저가 새 파일을 받아 간다
 const APP_VERSION = "20261111g";
 
@@ -5274,6 +5293,7 @@ async function main() {
   }));
   wireScheduleEditor();
   wireMovementControls();
+  wireDialogKeys();
   wireNav();
   wireHelp();
   wireSlots();
