@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261114o">
+<link rel="stylesheet" href="style.css?v=20261114p">
 </head>
 <body>
   <header>
@@ -51,7 +51,8 @@
         <div class="room-scene">
           <img class="room-bg" src="img/characters/room_1.jpg" alt="이로이의 방">
           <div class="room-char-wrap">
-            <div id="room-avatar" class="room-avatar">
+            <div id="room-bubble" class="room-bubble" hidden></div>
+            <div id="room-avatar" class="room-avatar" title="이로이를 눌러 보세요">
               <img id="room-char" class="room-char" src="img/characters/roy_n_9_stand.png" alt="방 안에 서 있는 이로이" draggable="false">
               <img class="room-layer" data-slot="shoe" alt="" draggable="false" hidden>
               <img class="room-layer" data-slot="bot" alt="" draggable="false" hidden>
@@ -121,8 +122,12 @@
       <div id="view-academy" class="view" hidden>
         <div class="view-head">
           <h2>🏫 학원정보</h2>
-          <button type="button" class="help-btn" data-help="academy" data-title="🏫 학원정보">❓ 설명보기</button>
+          <span class="view-head-btns">
+            <button type="button" id="apply-academy-week-btn" class="help-btn academy-apply-btn">📅 학원일정 등록하기</button>
+            <button type="button" class="help-btn" data-help="academy" data-title="🏫 학원정보">❓ 설명보기</button>
+          </span>
         </div>
+        <p id="academy-apply-note" class="planner-note" hidden></p>
         <template id="help-academy"><p>
           동네 학원들의 이름·운영시간·위치·성장 효과다. 학원은 <strong>매주 일정을 미리 등록</strong>한다 — 요일과
           시작 시각을 고르면 <strong>다음 주 월요일부터</strong> 적용되고, 등록된 수업은 매일 시간표에 자동으로 올라간다.
@@ -273,7 +278,7 @@
   <script src="scenes.js?v=20261113c"></script>
   <script src="wardrobe.js?v=20261114k"></script>
   <script src="github-save.js?v=20261114o"></script>
-  <script src="main.js?v=20261114o"></script>
+  <script src="main.js?v=20261114p"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

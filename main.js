@@ -342,7 +342,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261114o";
+const DATA_VERSION = "20261114p";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2386,6 +2386,7 @@ function buildSaveData() {
     logicHistory: state.logicHistory ?? [],
     diligenceHistory: state.diligenceHistory ?? [],
     insaHistory: state.insaHistory ?? [],
+    statHistory: state.statHistory ?? [],
     wardrobe: state.wardrobe,
   };
 }
@@ -2405,6 +2406,7 @@ function applySaveData(data) {
   state.logicHistory = data.logicHistory ?? [];
   state.diligenceHistory = data.diligenceHistory ?? [];
   state.insaHistory = data.insaHistory ?? [];
+  state.statHistory = data.statHistory ?? [];
   state.wardrobe = data.wardrobe ?? { owned: [], equipped: { set: null, top: null, bot: null, shoe: null, etc: null } };
 }
 
@@ -2891,6 +2893,54 @@ function renderAcademies(academies, categoryMap) {
     }
     el.appendChild(li);
   });
+}
+
+// "📅 학원일정 등록하기" — 학원정보에서 고른 요일·시각을 월요일까지 기다리지 않고 바로 이번 주에 적용하고,
+// 오늘부터 이번 주 금요일까지 남은 날의 시간표에 학원 수업을 한 번에 넣는다(겹치는 시간은 건너뜀)
+function applyAcademyScheduleThisWeek() {
+  const note = document.getElementById("academy-apply-note");
+  const say = (text) => {
+    if (!note) return;
+    note.textContent = text;
+    note.hidden = false;
+  };
+  if (state.dayRunning) return say("일과가 진행 중일 때는 등록할 수 없어요. 하루를 마치고 해 주세요.");
+  state.registrations.active = JSON.parse(JSON.stringify(state.registrations.pending));
+  const dowToday = weekdayOf(state.day);
+  if (dowToday < 1 || dowToday > 5) {
+    saveGame();
+    renderAcademies(state.academies, state.categoryMap);
+    return say("오늘은 주말이라 이번 주에 남은 학원 날이 없어요. 다음 주 월요일부터 이 일정대로 들어가요.");
+  }
+  let added = 0;
+  let skipped = 0;
+  let days = 0;
+  for (let d = state.day; weekdayOf(d) >= 1 && weekdayOf(d) <= 5 && d - state.day < 5; d++) {
+    days += 1;
+    const dow = weekdayOf(d);
+    // 예전에 등록 일정으로 들어간 학원 칸은 지우고 새 일정으로 다시 넣는다(직접 끌어다 놓은 칸은 그대로)
+    const plan = planFor(d).filter((b) => !(b.kind === "academy" && String(b.id).endsWith("-reg")));
+    Object.entries(state.registrations.active).forEach(([academyId, reg]) => {
+      if (!reg.days.includes(dow)) return;
+      const startMin = reg.startMin;
+      const endMin = startMin + ACADEMY_LESSON_MIN;
+      if (plan.some((b) => rangesOverlap(b.startMin, b.endMin, startMin, endMin))) {
+        skipped += 1;
+        return;
+      }
+      plan.push({ id: `academy-${academyId}-reg`, kind: "academy", academyId, startMin, endMin });
+      added += 1;
+    });
+    state.weekPlan[d] = plan.sort((a, b) => a.startMin - b.startMin);
+  }
+  saveGame();
+  renderAcademies(state.academies, state.categoryMap);
+  renderTimetable();
+  say(
+    added || skipped
+      ? `✅ 이번 주 남은 ${days}일(오늘~금요일)에 학원 수업 ${added}개를 넣었어요.${skipped ? ` 다른 일정과 시간이 겹쳐서 ${skipped}개는 못 넣었어요.` : ""} 주간 일정에서 확인해 보세요.`
+      : "학원정보에서 다니고 싶은 요일과 시각을 먼저 골라 주세요. 고른 일정이 이번 주 남은 날에 바로 들어가요."
+  );
 }
 
 // 배고프거나(허기 ≤ 30) 지치면(기력 ≤ 20) 능력치 성장이 절반으로 줄어든다
@@ -3630,6 +3680,7 @@ function sleepAndAdvance() {
 
 function advanceToNextDay() {
   state.day += 1;
+  recordStatSnapshot();
   renderDayHeader();
 
   // 월요일이 되면 지난주에 미리 등록해 둔 학원 일정이 이번 주 일정으로 확정된다
@@ -4405,6 +4456,7 @@ async function runTravel(destination) {
   if (images.length) await showTravelImageUrl(pickRandom(images));
 
   state.day = startDay + totalDays;
+  recordStatSnapshot();
 
   // 여행 마지막 날, 가족 대화를 몰아서 한 번에 보여준다
   const recapCount = Math.min(3, TRAVEL_FAMILY_LINES.length);
@@ -4747,6 +4799,93 @@ function wireMapRecenter() {
   });
 }
 
+// ── 최근 능력치 변화: 하루가 넘어갈 때마다 능력치를 기록(최근 8일)해서 7일 전과 비교 ──
+const STAT_HISTORY_DAYS = 8;
+function recordStatSnapshot() {
+  if (!state.character?.stats) return;
+  const hist = (state.statHistory ?? []).filter((h) => h.day > state.day - STAT_HISTORY_DAYS && h.day !== state.day);
+  hist.push({ day: state.day, stats: { ...state.character.stats } });
+  state.statHistory = hist;
+}
+function recentStatGain(key, lookbackDays = 7) {
+  const past = (state.statHistory ?? []).filter((h) => h.day >= state.day - lookbackDays && h.day < state.day).sort((a, b) => a.day - b.day)[0];
+  if (!past) return 0;
+  return (state.character.stats[key] ?? 0) - (past.stats[key] ?? 0);
+}
+
+// ── 방에서 이로이를 누르면 말풍선 ──
+const ROOM_TALK_GENERAL = [
+  "오늘은 뭐 하고 놀까?",
+  "엄마, 오늘 저녁 메뉴 뭐예요?",
+  "포켓몬카드 더 모으고 싶다~",
+  "로블록스 레벨 올려야 하는데…",
+  "이 옷 어때? 멋지지?",
+  "숙제는… 이따가 할게요!",
+  "친구들 보고 싶다~",
+  "나중에 커서 뭐가 될까?",
+  "어디로 여행 가고 싶다!",
+  "용돈 모아서 레고 살 거야!",
+  "헤헤, 간지러워요!",
+  "오늘 학교에서 재밌는 일 있었어!",
+];
+const ROOM_TALK_STAT_GAIN = {
+  diligence: "성실한 어린이가 될 거예요!",
+  stamina: "요즘 체력이 엄청 좋아졌어! 하나도 안 힘들어!",
+  power: "힘이 세졌어! 팔씨름하면 다 이길 것 같아!",
+  agility: "나 엄청 빨라졌어! 술래잡기 자신 있어!",
+  dexterity: "손재주가 늘었어! 뭐든 만들 수 있을 것 같아!",
+  language: "책 읽는 게 점점 재밌어져요!",
+  math: "수학 문제가 술술 풀려요!",
+  perception: "주변을 잘 살피게 됐어요. 작은 것도 다 보여!",
+  logic: "차근차근 생각하니까 문제가 쉬워져요!",
+  focus: "한 번 집중하면 시간 가는 줄 몰라요!",
+  expression: "그림 그리고 노래하는 게 너무 재밌어!",
+  social: "친구들이랑 노는 게 더 즐거워졌어!",
+  insa: "요즘 친구들이 나를 엄청 좋아해!",
+  selfEsteem: "나는 뭐든 할 수 있어!",
+  digital: "컴퓨터 다루는 거 이제 자신 있어!",
+};
+const ROOM_TALK_GAIN_MIN = 5;
+const ROOM_TALK_SHOW_MS = 3800;
+
+function roomTalkLines() {
+  const c = state.character.condition;
+  const st = state.character.stats;
+  const lines = [];
+  if (c.hunger <= 50) lines.push("엄마 배고파..");
+  if (c.hunger >= 100) lines.push("어휴... 배가 너무 부른데?");
+  if ((st.delinquency ?? 0) >= 20) lines.push("공부하기 싫다. 맨날 놀고 싶다.");
+  else if ((st.delinquency ?? 0) >= 10) lines.push("쳇.. 재미없어.");
+  if (c.stress >= 50) lines.push("너무 머리 아파요.. 힘들어요 엄마..");
+  if (c.staminaNow <= 20) lines.push("너무 피곤해… 좀 쉬고 싶어.");
+  if (state.character.wallet < 1000) lines.push("용돈이 다 떨어졌어… 엄마 용돈 주세요~");
+  else if (state.character.wallet >= 30000) lines.push("용돈이 엄청 많아졌다! 뭐 살까?");
+  Object.entries(ROOM_TALK_STAT_GAIN).forEach(([key, line]) => {
+    if (recentStatGain(key) >= ROOM_TALK_GAIN_MIN) lines.push(line);
+  });
+  return lines;
+}
+
+let roomBubbleTimer = null;
+let lastRoomLine = null;
+function sayRoomLine() {
+  const bubble = document.getElementById("room-bubble");
+  if (!bubble || !state.character) return;
+  const special = roomTalkLines();
+  // 상태에 맞는 말이 있으면 대부분은 그걸, 가끔은 평소 수다를 한다(같은 말 연속은 피함)
+  let pool = special.length && Math.random() < 0.75 ? special : ROOM_TALK_GENERAL;
+  if (pool.length > 1) pool = pool.filter((l) => l !== lastRoomLine);
+  const line = pickRandom(pool);
+  lastRoomLine = line;
+  bubble.textContent = line;
+  bubble.hidden = false;
+  bubble.classList.remove("pop");
+  void bubble.offsetWidth;
+  bubble.classList.add("pop");
+  clearTimeout(roomBubbleTimer);
+  roomBubbleTimer = setTimeout(() => (bubble.hidden = true), ROOM_TALK_SHOW_MS);
+}
+
 // 내 방 화면의 여행 버튼 — 주간 일정 화면의 여행 버튼(월요일에만 보임)과 같은 상태를 따라간다
 function syncRoomTravelButton() {
   const roomBtn = document.getElementById("room-travel-btn");
@@ -5009,6 +5148,8 @@ async function main() {
   wireSlots();
   wireTravel();
   wireRoomTravel();
+  document.getElementById("apply-academy-week-btn")?.addEventListener("click", applyAcademyScheduleThisWeek);
+  document.getElementById("room-avatar")?.addEventListener("click", sayRoomLine);
   if (typeof wireWardrobe === "function") wireWardrobe();
   wireMapRecenter();
   wireAppFullscreen();
