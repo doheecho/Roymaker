@@ -342,7 +342,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261114i";
+const DATA_VERSION = "20261114n";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -2527,6 +2527,8 @@ function openSlotModal(mode) {
 
 function closeSlotModal() {
   document.getElementById("slot-modal").hidden = true;
+  const panel = document.getElementById("transfer-panel");
+  if (panel) panel.hidden = true;
 }
 
 function saveToSlot(i) {
@@ -2557,7 +2559,124 @@ function loadFromSlot(i) {
   showView("home");
 }
 
+// ── 다른 기기로 옮기기: 진행 상황 + 20칸 저장을 파일/세이브 코드로 내보내고 가져온다 ──
+// 코드 형식: "ROY2:" + base64(gzip(JSON)) — 압축을 못 하는 브라우저면 "ROY1:" + base64(JSON)
+function bytesToBase64(bytes) {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function base64ToBytes(b64) {
+  const bin = atob(b64.replace(/\s+/g, ""));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function makeTransferCode() {
+  const payload = { app: "roymaker", v: 1, exportedAt: Date.now(), autosave: buildSaveData(), slots: readSlots() };
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  if (typeof CompressionStream === "function") {
+    const zipped = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+    return `ROY2:${bytesToBase64(zipped)}`;
+  }
+  return `ROY1:${bytesToBase64(bytes)}`;
+}
+async function readTransferCode(code) {
+  const text = String(code ?? "").trim();
+  const m = text.match(/ROY([12]):([A-Za-z0-9+/=\s]+)/);
+  if (!m) throw new Error("세이브 코드가 아니에요 (ROY로 시작해야 해요)");
+  let bytes = base64ToBytes(m[2]);
+  if (m[1] === "2") {
+    if (typeof DecompressionStream !== "function") throw new Error("이 브라우저는 압축된 코드를 못 읽어요. 크롬 최신 버전으로 열어 주세요");
+    bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+  }
+  const payload = JSON.parse(new TextDecoder().decode(bytes));
+  if (payload?.app !== "roymaker" || !payload.autosave || payload.autosave.version !== 2) throw new Error("이 게임의 세이브가 아니에요");
+  return payload;
+}
+function applyTransfer(payload) {
+  applySaveData(JSON.parse(JSON.stringify(payload.autosave)));
+  if (Array.isArray(payload.slots)) writeSlots(payload.slots);
+  renderDayHeader();
+  pruneWeekPlan();
+  renderAcademies(state.academies, state.categoryMap);
+  renderTimetable();
+  renderStats(state.character);
+  renderShop();
+  saveGame();
+}
+function setTransferMsg(text) {
+  document.getElementById("transfer-panel").hidden = false;
+  document.getElementById("transfer-msg").textContent = text;
+}
+function wireTransfer() {
+  const panel = document.getElementById("transfer-panel");
+  const codeEl = document.getElementById("transfer-code");
+  if (!panel || !codeEl) return;
+  document.getElementById("export-save-btn").addEventListener("click", async () => {
+    if (state.dayRunning) return setTransferMsg("일과가 진행 중일 때는 내보낼 수 없어요. 하루를 마치고 해 주세요.");
+    const code = await makeTransferCode();
+    codeEl.value = code;
+    // 파일로 내려받기
+    const d = gameDateForDay(state.day);
+    const blob = new Blob([code], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `roymaker-save-day${state.day}-${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(code);
+      copied = true;
+    } catch (err) {
+      // 클립보드를 못 쓰면 아래 칸에서 직접 복사
+    }
+    setTransferMsg(`✅ 세이브 파일을 내려받았어요${copied ? "(코드도 복사됨)" : ""}. 이 파일이나 아래 코드를 다른 기기로 보내서 "가져오기" 하세요.`);
+  });
+  document.getElementById("import-save-btn").addEventListener("click", () => {
+    codeEl.value = "";
+    setTransferMsg("받은 세이브 파일을 고르거나, 세이브 코드를 아래 칸에 붙여 넣고 \"이 코드로 가져오기\"를 누르세요.");
+    codeEl.focus();
+  });
+  const doImport = async (code) => {
+    if (state.dayRunning) return setTransferMsg("일과가 진행 중일 때는 가져올 수 없어요.");
+    try {
+      const payload = await readTransferCode(code);
+      const when = new Date(payload.exportedAt);
+      if (!window.confirm(`Day ${payload.autosave.day} 세이브(${when.getMonth() + 1}/${when.getDate()} ${pad2(when.getHours())}:${pad2(when.getMinutes())}에 내보냄)를 가져올까요?\n지금 이 기기의 진행 상황과 20칸 저장은 이걸로 바뀝니다.`)) return;
+      applyTransfer(payload);
+      openSlotModal("load");
+      setTransferMsg(`✅ 가져왔어요! Day ${state.day}부터 이어서 할 수 있어요.`);
+    } catch (err) {
+      setTransferMsg(`⚠️ ${err.message || "가져오지 못했어요"}`);
+    }
+  };
+  document.getElementById("transfer-apply").addEventListener("click", () => doImport(codeEl.value));
+  document.getElementById("transfer-copy").addEventListener("click", async () => {
+    if (!codeEl.value) codeEl.value = await makeTransferCode();
+    codeEl.select();
+    try {
+      await navigator.clipboard.writeText(codeEl.value);
+      setTransferMsg("📋 세이브 코드를 복사했어요. 메시지로 보내서 다른 기기에서 붙여 넣으세요.");
+    } catch (err) {
+      setTransferMsg("아래 코드를 길게 눌러 전체 선택 후 복사하세요.");
+    }
+  });
+  document.getElementById("transfer-file").addEventListener("change", async (ev) => {
+    const file = ev.target.files?.[0];
+    ev.target.value = "";
+    if (!file) return;
+    const text = await file.text();
+    codeEl.value = text.trim();
+    doImport(text);
+  });
+}
+
 function wireSlots() {
+  wireTransfer();
   document.getElementById("save-btn").addEventListener("click", () => openSlotModal("save"));
   document.getElementById("load-btn").addEventListener("click", () => openSlotModal("load"));
   document.getElementById("slot-close").addEventListener("click", closeSlotModal);
@@ -4778,6 +4897,12 @@ async function applyCustomIroiImage() {
 
 async function main() {
   await ensureUiModules();
+  // 브라우저가 공간이 모자랄 때 이 게임의 저장을 함부로 지우지 않게 요청
+  try {
+    navigator.storage?.persist?.();
+  } catch (err) {
+    // 지원 안 하면 그냥 넘어감
+  }
   applyCustomIroiImage();
   // 대화창 인물 사진을 뒤에서 미리 받아 둔다(게임 시작은 막지 않음)
   if (typeof preloadAllCustomPortraits === "function") setTimeout(() => preloadAllCustomPortraits(), 1500);

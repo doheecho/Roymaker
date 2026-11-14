@@ -1363,3 +1363,37 @@ li:last-child { border-bottom: none; }
   .room-scene.wardrobe-open .room-char-wrap { left: 22%; }
   .room-scene:has(.wardrobe-panel:not([hidden])) { aspect-ratio: auto; min-height: 520px; }
 }
+
+
+/* 저장 창: 다른 기기로 옮기기 */
+.transfer-box { margin: 4px 0 12px; padding: 10px 12px; border: 1px dashed rgba(232, 212, 154, 0.5); border-radius: 10px; }
+.transfer-box h4 { margin: 0 0 4px; font-size: 14px; color: #e8d49a; }
+.transfer-note { margin: 0 0 8px; font-size: 12px; line-height: 1.5; opacity: 0.85; }
+.transfer-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.transfer-btn {
+  padding: 7px 12px;
+  border: 1px solid rgba(232, 212, 154, 0.6);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.transfer-btn:hover { background: rgba(232, 212, 154, 0.2); }
+.transfer-panel { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.transfer-panel[hidden] { display: none; }
+.transfer-msg { margin: 0; font-size: 12.5px; line-height: 1.5; }
+.transfer-code {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(232, 212, 154, 0.5);
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  font-family: monospace;
+  font-size: 11px;
+  word-break: break-all;
+  resize: vertical;
+}
