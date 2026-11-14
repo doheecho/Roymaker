@@ -7,11 +7,14 @@
 // main.js의 state / applyEffect / renderStats / saveGame / logLine 등을 그대로 쓴다.
 
 const ROY_IMAGE_DIR = "img/roy/";
+// 코디 세트: img/outfit/roy_{n|g}_{나이}_{번호}.png — 옷 입은 이로이 전신 사진(배경 투명)을 몸 사진 대신 통째로 보여준다
+const OUTFIT_IMAGE_DIR = "img/outfit/";
 const ITEM_IMAGE_DIR = "img/item/";
 const ITEM_IMAGE_EXTS = ["png", "webp", "jpg"];
 const ROY_BASE_AGE = 9; // 게임 시작일(2026-03-01)의 나이 — 매년 3월 1일에 한 살씩 먹는다
 const ROY_LEGACY_IMAGES = { n: "img/characters/roy_n_9_stand.png", g: "img/characters/roy_g_9_stand.png" };
 const WARDROBE_SLOTS = [
+  { id: "set", label: "🧥 코디", prefix: "set", priority: 1 },
   { id: "top", label: "👕 상의", prefix: "top", priority: 1 },
   { id: "bot", label: "👖 하의", prefix: "bot", priority: 2 },
   { id: "shoe", label: "👟 신발", prefix: "shoe", priority: 3 },
@@ -24,7 +27,7 @@ const WARDROBE_DRAG_START_PX = 6;
 const WARDROBE_FREE_FOR_TEST = true;
 
 function emptyWardrobe() {
-  return { owned: [], equipped: { top: null, bot: null, shoe: null, etc: null } };
+  return { owned: [], equipped: { set: null, top: null, bot: null, shoe: null, etc: null } };
 }
 
 function ensureWardrobeState() {
@@ -197,7 +200,20 @@ async function resolveRoyBaseImage(glasses, age) {
 }
 
 // 나이별 옷 그림: {id}_{나이 두 자리} — 그 나이 그림이 없으면 가까운 나이(아래쪽 먼저), 그래도 없으면 나이 없는 {id}
+// 코디 세트 사진: 지금 안경 상태 → 다른 안경 상태 → 가까운 나이 순으로 찾는다
+async function resolveOutfitImage(id, glasses, age = royAgeForDay(state.day ?? 1)) {
+  const num = id.replace(/^set_/, "");
+  const order = glasses ? ["g", "n"] : ["n", "g"];
+  const urls = [];
+  for (let d = 0; d <= 12; d++) {
+    const ages = d === 0 ? [age] : [age - d, age + d].filter((a) => a >= 1);
+    ages.forEach((a) => order.forEach((g) => urls.push(`${OUTFIT_IMAGE_DIR}roy_${g}_${String(a).padStart(2, "0")}_${num}.png`)));
+  }
+  return firstExisting(urls);
+}
+
 async function resolveItemImage(id, age = royAgeForDay(state.day ?? 1)) {
+  if (id.startsWith("set_")) return resolveOutfitImage(id, roomGlasses, age);
   const names = [];
   for (let d = 0; d <= 12; d++) {
     if (age - d >= 1) names.push(`${id}_${String(age - d).padStart(2, "0")}`);
@@ -263,7 +279,10 @@ async function refreshRoomAvatar(rerollGlasses = false) {
   if (!base) return;
   if (rerollGlasses) roomGlasses = Math.random() < 0.5;
   const age = royAgeForDay(state.day ?? 1);
-  const url = await resolveRoyBaseImage(roomGlasses, age);
+  const wardrobeNow = ensureWardrobeState();
+  // 코디 세트를 입었으면 몸 사진 대신 코디 사진을 통째로 보여주고, 다른 옷 레이어는 숨긴다
+  const outfitUrl = wardrobeNow.equipped.set && clothingById(wardrobeNow.equipped.set) ? await resolveOutfitImage(wardrobeNow.equipped.set, roomGlasses, age) : null;
+  const url = outfitUrl ?? (await resolveRoyBaseImage(roomGlasses, age));
   if (base.getAttribute("src") !== url) base.src = url;
   base.alt = `방 안에 서 있는 이로이 (${age}살${roomGlasses ? ", 안경" : ""})`;
 
@@ -271,7 +290,9 @@ async function refreshRoomAvatar(rerollGlasses = false) {
   for (const slot of WARDROBE_LAYER_ORDER) {
     const layer = document.querySelector(`#room-avatar .room-layer[data-slot="${slot}"]`);
     if (!layer) continue;
-    const itemId = wardrobe.equipped[slot];
+    const equippedId = wardrobe.equipped[slot];
+    // item.csv에서 빠졌거나 꺼 둔 옷은 그리지 않는다(예전 세이브에 남은 낱개 옷 등)
+    const itemId = outfitUrl || !clothingById(equippedId) ? null : equippedId;
     const src = itemId ? await resolveItemImage(itemId, age) : null;
     layer.style.zIndex = String(layerZIndex(slot, itemId));
     if (src) {
@@ -301,7 +322,11 @@ function equipClothing(id) {
     return;
   }
   const wardrobe = ensureWardrobeState();
-  wardrobe.equipped[item.slot] = wardrobe.equipped[item.slot] === id ? null : id;
+  const wearing = wardrobe.equipped[item.slot] !== id;
+  wardrobe.equipped[item.slot] = wearing ? id : null;
+  // 코디 세트와 낱개 옷은 함께 입지 않는다
+  if (wearing && item.slot === "set") ["top", "bot", "shoe"].forEach((s) => (wardrobe.equipped[s] = null));
+  if (wearing && ["top", "bot", "shoe"].includes(item.slot)) wardrobe.equipped.set = null;
   refreshRoomAvatar();
   renderWardrobe();
   saveGame();
@@ -350,6 +375,9 @@ function renderWardrobe() {
     if (!list) return;
     list.innerHTML = "";
     const items = (state.clothing ?? []).filter((c) => c.slot === slot.id);
+    // 아이템이 하나도 없는 칸은 숨긴다(지금은 코디 세트만 쓰는 중)
+    const section = list.closest(".wardrobe-section");
+    if (section) section.hidden = items.length === 0;
     if (items.length === 0) {
       const empty = document.createElement("p");
       empty.className = "wardrobe-empty";
