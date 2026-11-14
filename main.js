@@ -3851,7 +3851,6 @@ function triggerIllness() {
 
 // 허기 회복은 이제 아침밥/저녁밥(serveBreakfast/serveDinner/lateDinnerTalk)이 맡는다 — 여기서는 잠들기 전 기력·스트레스만 추가로 회복
 function applyEndOfDay(stressRecovery) {
-  if (typeof applyWardrobeDailyEffects === "function") applyWardrobeDailyEffects();
   state.character.condition.staminaNow = Math.min(100, state.character.condition.staminaNow + 10);
   state.character.condition.stress = Math.max(0, state.character.condition.stress - stressRecovery);
   renderStats(state.character);

@@ -26,13 +26,14 @@ const WARDROBE_LAYER_ORDER = ["shoe", "bot", "top", "etc"];
 const WARDROBE_FREE_FOR_TEST = true;
 
 function emptyWardrobe() {
-  return { owned: [], equipped: { set: null, top: null, bot: null, shoe: null, etc: null } };
+  return { owned: [], equipped: { set: null, top: null, bot: null, shoe: null, etc: null }, appliedEffect: {} };
 }
 
 function ensureWardrobeState() {
   if (!state.wardrobe || typeof state.wardrobe !== "object") state.wardrobe = emptyWardrobe();
   state.wardrobe.owned ??= [];
   state.wardrobe.equipped ??= {};
+  state.wardrobe.appliedEffect ??= {};
   WARDROBE_SLOTS.forEach((s) => {
     if (!(s.id in state.wardrobe.equipped)) state.wardrobe.equipped[s.id] = null;
   });
@@ -317,81 +318,14 @@ function layerZIndex(slot, itemId) {
   return (4 - priority) * 10 + WARDROBE_LAYER_ORDER.indexOf(slot) + 1;
 }
 
-// ── 지도 위 캐릭터: 지금 입은 코디(없으면 기본 차림) 사진을 작게 잘라서 보여준다 ──
-async function currentAvatarUrl() {
-  const age = royAgeForDay(state.day ?? 1);
-  const w = ensureWardrobeState();
-  const outfit = w.equipped.set && clothingById(w.equipped.set) ? await resolveOutfitImage(w.equipped.set, roomGlasses, age) : null;
-  return outfit ?? (await resolveRoyBaseImage(roomGlasses, age));
-}
-
-// 지도용 가분수(머리 크게·몸 작게) 캐릭터 — 목(머리와 어깨 사이에서 폭이 가장 좁은 줄)에서 나눠 다시 붙인다
-const CHIBI_HEAD_SCALE = 1.5;
-const CHIBI_BODY_SCALE_Y = 0.72;
-const CHIBI_BODY_SCALE_X = 0.92;
-const chibiCache = {};
-function makeChibi(src) {
-  if (!src) return Promise.resolve(null);
-  chibiCache[src] ??= new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const w = img.naturalWidth, h = img.naturalHeight;
-        const c = document.createElement("canvas");
-        c.width = w;
-        c.height = h;
-        const ctx = c.getContext("2d");
-        ctx.drawImage(img, 0, 0);
-        const data = ctx.getImageData(0, 0, w, h).data;
-        let neck = Math.round(h * 0.28), best = Infinity;
-        for (let y = Math.round(h * 0.18); y < Math.round(h * 0.4); y++) {
-          let l = -1, r = -1;
-          for (let x = 0; x < w; x++) {
-            if (data[(y * w + x) * 4 + 3] > 60) {
-              if (l < 0) l = x;
-              r = x;
-            }
-          }
-          const width = l < 0 ? Infinity : r - l;
-          if (width < best) {
-            best = width;
-            neck = y;
-          }
-        }
-        const headH = neck, bodyH = h - neck;
-        const hw = w * CHIBI_HEAD_SCALE, hh = headH * CHIBI_HEAD_SCALE;
-        const bw = w * CHIBI_BODY_SCALE_X, bh = bodyH * CHIBI_BODY_SCALE_Y;
-        const overlap = Math.round(hh * 0.06); // 목 이음새가 안 보이게 머리를 몸 위로 살짝 겹친다
-        const out = document.createElement("canvas");
-        out.width = Math.ceil(Math.max(hw, bw));
-        out.height = Math.ceil(hh + bh - overlap);
-        const o = out.getContext("2d");
-        o.imageSmoothingQuality = "high";
-        o.drawImage(c, 0, neck, w, bodyH, (out.width - bw) / 2, hh - overlap, bw, bh);
-        o.drawImage(c, 0, 0, w, headH + 2, (out.width - hw) / 2, 0, hw, hh + 2 * CHIBI_HEAD_SCALE);
-        resolve(out.toDataURL("image/png"));
-      } catch (err) {
-        resolve(src);
-      }
-    };
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
-  return chibiCache[src];
-}
 
 async function refreshMapAvatar() {
+  // 코디 사진마다 목 위치가 달라 자동으로 머리/몸을 나누는 가분수 변환이 옷에 따라 머리가
+  // 찌그러지거나 배경 잔상이 남는 문제가 있어서, 지도 위에서는 코드로 그린 기존 가분수
+  // 캐릭터를 그대로 쓴다(코디 사진은 내 방 화면에서만 보여준다).
   const sp = typeof state === "object" ? state.sprite : null;
-  if (!sp?.photo || !sp.el) return;
-  const url = await currentAvatarUrl();
-  // 예전 도트 사진(img/characters)밖에 없으면 도트 캐릭터를 그대로 쓴다
-  const src = url && !url.startsWith("img/characters/") ? await makeChibi(await trimmedThumb(url, 900)) : null;
-  if (src) {
-    sp.photo.src = src;
-    sp.el.classList.add("has-photo");
-  } else {
-    sp.el.classList.remove("has-photo");
-  }
+  if (!sp?.el) return;
+  sp.el.classList.remove("has-photo");
 }
 
 // ── 안경 쓰기 / 벗기 ──
@@ -408,6 +342,27 @@ function toggleGlasses() {
   saveGame();
 }
 
+// ── 입고 있는 옷의 효과를 실시간으로 적용/회수 ──
+// 입을 때 적용된 실제 수치(클램핑 반영)를 slot별로 기억해 뒀다가, 벗을 때 그 수치 그대로 되돌린다
+// (능력치가 이미 100에 가까워 일부만 적용됐을 때도 어긋나지 않도록)
+function reverseSlotEffect(wardrobe, slotId) {
+  const prev = wardrobe.appliedEffect[slotId];
+  if (!prev || !Object.keys(prev).length) return;
+  applyEffect(Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, -v])), { modifier: false });
+  wardrobe.appliedEffect[slotId] = {};
+}
+
+function applySlotEffect(wardrobe, slotId) {
+  const item = clothingById(wardrobe.equipped[slotId]);
+  if (!item || !ownsClothing(item) || !Object.keys(item.effect).length) {
+    wardrobe.appliedEffect[slotId] = {};
+    return null;
+  }
+  const applied = applyEffect(item.effect, { modifier: false });
+  wardrobe.appliedEffect[slotId] = applied;
+  return { item, applied };
+}
+
 // ── 입기 / 벗기 ──
 function equipClothing(id) {
   const item = clothingById(id);
@@ -418,10 +373,21 @@ function equipClothing(id) {
   }
   const wardrobe = ensureWardrobeState();
   const wearing = wardrobe.equipped[item.slot] !== id;
+  const changedSlots = new Set([item.slot]);
+  // 코디 세트와 낱개 옷은 함께 입지 않는다 — 같이 벗겨지는 슬롯들도 효과를 되돌려야 한다
+  if (wearing && item.slot === "set") ["top", "bot", "shoe"].forEach((s) => changedSlots.add(s));
+  if (wearing && ["top", "bot", "shoe"].includes(item.slot)) changedSlots.add("set");
+
+  changedSlots.forEach((s) => reverseSlotEffect(wardrobe, s));
   wardrobe.equipped[item.slot] = wearing ? id : null;
-  // 코디 세트와 낱개 옷은 함께 입지 않는다
   if (wearing && item.slot === "set") ["top", "bot", "shoe"].forEach((s) => (wardrobe.equipped[s] = null));
   if (wearing && ["top", "bot", "shoe"].includes(item.slot)) wardrobe.equipped.set = null;
+  const results = [...changedSlots].map((s) => applySlotEffect(wardrobe, s)).filter(Boolean);
+
+  renderStats(state.character);
+  results.forEach(({ item: wornItem, applied }) => {
+    if (Object.keys(applied).length) logLine(`👕 ${wornItem.name} 효과 (${appliedText(applied)})`);
+  });
   refreshRoomAvatar();
   renderWardrobe();
   saveGame();
@@ -429,7 +395,9 @@ function equipClothing(id) {
 
 function unequipAll() {
   const wardrobe = ensureWardrobeState();
+  WARDROBE_SLOTS.forEach((s) => reverseSlotEffect(wardrobe, s.id));
   WARDROBE_SLOTS.forEach((s) => (wardrobe.equipped[s.id] = null));
+  renderStats(state.character);
   refreshRoomAvatar();
   renderWardrobe();
   saveGame();
@@ -565,22 +533,6 @@ function renderClothingShop(listEl) {
     li.append(row, btn);
     listEl.appendChild(li);
   });
-}
-
-// ── 입고 있는 옷의 효과: 하루가 끝날 때마다 한 번 ──
-function applyWardrobeDailyEffects() {
-  const wardrobe = ensureWardrobeState();
-  const total = {};
-  const names = [];
-  WARDROBE_SLOTS.forEach((s) => {
-    const item = clothingById(wardrobe.equipped[s.id]);
-    if (!item || !ownsClothing(item) || !Object.keys(item.effect).length) return;
-    names.push(item.name);
-    Object.entries(item.effect).forEach(([k, v]) => (total[k] = (total[k] ?? 0) + v));
-  });
-  if (!names.length) return;
-  const applied = applyEffect(total, { modifier: false });
-  if (Object.keys(applied).length) logLine(`👕 ${names.join(", ")} 효과 (${appliedText(applied)})`);
 }
 
 function wireWardrobe() {
