@@ -289,6 +289,9 @@ async function refreshRoomAvatar(rerollGlasses = false) {
   const url = outfitUrl ?? (await resolveRoyBaseImage(roomGlasses, age));
   if (base.getAttribute("src") !== url) base.src = url;
   base.alt = `방 안에 서 있는 이로이 (${age}살${roomGlasses ? ", 안경" : ""})`;
+  // 사진이 정해지기 전의 기본(큰) 사진이 잠깐 보였다가 줄어드는 게 보이지 않도록,
+  // 여기까지 와서 진짜 사진이 정해진 뒤에야 보여준다
+  document.getElementById("room-avatar")?.classList.remove("pending");
   refreshMapAvatar();
 
   const wardrobe = ensureWardrobeState();
@@ -546,4 +549,57 @@ function wireWardrobe() {
   document.getElementById("wardrobe-undress")?.addEventListener("click", unequipAll);
   document.getElementById("wardrobe-glasses")?.addEventListener("click", toggleGlasses);
   syncGlassesButton();
+  wireRoomZoom();
+}
+
+// ── 내 방 이로이 확대/축소: 마우스 휠, 방 화면에서 ↑/↓ 키 — 최소는 지금 보이는 기본 크기 ──
+const ROOM_ZOOM_KEY = "roymaker-room-zoom";
+const ROOM_ZOOM_MIN = 1;
+const ROOM_ZOOM_MAX = 2.5;
+let roomZoom = ROOM_ZOOM_MIN;
+
+function applyRoomZoom() {
+  document.querySelector(".room-char-wrap")?.style.setProperty("--room-zoom", roomZoom);
+}
+
+function setRoomZoom(next) {
+  roomZoom = Math.min(ROOM_ZOOM_MAX, Math.max(ROOM_ZOOM_MIN, next));
+  applyRoomZoom();
+  try {
+    localStorage.setItem(ROOM_ZOOM_KEY, String(roomZoom));
+  } catch (err) {
+    // 저장이 안 되면 이번 화면에서만 적용된다
+  }
+}
+
+function isHomeViewActive() {
+  return document.getElementById("main-view")?.dataset.view === "home";
+}
+
+function wireRoomZoom() {
+  try {
+    const saved = Number(localStorage.getItem(ROOM_ZOOM_KEY));
+    if (saved >= ROOM_ZOOM_MIN && saved <= ROOM_ZOOM_MAX) roomZoom = saved;
+  } catch (err) {
+    // 기본값(최소 크기)으로 시작
+  }
+  applyRoomZoom();
+
+  const scene = document.querySelector(".room-scene");
+  scene?.addEventListener(
+    "wheel",
+    (ev) => {
+      if (!isHomeViewActive() || ev.target.closest("#wardrobe-panel")) return;
+      ev.preventDefault();
+      setRoomZoom(roomZoom + (ev.deltaY < 0 ? 0.08 : -0.08));
+    },
+    { passive: false }
+  );
+
+  window.addEventListener("keydown", (ev) => {
+    if (!isHomeViewActive() || (ev.key !== "ArrowUp" && ev.key !== "ArrowDown")) return;
+    if (document.activeElement?.closest("#wardrobe-panel")) return;
+    ev.preventDefault();
+    setRoomZoom(roomZoom + (ev.key === "ArrowUp" ? 0.1 : -0.1));
+  });
 }

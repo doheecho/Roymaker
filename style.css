@@ -1125,7 +1125,7 @@ li:last-child { border-bottom: none; }
   left: 50%;
   bottom: 0;
   height: 82%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(var(--room-zoom, 1));
   animation: roy-sway 4.5s ease-in-out infinite;
   transform-origin: 50% 100%;
 }
@@ -1136,7 +1136,11 @@ li:last-child { border-bottom: none; }
   filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.25));
   transform-origin: 50% 100%;
   animation: roy-breathe 3s ease-in-out infinite;
+  opacity: 1;
+  transition: opacity 0.2s ease;
 }
+/* 처음 들어왔을 때 사진이 정해지기 전까지는 기본(큰) 사진이 잠깐 보이지 않게 숨긴다 */
+.room-avatar.pending { opacity: 0; transition: none; }
 .room-char {
   display: block;
   height: 100%;
@@ -1158,8 +1162,8 @@ li:last-child { border-bottom: none; }
   50% { transform: scaleY(1.012) translateY(-2px); }
 }
 @keyframes roy-sway {
-  0%, 100% { transform: translateX(-50%) rotate(-0.8deg); }
-  50% { transform: translateX(-50%) rotate(0.8deg); }
+  0%, 100% { transform: translateX(-50%) rotate(-0.8deg) scale(var(--room-zoom, 1)); }
+  50% { transform: translateX(-50%) rotate(0.8deg) scale(var(--room-zoom, 1)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .room-char-wrap, .room-char, .room-avatar { animation: none; }
