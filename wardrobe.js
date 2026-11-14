@@ -224,13 +224,14 @@ async function resolveItemImage(id, age = royAgeForDay(state.day ?? 1)) {
 
 // 옷장 목록용 미리보기 — 옷 그림은 몸 크기 캔버스라 빈 곳이 많으므로, 그림이 있는 부분만 잘라 보여준다
 const thumbCache = {};
-function trimmedThumb(url) {
+function trimmedThumb(url, maxSize = 240) {
   if (!url) return Promise.resolve(null);
-  thumbCache[url] ??= new Promise((resolve) => {
+  const key = `${url}@${maxSize}`;
+  thumbCache[key] ??= new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       try {
-        const scale = Math.min(1, 240 / Math.max(img.naturalWidth, img.naturalHeight));
+        const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
         const w = Math.max(1, Math.round(img.naturalWidth * scale));
         const h = Math.max(1, Math.round(img.naturalHeight * scale));
         const c = document.createElement("canvas");
@@ -268,7 +269,7 @@ function trimmedThumb(url) {
     img.onerror = () => resolve(null);
     img.src = url;
   });
-  return thumbCache[url];
+  return thumbCache[key];
 }
 
 // ── 방 아바타 그리기 ──
@@ -287,6 +288,7 @@ async function refreshRoomAvatar(rerollGlasses = false) {
   const url = outfitUrl ?? (await resolveRoyBaseImage(roomGlasses, age));
   if (base.getAttribute("src") !== url) base.src = url;
   base.alt = `방 안에 서 있는 이로이 (${age}살${roomGlasses ? ", 안경" : ""})`;
+  refreshMapAvatar();
 
   const wardrobe = ensureWardrobeState();
   for (const slot of WARDROBE_LAYER_ORDER) {
@@ -313,6 +315,28 @@ function layerZIndex(slot, itemId) {
   const def = WARDROBE_SLOTS.find((s) => s.id === slot)?.priority ?? 2;
   const priority = item?.priority ?? def;
   return (4 - priority) * 10 + WARDROBE_LAYER_ORDER.indexOf(slot) + 1;
+}
+
+// ── 지도 위 캐릭터: 지금 입은 코디(없으면 기본 차림) 사진을 작게 잘라서 보여준다 ──
+async function currentAvatarUrl() {
+  const age = royAgeForDay(state.day ?? 1);
+  const w = ensureWardrobeState();
+  const outfit = w.equipped.set && clothingById(w.equipped.set) ? await resolveOutfitImage(w.equipped.set, roomGlasses, age) : null;
+  return outfit ?? (await resolveRoyBaseImage(roomGlasses, age));
+}
+
+async function refreshMapAvatar() {
+  const sp = typeof state === "object" ? state.sprite : null;
+  if (!sp?.photo || !sp.el) return;
+  const url = await currentAvatarUrl();
+  // 예전 도트 사진(img/characters)밖에 없으면 도트 캐릭터를 그대로 쓴다
+  const src = url && !url.startsWith("img/characters/") ? await trimmedThumb(url, 900) : null;
+  if (src) {
+    sp.photo.src = src;
+    sp.el.classList.add("has-photo");
+  } else {
+    sp.el.classList.remove("has-photo");
+  }
 }
 
 // ── 안경 쓰기 / 벗기 ──

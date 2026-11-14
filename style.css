@@ -834,6 +834,31 @@ li:last-child { border-bottom: none; }
 }
 .ride-bubble[hidden] { display: none; }
 
+/* 지도 위 사진 캐릭터(옷장에서 입힌 코디) — 사진이 있으면 도트 캐릭터 대신 */
+.char-photo-wrap { display: none; transform-origin: 50% 100%; }
+.char-sprite.has-photo canvas { display: none; }
+.char-sprite.has-photo .char-photo-wrap { display: block; }
+.char-sprite.face-left .char-photo-wrap { transform: scaleX(-1); }
+.char-photo {
+  display: block;
+  height: 76px;
+  width: auto;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.95)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  user-select: none;
+  pointer-events: none;
+}
+.char-sprite.walking .char-photo { animation: map-walk 0.46s ease-in-out infinite; }
+@keyframes map-walk {
+  0%, 100% { transform: translateY(0) rotate(-5deg); }
+  25% { transform: translateY(-5px) rotate(0deg); }
+  50% { transform: translateY(0) rotate(5deg); }
+  75% { transform: translateY(-5px) rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .char-sprite.walking .char-photo { animation: none; }
+}
+
 /* ── 대화창 (프린세스 메이커 2 메시지 창 스타일) ── */
 .map-overlay-panel.pm-dialog {
   top: auto;

@@ -342,7 +342,7 @@ async function loadStations(path) {
 }
 
 // index.html의 ?v= 자산 버전과 맞춰서 올릴 것 — 데이터 파일(JSON/CSV)도 브라우저 캐시에 걸리지 않게 함
-const DATA_VERSION = "20261114g";
+const DATA_VERSION = "20261114i";
 
 async function loadJSON(path) {
   const res = await fetch(`${path}?v=${DATA_VERSION}`);
@@ -726,6 +726,12 @@ function startSpriteTicker() {
     const sp = state.sprite;
     if (!sp.canvas) return;
     const moving = !sp.riding && performance.now() - sp.movingAt < SPRITE_FRAME_MS * 2;
+    // 사진 캐릭터: 걷는 중이면 통통 튀는 애니메이션, 왼쪽으로 가면 좌우 뒤집기
+    if (sp.el) {
+      sp.el.classList.toggle("walking", moving);
+      if (sp.dir === "left") sp.el.classList.add("face-left");
+      else if (sp.dir === "right") sp.el.classList.remove("face-left");
+    }
     const frame = moving ? step++ % WALK_FRAMES : null;
     if (!moving) step = 0;
     if (frame !== sp.frame || sp.dir !== sp.drawnDir) {
@@ -750,10 +756,22 @@ function createCharacterOverlay(map, position) {
   bubble.hidden = true;
   el.appendChild(bubble);
   el.appendChild(canvas);
+  // 옷장에서 입힌 코디(또는 기본 차림) 사진을 작게 보여주는 자리 — 사진이 있으면 도트 캐릭터 대신 이걸 쓴다
+  const photoWrap = document.createElement("div");
+  photoWrap.className = "char-photo-wrap";
+  const photo = document.createElement("img");
+  photo.className = "char-photo";
+  photo.alt = "이로이";
+  photo.draggable = false;
+  photoWrap.appendChild(photo);
+  el.appendChild(photoWrap);
+  state.sprite.el = el;
+  state.sprite.photo = photo;
   state.sprite.canvas = canvas;
   state.sprite.bubble = bubble;
   drawSprite(canvas, state.sprite.dir, null);
   startSpriteTicker();
+  if (typeof refreshMapAvatar === "function") refreshMapAvatar();
   return new kakao.maps.CustomOverlay({
     map,
     position: new kakao.maps.LatLng(position.lat, position.lng),
