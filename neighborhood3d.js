@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115n";
+const ASSET_VERSION = "20261115o";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -35,6 +35,23 @@ const DANCE_POOL = [
   "Love_You_Pop_Dance",
   "Shake_It_Off_Dance",
   "Superlove_Pop_Dance",
+  "ymca_dance",
+];
+// 엄마 모델(mom.glb)에 들어있는 춤 동작들 — 걷기/인사 같은 동작은 제외
+const MOM_DANCE_POOL = [
+  "Cardio_Dance",
+  "Denim_Pop_Dance",
+  "Gangnam_Groove",
+  "Hip_Hop_Dance",
+  "Hip_Hop_Dance_2",
+  "Hip_Hop_Dance_3",
+  "Love_You_Pop_Dance",
+  "OMG_Groove",
+  "Pod_Baby_Groove",
+  "Pop_Dance_LSA2",
+  "Superlove_Pop_Dance",
+  "You_Groove",
+  "jazz_danc",
   "ymca_dance",
 ];
 
@@ -97,17 +114,30 @@ const NAME_COLOR_OVERRIDE = {
 // 지도 화면에서 움직이는 정도로 느껴지도록 전체를 줄여 쓴다 — 113동(우리집) 건물 밑변이
 // 이로이 캐릭터(키 1.7) 두 배쯤 되도록 축척을 잡았다(22m짜리 폭 → 약 3.3)
 const WORLD_SCALE = 0.15;
-// 도로 지도(kakaomap_road.png) 기준: 노란색+흰색이 전부 도로다(주택가 색은 그보다 살짝 진해서 구분됨).
-// 난계로(메인 도로)가 대현교회 쪽에서 이마트24를 지나 메가MGC커피·NEW웰빙마트·파리바게뜨가 모인
-// 사거리를 거쳐 롯데마트 쪽으로 쭉 이어지고, 그 사거리에서 흰 도로가 수직으로 한 번 더 교차한다.
-const ROAD_MAIN = [
-  [-261, -114], // 대현교회 쪽
-  [-136, -133], // 이마트24(105동)
-  [60, -179], // 메가MGC커피·NEW웰빙마트·파리바게뜨 사거리
-  [654, -352], // 롯데마트 방향
+// 도로 지도(kakaomap_road.png, 사용자가 빨간색으로 직접 도로를 칠해 준 버전) 기준으로 그린 도로망.
+// 라벨이나 지하철 5호선(보라색) 표시에 가려진 구간도 전부 도로로 쳤다. 폭은 지도에서 보이는 두께
+// 차이를 3단계(큰길/보통길/골목)로 단순화해서 반영했고, 큰길·보통길에는 중앙 차선을 그려 넣었다.
+const ROAD_WIDE = 10; // 난계로 같은 큰길
+const ROAD_MEDIUM = 6; // 단지 안 보통 도로
+const ROAD_NARROW = 3.5; // 건물 사이 좁은 길(차선 없음)
+const ROAD_SEGMENTS = [
+  // 난계로: 대현교회 → 이마트24 → 메가MGC커피 사거리 → 롯데마트 방향
+  { a: [-261, -114], b: [-136, -133], width: ROAD_WIDE },
+  { a: [-136, -133], b: [60, -179], width: ROAD_WIDE },
+  { a: [60, -179], b: [654, -352], width: ROAD_WIDE },
+  // 사거리에서 수직으로 교차하는 큰길(지도상 굵게 표시된, 도서관·안전센터 쪽으로 이어지는 길)
+  { a: [60, -179], b: [16, 83], width: ROAD_WIDE },
+  { a: [16, 83], b: [104, 152], width: ROAD_WIDE },
+  { a: [104, 152], b: [139, 235], width: ROAD_MEDIUM },
+  // 단지 서쪽(대현교회~9·10·11동~학교~117동) 안쪽 도로
+  { a: [-261, -114], b: [-325, 150], width: ROAD_MEDIUM },
+  { a: [-325, 150], b: [-170, 144], width: ROAD_MEDIUM },
+  { a: [-170, 144], b: [-74, 203], width: ROAD_MEDIUM },
+  { a: [-74, 203], b: [46, 240], width: ROAD_MEDIUM },
+  // 이마트24에서 우리집 쪽으로 들어오는 안쪽 골목
+  { a: [-136, -133], b: [0, -93], width: ROAD_NARROW },
+  { a: [0, -93], b: [0, 0], width: ROAD_NARROW },
 ];
-const ROAD_CROSS = [[30, -329], [90, -29]]; // 사거리에서 수직으로 교차하는 흰 도로
-const ROAD_WIDTH = 5;
 
 const AREA_MARGIN = 8;
 const AREA_MIN_X = Math.min(...PLACES.map((p) => p.x * WORLD_SCALE)) - AREA_MARGIN;
@@ -129,7 +159,7 @@ let currentAction = null;
 let rafId = null;
 let ready = false;
 let loading = false;
-let canvasEl, loadingEl, danceBtnEl, walkBtnEl, runBtnEl, momBtnEl, hudEl, toastEl, resetBtnEl, dpadEl;
+let canvasEl, loadingEl, danceBtnEl, walkBtnEl, runBtnEl, jumpBtnEl, momBtnEl, hudEl, toastEl, resetBtnEl, dpadEl;
 let mom = null;
 let momMixer = null;
 let momActions = {};
@@ -290,28 +320,45 @@ function buildStaticScene() {
   buildPlaces();
 }
 
-function buildRoadSegment(p1, p2) {
-  const x1 = p1[0] * WORLD_SCALE;
-  const z1 = p1[1] * WORLD_SCALE;
-  const x2 = p2[0] * WORLD_SCALE;
-  const z2 = p2[1] * WORLD_SCALE;
+function buildRoadSegment({ a, b, width }) {
+  const x1 = a[0] * WORLD_SCALE;
+  const z1 = a[1] * WORLD_SCALE;
+  const x2 = b[0] * WORLD_SCALE;
+  const z2 = b[1] * WORLD_SCALE;
   const dx = x2 - x1;
   const dz = z2 - z1;
   const len = Math.hypot(dx, dz);
-  const geo = new THREE.PlaneGeometry(ROAD_WIDTH * WORLD_SCALE, len);
+  const yaw = Math.atan2(dx, dz);
+  const midX = (x1 + x2) / 2;
+  const midZ = (z1 + z2) / 2;
+  const roadW = width * WORLD_SCALE;
+
+  const geo = new THREE.PlaneGeometry(roadW, len);
   geo.rotateX(-Math.PI / 2); // 바닥에 눕히는 회전을 지오메트리 자체에 구워 둬서, 메시 회전은 방향(Y축)만 다루면 되게 한다
   const road = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e }));
-  road.rotation.y = Math.atan2(dx, dz);
-  road.position.set((x1 + x2) / 2, 0.005, (z1 + z2) / 2);
+  road.rotation.y = yaw;
+  road.position.set(midX, 0.005, midZ);
   road.receiveShadow = true;
   scene.add(road);
+
+  // 골목(ROAD_NARROW)은 차선이 없고, 큰길·보통길에는 중앙 점선 차선을 그려 넣는다
+  if (width === ROAD_NARROW) return;
+  const laneMat = new THREE.MeshBasicMaterial({ color: 0xf5e8b0 });
+  const dashLen = 1.2 * WORLD_SCALE;
+  const gapLen = 1.2 * WORLD_SCALE;
+  const step = dashLen + gapLen;
+  const dashGeo = new THREE.PlaneGeometry(0.18 * WORLD_SCALE, dashLen);
+  dashGeo.rotateX(-Math.PI / 2);
+  for (let d = step / 2; d < len; d += step) {
+    const dash = new THREE.Mesh(dashGeo, laneMat);
+    dash.rotation.y = yaw;
+    dash.position.set(x1 + (dx * d) / len, 0.01, z1 + (dz * d) / len);
+    scene.add(dash);
+  }
 }
 
 function buildRoads() {
-  for (let i = 0; i < ROAD_MAIN.length - 1; i++) {
-    buildRoadSegment(ROAD_MAIN[i], ROAD_MAIN[i + 1]);
-  }
-  buildRoadSegment(ROAD_CROSS[0], ROAD_CROSS[1]);
+  ROAD_SEGMENTS.forEach(buildRoadSegment);
 }
 
 function buildPlaces() {
@@ -554,10 +601,30 @@ function pickRandomDance() {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function pickRandomMomDance() {
+  const pool = MOM_DANCE_POOL.filter((name) => momActions[name]);
+  if (!pool.length) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// 엄마가 옆에 있으면 같이 춤춘다 — 이로이가 고른 춤을 엄마도 갖고 있으면 같은 춤을, 없으면 엄마는
+// 자기 춤 목록에서 따로 무작위로 고른다.
+function triggerMomDance(childDanceName) {
+  if (!mom || !momMixer) return;
+  const name = momActions[childDanceName] ? childDanceName : pickRandomMomDance();
+  if (!name) return;
+  const action = momActions[name];
+  momMixer.stopAllAction();
+  action.reset().setLoop(THREE.LoopOnce, 1);
+  action.clampWhenFinished = true;
+  action.play();
+}
+
 function startRandomDance() {
   const name = pickRandomDance();
   if (!name) return;
   dancing = true;
+  triggerMomDance(name);
   playAction(name, {
     loop: false,
     onFinished: () => {
@@ -801,6 +868,7 @@ async function initNeighborhood3D() {
   danceBtnEl = document.getElementById("neighborhood3d-dance-btn");
   walkBtnEl = document.getElementById("neighborhood3d-walk-btn");
   runBtnEl = document.getElementById("neighborhood3d-run-btn");
+  jumpBtnEl = document.getElementById("neighborhood3d-jump-btn");
   momBtnEl = document.getElementById("neighborhood3d-mom-btn");
   hudEl = document.getElementById("neighborhood3d-hud");
   toastEl = document.getElementById("neighborhood3d-toast");
@@ -824,16 +892,17 @@ async function initNeighborhood3D() {
     wireDpad();
     // 버튼이 클릭 뒤에도 포커스를 들고 있으면, 스페이스바(점프)를 눌렀을 때 그 버튼이
     // 다시 눌리는 것으로 처리돼 버린다 — 눌린 직후 바로 포커스를 뺀다
-    [danceBtnEl, walkBtnEl, runBtnEl, momBtnEl, resetBtnEl].forEach((btn) => {
+    [danceBtnEl, walkBtnEl, runBtnEl, jumpBtnEl, momBtnEl, resetBtnEl].forEach((btn) => {
       btn?.addEventListener("click", () => btn.blur());
     });
     danceBtnEl?.addEventListener("click", onDanceClick);
     walkBtnEl?.addEventListener("click", () => setMoveMode("walk"));
     runBtnEl?.addEventListener("click", () => setMoveMode("run"));
+    jumpBtnEl?.addEventListener("click", triggerJump);
     momBtnEl?.addEventListener("click", onMomClick);
     resetBtnEl?.addEventListener("click", startAdventure);
     startAdventure();
-    [danceBtnEl, walkBtnEl, runBtnEl, momBtnEl, hudEl, dpadEl].forEach((el) => {
+    [danceBtnEl, walkBtnEl, runBtnEl, jumpBtnEl, momBtnEl, hudEl, dpadEl].forEach((el) => {
       if (el) el.hidden = false;
     });
     if (loadingEl) loadingEl.hidden = true;
