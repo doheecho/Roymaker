@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115r";
+const ASSET_VERSION = "20261115s";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -37,20 +37,20 @@ const DANCE_POOL = [
   "Superlove_Pop_Dance",
   "ymca_dance",
 ];
-// 엄마 모델(mom.glb)에 들어있는 춤 동작들 — 걷기/인사 같은 동작은 제외
+// 엄마 모델(mom.glb)에 들어있는 춤 동작들 — 걷기/인사/Idle 같은 동작은 제외
 const MOM_DANCE_POOL = [
+  "Boom_Dance",
   "Cardio_Dance",
-  "Denim_Pop_Dance",
+  "Crystal_Beads",
   "Gangnam_Groove",
   "Hip_Hop_Dance",
   "Hip_Hop_Dance_2",
   "Hip_Hop_Dance_3",
+  "Indoor_Swing",
   "Love_You_Pop_Dance",
   "OMG_Groove",
-  "Pod_Baby_Groove",
-  "Pop_Dance_LSA2",
+  "Shake_It_Off_Dance",
   "Superlove_Pop_Dance",
-  "You_Groove",
   "jazz_danc",
   "ymca_dance",
 ];
@@ -504,10 +504,88 @@ function buildLaneDashes() {
   scene.add(inst);
 }
 
+// 구간을 따로따로 그리면 꺾이는 지점마다 바깥쪽에 틈이 생겨서 끊겨 보인다 — 같은 지점에서
+// 만나는 구간들 중 제일 넓은 폭으로 둥근 판을 하나 더 깔아서 이음매를 자연스럽게 메운다
+function buildJunctionFillers() {
+  const endpoints = [];
+  ROAD_SEGMENTS.forEach((seg) => {
+    endpoints.push({ x: seg.a[0], z: seg.a[1], width: seg.width });
+    endpoints.push({ x: seg.b[0], z: seg.b[1], width: seg.width });
+  });
+  const THRESH = 6; // raw 단위(이미지 추출 과정에서 생기는 약간의 좌표 오차를 흡수)
+  const used = new Array(endpoints.length).fill(false);
+  for (let i = 0; i < endpoints.length; i++) {
+    if (used[i]) continue;
+    const group = [endpoints[i]];
+    used[i] = true;
+    for (let j = i + 1; j < endpoints.length; j++) {
+      if (used[j]) continue;
+      if (Math.hypot(endpoints[i].x - endpoints[j].x, endpoints[i].z - endpoints[j].z) < THRESH) {
+        group.push(endpoints[j]);
+        used[j] = true;
+      }
+    }
+    if (group.length < 2) continue; // 혼자인 끝점(막다른 길)은 메울 필요 없다
+    const cx = (group.reduce((s, p) => s + p.x, 0) / group.length) * WORLD_SCALE;
+    const cz = (group.reduce((s, p) => s + p.z, 0) / group.length) * WORLD_SCALE;
+    const maxWidth = Math.max(...group.map((p) => p.width));
+    const geo = new THREE.CircleGeometry((maxWidth / 2) * WORLD_SCALE, 16);
+    geo.rotateX(-Math.PI / 2);
+    const filler = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e }));
+    filler.position.set(cx, 0.006, cz);
+    filler.receiveShadow = true;
+    scene.add(filler);
+  }
+}
+
 function buildRoads() {
   dashTransforms = [];
   ROAD_SEGMENTS.forEach(buildRoadSegment);
   buildLaneDashes();
+  buildJunctionFillers();
+}
+
+// 아파트 동은 실제 금호파크힐스 3D 모델링 사진(113동·106동) 두 장을 보고 만든 두 가지 매싱
+// 템플릿을 동 번호 짝/홀수로 번갈아 적용한다 — 타워 여러 개를 높이를 다르게 붙이고 저층부는
+// 어둡게, 상층부는 주황/베이지 투톤으로 나눠서 사진 속 느낌을 흉내낸다.
+// 우리집(0번=실제 113동)은 그 사진 그대로의 매싱(템플릿 A)을 쓰되, 눈에 띄게 분홍으로 칠한다.
+function addTowerBox(px, pz, offX, offZ, w, d, h, color) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }));
+  mesh.position.set(px + offX, h / 2, pz + offZ);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+function buildApartmentCluster(place, px, pz, floors) {
+  const baseH = Math.max(0.6, Math.min(floors, 6) * 3 * WORLD_SCALE);
+  const BASE_COLOR = 0x3a3a40;
+  addTowerBox(px, pz, 0, 0, 20 * WORLD_SCALE, 12 * WORLD_SCALE, baseH, BASE_COLOR);
+
+  const useTemplateA = place.home || place.id % 2 === 1;
+  let topHeight;
+  if (useTemplateA) {
+    // 113동 스타일: 메인 타워(정면 색) + 뒤쪽 보조 타워(크림) + 더 높은 첨탑(연회색)
+    const mainColor = place.home ? 0xff6fa0 : 0xd98a4a;
+    const mainH = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 3 * WORLD_SCALE);
+    const sideH = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 2.4 * WORLD_SCALE);
+    const spireH = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 3.3 * WORLD_SCALE);
+    addTowerBox(px, pz, -4 * WORLD_SCALE, -1 * WORLD_SCALE, 9 * WORLD_SCALE, 9 * WORLD_SCALE, mainH, mainColor);
+    addTowerBox(px, pz, 3 * WORLD_SCALE, 2 * WORLD_SCALE, 8 * WORLD_SCALE, 7 * WORLD_SCALE, sideH, 0xe8e2d0);
+    addTowerBox(px, pz, 6 * WORLD_SCALE, -3 * WORLD_SCALE, 5 * WORLD_SCALE, 5 * WORLD_SCALE, spireH, 0xcfd0d2);
+    topHeight = Math.max(mainH, sideH, spireH);
+  } else {
+    // 106동 스타일: 비슷한 높이의 타워 3개를 나란히(주황-크림-주황)
+    const h1 = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 2.9 * WORLD_SCALE);
+    const h2 = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 2.6 * WORLD_SCALE);
+    const h3 = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 3 * WORLD_SCALE);
+    addTowerBox(px, pz, -6 * WORLD_SCALE, 0, 7 * WORLD_SCALE, 9 * WORLD_SCALE, h1, 0xd98a4a);
+    addTowerBox(px, pz, 0, 0, 7 * WORLD_SCALE, 9 * WORLD_SCALE, h2, 0xe8e2d0);
+    addTowerBox(px, pz, 6 * WORLD_SCALE, 0, 7 * WORLD_SCALE, 9 * WORLD_SCALE, h3, 0xd98a4a);
+    topHeight = Math.max(h1, h2, h3);
+  }
+  return topHeight;
 }
 
 function buildPlaces() {
@@ -517,27 +595,20 @@ function buildPlaces() {
     const pz = place.z * WORLD_SCALE;
     const w = style.w * WORLD_SCALE;
     const d = style.d * WORLD_SCALE;
-    const height = Math.max(0.6, (place.floors || 15) * 3 * WORLD_SCALE);
+    const floors = place.floors || 15;
+    let height = Math.max(0.6, floors * 3 * WORLD_SCALE);
     const color = NAME_COLOR_OVERRIDE[place.name] ?? style.color;
     const rotY = place.diagonal ? Math.PI / 4 : 0;
 
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), new THREE.MeshStandardMaterial({ color }));
-    mesh.position.set(px, height / 2, pz);
-    mesh.rotation.y = rotY;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-
-    // 아파트 동은 사진 속 흰색/베이지 + 주황 포인트 배색을 얇은 세로 띠로 흉내낸다
     if (place.type === "아파트") {
-      const accent = new THREE.Mesh(
-        new THREE.BoxGeometry(w * 0.22, height, d + 0.3 * WORLD_SCALE),
-        new THREE.MeshStandardMaterial({ color: place.home ? 0xff6fa0 : style.accent })
-      );
-      accent.position.set(px + Math.cos(rotY) * w * 0.36, height / 2, pz - Math.sin(rotY) * w * 0.36);
-      accent.rotation.y = rotY;
-      accent.castShadow = true;
-      scene.add(accent);
+      height = buildApartmentCluster(place, px, pz, floors);
+    } else {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), new THREE.MeshStandardMaterial({ color }));
+      mesh.position.set(px, height / 2, pz);
+      mesh.rotation.y = rotY;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
     }
 
     // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
@@ -763,10 +834,19 @@ function triggerMomDance(childDanceName) {
   const name = momActions[childDanceName] ? childDanceName : pickRandomMomDance();
   if (!name) return;
   const action = momActions[name];
+  const idle = momActions["Idle_02"];
   momMixer.stopAllAction();
   action.reset().setLoop(THREE.LoopOnce, 1);
-  action.clampWhenFinished = true;
+  action.clampWhenFinished = !idle;
   action.play();
+  if (idle) {
+    const onFinished = (e) => {
+      if (e.action !== action) return;
+      momMixer.removeEventListener("finished", onFinished);
+      idle.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+    };
+    momMixer.addEventListener("finished", onFinished);
+  }
 }
 
 function startRandomDance() {
@@ -821,16 +901,33 @@ function placeMomBesideCharacter() {
   mom.visible = true;
 }
 
+// 부르면 손 흔드는 동작(Wave_for_Help_4)을 한 번 하고, 끝나면 Idle_02로 자연스럽게 선다
+function playMomGreeting() {
+  if (!momMixer) return;
+  const greet = momActions["Wave_for_Help_4"];
+  const idle = momActions["Idle_02"];
+  momMixer.stopAllAction();
+  if (!greet) {
+    idle?.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+    return;
+  }
+  greet.reset().setLoop(THREE.LoopOnce, 1);
+  greet.clampWhenFinished = !idle;
+  greet.play();
+  if (idle) {
+    const onFinished = (e) => {
+      if (e.action !== greet) return;
+      momMixer.removeEventListener("finished", onFinished);
+      idle.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+    };
+    momMixer.addEventListener("finished", onFinished);
+  }
+}
+
 function onMomClick() {
   if (mom) {
     placeMomBesideCharacter();
-    const greet = momActions["Big_Wave_Hello"];
-    if (greet) {
-      if (momMixer) momMixer.stopAllAction();
-      greet.reset().setLoop(THREE.LoopOnce, 1);
-      greet.clampWhenFinished = true;
-      greet.play();
-    }
+    playMomGreeting();
     return;
   }
   if (momLoading) return;
@@ -849,12 +946,7 @@ function onMomClick() {
         momActions[clip.name] = momMixer.clipAction(clip);
       });
       placeMomBesideCharacter();
-      const greet = momActions["Big_Wave_Hello"];
-      if (greet) {
-        greet.reset().setLoop(THREE.LoopOnce, 1);
-        greet.clampWhenFinished = true;
-        greet.play();
-      }
+      playMomGreeting();
       momLoading = false;
       momBtnEl.disabled = false;
     },
