@@ -45,7 +45,6 @@
         <button type="button" class="nav-btn" data-view="shop">🛍️ 상점</button>
         <button type="button" class="nav-btn" data-view="exam">📝 월말시험</button>
         <button type="button" class="nav-btn" data-view="neighborhood">⚔️ 거리 모험</button>
-        <button type="button" class="nav-btn" data-view="keyboard">⌨️ 키보드 대탈출</button>
       </nav>
     </section>
 
@@ -242,31 +241,6 @@
           </div>
         </div>
       </div>
-
-      <div id="view-keyboard" class="view" hidden>
-        <div class="view-head">
-          <h2>⌨️ 키보드 대탈출</h2>
-          <button type="button" class="help-btn" data-help="keyboard-escape" data-title="⌨️ 키보드 대탈출">❓ 설명보기</button>
-        </div>
-        <template id="help-keyboard-escape"><p>거대한 키보드 위를 뛰어다니며 <b>반짝이는 구슬을 모아 레벨업</b>하는 미니게임. 레벨이 오를수록 <b>이동 속도가 빨라진다</b>. 자판 사이 틈은 <b>방향키(←↑↓→)·WASD와 스페이스바 점프를 같이 눌러서</b> 뛰어 건너야 하고, 틈에 빠지면 마지막으로 서 있던 자판으로 돌아간다. 화면을 마우스로 눌러 돌리거나 휠로 확대/축소할 수 있다. 맨 앞의 스페이스바 자판까지 도착하면 탈출 성공!</p></template>
-        <div id="kbescape-wrap">
-          <canvas id="kbescape-canvas"></canvas>
-          <p id="kbescape-loading" class="muted">불러오는 중…</p>
-          <p id="kbescape-hud" class="neighborhood3d-hud" hidden></p>
-          <p id="kbescape-toast" class="neighborhood3d-toast" hidden></p>
-          <button type="button" id="kbescape-reset-btn" class="neighborhood3d-reset-btn" hidden>🔄 다시 하기</button>
-          <div class="neighborhood3d-move-group">
-            <button type="button" id="kbescape-walk-btn" class="neighborhood3d-mode-btn active" hidden>🚶 걷기</button>
-            <button type="button" id="kbescape-run-btn" class="neighborhood3d-mode-btn" hidden>🏃 뛰기</button>
-          </div>
-          <div class="dpad" id="kbescape-dpad" hidden>
-            <button type="button" data-dir="up" aria-label="위로 이동">▲</button>
-            <button type="button" data-dir="left" aria-label="왼쪽으로 이동">◀</button>
-            <button type="button" data-dir="right" aria-label="오른쪽으로 이동">▶</button>
-            <button type="button" data-dir="down" aria-label="아래로 이동">▼</button>
-          </div>
-        </div>
-      </div>
     </section>
   </main>
 
@@ -371,7 +345,6 @@
     }
   </script>
   <script type="module" src="neighborhood3d.js?v=20261115i"></script>
-  <script type="module" src="keyboard_escape.js?v=20261115a"></script>
   <script src="main.js?v=20261115b"></script>
   <script>
     if ("serviceWorker" in navigator) {

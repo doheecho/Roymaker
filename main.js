@@ -4887,9 +4887,6 @@ function showView(name) {
   if (name === "neighborhood" && typeof window.initNeighborhood3D === "function") window.initNeighborhood3D();
   else if (typeof window.pauseNeighborhood3D === "function") window.pauseNeighborhood3D();
 
-  if (name === "keyboard" && typeof window.initKeyboardEscape === "function") window.initKeyboardEscape();
-  else if (typeof window.pauseKeyboardEscape === "function") window.pauseKeyboardEscape();
-
   if (name === "map" && state.map) {
     state.map.relayout();
     if (state.charPos) {

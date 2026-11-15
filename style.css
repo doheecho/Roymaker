@@ -1574,31 +1574,6 @@ li:last-child { border-bottom: none; }
   font-weight: 700;
 }
 #neighborhood3d-loading[hidden] { display: none; }
-
-/* ── 키보드 대탈출 (거리 모험과 같은 틀을 그대로 재사용) ── */
-#kbescape-wrap {
-  position: relative;
-  border: 2px solid var(--accent2);
-  border-radius: 12px;
-  overflow: hidden;
-  background: #bfe3ff;
-  height: 70vh;
-  min-height: 420px;
-}
-#kbescape-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
-#kbescape-canvas:active { cursor: grabbing; }
-#kbescape-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  background: rgba(255, 255, 255, 0.75);
-  font-weight: 700;
-}
-#kbescape-loading[hidden] { display: none; }
-#kbescape-dpad { position: absolute; right: 18px; bottom: 18px; }
 .neighborhood3d-move-group {
   position: absolute;
   left: 12px;
