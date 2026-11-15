@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261115e">
+<link rel="stylesheet" href="style.css?v=20261115g">
 </head>
 <body>
   <header>
@@ -169,7 +169,6 @@
             <canvas id="scene-canvas" width="128" height="80" aria-label="일정 애니메이션"></canvas>
             <p id="scene-caption" class="scene-caption"></p>
           </div>
-          <div id="event-panel" class="map-overlay-panel pm-dialog" hidden></div>
           <button type="button" id="phone-btn" class="phone-btn" hidden>📱 휴대전화</button>
           <div id="dpad" class="dpad" hidden>
             <button type="button" data-dir="up" aria-label="위로 이동">▲</button>
@@ -243,6 +242,8 @@
           </div>
         </div>
       </div>
+
+      <div id="event-panel" class="map-overlay-panel pm-dialog" hidden></div>
     </section>
   </main>
 
@@ -346,8 +347,8 @@
       }
     }
   </script>
-  <script type="module" src="neighborhood3d.js?v=20261115u"></script>
-  <script src="main.js?v=20261115b"></script>
+  <script type="module" src="neighborhood3d.js?v=20261115w"></script>
+  <script src="main.js?v=20261115d"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

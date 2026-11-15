@@ -4279,6 +4279,7 @@ async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
   state.homeworkPraiseDone = false;
   state.readingCountToday = 0;
   state.readingPraiseDone = false;
+  state.errandDoneToday = false;
   const talkIfDue = async (force) => {
     if (pendingTalk && (force || clock >= pendingTalk.at)) {
       const talk = pendingTalk;
@@ -4350,11 +4351,19 @@ async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
       logLine(`${minutesToClock(clock)} 잠자리에 들었다`);
       return clock;
     }
-    if (pick === "out") clock = await playOutside(clock);
-    else if (pick === "homework") clock = await doHomework(clock);
-    else if (pick === "reading") clock = await readAtHome(clock);
-    else if (pick === "game") clock = await playGame(clock);
-    else if (pick === "phone") clock += await openPhone(clock);
+    if (pick === "out") {
+      clock = await playOutside(clock);
+      await maybeTriggerMomErrand(false); // 밖에 나가 놀다 돌아온 참이라 "전화로" 심부름을 받는다
+    } else if (pick === "homework") {
+      clock = await doHomework(clock);
+      await maybeTriggerMomErrand(true);
+    } else if (pick === "reading") {
+      clock = await readAtHome(clock);
+      await maybeTriggerMomErrand(true);
+    } else if (pick === "game") {
+      clock = await playGame(clock);
+      await maybeTriggerMomErrand(true);
+    } else if (pick === "phone") clock += await openPhone(clock);
     else if (pick === "party") clock = await askForParty(clock);
   }
 }
@@ -4495,6 +4504,133 @@ async function playGame(clock) {
 
 function isAtHome() {
   return distanceMeters(state.charPos, state.positions.home) <= ARRIVAL_RADIUS_M;
+}
+
+// ── 엄마 심부름: 더 할 일정이 없는 저녁에, 집에서 숙제·독서·게임을 끝냈거나 밖에서 놀고 돌아왔을 때
+// 가끔 엄마가 편의점 심부름을 시킨다. 거리 모험(3D) 화면으로 넘어가서 이마트24나 CU에 가서
+// 물건을 사 오고, 제대로 사왔는지에 따라 능력치가 달라진다.
+const ERRAND_CHANCE = 0.35;
+const ERRAND_CATEGORIES = [
+  { label: "라면", items: ["참깨라면", "진라면", "신라면", "오뚜기", "열라면", "불닭볶음면"] },
+  { label: "아이스크림", items: ["바밤바", "죠스바", "스크류바", "메로나", "월드콘", "브라보콘"] },
+  { label: "과자", items: ["새우깡", "알새우칩", "치토스", "조리퐁", "홈런볼", "감자칩"] },
+];
+const ERRAND_STORES = {
+  5: { introId: "emart24_005", alba: "alba_kfc", albaName: "이마트24 알바생", storeLabel: "이마트24" },
+  29: { introId: "cu", alba: "alba_lotteria", albaName: "CU 알바생", storeLabel: "CU" },
+};
+
+function shuffle(list) {
+  const arr = [...list];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+async function maybeTriggerMomErrand(atHome) {
+  if (state.errandDoneToday) return;
+  if (!window.initNeighborhood3D) return; // 거리 모험 모듈이 없으면(옛 캐시 등) 건너뛴다
+  if (Math.random() >= ERRAND_CHANCE) return;
+  state.errandDoneToday = true;
+  await runMomErrand(atHome);
+}
+
+async function runMomErrand(atHome) {
+  const category = pickRandom(ERRAND_CATEGORIES);
+  const correctItem = pickRandom(category.items);
+  const qty = 1 + Math.floor(Math.random() * 3);
+  const wrongPool = category.items.filter((i) => i !== correctItem);
+  const wrongItems = [];
+  while (wrongItems.length < 2 && wrongPool.length) {
+    const idx = Math.floor(Math.random() * wrongPool.length);
+    wrongItems.push(wrongPool.splice(idx, 1)[0]);
+  }
+
+  await presentChoice("event-panel", "엄마", [{ label: "그럼요! 엄마 얼른 다녀올게요~", value: true }], {
+    body: `"로이야~ 엄마가 바빠서 그러는데 혹시 편의점에서 ${correctItem} ${qty}개 사올 수 있을까?"`,
+    tone: atHome ? "event" : "phone",
+    speaker: "mom",
+  });
+
+  showView("neighborhood");
+  window.startErrand?.({ storeIds: [5, 29], hudText: "🧺 엄마의 심부름 : 편의점 다녀오기" });
+
+  const storeId = await new Promise((resolve) => {
+    window.onErrandStoreArrival = resolve;
+  });
+  const store = ERRAND_STORES[storeId];
+
+  await maybeShowIntro(store.introId);
+  await presentChoice("event-panel", store.storeLabel, [{ label: "▶", value: true }], {
+    body: "두근두근, 편의점에 들어왔다.",
+    speaker: "iroi",
+  });
+
+  const options = shuffle([
+    { label: `${correctItem} ${qty}개`, value: correctItem },
+    { label: `${wrongItems[0]} ${qty}개`, value: wrongItems[0] },
+    { label: `${wrongItems[1]} ${qty}개`, value: wrongItems[1] },
+  ]);
+  const chosen = await presentChoice("event-panel", store.albaName, options, {
+    body: `"어서오세요 ${store.storeLabel}입니다~ 어떤 물건을 찾으시나요?"`,
+    speaker: store.alba,
+    speakerName: store.albaName,
+  });
+  await presentChoice("event-panel", "이로이", [{ label: "▶", value: true }], {
+    body: `"${chosen} ${qty}개 주세요~"`,
+    speaker: "iroi",
+  });
+  await presentChoice("event-panel", store.albaName, [{ label: "감사합니다!", value: true }], {
+    body: `"네 여기있습니다. 또 오세요~"`,
+    speaker: store.alba,
+    speakerName: store.albaName,
+  });
+
+  const boughtCorrect = chosen === correctItem;
+  window.errandDialogDone?.();
+  await new Promise((resolve) => {
+    window.onErrandHomeReturn = resolve;
+  });
+
+  await screenFade("무사히 집에 들어왔다...", async () => {
+    showView("home");
+  });
+
+  if (boughtCorrect) {
+    const applied = applyEffect({ diligence: 1, selfEsteem: 1, math: 1, delinquency: -1, wallet: 2000 });
+    renderStats(state.character);
+    logLine(`엄마 심부름으로 ${store.storeLabel}에서 ${correctItem}를 사다 드렸다 (${appliedText(applied)})`);
+    diary(`엄마 심부름으로 ${store.storeLabel}에서 ${correctItem}를 사다 드렸다. 엄마가 정말 고마워하셨다.`);
+    await presentChoice("event-panel", "엄마", [{ label: "▶", value: true }], {
+      body: `"우리 로이, 심부름 도와줘서 너무 고마워! 이건 용돈이야~"\n"이따가 이거 같이 먹자!"\n(${appliedText(applied)})`,
+      tone: "event",
+      speaker: "mom",
+    });
+    await presentChoice("event-panel", "이로이", [{ label: "▶", value: true }], {
+      body: `"네 엄마~ 고맙습니다! (엄마가 기뻐하시니 너무 뿌듯하고 좋아!)"`,
+      speaker: "iroi",
+    });
+  } else {
+    const applied = applyEffect({ diligence: -1, selfEsteem: -1, math: -1 });
+    renderStats(state.character);
+    logLine(`엄마 심부름으로 ${store.storeLabel}에 갔는데 ${chosen}를 사왔다 — 잘못 사왔다 (${appliedText(applied)})`);
+    diary(`엄마 심부름으로 ${store.storeLabel}에 갔는데 다른 걸 사오고 말았다. 다음엔 더 잘 기억해야지.`);
+    await presentChoice("event-panel", "엄마", [{ label: "▶", value: true }], {
+      body: `"어? 로이야, 이거 엄마가 말한 거랑 다른 거 같은데? 왜 이걸 사왔어?"\n(${appliedText(applied)})`,
+      tone: "event",
+      speaker: "mom",
+    });
+    await presentChoice("event-panel", "이로이", [{ label: "▶", value: true }], {
+      body: `"아.. 죄송해요 제가 헷갈려서 잘못 사온 것 같아요.."`,
+      speaker: "iroi",
+    });
+    await presentChoice("event-panel", "엄마", [{ label: "▶", value: true }], {
+      body: `"다음에는 잘 사오면 되지, 괜찮아~ 방에 들어가서 쉬어!"`,
+      speaker: "mom",
+    });
+  }
 }
 
 function blockPlace(block) {
@@ -5180,7 +5316,11 @@ function wireHelp() {
 
 function wireNav() {
   document.querySelectorAll(".nav-btn").forEach((btn) => {
-    btn.addEventListener("click", () => showView(btn.dataset.view));
+    btn.addEventListener("click", () => {
+      // 엄마 심부름 중엔 거리 모험 화면을 벗어나지 못하게 한다(심부름을 끝까지 마쳐야 다음으로 넘어간다)
+      if (btn.dataset.view !== "neighborhood" && window.isErrandActive?.()) return;
+      showView(btn.dataset.view);
+    });
   });
   showView("home");
 }

@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115u";
+const ASSET_VERSION = "20261115v";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -286,6 +286,9 @@ let mom = null;
 let momMixer = null;
 let momActions = {};
 let momLoading = false;
+// 엄마 심부름(main.js의 runMomErrand)과 주고받는 상태 — phase: "toStore"|"awaitingDialog"|"toHome"
+let currentErrand = null;
+const placeHighlights = {}; // place.id -> 목적지 표시용 파란 점멸 스프라이트
 const keys = { up: false, down: false, left: false, right: false };
 let moveMode = "walk"; // "walk" | "run"
 let dancing = false;
@@ -339,6 +342,23 @@ window.addEventListener("keyup", (ev) => {
 // ── 글씨 라벨(간판·이름표) — 캔버스에 그려서 늘 카메라를 보는 스프라이트로 띄운다 ──
 // 기본 sizeAttenuation(원근에 따라 커짐)만 쓰면 가까이 다가갈수록 한없이 커져서, 상단 동전·불량배
 // 표시(HUD)의 글자 크기(14px)를 최대치로 두고 그보다 커지지 않게 화면 픽셀 기준으로 직접 계산해 준다.
+// 심부름 목적지를 표시할 둥근 파란 광원 텍스처(한 번만 만들어서 재사용)
+let _highlightTexture = null;
+function highlightTexture() {
+  if (_highlightTexture) return _highlightTexture;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, "rgba(255,255,255,1)");
+  grad.addColorStop(0.5, "rgba(120,200,255,0.8)");
+  grad.addColorStop(1, "rgba(120,200,255,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  _highlightTexture = new THREE.CanvasTexture(canvas);
+  return _highlightTexture;
+}
+
 const labelTextureCache = {};
 const allLabelSprites = [];
 const LABEL_FONT_SIZE = 46; // 캔버스에 그리는 실제 글자 크기(px) — 아래 padY와 함께 캔버스 전체 높이를 이룬다
@@ -670,6 +690,17 @@ function buildPlaces() {
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
     label.position.set(px, height + 1.1, pz);
     scene.add(label);
+
+    // 심부름 목적지로 지정되면 이 라벨 뒤에서 파란 점멸 표시가 켜진다(기본은 숨김)
+    const highlight = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: highlightTexture(), color: 0x3fa9ff, transparent: true, opacity: 0, depthTest: false })
+    );
+    highlight.scale.set(5, 5, 1);
+    highlight.position.set(px, height + 1.1, pz);
+    highlight.renderOrder = 998;
+    highlight.visible = false;
+    scene.add(highlight);
+    placeHighlights[place.id] = highlight;
   });
 }
 
@@ -731,8 +762,15 @@ function spawnEnemies() {
 }
 
 function startAdventure() {
-  spawnItems();
-  spawnEnemies();
+  if (currentErrand) {
+    items.forEach((it) => scene.remove(it.mesh));
+    enemies.forEach((en) => scene.remove(en.mesh));
+    items = [];
+    enemies = [];
+  } else {
+    spawnItems();
+    spawnEnemies();
+  }
   if (resetBtnEl) resetBtnEl.hidden = true;
   updateHud();
 }
@@ -755,6 +793,10 @@ function remainingCounts() {
 
 function updateHud() {
   if (!hudEl) return;
+  if (currentErrand) {
+    hudEl.textContent = currentErrand.hudText;
+    return;
+  }
   const { itemsLeft, enemiesLeft } = remainingCounts();
   hudEl.textContent = `🪙 동전 ${itemsLeft} · 👊 불량배 ${enemiesLeft}`;
   if (itemsLeft === 0 && enemiesLeft === 0 && resetBtnEl) {
@@ -793,6 +835,47 @@ function updatePickups(dt) {
     }
   });
   if (changed) updateHud();
+}
+
+const ERRAND_ARRIVAL_RADIUS = 3;
+
+// 심부름 중엔 동전·불량배 대신 목적지(편의점 → 다시 집)에 가까워졌는지를 매 프레임 확인한다.
+// main.js 쪽 async 흐름이 window.onErrandStoreArrival / window.onErrandHomeReturn을 기다리고 있다.
+function updateErrand() {
+  if (!currentErrand || !character) return;
+  const cp = character.position;
+  if (currentErrand.phase === "toStore") {
+    for (const id of currentErrand.storeIds) {
+      const place = PLACES.find((p) => p.id === id);
+      if (!place) continue;
+      const dx = cp.x - place.x * WORLD_SCALE;
+      const dz = cp.z - place.z * WORLD_SCALE;
+      if (Math.hypot(dx, dz) < ERRAND_ARRIVAL_RADIUS) {
+        currentErrand.phase = "awaitingDialog";
+        window.onErrandStoreArrival?.(id);
+        return;
+      }
+    }
+  } else if (currentErrand.phase === "toHome") {
+    if (Math.hypot(cp.x, cp.z) < ERRAND_ARRIVAL_RADIUS) {
+      currentErrand.phase = "done";
+      currentErrand = null;
+      window.onErrandHomeReturn?.();
+    }
+  }
+}
+
+// 심부름 목적지(편의점들 → 다시 집)에 해당하는 라벨 뒤에서 파란 빛이 점멸한다
+function updateErrandHighlights() {
+  const activeIds = new Set();
+  if (currentErrand?.phase === "toStore") currentErrand.storeIds.forEach((id) => activeIds.add(id));
+  else if (currentErrand?.phase === "toHome") activeIds.add(0);
+  const t = performance.now() / 300;
+  Object.entries(placeHighlights).forEach(([id, sprite]) => {
+    const active = activeIds.has(Number(id));
+    sprite.visible = active;
+    if (active) sprite.material.opacity = 0.35 + 0.35 * Math.sin(t) ** 2;
+  });
 }
 
 function loadCharacter() {
@@ -962,15 +1045,16 @@ function playMomGreeting() {
   }
 }
 
-function onMomClick() {
+// 엄마 모델이 아직 없으면 불러오고(이미 있으면 바로), 끝나면 onReady를 호출한다 —
+// "엄마 부르기" 버튼과 심부름 자동 등장이 같은 로딩 로직을 쓴다
+function ensureMomLoaded(onReady) {
   if (mom) {
-    placeMomBesideCharacter();
-    playMomGreeting();
+    onReady();
     return;
   }
   if (momLoading) return;
   momLoading = true;
-  momBtnEl.disabled = true;
+  if (momBtnEl) momBtnEl.disabled = true;
   new GLTFLoader().load(
     `models/mom.glb?v=${ASSET_VERSION}`,
     (gltf) => {
@@ -983,18 +1067,38 @@ function onMomClick() {
       gltf.animations.forEach((clip) => {
         momActions[clip.name] = momMixer.clipAction(clip);
       });
-      placeMomBesideCharacter();
-      playMomGreeting();
       momLoading = false;
-      momBtnEl.disabled = false;
+      if (momBtnEl) momBtnEl.disabled = false;
+      onReady();
     },
     undefined,
     (err) => {
       console.warn("엄마 모델을 못 불러왔다", err);
       momLoading = false;
-      momBtnEl.disabled = false;
+      if (momBtnEl) momBtnEl.disabled = false;
     }
   );
+}
+
+function onMomClick() {
+  ensureMomLoaded(() => {
+    placeMomBesideCharacter();
+    playMomGreeting();
+  });
+}
+
+// 심부름을 마치고 집으로 돌아올 때, 엄마가 집 앞에 미리 나와서 손을 흔들며 기다리고 있다
+function spawnErrandMom() {
+  ensureMomLoaded(() => {
+    mom.position.set(2 * WORLD_SCALE, 0, 3);
+    mom.rotation.y = Math.PI;
+    mom.visible = true;
+    const greet = momActions["Wave_for_Help_4"];
+    if (greet) {
+      momMixer.stopAllAction();
+      greet.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+    }
+  });
 }
 
 // 방향키는 "월드 기준 앞/뒤/좌/우"가 아니라, 지금 마우스로 돌려 둔 카메라가 보는 방향을 기준으로
@@ -1002,6 +1106,7 @@ function onMomClick() {
 // 그대로 반영한다.
 function updateMovement(dt) {
   if (!character || dancing) return;
+  if (currentErrand?.phase === "awaitingDialog") return; // 편의점 대화 중엔 멈춰 선다
   const inputForward = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
   const inputRight = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
   const moving = inputForward !== 0 || inputRight !== 0;
@@ -1124,6 +1229,8 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   updateMovement(dt);
   updatePickups(dt);
+  updateErrand();
+  updateErrandHighlights();
   if (mixer) mixer.update(dt);
   if (momMixer) momMixer.update(dt);
   updateCamera();
@@ -1203,3 +1310,19 @@ function pauseNeighborhood3D() {
 
 window.initNeighborhood3D = initNeighborhood3D;
 window.pauseNeighborhood3D = pauseNeighborhood3D;
+
+// main.js의 엄마 심부름 이벤트가 이 거리 모험 화면을 "조종"하는 다리 함수들
+window.startErrand = function startErrand({ storeIds, hudText }) {
+  currentErrand = { storeIds, hudText, phase: "toStore" };
+  if (ready) startAdventure(); // 이미 들어와 있던 화면이면 동전·불량배를 바로 치운다
+  if (hudEl) hudEl.hidden = false;
+  updateHud();
+};
+window.errandDialogDone = function errandDialogDone() {
+  if (!currentErrand) return;
+  currentErrand.phase = "toHome";
+  spawnErrandMom();
+};
+window.isErrandActive = function isErrandActive() {
+  return !!currentErrand;
+};
