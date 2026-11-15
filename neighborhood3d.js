@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261116f";
+const ASSET_VERSION = "20261116g";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -72,7 +72,7 @@ const PLACES = [
   { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -325, z: 150, model: "models/3D_place_109.glb", rotationDeg: 180 },
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -261, z: 136, model: "models/3D_place_110.glb", rotationDeg: 180 },
   { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -170, z: 144, model: "models/3D_place_111.glb", rotationDeg: 180 },
-  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75, model: "models/3D_place_112.glb", rotationDeg: 180 },
+  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75, model: "models/3D_place_112.glb", rotationDeg: 0 },
   { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 0, z: -93, model: "models/3D_place_114.glb", rotationDeg: 0 },
   { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -29, z: -149, model: "models/3D_place_115.glb", rotationDeg: 180 },
   { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -50, z: 134, model: "models/3D_place_116.glb", rotationDeg: 270 },
