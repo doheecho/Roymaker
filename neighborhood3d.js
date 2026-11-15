@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115h";
+const ASSET_VERSION = "20261115i";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -472,21 +472,33 @@ function onDanceClick() {
   );
 }
 
+// 방향키는 "월드 기준 앞/뒤/좌/우"가 아니라, 지금 마우스로 돌려 둔 카메라가 보는 방향을 기준으로
+// 움직인다 — 카메라를 오른쪽으로 돌렸으면 위쪽 키가 그 돌린 방향으로 가도록, camYaw를 매 프레임
+// 그대로 반영한다.
 function updateMovement(dt) {
-  if (!character || dancing || jumping) return;
-  const dir = new THREE.Vector3(
-    (keys.right ? 1 : 0) - (keys.left ? 1 : 0),
-    0,
-    (keys.down ? 1 : 0) - (keys.up ? 1 : 0)
-  );
-  if (dir.lengthSq() > 0) {
+  if (!character || dancing) return;
+  const inputForward = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
+  const inputRight = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  const moving = inputForward !== 0 || inputRight !== 0;
+  if (moving) {
+    const fx = -Math.sin(camYaw);
+    const fz = -Math.cos(camYaw);
+    const rx = Math.cos(camYaw);
+    const rz = -Math.sin(camYaw);
+    const dir = new THREE.Vector3(fx * inputForward + rx * inputRight, 0, fz * inputForward + rz * inputRight);
     dir.normalize();
     const speed = moveMode === "run" ? RUN_SPEED : WALK_SPEED;
     const next = character.position.clone().addScaledVector(dir, speed * dt);
     next.x = Math.max(-STREET_HALF_WIDTH + 0.6, Math.min(STREET_HALF_WIDTH - 0.6, next.x));
     next.z = Math.max(-STREET_HALF_LEN + 1, Math.min(STREET_HALF_LEN - 1, next.z));
-    character.position.copy(next);
+    character.position.x = next.x;
+    character.position.z = next.z;
     character.rotation.y = Math.atan2(dir.x, dir.z);
+  }
+  // 점프 중엔 애니메이션은 점프 동작을 그대로 유지하고, 이동/방향 전환만 반영한다
+  // (방향키+점프를 같이 누르면 그 방향으로 가며 점프하게)
+  if (jumping) return;
+  if (moving) {
     playAction(moveMode === "run" ? "Running" : "Walking");
   } else {
     playAction("Idle_02");
