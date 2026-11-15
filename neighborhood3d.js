@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115m";
+const ASSET_VERSION = "20261115n";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -97,13 +97,16 @@ const NAME_COLOR_OVERRIDE = {
 // 지도 화면에서 움직이는 정도로 느껴지도록 전체를 줄여 쓴다 — 113동(우리집) 건물 밑변이
 // 이로이 캐릭터(키 1.7) 두 배쯤 되도록 축척을 잡았다(22m짜리 폭 → 약 3.3)
 const WORLD_SCALE = 0.15;
-// 지도에 보이던 순환도로(단지를 둘러 도는 큰 길)와, 거기서 롯데마트까지 뻗어나가는 길을
-// 꼭짓점 몇 개로 단순화해서 따라 그린다 — 실제 도로처럼 정밀하진 않지만 대략의 모양은 흉내낸다
-const ROAD_LOOP = [
-  [-104, -229], [-261, -114], [-325, 150], [-74, 203], [139, 235],
-  [104, 152], [91, 83], [16, 83], [27, -160], [51, -229], [-104, -229],
+// 도로 지도(kakaomap_road.png) 기준: 노란색+흰색이 전부 도로다(주택가 색은 그보다 살짝 진해서 구분됨).
+// 난계로(메인 도로)가 대현교회 쪽에서 이마트24를 지나 메가MGC커피·NEW웰빙마트·파리바게뜨가 모인
+// 사거리를 거쳐 롯데마트 쪽으로 쭉 이어지고, 그 사거리에서 흰 도로가 수직으로 한 번 더 교차한다.
+const ROAD_MAIN = [
+  [-261, -114], // 대현교회 쪽
+  [-136, -133], // 이마트24(105동)
+  [60, -179], // 메가MGC커피·NEW웰빙마트·파리바게뜨 사거리
+  [654, -352], // 롯데마트 방향
 ];
-const ROAD_BRANCHES = [[[51, -229], [654, -352]]];
+const ROAD_CROSS = [[30, -329], [90, -29]]; // 사거리에서 수직으로 교차하는 흰 도로
 const ROAD_WIDTH = 5;
 
 const AREA_MARGIN = 8;
@@ -183,18 +186,20 @@ window.addEventListener("keyup", (ev) => {
 
 // ── 글씨 라벨(간판·이름표) — 캔버스에 그려서 늘 카메라를 보는 스프라이트로 띄운다 ──
 // 기본 sizeAttenuation(원근에 따라 커짐)만 쓰면 가까이 다가갈수록 한없이 커져서, 상단 동전·불량배
-// 표시(HUD) 정도의 크기를 최대치로 두고 그보다 가까워져도 더는 안 커지게 직접 계산해 준다.
+// 표시(HUD)의 글자 크기(14px)를 최대치로 두고 그보다 커지지 않게 화면 픽셀 기준으로 직접 계산해 준다.
 const labelTextureCache = {};
 const allLabelSprites = [];
-const LABEL_MAX_DIST = 6; // 이 거리(기본 카메라 거리)에서의 크기가 최대 크기 — 더 가까워져도 이 이상 안 커진다
+const LABEL_FONT_SIZE = 46; // 캔버스에 그리는 실제 글자 크기(px) — 아래 padY와 함께 캔버스 전체 높이를 이룬다
+const LABEL_PAD_Y = 14;
+const LABEL_TARGET_FONT_PX = 14; // 화면에 보일 때 글자 높이의 목표 픽셀 크기 — HUD의 font-size:14px과 맞춘다
 function makeLabelSprite(text, scale = 0.05) {
   if (!labelTextureCache[text]) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
-    const fontSize = 46;
+    const fontSize = LABEL_FONT_SIZE;
     ctx.font = `bold ${fontSize}px sans-serif`;
     const padX = 20;
-    const padY = 14;
+    const padY = LABEL_PAD_Y;
     canvas.width = Math.ceil(ctx.measureText(text).width) + padX * 2;
     canvas.height = fontSize + padY * 2;
     ctx.font = `bold ${fontSize}px sans-serif`;
@@ -224,17 +229,23 @@ function makeLabelSprite(text, scale = 0.05) {
   return sprite;
 }
 
-// sizeAttenuation을 꺼 뒀으니(그래야 최대 크기를 우리가 정할 수 있다) 매 프레임 카메라와의 거리로
-// 직접 크기를 계산한다 — LABEL_MAX_DIST보다 멀면 거리에 비례해 작아지고(원래 sizeAttenuation과 같은 효과),
-// 그보다 가까우면 LABEL_MAX_DIST에서의 크기로 고정된다.
+// sizeAttenuation을 꺼 뒀으니(그래야 최대 크기를 우리가 정할 수 있다) 매 프레임 두 가지 크기를 비교해서
+// 더 작은 쪽을 쓴다 — ① 멀어지면 거리에 비례해 작아지는 원래 sizeAttenuation과 같은 크기, ② 화면에서
+// 글자 높이가 LABEL_TARGET_FONT_PX(=HUD의 font-size:14px)를 넘지 않는 크기. 그래서 멀리서는 자연스럽게
+// 작아지고, 아무리 가까이 가도 HUD 글자 크기 이상으로는 커지지 않는다.
 function updateLabelScales() {
-  if (!camera) return;
+  if (!camera || !canvasEl) return;
+  const canvasH = canvasEl.clientHeight || 1;
+  const halfFovRad = (camera.fov / 2) * (Math.PI / 180);
+  // scale.y 값이 이것일 때 화면에 LABEL_TARGET_FONT_PX만큼의 "전체 배지 높이"로 보인다
+  // (목표는 글자 크기 14px이고, 배지 전체 높이는 캔버스에서 글자가 차지하는 비율만큼 더 크다)
+  const badgeTargetPx = LABEL_TARGET_FONT_PX * ((LABEL_FONT_SIZE + LABEL_PAD_Y * 2) / LABEL_FONT_SIZE);
+  const targetScaleY = (badgeTargetPx * 2 * Math.tan(halfFovRad)) / canvasH;
   allLabelSprites.forEach((sprite) => {
-    const dist = sprite.position.distanceTo(camera.position);
-    // sizeAttenuation:true였다면 엔진이 알아서 거리로 나눠 작아지게 했을 것 — 그 나눗셈을 직접 해 주되,
-    // LABEL_MAX_DIST보다 가까운 거리는 그 값으로 바닥을 깔아서 그 이상 커지지 않게 한다
-    const effectiveDist = Math.max(dist, LABEL_MAX_DIST);
-    sprite.scale.set(sprite.userData.baseW / effectiveDist, sprite.userData.baseH / effectiveDist, 1);
+    const dist = Math.max(sprite.position.distanceTo(camera.position), 0.01);
+    const capFactor = targetScaleY / sprite.userData.baseH;
+    const factor = Math.min(1 / dist, capFactor);
+    sprite.scale.set(sprite.userData.baseW * factor, sprite.userData.baseH * factor, 1);
   });
 }
 
@@ -297,10 +308,10 @@ function buildRoadSegment(p1, p2) {
 }
 
 function buildRoads() {
-  for (let i = 0; i < ROAD_LOOP.length - 1; i++) {
-    buildRoadSegment(ROAD_LOOP[i], ROAD_LOOP[i + 1]);
+  for (let i = 0; i < ROAD_MAIN.length - 1; i++) {
+    buildRoadSegment(ROAD_MAIN[i], ROAD_MAIN[i + 1]);
   }
-  ROAD_BRANCHES.forEach(([a, b]) => buildRoadSegment(a, b));
+  buildRoadSegment(ROAD_CROSS[0], ROAD_CROSS[1]);
 }
 
 function buildPlaces() {
