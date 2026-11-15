@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115l";
+const ASSET_VERSION = "20261115m";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -182,7 +182,11 @@ window.addEventListener("keyup", (ev) => {
 });
 
 // ── 글씨 라벨(간판·이름표) — 캔버스에 그려서 늘 카메라를 보는 스프라이트로 띄운다 ──
+// 기본 sizeAttenuation(원근에 따라 커짐)만 쓰면 가까이 다가갈수록 한없이 커져서, 상단 동전·불량배
+// 표시(HUD) 정도의 크기를 최대치로 두고 그보다 가까워져도 더는 안 커지게 직접 계산해 준다.
 const labelTextureCache = {};
+const allLabelSprites = [];
+const LABEL_MAX_DIST = 6; // 이 거리(기본 카메라 거리)에서의 크기가 최대 크기 — 더 가까워져도 이 이상 안 커진다
 function makeLabelSprite(text, scale = 0.05) {
   if (!labelTextureCache[text]) {
     const canvas = document.createElement("canvas");
@@ -211,10 +215,27 @@ function makeLabelSprite(text, scale = 0.05) {
     labelTextureCache[text] = { texture, w: canvas.width, h: canvas.height };
   }
   const { texture, w, h } = labelTextureCache[text];
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, sizeAttenuation: true }));
-  sprite.scale.set(w * scale, h * scale, 1);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, sizeAttenuation: false }));
+  sprite.userData.baseW = w * scale;
+  sprite.userData.baseH = h * scale;
+  sprite.scale.set(sprite.userData.baseW, sprite.userData.baseH, 1);
   sprite.renderOrder = 999;
+  allLabelSprites.push(sprite);
   return sprite;
+}
+
+// sizeAttenuation을 꺼 뒀으니(그래야 최대 크기를 우리가 정할 수 있다) 매 프레임 카메라와의 거리로
+// 직접 크기를 계산한다 — LABEL_MAX_DIST보다 멀면 거리에 비례해 작아지고(원래 sizeAttenuation과 같은 효과),
+// 그보다 가까우면 LABEL_MAX_DIST에서의 크기로 고정된다.
+function updateLabelScales() {
+  if (!camera) return;
+  allLabelSprites.forEach((sprite) => {
+    const dist = sprite.position.distanceTo(camera.position);
+    // sizeAttenuation:true였다면 엔진이 알아서 거리로 나눠 작아지게 했을 것 — 그 나눗셈을 직접 해 주되,
+    // LABEL_MAX_DIST보다 가까운 거리는 그 값으로 바닥을 깔아서 그 이상 커지지 않게 한다
+    const effectiveDist = Math.max(dist, LABEL_MAX_DIST);
+    sprite.scale.set(sprite.userData.baseW / effectiveDist, sprite.userData.baseH / effectiveDist, 1);
+  });
 }
 
 function buildStaticScene() {
@@ -749,6 +770,7 @@ function animate() {
   if (mixer) mixer.update(dt);
   if (momMixer) momMixer.update(dt);
   updateCamera();
+  updateLabelScales();
   renderer.render(scene, camera);
 }
 
