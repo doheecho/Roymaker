@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115o";
+const ASSET_VERSION = "20261115r";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -55,31 +55,31 @@ const MOM_DANCE_POOL = [
   "ymca_dance",
 ];
 
-// ── 동네 생김새: 실제 금호파인힐스 단지 주변(카카오맵 위성사진 기준)을 간단한 박스 매싱으로 재현 ──
+// ── 동네 생김새: 실제 금호파크힐스 단지 주변(카카오맵 위성사진 기준)을 간단한 박스 매싱으로 재현 ──
 // 좌표는 지도 스크린샷에서 번호별 위치를 눈대중으로 읽어 축척(약 1.6m/px)을 적용해 환산한 값이라
 // 정밀한 실측은 아니고, 건물 간 상대적인 배치만 실제 동네와 비슷하게 맞췄다.
-// 0번(우리집)은 층수·유형 정보가 비어 있어서 주변 금호파인힐스 동과 같은 15층 아파트로 가정했다.
+// 0번(우리집)은 층수·유형 정보가 비어 있어서 주변 금호파크힐스 동과 같은 15층 아파트로 가정했다.
 const PLACES = [
   { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true },
-  { id: 1, name: "금호파인힐스 101동", floors: 15, type: "아파트", x: -410, z: 94 },
-  { id: 2, name: "금호파인힐스 102동", floors: 15, type: "아파트", x: -322, z: 46 },
-  { id: 3, name: "금호파인힐스 103동", floors: 15, type: "아파트", x: -261, z: -16 },
-  { id: 4, name: "금호파인힐스 104동", floors: 15, type: "아파트", x: -200, z: -69 },
-  { id: 5, name: "금호파인힐스 105동·이마트24", floors: 15, type: "아파트", x: -136, z: -133 },
-  { id: 6, name: "금호파인힐스 106동", floors: 15, type: "아파트", x: -66, z: -77 },
-  { id: 7, name: "금호파인힐스 107동", floors: 15, type: "아파트", x: -141, z: -8 },
-  { id: 8, name: "금호파인힐스 108동", floors: 15, type: "아파트", x: -208, z: 59 },
-  { id: 9, name: "금호파인힐스 109동", floors: 15, type: "아파트", x: -325, z: 150 },
-  { id: 10, name: "금호파인힐스 110동", floors: 15, type: "아파트", x: -261, z: 136 },
-  { id: 11, name: "금호파인힐스 111동", floors: 15, type: "아파트", x: -170, z: 144 },
-  { id: 12, name: "금호파인힐스 112동", floors: 15, type: "아파트", x: -74, z: 75 },
-  { id: 14, name: "금호파인힐스 114동", floors: 15, type: "아파트", x: 0, z: -93 },
-  { id: 15, name: "금호파인힐스 115동", floors: 15, type: "아파트", x: -29, z: -149 },
-  { id: 16, name: "금호파인힐스 116동", floors: 15, type: "아파트", x: -50, z: 134 },
+  { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -410, z: 94 },
+  { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -322, z: 46 },
+  { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -261, z: -16 },
+  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -200, z: -69 },
+  { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -136, z: -133 },
+  { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -66, z: -77 },
+  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -141, z: -8 },
+  { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -208, z: 59 },
+  { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -325, z: 150 },
+  { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -261, z: 136 },
+  { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -170, z: 144 },
+  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75 },
+  { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 0, z: -93 },
+  { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -29, z: -149 },
+  { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -50, z: 134 },
   { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 27, z: -160, diagonal: true },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -261, z: -114, church: true },
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -74, z: 203 },
-  { id: 20, name: "금호파인힐스 117동", floors: 15, type: "아파트", x: 46, z: 240 },
+  { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 46, z: 240 },
   { id: 21, name: "금호119안전센터", floors: 2, type: "기타", x: 16, z: 83 },
   { id: 22, name: "성동구립금호도서관", floors: 4, type: "도서관", x: 91, z: 83 },
   { id: 23, name: "성동구보건소금호분소", floors: 4, type: "보건소", x: 104, z: 152 },
@@ -92,7 +92,7 @@ const PLACES = [
   { id: 30, name: "분식집", floors: 4, type: "식당", x: -56, z: -229 },
 ];
 
-// 유형별 기본 크기·색(사진 참고 — 금호파인힐스는 흰색/베이지 바탕에 주황 포인트, 각 상점은 실제 브랜드 색을 흉내)
+// 유형별 기본 크기·색(사진 참고 — 금호파크힐스는 흰색/베이지 바탕에 주황 포인트, 각 상점은 실제 브랜드 색을 흉내)
 const TYPE_STYLE = {
   "아파트": { w: 22, d: 13, color: 0xede4d6, accent: 0xc9784a },
   "카페": { w: 13, d: 11, color: 0x173a66 },
@@ -114,36 +114,155 @@ const NAME_COLOR_OVERRIDE = {
 // 지도 화면에서 움직이는 정도로 느껴지도록 전체를 줄여 쓴다 — 113동(우리집) 건물 밑변이
 // 이로이 캐릭터(키 1.7) 두 배쯤 되도록 축척을 잡았다(22m짜리 폭 → 약 3.3)
 const WORLD_SCALE = 0.15;
-// 도로 지도(kakaomap_road.png, 사용자가 빨간색으로 직접 도로를 칠해 준 버전) 기준으로 그린 도로망.
-// 라벨이나 지하철 5호선(보라색) 표시에 가려진 구간도 전부 도로로 쳤다. 폭은 지도에서 보이는 두께
-// 차이를 3단계(큰길/보통길/골목)로 단순화해서 반영했고, 큰길·보통길에는 중앙 차선을 그려 넣었다.
-const ROAD_WIDE = 10; // 난계로 같은 큰길
+// 도로 지도(kakaomap_road1.png, 사용자가 건물번호 지도와 같은 위성사진 위에 빨간색으로 도로를
+// 직접 칠해 준 버전) 기준. 이 지도는 번호 지도(kakaomap_number.png)와 완전히 같은 사진이라, 건물
+// 좌표를 구할 때 썼던 것과 같은 축척·기준점으로 도로 모양을 그대로 옮길 수 있었다 — 빨간색 영역을
+// 이미지 처리(색상 추출→스켈레톤화→그래프 추출)로 따서 중심선과 각 구간의 실제 두께를 함께 구했고,
+// 두께 분포(3~5m / 13m 안팎 / 19m 이상)를 그대로 골목·보통길·큰길 3단계 폭으로 옮겼다.
+const ROAD_WIDE = 10; // 난계로 등 두껍게 칠해진 큰길
 const ROAD_MEDIUM = 6; // 단지 안 보통 도로
-const ROAD_NARROW = 3.5; // 건물 사이 좁은 길(차선 없음)
+const ROAD_NARROW = 3.5; // 가늘게 칠해진 좁은 길(차선 없음)
 const ROAD_SEGMENTS = [
-  // 난계로: 대현교회 → 이마트24 → 메가MGC커피 사거리 → 롯데마트 방향
-  { a: [-261, -114], b: [-136, -133], width: ROAD_WIDE },
-  { a: [-136, -133], b: [60, -179], width: ROAD_WIDE },
-  { a: [60, -179], b: [654, -352], width: ROAD_WIDE },
-  // 사거리에서 수직으로 교차하는 큰길(지도상 굵게 표시된, 도서관·안전센터 쪽으로 이어지는 길)
-  { a: [60, -179], b: [16, 83], width: ROAD_WIDE },
-  { a: [16, 83], b: [104, 152], width: ROAD_WIDE },
-  { a: [104, 152], b: [139, 235], width: ROAD_MEDIUM },
-  // 단지 서쪽(대현교회~9·10·11동~학교~117동) 안쪽 도로
-  { a: [-261, -114], b: [-325, 150], width: ROAD_MEDIUM },
-  { a: [-325, 150], b: [-170, 144], width: ROAD_MEDIUM },
-  { a: [-170, 144], b: [-74, 203], width: ROAD_MEDIUM },
-  { a: [-74, 203], b: [46, 240], width: ROAD_MEDIUM },
-  // 이마트24에서 우리집 쪽으로 들어오는 안쪽 골목
-  { a: [-136, -133], b: [0, -93], width: ROAD_NARROW },
-  { a: [0, -93], b: [0, 0], width: ROAD_NARROW },
+  { a: [646.4, -430.4], b: [566.4, -379.2], width: ROAD_WIDE },
+  { a: [-52.8, -428.8], b: [-67.2, -348.8], width: ROAD_MEDIUM },
+  { a: [-49.6, -428.8], b: [-30.4, -420.8], width: ROAD_MEDIUM },
+  { a: [-30.4, -420.8], b: [6.4, -380.8], width: ROAD_MEDIUM },
+  { a: [398.4, -428.8], b: [177.6, -296.0], width: ROAD_MEDIUM },
+  { a: [177.6, -296.0], b: [160.0, -297.6], width: ROAD_MEDIUM },
+  { a: [160.0, -297.6], b: [152.0, -316.8], width: ROAD_MEDIUM },
+  { a: [152.0, -316.8], b: [147.2, -363.2], width: ROAD_MEDIUM },
+  { a: [147.2, -363.2], b: [156.8, -424.0], width: ROAD_MEDIUM },
+  { a: [72.0, -424.0], b: [72.0, -377.6], width: ROAD_WIDE },
+  { a: [523.2, -424.0], b: [553.6, -379.2], width: ROAD_MEDIUM },
+  { a: [8.0, -380.8], b: [70.4, -377.6], width: ROAD_MEDIUM },
+  { a: [6.4, -379.2], b: [6.4, -323.2], width: ROAD_MEDIUM },
+  { a: [6.4, -323.2], b: [-17.6, -289.6], width: ROAD_MEDIUM },
+  { a: [-17.6, -289.6], b: [-22.4, -251.2], width: ROAD_MEDIUM },
+  { a: [555.2, -379.2], b: [566.4, -379.2], width: ROAD_WIDE },
+  { a: [566.4, -379.2], b: [635.2, -272.0], width: ROAD_MEDIUM },
+  { a: [553.6, -377.6], b: [326.4, -238.4], width: ROAD_WIDE },
+  { a: [72.0, -376.0], b: [70.4, -251.2], width: ROAD_WIDE },
+  { a: [-68.8, -348.8], b: [-76.8, -347.2], width: ROAD_NARROW },
+  { a: [-76.8, -347.2], b: [-70.4, -342.4], width: ROAD_NARROW },
+  { a: [-68.8, -340.8], b: [-70.4, -238.4], width: ROAD_MEDIUM },
+  { a: [740.8, -329.6], b: [635.2, -272.0], width: ROAD_MEDIUM },
+  { a: [-200.0, -312.0], b: [-232.0, -289.6], width: ROAD_MEDIUM },
+  { a: [-232.0, -289.6], b: [-216.0, -251.2], width: ROAD_MEDIUM },
+  { a: [740.8, -273.6], b: [659.2, -220.8], width: ROAD_MEDIUM },
+  { a: [-169.6, -272.0], b: [-212.8, -251.2], width: ROAD_MEDIUM },
+  { a: [635.2, -272.0], b: [400.0, -120.0], width: ROAD_MEDIUM },
+  { a: [68.8, -251.2], b: [-20.8, -249.6], width: ROAD_MEDIUM },
+  { a: [-22.4, -249.6], b: [-70.4, -238.4], width: ROAD_MEDIUM },
+  { a: [70.4, -249.6], b: [70.4, -203.2], width: ROAD_WIDE },
+  { a: [-216.0, -248.0], b: [-257.6, -224.0], width: ROAD_MEDIUM },
+  { a: [-214.4, -248.0], b: [-180.8, -187.2], width: ROAD_MEDIUM },
+  { a: [-70.4, -238.4], b: [-65.6, -190.4], width: ROAD_MEDIUM },
+  { a: [324.8, -236.8], b: [163.2, -184.0], width: ROAD_WIDE },
+  { a: [326.4, -236.8], b: [398.4, -120.0], width: ROAD_MEDIUM },
+  { a: [657.6, -219.2], b: [475.2, -112.0], width: ROAD_MEDIUM },
+  { a: [659.2, -219.2], b: [721.6, -108.8], width: ROAD_MEDIUM },
+  { a: [68.8, -196.8], b: [-64.0, -188.8], width: ROAD_WIDE },
+  { a: [70.4, -196.8], b: [76.8, -180.8], width: ROAD_WIDE },
+  { a: [-81.6, -188.8], b: [-179.2, -185.6], width: ROAD_WIDE },
+  { a: [-78.4, -188.8], b: [-67.2, -188.8], width: ROAD_WIDE },
+  { a: [-80.0, -187.2], b: [-78.4, -145.6], width: ROAD_MEDIUM },
+  { a: [-78.4, -145.6], b: [-40.0, -108.8], width: ROAD_MEDIUM },
+  { a: [-40.0, -108.8], b: [-25.6, -52.8], width: ROAD_MEDIUM },
+  { a: [-25.6, -52.8], b: [-35.2, -33.6], width: ROAD_MEDIUM },
+  { a: [-35.2, -33.6], b: [-120.0, 41.6], width: ROAD_MEDIUM },
+  { a: [-120.0, 41.6], b: [-134.4, 88.0], width: ROAD_MEDIUM },
+  { a: [-134.4, 88.0], b: [-155.2, 100.8], width: ROAD_MEDIUM },
+  { a: [-155.2, 100.8], b: [-340.8, 102.4], width: ROAD_MEDIUM },
+  { a: [-340.8, 102.4], b: [-369.6, 120.0], width: ROAD_MEDIUM },
+  { a: [-369.6, 120.0], b: [-414.4, 166.4], width: ROAD_MEDIUM },
+  { a: [-180.8, -185.6], b: [-241.6, -171.2], width: ROAD_WIDE },
+  { a: [-241.6, -171.2], b: [-284.8, -145.6], width: ROAD_WIDE },
+  { a: [-284.8, -145.6], b: [-304.0, -115.2], width: ROAD_WIDE },
+  { a: [-304.0, -115.2], b: [-315.2, -48.0], width: ROAD_WIDE },
+  { a: [-315.2, -48.0], b: [-329.6, -27.2], width: ROAD_WIDE },
+  { a: [-329.6, -27.2], b: [-382.4, -11.2], width: ROAD_WIDE },
+  { a: [-382.4, -11.2], b: [-512.0, -9.6], width: ROAD_WIDE },
+  { a: [161.6, -184.0], b: [126.4, -177.6], width: ROAD_WIDE },
+  { a: [163.2, -182.4], b: [196.8, -105.6], width: ROAD_MEDIUM },
+  { a: [196.8, -105.6], b: [222.4, -76.8], width: ROAD_MEDIUM },
+  { a: [222.4, -76.8], b: [416.0, 16.0], width: ROAD_MEDIUM },
+  { a: [78.4, -179.2], b: [124.8, -177.6], width: ROAD_WIDE },
+  { a: [76.8, -177.6], b: [72.0, -108.8], width: ROAD_WIDE },
+  { a: [126.4, -176.0], b: [140.8, -81.6], width: ROAD_MEDIUM },
+  { a: [396.8, -118.4], b: [368.0, -100.8], width: ROAD_MEDIUM },
+  { a: [400.0, -118.4], b: [430.4, -78.4], width: ROAD_MEDIUM },
+  { a: [430.4, -78.4], b: [515.2, -56.0], width: ROAD_MEDIUM },
+  { a: [515.2, -56.0], b: [564.8, -56.0], width: ROAD_MEDIUM },
+  { a: [564.8, -56.0], b: [721.6, -107.2], width: ROAD_MEDIUM },
+  { a: [740.8, -110.4], b: [723.2, -107.2], width: ROAD_MEDIUM },
+  { a: [70.4, -107.2], b: [62.4, -51.2], width: ROAD_WIDE },
+  { a: [72.0, -107.2], b: [96.0, -92.8], width: ROAD_MEDIUM },
+  { a: [96.0, -92.8], b: [97.6, 22.4], width: ROAD_MEDIUM },
+  { a: [97.6, 22.4], b: [121.6, 73.6], width: ROAD_MEDIUM },
+  { a: [121.6, 73.6], b: [110.4, 228.8], width: ROAD_MEDIUM },
+  { a: [142.4, -80.0], b: [244.8, -40.0], width: ROAD_MEDIUM },
+  { a: [244.8, -40.0], b: [292.8, -6.4], width: ROAD_MEDIUM },
+  { a: [292.8, -6.4], b: [294.4, 49.6], width: ROAD_MEDIUM },
+  { a: [294.4, 49.6], b: [358.4, 108.8], width: ROAD_MEDIUM },
+  { a: [358.4, 108.8], b: [372.8, 179.2], width: ROAD_MEDIUM },
+  { a: [140.8, -78.4], b: [113.6, -11.2], width: ROAD_MEDIUM },
+  { a: [113.6, -11.2], b: [140.8, 67.2], width: ROAD_MEDIUM },
+  { a: [140.8, 67.2], b: [139.2, 128.0], width: ROAD_MEDIUM },
+  { a: [740.8, -68.8], b: [684.8, -73.6], width: ROAD_MEDIUM },
+  { a: [684.8, -73.6], b: [416.0, 16.0], width: ROAD_MEDIUM },
+  { a: [60.8, -51.2], b: [33.6, -49.6], width: ROAD_MEDIUM },
+  { a: [62.4, -49.6], b: [54.4, 65.6], width: ROAD_WIDE },
+  { a: [416.0, 16.0], b: [441.6, 145.6], width: ROAD_MEDIUM },
+  { a: [441.6, 145.6], b: [510.4, 208.0], width: ROAD_MEDIUM },
+  { a: [510.4, 208.0], b: [553.6, 300.8], width: ROAD_MEDIUM },
+  { a: [52.8, 67.2], b: [41.6, 78.4], width: ROAD_WIDE },
+  { a: [41.6, 78.4], b: [41.6, 96.0], width: ROAD_WIDE },
+  { a: [41.6, 96.0], b: [51.2, 105.6], width: ROAD_WIDE },
+  { a: [56.0, 67.2], b: [62.4, 96.0], width: ROAD_WIDE },
+  { a: [62.4, 96.0], b: [54.4, 104.0], width: ROAD_WIDE },
+  { a: [-512.0, 86.4], b: [-427.2, 168.0], width: ROAD_WIDE },
+  { a: [51.2, 105.6], b: [36.8, 121.6], width: ROAD_WIDE },
+  { a: [36.8, 121.6], b: [52.8, 147.2], width: ROAD_WIDE },
+  { a: [54.4, 107.2], b: [54.4, 147.2], width: ROAD_WIDE },
+  { a: [140.8, 129.6], b: [300.8, 198.4], width: ROAD_MEDIUM },
+  { a: [300.8, 198.4], b: [371.2, 180.8], width: ROAD_MEDIUM },
+  { a: [137.6, 131.2], b: [132.8, 214.4], width: ROAD_MEDIUM },
+  { a: [132.8, 214.4], b: [168.0, 244.8], width: ROAD_MEDIUM },
+  { a: [54.4, 148.8], b: [68.8, 203.2], width: ROAD_WIDE },
+  { a: [68.8, 203.2], b: [97.6, 248.0], width: ROAD_WIDE },
+  { a: [-427.2, 168.0], b: [-416.0, 168.0], width: ROAD_WIDE },
+  { a: [-427.2, 168.0], b: [-508.8, 235.2], width: ROAD_MEDIUM },
+  { a: [-414.4, 169.6], b: [-358.4, 198.4], width: ROAD_WIDE },
+  { a: [-358.4, 198.4], b: [-152.0, 259.2], width: ROAD_WIDE },
+  { a: [-152.0, 259.2], b: [-78.4, 291.2], width: ROAD_WIDE },
+  { a: [-78.4, 291.2], b: [-64.0, 307.2], width: ROAD_WIDE },
+  { a: [372.8, 180.8], b: [384.0, 284.8], width: ROAD_MEDIUM },
+  { a: [108.8, 232.0], b: [99.2, 248.0], width: ROAD_WIDE },
+  { a: [-510.4, 236.8], b: [-510.4, 243.2], width: ROAD_WIDE },
+  { a: [-508.8, 244.8], b: [-435.2, 312.0], width: ROAD_MEDIUM },
+  { a: [171.2, 244.8], b: [203.2, 264.0], width: ROAD_MEDIUM },
+  { a: [203.2, 264.0], b: [190.4, 305.6], width: ROAD_MEDIUM },
+  { a: [190.4, 305.6], b: [179.2, 312.0], width: ROAD_MEDIUM },
+  { a: [-512.0, 246.4], b: [-512.0, 300.8], width: ROAD_MEDIUM },
+  { a: [169.6, 246.4], b: [177.6, 312.0], width: ROAD_MEDIUM },
+  { a: [99.2, 249.6], b: [105.6, 281.6], width: ROAD_WIDE },
+  { a: [107.2, 283.2], b: [121.6, 289.6], width: ROAD_WIDE },
+  { a: [105.6, 284.8], b: [108.8, 300.8], width: ROAD_WIDE },
+  { a: [382.4, 286.4], b: [369.6, 300.8], width: ROAD_MEDIUM },
+  { a: [384.0, 286.4], b: [388.8, 300.8], width: ROAD_MEDIUM },
+  { a: [124.8, 292.8], b: [131.2, 300.8], width: ROAD_MEDIUM },
+  { a: [-62.4, 308.8], b: [-43.2, 312.0], width: ROAD_WIDE },
 ];
 
 const AREA_MARGIN = 8;
-const AREA_MIN_X = Math.min(...PLACES.map((p) => p.x * WORLD_SCALE)) - AREA_MARGIN;
-const AREA_MAX_X = Math.max(...PLACES.map((p) => p.x * WORLD_SCALE)) + AREA_MARGIN;
-const AREA_MIN_Z = Math.min(...PLACES.map((p) => p.z * WORLD_SCALE)) - AREA_MARGIN;
-const AREA_MAX_Z = Math.max(...PLACES.map((p) => p.z * WORLD_SCALE)) + AREA_MARGIN;
+// 도로가 건물보다 더 넓게 뻗어 있는 구간(예: 롯데마트 너머)도 있어서, 바닥·이동범위는 건물과
+// 도로 좌표를 모두 합쳐서 계산한다
+const ALL_COORD_XS = [...PLACES.map((p) => p.x), ...ROAD_SEGMENTS.flatMap((s) => [s.a[0], s.b[0]])];
+const ALL_COORD_ZS = [...PLACES.map((p) => p.z), ...ROAD_SEGMENTS.flatMap((s) => [s.a[1], s.b[1]])];
+const AREA_MIN_X = Math.min(...ALL_COORD_XS) * WORLD_SCALE - AREA_MARGIN;
+const AREA_MAX_X = Math.max(...ALL_COORD_XS) * WORLD_SCALE + AREA_MARGIN;
+const AREA_MIN_Z = Math.min(...ALL_COORD_ZS) * WORLD_SCALE - AREA_MARGIN;
+const AREA_MAX_Z = Math.max(...ALL_COORD_ZS) * WORLD_SCALE + AREA_MARGIN;
 
 const ITEM_COUNT = 10;
 const ENEMY_COUNT = 5;
@@ -320,6 +439,10 @@ function buildStaticScene() {
   buildPlaces();
 }
 
+// 차선 점선은 도로가 많아지니 개별 메시로 그리면 수백 개가 생겨서(실측 500개+) 프레임이 뚝 떨어진다.
+// 그래서 위치만 모아 뒀다가 InstancedMesh 하나로 한 번에 그린다(드로우콜 1개).
+let dashTransforms = [];
+
 function buildRoadSegment({ a, b, width }) {
   const x1 = a[0] * WORLD_SCALE;
   const z1 = a[1] * WORLD_SCALE;
@@ -341,24 +464,50 @@ function buildRoadSegment({ a, b, width }) {
   road.receiveShadow = true;
   scene.add(road);
 
-  // 골목(ROAD_NARROW)은 차선이 없고, 큰길·보통길에는 중앙 점선 차선을 그려 넣는다
+  // 골목(ROAD_NARROW)은 차선이 없고, 보통길은 중앙에 점선 차선 1줄, 난계로·사거리의 큰길은
+  // 왕복 차로가 넓은 큰 도로라는 걸 보여주려고 차선을 2줄(중앙 기준 양쪽으로) 그려 넣는다
   if (width === ROAD_NARROW) return;
-  const laneMat = new THREE.MeshBasicMaterial({ color: 0xf5e8b0 });
-  const dashLen = 1.2 * WORLD_SCALE;
-  const gapLen = 1.2 * WORLD_SCALE;
+  const dashLen = 3 * WORLD_SCALE;
+  const gapLen = 3 * WORLD_SCALE;
   const step = dashLen + gapLen;
+  const ux = dx / len;
+  const uz = dz / len;
+  const perpX = -uz;
+  const perpZ = ux;
+  const lineOffsets = width === ROAD_WIDE ? [-roadW * 0.15, roadW * 0.15] : [0];
+  lineOffsets.forEach((offset) => {
+    for (let d = step / 2; d < len; d += step) {
+      dashTransforms.push({
+        x: x1 + (dx * d) / len + perpX * offset,
+        z: z1 + (dz * d) / len + perpZ * offset,
+        yaw,
+      });
+    }
+  });
+}
+
+function buildLaneDashes() {
+  if (!dashTransforms.length) return;
+  const dashLen = 3 * WORLD_SCALE;
   const dashGeo = new THREE.PlaneGeometry(0.18 * WORLD_SCALE, dashLen);
   dashGeo.rotateX(-Math.PI / 2);
-  for (let d = step / 2; d < len; d += step) {
-    const dash = new THREE.Mesh(dashGeo, laneMat);
-    dash.rotation.y = yaw;
-    dash.position.set(x1 + (dx * d) / len, 0.01, z1 + (dz * d) / len);
-    scene.add(dash);
-  }
+  const laneMat = new THREE.MeshBasicMaterial({ color: 0xf5e8b0 });
+  const inst = new THREE.InstancedMesh(dashGeo, laneMat, dashTransforms.length);
+  const dummy = new THREE.Object3D();
+  dashTransforms.forEach((t, i) => {
+    dummy.position.set(t.x, 0.01, t.z);
+    dummy.rotation.set(0, t.yaw, 0);
+    dummy.updateMatrix();
+    inst.setMatrixAt(i, dummy.matrix);
+  });
+  inst.instanceMatrix.needsUpdate = true;
+  scene.add(inst);
 }
 
 function buildRoads() {
+  dashTransforms = [];
   ROAD_SEGMENTS.forEach(buildRoadSegment);
+  buildLaneDashes();
 }
 
 function buildPlaces() {
