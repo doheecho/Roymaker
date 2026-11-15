@@ -4884,6 +4884,9 @@ function showView(name) {
 
   if (name === "exam" && typeof renderExamView === "function") renderExamView();
 
+  if (name === "neighborhood" && typeof window.initNeighborhood3D === "function") window.initNeighborhood3D();
+  else if (typeof window.pauseNeighborhood3D === "function") window.pauseNeighborhood3D();
+
   if (name === "map" && state.map) {
     state.map.relayout();
     if (state.charPos) {
