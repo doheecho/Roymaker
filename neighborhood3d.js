@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115i";
+const ASSET_VERSION = "20261115j";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -38,12 +38,66 @@ const DANCE_POOL = [
   "ymca_dance",
 ];
 
-// ── 거리 생김새 ──
-const STREET_HALF_LEN = 60;
-const STREET_HALF_WIDTH = 7;
-const BUILDING_ROW_X = 13;
-const BUILDING_COLORS = [0xffd9a0, 0xa8d8c9, 0xa9c6e8, 0xf2a9c4, 0xd7c4e8, 0xfff0a8, 0xffb199];
-const SHOP_NAMES = ["분식", "문구점", "편의점", "세탁소", "약국", "빵집", "꽃집", "태권도장", "김밥천국", "문방구"];
+// ── 동네 생김새: 실제 금호파인힐스 단지 주변(카카오맵 위성사진 기준)을 간단한 박스 매싱으로 재현 ──
+// 좌표는 지도 스크린샷에서 번호별 위치를 눈대중으로 읽어 축척(약 1.6m/px)을 적용해 환산한 값이라
+// 정밀한 실측은 아니고, 건물 간 상대적인 배치만 실제 동네와 비슷하게 맞췄다.
+// 0번(우리집)은 층수·유형 정보가 비어 있어서 주변 금호파인힐스 동과 같은 15층 아파트로 가정했다.
+const PLACES = [
+  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true },
+  { id: 1, name: "금호파인힐스 101동", floors: 15, type: "아파트", x: -410, z: 94 },
+  { id: 2, name: "금호파인힐스 102동", floors: 15, type: "아파트", x: -322, z: 46 },
+  { id: 3, name: "금호파인힐스 103동", floors: 15, type: "아파트", x: -261, z: -16 },
+  { id: 4, name: "금호파인힐스 104동", floors: 15, type: "아파트", x: -200, z: -69 },
+  { id: 5, name: "금호파인힐스 105동·이마트24", floors: 15, type: "아파트", x: -136, z: -133 },
+  { id: 6, name: "금호파인힐스 106동", floors: 15, type: "아파트", x: -66, z: -77 },
+  { id: 7, name: "금호파인힐스 107동", floors: 15, type: "아파트", x: -141, z: -8 },
+  { id: 8, name: "금호파인힐스 108동", floors: 15, type: "아파트", x: -208, z: 59 },
+  { id: 9, name: "금호파인힐스 109동", floors: 15, type: "아파트", x: -325, z: 150 },
+  { id: 10, name: "금호파인힐스 110동", floors: 15, type: "아파트", x: -261, z: 136 },
+  { id: 11, name: "금호파인힐스 111동", floors: 15, type: "아파트", x: -170, z: 144 },
+  { id: 12, name: "금호파인힐스 112동", floors: 15, type: "아파트", x: -74, z: 75 },
+  { id: 14, name: "금호파인힐스 114동", floors: 15, type: "아파트", x: 0, z: -93 },
+  { id: 15, name: "금호파인힐스 115동", floors: 15, type: "아파트", x: -29, z: -149 },
+  { id: 16, name: "금호파인힐스 116동", floors: 15, type: "아파트", x: -50, z: 134 },
+  { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 27, z: -160, diagonal: true },
+  { id: 18, name: "대현교회", floors: 4, type: "기타", x: -261, z: -114, church: true },
+  { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -74, z: 203 },
+  { id: 20, name: "금호파인힐스 117동", floors: 15, type: "아파트", x: 46, z: 240 },
+  { id: 21, name: "금호119안전센터", floors: 2, type: "기타", x: 16, z: 83 },
+  { id: 22, name: "성동구립금호도서관", floors: 4, type: "도서관", x: 91, z: 83 },
+  { id: 23, name: "성동구보건소금호분소", floors: 4, type: "보건소", x: 104, z: 152 },
+  { id: 24, name: "성동아이사랑복합문화센터", floors: 4, type: "기타", x: 139, z: 235 },
+  { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 115, z: -88 },
+  { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 104, z: -149, diagonal: true },
+  { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 654, z: -352 },
+  { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 51, z: -229, diagonal: true },
+  { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -104, z: -229 },
+  { id: 30, name: "분식집", floors: 4, type: "식당", x: -56, z: -229 },
+];
+
+// 유형별 기본 크기·색(사진 참고 — 금호파인힐스는 흰색/베이지 바탕에 주황 포인트, 각 상점은 실제 브랜드 색을 흉내)
+const TYPE_STYLE = {
+  "아파트": { w: 22, d: 13, color: 0xede4d6, accent: 0xc9784a },
+  "카페": { w: 13, d: 11, color: 0x173a66 },
+  "기타": { w: 12, d: 10, color: 0x9fb0c0 },
+  "학교": { w: 30, d: 16, color: 0xdccba0 },
+  "도서관": { w: 14, d: 12, color: 0x7fa0b0 },
+  "보건소": { w: 13, d: 11, color: 0x8fb5c5 },
+  "학원": { w: 12, d: 10, color: 0x3d6fae },
+  "중형마트": { w: 14, d: 12, color: 0xff8c3c },
+  "대형마트": { w: 20, d: 16, color: 0xc81432 },
+  "편의점": { w: 10, d: 9, color: 0x6a2c91 },
+  "식당": { w: 11, d: 10, color: 0xe0a040 },
+};
+const NAME_COLOR_OVERRIDE = {
+  "파리바게뜨": 0x163a73,
+  "메가MGC커피": 0x8c1f1f,
+};
+const AREA_MARGIN = 40;
+const AREA_MIN_X = Math.min(...PLACES.map((p) => p.x)) - AREA_MARGIN;
+const AREA_MAX_X = Math.max(...PLACES.map((p) => p.x)) + AREA_MARGIN;
+const AREA_MIN_Z = Math.min(...PLACES.map((p) => p.z)) - AREA_MARGIN;
+const AREA_MAX_Z = Math.max(...PLACES.map((p) => p.z)) + AREA_MARGIN;
 
 const ITEM_COUNT = 10;
 const ENEMY_COUNT = 5;
@@ -72,12 +126,12 @@ let enemies = [];
 
 // ── 카메라: 캐릭터를 중심으로 도는 궤도(드래그로 회전, 휠로 확대/축소) ──
 let camYaw = 0;
-let camPitch = 0.55;
-let camDistance = 11;
-const CAM_PITCH_MIN = 0.15;
+let camPitch = 0.4;
+let camDistance = 16;
+const CAM_PITCH_MIN = 0.1;
 const CAM_PITCH_MAX = 1.35;
 const CAM_DIST_MIN = 3.5;
-const CAM_DIST_MAX = 28;
+const CAM_DIST_MAX = 90;
 let dragging = false;
 let lastPointer = { x: 0, y: 0 };
 
@@ -112,7 +166,7 @@ window.addEventListener("keyup", (ev) => {
 
 // ── 글씨 라벨(간판·이름표) — 캔버스에 그려서 늘 카메라를 보는 스프라이트로 띄운다 ──
 const labelTextureCache = {};
-function makeLabelSprite(text) {
+function makeLabelSprite(text, scale = 0.05) {
   if (!labelTextureCache[text]) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -141,7 +195,6 @@ function makeLabelSprite(text) {
   }
   const { texture, w, h } = labelTextureCache[text];
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, sizeAttenuation: true }));
-  const scale = 0.05;
   sprite.scale.set(w * scale, h * scale, 1);
   sprite.renderOrder = 999;
   return sprite;
@@ -150,107 +203,103 @@ function makeLabelSprite(text) {
 function buildStaticScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xbfe3ff);
-  scene.fog = new THREE.Fog(0xbfe3ff, 100, 300);
+  scene.fog = new THREE.Fog(0xbfe3ff, 60, 450);
 
-  camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1000);
+  camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1200);
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8d9a7a, 1.1));
   const sun = new THREE.DirectionalLight(0xffffff, 1.3);
   sun.position.set(60, 90, 40);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -100, right: 100, top: 100, bottom: -100, far: 300 });
+  Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, far: 400 });
   scene.add(sun);
 
-  // 길 밖은 전부 잔디로 덮어서 끝이 안 보이게 한다
-  const bg = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({ color: 0x8fbf72 }));
+  // 동네 전체를 덮는 잔디 바닥 — 건물들이 차지하는 영역(AREA_MIN/MAX)보다 넉넉하게 깐다
+  const groundW = AREA_MAX_X - AREA_MIN_X;
+  const groundD = AREA_MAX_Z - AREA_MIN_Z;
+  const bg = new THREE.Mesh(
+    new THREE.PlaneGeometry(groundW, groundD),
+    new THREE.MeshStandardMaterial({ color: 0x8fbf72 })
+  );
   bg.rotation.x = -Math.PI / 2;
-  bg.position.y = -0.03;
+  bg.position.set((AREA_MIN_X + AREA_MAX_X) / 2, -0.03, (AREA_MIN_Z + AREA_MAX_Z) / 2);
   bg.receiveShadow = true;
   scene.add(bg);
 
-  // 도로
-  const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(STREET_HALF_WIDTH * 2, STREET_HALF_LEN * 2),
-    new THREE.MeshStandardMaterial({ color: 0x6f6f72 })
+  // 각 건물 사이에 깔린 회색 보행로(정밀한 실제 도로는 아니고, 건물들이 서 있는 자리를 넓게 덮는 정도)
+  const plaza = new THREE.Mesh(
+    new THREE.PlaneGeometry(groundW * 0.6, groundD * 0.6),
+    new THREE.MeshStandardMaterial({ color: 0xc7c7c2 })
   );
-  road.rotation.x = -Math.PI / 2;
-  road.receiveShadow = true;
-  scene.add(road);
+  plaza.rotation.x = -Math.PI / 2;
+  plaza.position.set((AREA_MIN_X + AREA_MAX_X) / 2, -0.02, (AREA_MIN_Z + AREA_MAX_Z) / 2);
+  plaza.receiveShadow = true;
+  scene.add(plaza);
 
-  // 중앙선
-  const lineMat = new THREE.MeshBasicMaterial({ color: 0xf5e8b0 });
-  for (let z = -STREET_HALF_LEN + 3; z < STREET_HALF_LEN; z += 8) {
-    const seg = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 4), lineMat);
-    seg.rotation.x = -Math.PI / 2;
-    seg.position.set(0, 0.01, z);
-    scene.add(seg);
-  }
-
-  // 양옆 인도
-  [-1, 1].forEach((side) => {
-    const sidewalk = new THREE.Mesh(
-      new THREE.PlaneGeometry(4, STREET_HALF_LEN * 2),
-      new THREE.MeshStandardMaterial({ color: 0xc7c7c2 })
-    );
-    sidewalk.rotation.x = -Math.PI / 2;
-    sidewalk.position.set(side * (STREET_HALF_WIDTH + 2), 0.01, 0);
-    sidewalk.receiveShadow = true;
-    scene.add(sidewalk);
-  });
-
-  buildShops();
+  buildPlaces();
 }
 
-function buildShops() {
-  let shopIdx = 0;
-  [-1, 1].forEach((side) => {
-    for (let z = -STREET_HALF_LEN + 10; z <= STREET_HALF_LEN - 10; z += 14) {
-      const h = 6 + (shopIdx % 4) * 2.5;
-      const color = BUILDING_COLORS[shopIdx % BUILDING_COLORS.length];
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(8, h, 10), new THREE.MeshStandardMaterial({ color }));
-      const x = side * (BUILDING_ROW_X + 4);
-      mesh.position.set(x, h / 2, z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
+function buildPlaces() {
+  PLACES.forEach((place) => {
+    const style = TYPE_STYLE[place.type] || TYPE_STYLE["기타"];
+    const height = Math.max(3, (place.floors || 15) * 3);
+    const color = NAME_COLOR_OVERRIDE[place.name] ?? style.color;
+    const rotY = place.diagonal ? Math.PI / 4 : 0;
 
-      // 입구 차양(생김새만 흉내)
-      const awning = new THREE.Mesh(
-        new THREE.BoxGeometry(6.5, 0.4, 1.6),
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(style.w, height, style.d),
+      new THREE.MeshStandardMaterial({ color })
+    );
+    mesh.position.set(place.x, height / 2, place.z);
+    mesh.rotation.y = rotY;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+
+    // 아파트 동은 사진 속 흰색/베이지 + 주황 포인트 배색을 얇은 세로 띠로 흉내낸다
+    if (place.type === "아파트") {
+      const accent = new THREE.Mesh(
+        new THREE.BoxGeometry(style.w * 0.22, height, style.d + 0.3),
+        new THREE.MeshStandardMaterial({ color: place.home ? 0xff6fa0 : style.accent })
+      );
+      accent.position.set(
+        place.x + Math.cos(rotY) * style.w * 0.36,
+        height / 2,
+        place.z - Math.sin(rotY) * style.w * 0.36
+      );
+      accent.rotation.y = rotY;
+      accent.castShadow = true;
+      scene.add(accent);
+    }
+
+    // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
+    if (place.church) {
+      const spire = new THREE.Mesh(
+        new THREE.ConeGeometry(1.6, 4, 4),
         new THREE.MeshStandardMaterial({ color: 0xffffff })
       );
-      awning.position.set(x, 3, z + side * -5.5);
-      scene.add(awning);
-
-      const label = makeLabelSprite(SHOP_NAMES[shopIdx % SHOP_NAMES.length]);
-      label.position.set(x, h + 2.2, z);
-      scene.add(label);
-      shopIdx++;
+      spire.position.set(place.x, height + 2, place.z);
+      spire.rotation.y = Math.PI / 4;
+      scene.add(spire);
+      const crossMat = new THREE.MeshStandardMaterial({ color: 0xb8291f });
+      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.6, 0.25), crossMat);
+      crossV.position.set(place.x, height + 4.6, place.z);
+      const crossH = new THREE.Mesh(new THREE.BoxGeometry(1, 0.25, 0.25), crossMat);
+      crossH.position.set(place.x, height + 4.9, place.z);
+      scene.add(crossV, crossH);
     }
-  });
 
-  // 가로수
-  for (let z = -STREET_HALF_LEN + 6; z <= STREET_HALF_LEN - 6; z += 10) {
-    [-1, 1].forEach((side) => {
-      const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.18, 0.22, 1.6, 8),
-        new THREE.MeshStandardMaterial({ color: 0x7a5a3a })
-      );
-      const leaves = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 10), new THREE.MeshStandardMaterial({ color: 0x4f9a5c }));
-      leaves.position.y = 1.6;
-      const tree = new THREE.Group();
-      tree.add(trunk, leaves);
-      tree.position.set(side * (STREET_HALF_WIDTH + 3.6), 0.8, z);
-      tree.castShadow = true;
-      scene.add(tree);
-    });
-  }
+    const labelText = place.home ? "🏠 우리집" : place.name;
+    const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
+    label.position.set(place.x, height + 2.4, place.z);
+    scene.add(label);
+  });
 }
 
 function randomStreetSpot() {
-  const x = rand(-(STREET_HALF_WIDTH - 1.5), STREET_HALF_WIDTH - 1.5);
-  const z = rand(-(STREET_HALF_LEN - 6), STREET_HALF_LEN - 6);
+  const x = rand(AREA_MIN_X + 5, AREA_MAX_X - 5);
+  const z = rand(AREA_MIN_Z + 5, AREA_MAX_Z - 5);
   return [x, z];
 }
 
@@ -489,8 +538,8 @@ function updateMovement(dt) {
     dir.normalize();
     const speed = moveMode === "run" ? RUN_SPEED : WALK_SPEED;
     const next = character.position.clone().addScaledVector(dir, speed * dt);
-    next.x = Math.max(-STREET_HALF_WIDTH + 0.6, Math.min(STREET_HALF_WIDTH - 0.6, next.x));
-    next.z = Math.max(-STREET_HALF_LEN + 1, Math.min(STREET_HALF_LEN - 1, next.z));
+    next.x = Math.max(AREA_MIN_X + 1, Math.min(AREA_MAX_X - 1, next.x));
+    next.z = Math.max(AREA_MIN_Z + 1, Math.min(AREA_MAX_Z - 1, next.z));
     character.position.x = next.x;
     character.position.z = next.z;
     character.rotation.y = Math.atan2(dir.x, dir.z);
@@ -597,7 +646,7 @@ async function initNeighborhood3D() {
     clock = new THREE.Clock();
     buildStaticScene();
     await loadCharacter();
-    character.position.set(0, 0, -STREET_HALF_LEN + 4);
+    character.position.set(0, 0, 10); // 우리집(0,0) 바로 앞 — 건물 안에 스폰되지 않게 앞마당만큼 띄운다
     playAction("Idle_02");
     wireOrbitControls();
     wireDpad();
