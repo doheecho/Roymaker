@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261116a";
+const ASSET_VERSION = "20261116c";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -76,7 +76,7 @@ const PLACES = [
   { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 0, z: -93, model: "models/3D_place_114.glb" },
   { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -29, z: -149, model: "models/3D_place_115.glb" },
   { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -50, z: 134, model: "models/3D_place_116.glb" },
-  { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 27, z: -160, diagonal: true },
+  { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 27, z: -160, diagonal: true, model: "models/3D_place_namkwang.glb" },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -261, z: -114, church: true },
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -74, z: 203 },
   { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 46, z: 240 },
@@ -87,7 +87,7 @@ const PLACES = [
   { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 115, z: -88 },
   { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 104, z: -149, diagonal: true },
   { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 654, z: -352 },
-  { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 51, z: -229, diagonal: true },
+  { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 51, z: -229, diagonal: true, model: "models/3D_place_megacoffee.glb" },
   { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -104, z: -229 },
   { id: 30, name: "분식집", floors: 4, type: "식당", x: -56, z: -229 },
 ];
@@ -655,13 +655,16 @@ function buildApartmentCluster(place, px, pz, floors) {
 // 동마다 실제로 제작된 3D 모델(3D_place_101.glb ~ 116.glb 등)을 불러와서 자리에 앉힌다. 모델 자체의
 // 단위가 PLACES 좌표와 같은 "실측 미터" 기준이라 WORLD_SCALE을 그대로 곱해서 쓰고, 모델이 세로 중심을
 // 기준으로 만들어져 있어서(바닥이 y=0이 아님) 불러온 뒤 바운딩박스를 재서 바닥이 지면에 닿도록 보정한다.
-function loadPlaceModel(place, px, pz) {
+// rotY는 사거리 대각선 배치(place.diagonal) 자리의 기본 회전값 — place.rotationDeg를 넣어 두면
+// (모델마다 정면 방향이 다를 수 있어서) 그 값으로 덮어써 미세 조정할 수 있다.
+function loadPlaceModel(place, px, pz, rotY = 0) {
   new GLTFLoader().load(
     `${place.model}?v=${ASSET_VERSION}`,
     (gltf) => {
       const model = gltf.scene;
       model.scale.setScalar(WORLD_SCALE);
       model.position.set(px, 0, pz);
+      model.rotation.y = place.rotationDeg != null ? THREE.MathUtils.degToRad(place.rotationDeg) : rotY;
       model.traverse((o) => {
         if (o.isMesh) {
           o.castShadow = true;
@@ -692,7 +695,7 @@ function buildPlaces() {
 
     if (place.model) {
       // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동)은 그 모델을 그대로 불러와 쓴다
-      loadPlaceModel(place, px, pz);
+      loadPlaceModel(place, px, pz, rotY);
     } else if (place.type === "아파트") {
       height = buildApartmentCluster(place, px, pz, floors);
     } else {
