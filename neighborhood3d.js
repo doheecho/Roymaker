@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115j";
+const ASSET_VERSION = "20261115l";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -93,11 +93,24 @@ const NAME_COLOR_OVERRIDE = {
   "파리바게뜨": 0x163a73,
   "메가MGC커피": 0x8c1f1f,
 };
-const AREA_MARGIN = 40;
-const AREA_MIN_X = Math.min(...PLACES.map((p) => p.x)) - AREA_MARGIN;
-const AREA_MAX_X = Math.max(...PLACES.map((p) => p.x)) + AREA_MARGIN;
-const AREA_MIN_Z = Math.min(...PLACES.map((p) => p.z)) - AREA_MARGIN;
-const AREA_MAX_Z = Math.max(...PLACES.map((p) => p.z)) + AREA_MARGIN;
+// 실제 축척(1유닛=1m) 그대로 쓰면 건물이 너무 거대하고 이동도 한없이 느려져서,
+// 지도 화면에서 움직이는 정도로 느껴지도록 전체를 줄여 쓴다 — 113동(우리집) 건물 밑변이
+// 이로이 캐릭터(키 1.7) 두 배쯤 되도록 축척을 잡았다(22m짜리 폭 → 약 3.3)
+const WORLD_SCALE = 0.15;
+// 지도에 보이던 순환도로(단지를 둘러 도는 큰 길)와, 거기서 롯데마트까지 뻗어나가는 길을
+// 꼭짓점 몇 개로 단순화해서 따라 그린다 — 실제 도로처럼 정밀하진 않지만 대략의 모양은 흉내낸다
+const ROAD_LOOP = [
+  [-104, -229], [-261, -114], [-325, 150], [-74, 203], [139, 235],
+  [104, 152], [91, 83], [16, 83], [27, -160], [51, -229], [-104, -229],
+];
+const ROAD_BRANCHES = [[[51, -229], [654, -352]]];
+const ROAD_WIDTH = 5;
+
+const AREA_MARGIN = 8;
+const AREA_MIN_X = Math.min(...PLACES.map((p) => p.x * WORLD_SCALE)) - AREA_MARGIN;
+const AREA_MAX_X = Math.max(...PLACES.map((p) => p.x * WORLD_SCALE)) + AREA_MARGIN;
+const AREA_MIN_Z = Math.min(...PLACES.map((p) => p.z * WORLD_SCALE)) - AREA_MARGIN;
+const AREA_MAX_Z = Math.max(...PLACES.map((p) => p.z * WORLD_SCALE)) + AREA_MARGIN;
 
 const ITEM_COUNT = 10;
 const ENEMY_COUNT = 5;
@@ -113,7 +126,11 @@ let currentAction = null;
 let rafId = null;
 let ready = false;
 let loading = false;
-let canvasEl, loadingEl, danceBtnEl, walkBtnEl, runBtnEl, hudEl, toastEl, resetBtnEl, dpadEl;
+let canvasEl, loadingEl, danceBtnEl, walkBtnEl, runBtnEl, momBtnEl, hudEl, toastEl, resetBtnEl, dpadEl;
+let mom = null;
+let momMixer = null;
+let momActions = {};
+let momLoading = false;
 const keys = { up: false, down: false, left: false, right: false };
 let moveMode = "walk"; // "walk" | "run"
 let dancing = false;
@@ -127,11 +144,11 @@ let enemies = [];
 // ── 카메라: 캐릭터를 중심으로 도는 궤도(드래그로 회전, 휠로 확대/축소) ──
 let camYaw = 0;
 let camPitch = 0.4;
-let camDistance = 16;
+let camDistance = 6;
 const CAM_PITCH_MIN = 0.1;
 const CAM_PITCH_MAX = 1.35;
-const CAM_DIST_MIN = 3.5;
-const CAM_DIST_MAX = 90;
+const CAM_DIST_MIN = 1.5;
+const CAM_DIST_MAX = 40;
 let dragging = false;
 let lastPointer = { x: 0, y: 0 };
 
@@ -203,16 +220,16 @@ function makeLabelSprite(text, scale = 0.05) {
 function buildStaticScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xbfe3ff);
-  scene.fog = new THREE.Fog(0xbfe3ff, 60, 450);
+  scene.fog = new THREE.Fog(0xbfe3ff, 20, 180);
 
-  camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1200);
+  camera = new THREE.PerspectiveCamera(55, 1, 0.1, 300);
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8d9a7a, 1.1));
   const sun = new THREE.DirectionalLight(0xffffff, 1.3);
-  sun.position.set(60, 90, 40);
+  sun.position.set(20, 30, 15);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, far: 400 });
+  Object.assign(sun.shadow.camera, { left: -120, right: 120, top: 120, bottom: -120, far: 200 });
   scene.add(sun);
 
   // 동네 전체를 덮는 잔디 바닥 — 건물들이 차지하는 영역(AREA_MIN/MAX)보다 넉넉하게 깐다
@@ -237,21 +254,47 @@ function buildStaticScene() {
   plaza.receiveShadow = true;
   scene.add(plaza);
 
+  buildRoads();
   buildPlaces();
+}
+
+function buildRoadSegment(p1, p2) {
+  const x1 = p1[0] * WORLD_SCALE;
+  const z1 = p1[1] * WORLD_SCALE;
+  const x2 = p2[0] * WORLD_SCALE;
+  const z2 = p2[1] * WORLD_SCALE;
+  const dx = x2 - x1;
+  const dz = z2 - z1;
+  const len = Math.hypot(dx, dz);
+  const geo = new THREE.PlaneGeometry(ROAD_WIDTH * WORLD_SCALE, len);
+  geo.rotateX(-Math.PI / 2); // 바닥에 눕히는 회전을 지오메트리 자체에 구워 둬서, 메시 회전은 방향(Y축)만 다루면 되게 한다
+  const road = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e }));
+  road.rotation.y = Math.atan2(dx, dz);
+  road.position.set((x1 + x2) / 2, 0.005, (z1 + z2) / 2);
+  road.receiveShadow = true;
+  scene.add(road);
+}
+
+function buildRoads() {
+  for (let i = 0; i < ROAD_LOOP.length - 1; i++) {
+    buildRoadSegment(ROAD_LOOP[i], ROAD_LOOP[i + 1]);
+  }
+  ROAD_BRANCHES.forEach(([a, b]) => buildRoadSegment(a, b));
 }
 
 function buildPlaces() {
   PLACES.forEach((place) => {
     const style = TYPE_STYLE[place.type] || TYPE_STYLE["기타"];
-    const height = Math.max(3, (place.floors || 15) * 3);
+    const px = place.x * WORLD_SCALE;
+    const pz = place.z * WORLD_SCALE;
+    const w = style.w * WORLD_SCALE;
+    const d = style.d * WORLD_SCALE;
+    const height = Math.max(0.6, (place.floors || 15) * 3 * WORLD_SCALE);
     const color = NAME_COLOR_OVERRIDE[place.name] ?? style.color;
     const rotY = place.diagonal ? Math.PI / 4 : 0;
 
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(style.w, height, style.d),
-      new THREE.MeshStandardMaterial({ color })
-    );
-    mesh.position.set(place.x, height / 2, place.z);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), new THREE.MeshStandardMaterial({ color }));
+    mesh.position.set(px, height / 2, pz);
     mesh.rotation.y = rotY;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -260,14 +303,10 @@ function buildPlaces() {
     // 아파트 동은 사진 속 흰색/베이지 + 주황 포인트 배색을 얇은 세로 띠로 흉내낸다
     if (place.type === "아파트") {
       const accent = new THREE.Mesh(
-        new THREE.BoxGeometry(style.w * 0.22, height, style.d + 0.3),
+        new THREE.BoxGeometry(w * 0.22, height, d + 0.3 * WORLD_SCALE),
         new THREE.MeshStandardMaterial({ color: place.home ? 0xff6fa0 : style.accent })
       );
-      accent.position.set(
-        place.x + Math.cos(rotY) * style.w * 0.36,
-        height / 2,
-        place.z - Math.sin(rotY) * style.w * 0.36
-      );
+      accent.position.set(px + Math.cos(rotY) * w * 0.36, height / 2, pz - Math.sin(rotY) * w * 0.36);
       accent.rotation.y = rotY;
       accent.castShadow = true;
       scene.add(accent);
@@ -276,30 +315,30 @@ function buildPlaces() {
     // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
     if (place.church) {
       const spire = new THREE.Mesh(
-        new THREE.ConeGeometry(1.6, 4, 4),
+        new THREE.ConeGeometry(1.6 * WORLD_SCALE, 4 * WORLD_SCALE, 4),
         new THREE.MeshStandardMaterial({ color: 0xffffff })
       );
-      spire.position.set(place.x, height + 2, place.z);
+      spire.position.set(px, height + 2 * WORLD_SCALE, pz);
       spire.rotation.y = Math.PI / 4;
       scene.add(spire);
       const crossMat = new THREE.MeshStandardMaterial({ color: 0xb8291f });
-      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.6, 0.25), crossMat);
-      crossV.position.set(place.x, height + 4.6, place.z);
-      const crossH = new THREE.Mesh(new THREE.BoxGeometry(1, 0.25, 0.25), crossMat);
-      crossH.position.set(place.x, height + 4.9, place.z);
+      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.25 * WORLD_SCALE, 1.6 * WORLD_SCALE, 0.25 * WORLD_SCALE), crossMat);
+      crossV.position.set(px, height + 4.6 * WORLD_SCALE, pz);
+      const crossH = new THREE.Mesh(new THREE.BoxGeometry(1 * WORLD_SCALE, 0.25 * WORLD_SCALE, 0.25 * WORLD_SCALE), crossMat);
+      crossH.position.set(px, height + 4.9 * WORLD_SCALE, pz);
       scene.add(crossV, crossH);
     }
 
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
-    label.position.set(place.x, height + 2.4, place.z);
+    label.position.set(px, height + 1.1, pz);
     scene.add(label);
   });
 }
 
 function randomStreetSpot() {
-  const x = rand(AREA_MIN_X + 5, AREA_MAX_X - 5);
-  const z = rand(AREA_MIN_Z + 5, AREA_MAX_Z - 5);
+  const x = rand(AREA_MIN_X + 2, AREA_MAX_X - 2);
+  const z = rand(AREA_MIN_Z + 2, AREA_MAX_Z - 2);
   return [x, z];
 }
 
@@ -521,6 +560,65 @@ function onDanceClick() {
   );
 }
 
+// "엄마 부르기"를 누르면 이로이 옆(바라보는 방향 기준 오른쪽으로 살짝 떨어진 자리)에 엄마를 세운다.
+// 모델은 처음 누를 때만 불러오고(춤 동작과 같은 지연 로딩 방식), 그다음부터는 부를 때마다
+// 이로이 옆자리로 다시 옮겨 세운다.
+function placeMomBesideCharacter() {
+  if (!mom || !character) return;
+  const rotY = character.rotation.y;
+  const rightX = Math.cos(rotY);
+  const rightZ = -Math.sin(rotY);
+  mom.position.set(character.position.x + rightX * 1.3, character.position.y, character.position.z + rightZ * 1.3);
+  mom.rotation.y = rotY;
+  mom.visible = true;
+}
+
+function onMomClick() {
+  if (mom) {
+    placeMomBesideCharacter();
+    const greet = momActions["Big_Wave_Hello"];
+    if (greet) {
+      if (momMixer) momMixer.stopAllAction();
+      greet.reset().setLoop(THREE.LoopOnce, 1);
+      greet.clampWhenFinished = true;
+      greet.play();
+    }
+    return;
+  }
+  if (momLoading) return;
+  momLoading = true;
+  momBtnEl.disabled = true;
+  new GLTFLoader().load(
+    `models/mom.glb?v=${ASSET_VERSION}`,
+    (gltf) => {
+      mom = gltf.scene;
+      mom.traverse((o) => {
+        if (o.isMesh) o.castShadow = true;
+      });
+      scene.add(mom);
+      momMixer = new THREE.AnimationMixer(mom);
+      gltf.animations.forEach((clip) => {
+        momActions[clip.name] = momMixer.clipAction(clip);
+      });
+      placeMomBesideCharacter();
+      const greet = momActions["Big_Wave_Hello"];
+      if (greet) {
+        greet.reset().setLoop(THREE.LoopOnce, 1);
+        greet.clampWhenFinished = true;
+        greet.play();
+      }
+      momLoading = false;
+      momBtnEl.disabled = false;
+    },
+    undefined,
+    (err) => {
+      console.warn("엄마 모델을 못 불러왔다", err);
+      momLoading = false;
+      momBtnEl.disabled = false;
+    }
+  );
+}
+
 // 방향키는 "월드 기준 앞/뒤/좌/우"가 아니라, 지금 마우스로 돌려 둔 카메라가 보는 방향을 기준으로
 // 움직인다 — 카메라를 오른쪽으로 돌렸으면 위쪽 키가 그 돌린 방향으로 가도록, camYaw를 매 프레임
 // 그대로 반영한다.
@@ -554,13 +652,45 @@ function updateMovement(dt) {
   }
 }
 
+// 모바일에서 손가락 두 개로 벌리고 좁혀서 확대/축소할 수 있게, 지금 눌려 있는 포인터들을
+// pointerId별로 기록해 둔다. 손가락이 하나면 기존처럼 드래그 회전, 두 개가 되면 그 사이 거리
+// 변화로 줌을 하고(핀치), 한 손가락 드래그 회전은 그동안 멈춘다.
+const activePointers = new Map();
+let pinchStartDist = 0;
+let pinchStartCamDistance = 0;
+
+function pinchDistance() {
+  const pts = [...activePointers.values()];
+  return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+}
+
 function wireOrbitControls() {
   canvasEl.addEventListener("pointerdown", (ev) => {
-    dragging = true;
-    lastPointer = { x: ev.clientX, y: ev.clientY };
-    canvasEl.setPointerCapture(ev.pointerId);
+    activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    // setPointerCapture가 실패해도(일부 환경에서 예외를 던질 수 있다) 핀치 줌 상태 기록은 반드시 되어야 한다
+    try {
+      canvasEl.setPointerCapture(ev.pointerId);
+    } catch (err) {
+      /* 캡처 실패는 무시 — 드래그/핀치 자체는 아래 로직으로 계속 동작한다 */
+    }
+    if (activePointers.size === 2) {
+      dragging = false;
+      pinchStartDist = pinchDistance();
+      pinchStartCamDistance = camDistance;
+    } else if (activePointers.size === 1) {
+      dragging = true;
+      lastPointer = { x: ev.clientX, y: ev.clientY };
+    }
   });
   canvasEl.addEventListener("pointermove", (ev) => {
+    if (!activePointers.has(ev.pointerId)) return;
+    activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (activePointers.size === 2) {
+      const dist = pinchDistance();
+      const ratio = pinchStartDist > 0 ? pinchStartDist / dist : 1;
+      camDistance = Math.min(CAM_DIST_MAX, Math.max(CAM_DIST_MIN, pinchStartCamDistance * ratio));
+      return;
+    }
     if (!dragging) return;
     const dx = ev.clientX - lastPointer.x;
     const dy = ev.clientY - lastPointer.y;
@@ -568,8 +698,15 @@ function wireOrbitControls() {
     camYaw -= dx * 0.006;
     camPitch = Math.min(CAM_PITCH_MAX, Math.max(CAM_PITCH_MIN, camPitch + dy * 0.006));
   });
-  const stopDrag = () => {
-    dragging = false;
+  const stopDrag = (ev) => {
+    activePointers.delete(ev.pointerId);
+    if (activePointers.size === 1) {
+      const [remaining] = activePointers.values();
+      dragging = true;
+      lastPointer = { x: remaining.x, y: remaining.y };
+    } else {
+      dragging = false;
+    }
   };
   canvasEl.addEventListener("pointerup", stopDrag);
   canvasEl.addEventListener("pointercancel", stopDrag);
@@ -610,6 +747,7 @@ function animate() {
   updateMovement(dt);
   updatePickups(dt);
   if (mixer) mixer.update(dt);
+  if (momMixer) momMixer.update(dt);
   updateCamera();
   renderer.render(scene, camera);
 }
@@ -630,6 +768,7 @@ async function initNeighborhood3D() {
   danceBtnEl = document.getElementById("neighborhood3d-dance-btn");
   walkBtnEl = document.getElementById("neighborhood3d-walk-btn");
   runBtnEl = document.getElementById("neighborhood3d-run-btn");
+  momBtnEl = document.getElementById("neighborhood3d-mom-btn");
   hudEl = document.getElementById("neighborhood3d-hud");
   toastEl = document.getElementById("neighborhood3d-toast");
   resetBtnEl = document.getElementById("neighborhood3d-reset-btn");
@@ -646,21 +785,22 @@ async function initNeighborhood3D() {
     clock = new THREE.Clock();
     buildStaticScene();
     await loadCharacter();
-    character.position.set(0, 0, 10); // 우리집(0,0) 바로 앞 — 건물 안에 스폰되지 않게 앞마당만큼 띄운다
+    character.position.set(0, 0, 2.5); // 우리집(0,0) 바로 앞 — 건물 안에 스폰되지 않게 앞마당만큼 띄운다
     playAction("Idle_02");
     wireOrbitControls();
     wireDpad();
     // 버튼이 클릭 뒤에도 포커스를 들고 있으면, 스페이스바(점프)를 눌렀을 때 그 버튼이
     // 다시 눌리는 것으로 처리돼 버린다 — 눌린 직후 바로 포커스를 뺀다
-    [danceBtnEl, walkBtnEl, runBtnEl, resetBtnEl].forEach((btn) => {
+    [danceBtnEl, walkBtnEl, runBtnEl, momBtnEl, resetBtnEl].forEach((btn) => {
       btn?.addEventListener("click", () => btn.blur());
     });
     danceBtnEl?.addEventListener("click", onDanceClick);
     walkBtnEl?.addEventListener("click", () => setMoveMode("walk"));
     runBtnEl?.addEventListener("click", () => setMoveMode("run"));
+    momBtnEl?.addEventListener("click", onMomClick);
     resetBtnEl?.addEventListener("click", startAdventure);
     startAdventure();
-    [danceBtnEl, walkBtnEl, runBtnEl, hudEl, dpadEl].forEach((el) => {
+    [danceBtnEl, walkBtnEl, runBtnEl, momBtnEl, hudEl, dpadEl].forEach((el) => {
       if (el) el.hidden = false;
     });
     if (loadingEl) loadingEl.hidden = true;
