@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115s";
+const ASSET_VERSION = "20261115u";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -60,19 +60,19 @@ const MOM_DANCE_POOL = [
 // 정밀한 실측은 아니고, 건물 간 상대적인 배치만 실제 동네와 비슷하게 맞췄다.
 // 0번(우리집)은 층수·유형 정보가 비어 있어서 주변 금호파크힐스 동과 같은 15층 아파트로 가정했다.
 const PLACES = [
-  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true },
-  { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -410, z: 94 },
-  { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -322, z: 46 },
+  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true, model: "models/place_113.glb" },
+  { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -410, z: 94, model: "models/place_106.glb" },
+  { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -322, z: 46, model: "models/place_106.glb" },
   { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -261, z: -16 },
-  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -200, z: -69 },
+  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -200, z: -69, model: "models/place_106.glb" },
   { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -136, z: -133 },
-  { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -66, z: -77 },
-  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -141, z: -8 },
-  { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -208, z: 59 },
+  { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -66, z: -77, model: "models/place_106.glb" },
+  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -141, z: -8, model: "models/place_106.glb" },
+  { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -208, z: 59, model: "models/place_106.glb" },
   { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -325, z: 150 },
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -261, z: 136 },
   { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -170, z: 144 },
-  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75 },
+  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75, model: "models/place_113.glb" },
   { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 0, z: -93 },
   { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -29, z: -149 },
   { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -50, z: 134 },
@@ -118,12 +118,15 @@ const WORLD_SCALE = 0.15;
 // 직접 칠해 준 버전) 기준. 이 지도는 번호 지도(kakaomap_number.png)와 완전히 같은 사진이라, 건물
 // 좌표를 구할 때 썼던 것과 같은 축척·기준점으로 도로 모양을 그대로 옮길 수 있었다 — 빨간색 영역을
 // 이미지 처리(색상 추출→스켈레톤화→그래프 추출)로 따서 중심선과 각 구간의 실제 두께를 함께 구했고,
-// 두께 분포(3~5m / 13m 안팎 / 19m 이상)를 그대로 골목·보통길·큰길 3단계 폭으로 옮겼다.
-const ROAD_WIDE = 10; // 난계로 등 두껍게 칠해진 큰길
+// 두께 분포(3~5m / 13m 안팎 / 19~29m / 30m 이상)를 그대로 골목·보통길·큰길·난계로급 4단계 폭으로
+// 옮겼다. 난계로와 거기 교차하는 큰길(가장 두껍게 칠해진 구간)은 ROAD_MAJOR로 따로 빼서 더 넓게,
+// 차선도 2줄이 아니라 3줄로 그린다.
+const ROAD_MAJOR = 16; // 난계로·사거리 교차로 등 가장 두껍게 칠해진 간선도로
+const ROAD_WIDE = 10; // 그다음으로 두꺼운 큰길
 const ROAD_MEDIUM = 6; // 단지 안 보통 도로
 const ROAD_NARROW = 3.5; // 가늘게 칠해진 좁은 길(차선 없음)
 const ROAD_SEGMENTS = [
-  { a: [646.4, -430.4], b: [566.4, -379.2], width: ROAD_WIDE },
+  { a: [646.4, -430.4], b: [566.4, -379.2], width: ROAD_MAJOR },
   { a: [-52.8, -428.8], b: [-67.2, -348.8], width: ROAD_MEDIUM },
   { a: [-49.6, -428.8], b: [-30.4, -420.8], width: ROAD_MEDIUM },
   { a: [-30.4, -420.8], b: [6.4, -380.8], width: ROAD_MEDIUM },
@@ -132,16 +135,16 @@ const ROAD_SEGMENTS = [
   { a: [160.0, -297.6], b: [152.0, -316.8], width: ROAD_MEDIUM },
   { a: [152.0, -316.8], b: [147.2, -363.2], width: ROAD_MEDIUM },
   { a: [147.2, -363.2], b: [156.8, -424.0], width: ROAD_MEDIUM },
-  { a: [72.0, -424.0], b: [72.0, -377.6], width: ROAD_WIDE },
+  { a: [72.0, -424.0], b: [72.0, -377.6], width: ROAD_MAJOR },
   { a: [523.2, -424.0], b: [553.6, -379.2], width: ROAD_MEDIUM },
   { a: [8.0, -380.8], b: [70.4, -377.6], width: ROAD_MEDIUM },
   { a: [6.4, -379.2], b: [6.4, -323.2], width: ROAD_MEDIUM },
   { a: [6.4, -323.2], b: [-17.6, -289.6], width: ROAD_MEDIUM },
   { a: [-17.6, -289.6], b: [-22.4, -251.2], width: ROAD_MEDIUM },
-  { a: [555.2, -379.2], b: [566.4, -379.2], width: ROAD_WIDE },
+  { a: [555.2, -379.2], b: [566.4, -379.2], width: ROAD_MAJOR },
   { a: [566.4, -379.2], b: [635.2, -272.0], width: ROAD_MEDIUM },
-  { a: [553.6, -377.6], b: [326.4, -238.4], width: ROAD_WIDE },
-  { a: [72.0, -376.0], b: [70.4, -251.2], width: ROAD_WIDE },
+  { a: [553.6, -377.6], b: [326.4, -238.4], width: ROAD_MAJOR },
+  { a: [72.0, -376.0], b: [70.4, -251.2], width: ROAD_MAJOR },
   { a: [-68.8, -348.8], b: [-76.8, -347.2], width: ROAD_NARROW },
   { a: [-76.8, -347.2], b: [-70.4, -342.4], width: ROAD_NARROW },
   { a: [-68.8, -340.8], b: [-70.4, -238.4], width: ROAD_MEDIUM },
@@ -153,18 +156,18 @@ const ROAD_SEGMENTS = [
   { a: [635.2, -272.0], b: [400.0, -120.0], width: ROAD_MEDIUM },
   { a: [68.8, -251.2], b: [-20.8, -249.6], width: ROAD_MEDIUM },
   { a: [-22.4, -249.6], b: [-70.4, -238.4], width: ROAD_MEDIUM },
-  { a: [70.4, -249.6], b: [70.4, -203.2], width: ROAD_WIDE },
+  { a: [70.4, -249.6], b: [70.4, -203.2], width: ROAD_MAJOR },
   { a: [-216.0, -248.0], b: [-257.6, -224.0], width: ROAD_MEDIUM },
   { a: [-214.4, -248.0], b: [-180.8, -187.2], width: ROAD_MEDIUM },
   { a: [-70.4, -238.4], b: [-65.6, -190.4], width: ROAD_MEDIUM },
-  { a: [324.8, -236.8], b: [163.2, -184.0], width: ROAD_WIDE },
+  { a: [324.8, -236.8], b: [163.2, -184.0], width: ROAD_MAJOR },
   { a: [326.4, -236.8], b: [398.4, -120.0], width: ROAD_MEDIUM },
   { a: [657.6, -219.2], b: [475.2, -112.0], width: ROAD_MEDIUM },
   { a: [659.2, -219.2], b: [721.6, -108.8], width: ROAD_MEDIUM },
-  { a: [68.8, -196.8], b: [-64.0, -188.8], width: ROAD_WIDE },
-  { a: [70.4, -196.8], b: [76.8, -180.8], width: ROAD_WIDE },
-  { a: [-81.6, -188.8], b: [-179.2, -185.6], width: ROAD_WIDE },
-  { a: [-78.4, -188.8], b: [-67.2, -188.8], width: ROAD_WIDE },
+  { a: [68.8, -196.8], b: [-64.0, -188.8], width: ROAD_MAJOR },
+  { a: [70.4, -196.8], b: [76.8, -180.8], width: ROAD_MAJOR },
+  { a: [-81.6, -188.8], b: [-179.2, -185.6], width: ROAD_MAJOR },
+  { a: [-78.4, -188.8], b: [-67.2, -188.8], width: ROAD_MAJOR },
   { a: [-80.0, -187.2], b: [-78.4, -145.6], width: ROAD_MEDIUM },
   { a: [-78.4, -145.6], b: [-40.0, -108.8], width: ROAD_MEDIUM },
   { a: [-40.0, -108.8], b: [-25.6, -52.8], width: ROAD_MEDIUM },
@@ -175,19 +178,19 @@ const ROAD_SEGMENTS = [
   { a: [-155.2, 100.8], b: [-340.8, 102.4], width: ROAD_MEDIUM },
   { a: [-340.8, 102.4], b: [-369.6, 120.0], width: ROAD_MEDIUM },
   { a: [-369.6, 120.0], b: [-414.4, 166.4], width: ROAD_MEDIUM },
-  { a: [-180.8, -185.6], b: [-241.6, -171.2], width: ROAD_WIDE },
-  { a: [-241.6, -171.2], b: [-284.8, -145.6], width: ROAD_WIDE },
-  { a: [-284.8, -145.6], b: [-304.0, -115.2], width: ROAD_WIDE },
-  { a: [-304.0, -115.2], b: [-315.2, -48.0], width: ROAD_WIDE },
-  { a: [-315.2, -48.0], b: [-329.6, -27.2], width: ROAD_WIDE },
-  { a: [-329.6, -27.2], b: [-382.4, -11.2], width: ROAD_WIDE },
-  { a: [-382.4, -11.2], b: [-512.0, -9.6], width: ROAD_WIDE },
-  { a: [161.6, -184.0], b: [126.4, -177.6], width: ROAD_WIDE },
+  { a: [-180.8, -185.6], b: [-241.6, -171.2], width: ROAD_MAJOR },
+  { a: [-241.6, -171.2], b: [-284.8, -145.6], width: ROAD_MAJOR },
+  { a: [-284.8, -145.6], b: [-304.0, -115.2], width: ROAD_MAJOR },
+  { a: [-304.0, -115.2], b: [-315.2, -48.0], width: ROAD_MAJOR },
+  { a: [-315.2, -48.0], b: [-329.6, -27.2], width: ROAD_MAJOR },
+  { a: [-329.6, -27.2], b: [-382.4, -11.2], width: ROAD_MAJOR },
+  { a: [-382.4, -11.2], b: [-512.0, -9.6], width: ROAD_MAJOR },
+  { a: [161.6, -184.0], b: [126.4, -177.6], width: ROAD_MAJOR },
   { a: [163.2, -182.4], b: [196.8, -105.6], width: ROAD_MEDIUM },
   { a: [196.8, -105.6], b: [222.4, -76.8], width: ROAD_MEDIUM },
   { a: [222.4, -76.8], b: [416.0, 16.0], width: ROAD_MEDIUM },
-  { a: [78.4, -179.2], b: [124.8, -177.6], width: ROAD_WIDE },
-  { a: [76.8, -177.6], b: [72.0, -108.8], width: ROAD_WIDE },
+  { a: [78.4, -179.2], b: [124.8, -177.6], width: ROAD_MAJOR },
+  { a: [76.8, -177.6], b: [72.0, -108.8], width: ROAD_MAJOR },
   { a: [126.4, -176.0], b: [140.8, -81.6], width: ROAD_MEDIUM },
   { a: [396.8, -118.4], b: [368.0, -100.8], width: ROAD_MEDIUM },
   { a: [400.0, -118.4], b: [430.4, -78.4], width: ROAD_MEDIUM },
@@ -195,7 +198,7 @@ const ROAD_SEGMENTS = [
   { a: [515.2, -56.0], b: [564.8, -56.0], width: ROAD_MEDIUM },
   { a: [564.8, -56.0], b: [721.6, -107.2], width: ROAD_MEDIUM },
   { a: [740.8, -110.4], b: [723.2, -107.2], width: ROAD_MEDIUM },
-  { a: [70.4, -107.2], b: [62.4, -51.2], width: ROAD_WIDE },
+  { a: [70.4, -107.2], b: [62.4, -51.2], width: ROAD_MAJOR },
   { a: [72.0, -107.2], b: [96.0, -92.8], width: ROAD_MEDIUM },
   { a: [96.0, -92.8], b: [97.6, 22.4], width: ROAD_MEDIUM },
   { a: [97.6, 22.4], b: [121.6, 73.6], width: ROAD_MEDIUM },
@@ -211,7 +214,7 @@ const ROAD_SEGMENTS = [
   { a: [740.8, -68.8], b: [684.8, -73.6], width: ROAD_MEDIUM },
   { a: [684.8, -73.6], b: [416.0, 16.0], width: ROAD_MEDIUM },
   { a: [60.8, -51.2], b: [33.6, -49.6], width: ROAD_MEDIUM },
-  { a: [62.4, -49.6], b: [54.4, 65.6], width: ROAD_WIDE },
+  { a: [62.4, -49.6], b: [54.4, 65.6], width: ROAD_MAJOR },
   { a: [416.0, 16.0], b: [441.6, 145.6], width: ROAD_MEDIUM },
   { a: [441.6, 145.6], b: [510.4, 208.0], width: ROAD_MEDIUM },
   { a: [510.4, 208.0], b: [553.6, 300.8], width: ROAD_MEDIUM },
@@ -220,22 +223,22 @@ const ROAD_SEGMENTS = [
   { a: [41.6, 96.0], b: [51.2, 105.6], width: ROAD_WIDE },
   { a: [56.0, 67.2], b: [62.4, 96.0], width: ROAD_WIDE },
   { a: [62.4, 96.0], b: [54.4, 104.0], width: ROAD_WIDE },
-  { a: [-512.0, 86.4], b: [-427.2, 168.0], width: ROAD_WIDE },
+  { a: [-512.0, 86.4], b: [-427.2, 168.0], width: ROAD_MAJOR },
   { a: [51.2, 105.6], b: [36.8, 121.6], width: ROAD_WIDE },
   { a: [36.8, 121.6], b: [52.8, 147.2], width: ROAD_WIDE },
-  { a: [54.4, 107.2], b: [54.4, 147.2], width: ROAD_WIDE },
+  { a: [54.4, 107.2], b: [54.4, 147.2], width: ROAD_MAJOR },
   { a: [140.8, 129.6], b: [300.8, 198.4], width: ROAD_MEDIUM },
   { a: [300.8, 198.4], b: [371.2, 180.8], width: ROAD_MEDIUM },
   { a: [137.6, 131.2], b: [132.8, 214.4], width: ROAD_MEDIUM },
   { a: [132.8, 214.4], b: [168.0, 244.8], width: ROAD_MEDIUM },
-  { a: [54.4, 148.8], b: [68.8, 203.2], width: ROAD_WIDE },
-  { a: [68.8, 203.2], b: [97.6, 248.0], width: ROAD_WIDE },
-  { a: [-427.2, 168.0], b: [-416.0, 168.0], width: ROAD_WIDE },
+  { a: [54.4, 148.8], b: [68.8, 203.2], width: ROAD_MAJOR },
+  { a: [68.8, 203.2], b: [97.6, 248.0], width: ROAD_MAJOR },
+  { a: [-427.2, 168.0], b: [-416.0, 168.0], width: ROAD_MAJOR },
   { a: [-427.2, 168.0], b: [-508.8, 235.2], width: ROAD_MEDIUM },
-  { a: [-414.4, 169.6], b: [-358.4, 198.4], width: ROAD_WIDE },
-  { a: [-358.4, 198.4], b: [-152.0, 259.2], width: ROAD_WIDE },
-  { a: [-152.0, 259.2], b: [-78.4, 291.2], width: ROAD_WIDE },
-  { a: [-78.4, 291.2], b: [-64.0, 307.2], width: ROAD_WIDE },
+  { a: [-414.4, 169.6], b: [-358.4, 198.4], width: ROAD_MAJOR },
+  { a: [-358.4, 198.4], b: [-152.0, 259.2], width: ROAD_MAJOR },
+  { a: [-152.0, 259.2], b: [-78.4, 291.2], width: ROAD_MAJOR },
+  { a: [-78.4, 291.2], b: [-64.0, 307.2], width: ROAD_MAJOR },
   { a: [372.8, 180.8], b: [384.0, 284.8], width: ROAD_MEDIUM },
   { a: [108.8, 232.0], b: [99.2, 248.0], width: ROAD_WIDE },
   { a: [-510.4, 236.8], b: [-510.4, 243.2], width: ROAD_WIDE },
@@ -245,13 +248,13 @@ const ROAD_SEGMENTS = [
   { a: [190.4, 305.6], b: [179.2, 312.0], width: ROAD_MEDIUM },
   { a: [-512.0, 246.4], b: [-512.0, 300.8], width: ROAD_MEDIUM },
   { a: [169.6, 246.4], b: [177.6, 312.0], width: ROAD_MEDIUM },
-  { a: [99.2, 249.6], b: [105.6, 281.6], width: ROAD_WIDE },
+  { a: [99.2, 249.6], b: [105.6, 281.6], width: ROAD_MAJOR },
   { a: [107.2, 283.2], b: [121.6, 289.6], width: ROAD_WIDE },
-  { a: [105.6, 284.8], b: [108.8, 300.8], width: ROAD_WIDE },
+  { a: [105.6, 284.8], b: [108.8, 300.8], width: ROAD_MAJOR },
   { a: [382.4, 286.4], b: [369.6, 300.8], width: ROAD_MEDIUM },
   { a: [384.0, 286.4], b: [388.8, 300.8], width: ROAD_MEDIUM },
   { a: [124.8, 292.8], b: [131.2, 300.8], width: ROAD_MEDIUM },
-  { a: [-62.4, 308.8], b: [-43.2, 312.0], width: ROAD_WIDE },
+  { a: [-62.4, 308.8], b: [-43.2, 312.0], width: ROAD_MAJOR },
 ];
 
 const AREA_MARGIN = 8;
@@ -464,8 +467,9 @@ function buildRoadSegment({ a, b, width }) {
   road.receiveShadow = true;
   scene.add(road);
 
-  // 골목(ROAD_NARROW)은 차선이 없고, 보통길은 중앙에 점선 차선 1줄, 난계로·사거리의 큰길은
-  // 왕복 차로가 넓은 큰 도로라는 걸 보여주려고 차선을 2줄(중앙 기준 양쪽으로) 그려 넣는다
+  // 골목(ROAD_NARROW)은 차선이 없고, 보통길은 중앙에 점선 차선 1줄, 큰길은 2줄, 난계로·사거리의
+  // 간선도로(ROAD_MAJOR, 가장 두껍게 칠해져 있던 구간)는 왕복 차로가 가장 넓은 도로라는 걸 보여주려고
+  // 차선을 3줄(중앙 + 양쪽)로 그려 넣는다
   if (width === ROAD_NARROW) return;
   const dashLen = 3 * WORLD_SCALE;
   const gapLen = 3 * WORLD_SCALE;
@@ -474,7 +478,9 @@ function buildRoadSegment({ a, b, width }) {
   const uz = dz / len;
   const perpX = -uz;
   const perpZ = ux;
-  const lineOffsets = width === ROAD_WIDE ? [-roadW * 0.15, roadW * 0.15] : [0];
+  let lineOffsets = [0];
+  if (width === ROAD_WIDE) lineOffsets = [-roadW * 0.15, roadW * 0.15];
+  else if (width === ROAD_MAJOR) lineOffsets = [-roadW * 0.22, 0, roadW * 0.22];
   lineOffsets.forEach((offset) => {
     for (let d = step / 2; d < len; d += step) {
       dashTransforms.push({
@@ -512,7 +518,7 @@ function buildJunctionFillers() {
     endpoints.push({ x: seg.a[0], z: seg.a[1], width: seg.width });
     endpoints.push({ x: seg.b[0], z: seg.b[1], width: seg.width });
   });
-  const THRESH = 6; // raw 단위(이미지 추출 과정에서 생기는 약간의 좌표 오차를 흡수)
+  const THRESH = 14; // raw 단위(이미지 추출 과정에서 생기는 좌표 오차를 흡수 — 전보다 넉넉하게)
   const used = new Array(endpoints.length).fill(false);
   for (let i = 0; i < endpoints.length; i++) {
     if (used[i]) continue;
@@ -526,13 +532,16 @@ function buildJunctionFillers() {
       }
     }
     if (group.length < 2) continue; // 혼자인 끝점(막다른 길)은 메울 필요 없다
-    const cx = (group.reduce((s, p) => s + p.x, 0) / group.length) * WORLD_SCALE;
-    const cz = (group.reduce((s, p) => s + p.z, 0) / group.length) * WORLD_SCALE;
+    const rawCx = group.reduce((s, p) => s + p.x, 0) / group.length;
+    const rawCz = group.reduce((s, p) => s + p.z, 0) / group.length;
     const maxWidth = Math.max(...group.map((p) => p.width));
-    const geo = new THREE.CircleGeometry((maxWidth / 2) * WORLD_SCALE, 16);
+    // 묶인 끝점들이 중심에서 떨어진 거리까지 넉넉히 덮도록(각도가 예리한 모서리에서도 안 뚫리게)
+    const maxSpread = Math.max(...group.map((p) => Math.hypot(p.x - rawCx, p.z - rawCz)));
+    const radius = (Math.max(maxWidth / 2, maxSpread) + maxWidth * 0.25) * WORLD_SCALE;
+    const geo = new THREE.CircleGeometry(radius, 20);
     geo.rotateX(-Math.PI / 2);
     const filler = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e }));
-    filler.position.set(cx, 0.006, cz);
+    filler.position.set(rawCx * WORLD_SCALE, 0.006, rawCz * WORLD_SCALE);
     filler.receiveShadow = true;
     scene.add(filler);
   }
@@ -588,6 +597,32 @@ function buildApartmentCluster(place, px, pz, floors) {
   return topHeight;
 }
 
+// 실제 제작된 건물 3D 모델(113동·106동)을 불러와서 자리에 앉힌다. 모델 자체의 단위가 PLACES 좌표와
+// 같은 "실측 미터" 기준이라 WORLD_SCALE을 그대로 곱해서 쓰고, 모델이 세로 중심을 기준으로 만들어져
+// 있어서(바닥이 y=0이 아님) 불러온 뒤 바운딩박스를 재서 바닥이 지면에 닿도록 높이를 보정한다.
+function loadPlaceModel(place, px, pz) {
+  new GLTFLoader().load(
+    `${place.model}?v=${ASSET_VERSION}`,
+    (gltf) => {
+      const model = gltf.scene;
+      model.scale.setScalar(WORLD_SCALE);
+      model.position.set(px, 0, pz);
+      model.traverse((o) => {
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+        }
+      });
+      model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model);
+      model.position.y -= box.min.y;
+      scene.add(model);
+    },
+    undefined,
+    (err) => console.warn(`${place.name} 모델을 못 불러왔다`, err)
+  );
+}
+
 function buildPlaces() {
   PLACES.forEach((place) => {
     const style = TYPE_STYLE[place.type] || TYPE_STYLE["기타"];
@@ -600,7 +635,10 @@ function buildPlaces() {
     const color = NAME_COLOR_OVERRIDE[place.name] ?? style.color;
     const rotY = place.diagonal ? Math.PI / 4 : 0;
 
-    if (place.type === "아파트") {
+    if (place.model) {
+      // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동)은 그 모델을 그대로 불러와 쓴다
+      loadPlaceModel(place, px, pz);
+    } else if (place.type === "아파트") {
       height = buildApartmentCluster(place, px, pz, floors);
     } else {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), new THREE.MeshStandardMaterial({ color }));
