@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115x";
+const ASSET_VERSION = "20261116a";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -60,22 +60,22 @@ const MOM_DANCE_POOL = [
 // 정밀한 실측은 아니고, 건물 간 상대적인 배치만 실제 동네와 비슷하게 맞췄다.
 // 0번(우리집)은 층수·유형 정보가 비어 있어서 주변 금호파크힐스 동과 같은 15층 아파트로 가정했다.
 const PLACES = [
-  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true, model: "models/place_113.glb" },
-  { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -410, z: 94, model: "models/place_106.glb" },
-  { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -322, z: 46, model: "models/place_106.glb" },
-  { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -261, z: -16, model: "models/place_106.glb" },
-  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -200, z: -69, model: "models/place_106.glb" },
-  { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -136, z: -133 },
-  { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -66, z: -77, model: "models/place_106.glb" },
-  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -141, z: -8, model: "models/place_113.glb" },
-  { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -208, z: 59, model: "models/place_106.glb" },
-  { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -325, z: 150 },
-  { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -261, z: 136 },
-  { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -170, z: 144 },
-  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75, model: "models/place_113.glb" },
-  { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 0, z: -93 },
-  { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -29, z: -149 },
-  { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -50, z: 134 },
+  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true, model: "models/3D_place_113.glb" },
+  { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -410, z: 94, model: "models/3D_place_101.glb" },
+  { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -322, z: 46, model: "models/3D_place_102.glb" },
+  { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -261, z: -16, model: "models/3D_place_103.glb" },
+  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -200, z: -69, model: "models/3D_place_104.glb" },
+  { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -136, z: -133, model: "models/3D_place_105.glb" },
+  { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -66, z: -77, model: "models/3D_place_106.glb" },
+  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -141, z: -8, model: "models/3D_place_107.glb" },
+  { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -208, z: 59, model: "models/3D_place_108.glb" },
+  { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -325, z: 150, model: "models/3D_place_109.glb" },
+  { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -261, z: 136, model: "models/3D_place_110.glb" },
+  { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -170, z: 144, model: "models/3D_place_111.glb" },
+  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75, model: "models/3D_place_112.glb" },
+  { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 0, z: -93, model: "models/3D_place_114.glb" },
+  { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -29, z: -149, model: "models/3D_place_115.glb" },
+  { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -50, z: 134, model: "models/3D_place_116.glb" },
   { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 27, z: -160, diagonal: true },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -261, z: -114, church: true },
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -74, z: 203 },
@@ -574,10 +574,9 @@ function buildRoads() {
   buildJunctionFillers();
 }
 
-// 아파트 동은 실제 금호파크힐스 3D 모델링 사진(113동·106동) 두 장을 보고 만든 두 가지 매싱
-// 템플릿을 동 번호 짝/홀수로 번갈아 적용한다 — 타워 여러 개를 높이를 다르게 붙이고 저층부는
-// 어둡게, 상층부는 주황/베이지 투톤으로 나눠서 사진 속 느낌을 흉내낸다.
-// 우리집(0번=실제 113동)은 그 사진 그대로의 매싱(템플릿 A)을 쓰되, 눈에 띄게 분홍으로 칠한다.
+// 금호파크힐스 동들은 대부분 실제 3D 모델(loadPlaceModel)을 쓰지만, 모델이 없는 동(예: 117동)은
+// 이 스타일화 매싱으로 대신한다 — 동 번호 짝/홀수로 두 템플릿을 번갈아 적용해 타워 여러 개를
+// 높이 다르게 붙이고 저층부는 어둡게, 상층부는 주황/베이지 투톤으로 나눠서 단지 느낌을 흉내낸다.
 function addTowerBox(px, pz, offX, offZ, w, d, h, color) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }));
   mesh.position.set(px + offX, h / 2, pz + offZ);
@@ -617,9 +616,9 @@ function buildApartmentCluster(place, px, pz, floors) {
   return topHeight;
 }
 
-// 실제 제작된 건물 3D 모델(113동·106동)을 불러와서 자리에 앉힌다. 모델 자체의 단위가 PLACES 좌표와
-// 같은 "실측 미터" 기준이라 WORLD_SCALE을 그대로 곱해서 쓰고, 모델이 세로 중심을 기준으로 만들어져
-// 있어서(바닥이 y=0이 아님) 불러온 뒤 바운딩박스를 재서 바닥이 지면에 닿도록 높이를 보정한다.
+// 동마다 실제로 제작된 3D 모델(3D_place_101.glb ~ 116.glb 등)을 불러와서 자리에 앉힌다. 모델 자체의
+// 단위가 PLACES 좌표와 같은 "실측 미터" 기준이라 WORLD_SCALE을 그대로 곱해서 쓰고, 모델이 세로 중심을
+// 기준으로 만들어져 있어서(바닥이 y=0이 아님) 불러온 뒤 바운딩박스를 재서 바닥이 지면에 닿도록 보정한다.
 function loadPlaceModel(place, px, pz) {
   new GLTFLoader().load(
     `${place.model}?v=${ASSET_VERSION}`,

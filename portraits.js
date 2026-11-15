@@ -294,10 +294,18 @@ const CHARACTER_REPO = "doheecho/Roymaker";
 const customPortraitCache = {};
 let characterListing = null; // Map(이름 → 파일명) | false(목록을 못 받음)
 let characterListingPromise = null;
+let characterListingFetchedAt = 0;
 
-// GitHub에서 폴더 목록을 한 번 받아 온다 (실패하면 파일을 하나씩 찾아본다)
+// GitHub에서 폴더 목록을 받아 온다 (실패하면 파일을 하나씩 찾아본다). 10분 지나면 다시 받아 오는데,
+// 예전엔 탭 하나에서 딱 한 번만 받아 오고 다신 안 받아 와서 — 막 올려 둔 파일이 목록에 없던 바로 그
+// 순간에 캐릭터 그림을 찾으면 그 탭이 켜져 있는 내내(새로고침해도 sessionStorage가 남아 있어서) 계속
+// 못 찾는 문제가 있었다.
 function loadCharacterListing() {
-  characterListingPromise ??= (async () => {
+  if (characterListingPromise && Date.now() - characterListingFetchedAt < LISTING_CACHE_MS) {
+    return characterListingPromise;
+  }
+  characterListingFetchedAt = Date.now();
+  characterListingPromise = (async () => {
     // 10분 안에 받아 둔 목록이 있으면 다시 묻지 않는다 (GitHub API 요청 제한 대비)
     try {
       const cached = JSON.parse(sessionStorage.getItem(LISTING_CACHE_KEY) ?? "null");
@@ -378,7 +386,10 @@ async function resolveCustomPortrait(id) {
   if (characterListing) {
     const hit = names.map((n) => characterListing.get(n)).find(Boolean);
     if (hit) url = CHARACTER_DIR + encodeURIComponent(hit);
-  } else {
+  }
+  // 목록에 없더라도(막 올라온 파일이라 목록이 아직 그걸 못 받아 왔을 수 있다) 정확한 파일명으로 한 번 더 찔러 본다 —
+  // 목록은 탭 하나에서 딱 한 번만 받아 오고 다시 안 받아 오기 때문에, 이 보험이 없으면 세션 내내 계속 실패한다.
+  if (!url) {
     outer: for (const n of names) {
       for (const form of [...new Set([n, n.normalize("NFD")])]) {
         for (const ext of CHARACTER_EXTS) {
@@ -391,6 +402,7 @@ async function resolveCustomPortrait(id) {
       }
     }
   }
-  customPortraitCache[id] = url;
+  // 실패는 캐시해 두지 않는다 — 막 올라온 파일이면 다음 시도에서 찾을 수 있어야 한다
+  if (url) customPortraitCache[id] = url;
   return url;
 }
