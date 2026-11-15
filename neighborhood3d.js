@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261116e";
+const ASSET_VERSION = "20261116f";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -60,7 +60,7 @@ const MOM_DANCE_POOL = [
 // 정밀한 실측은 아니고, 건물 간 상대적인 배치만 실제 동네와 비슷하게 맞췄다.
 // 0번(우리집)은 층수·유형 정보가 비어 있어서 주변 금호파크힐스 동과 같은 15층 아파트로 가정했다.
 const PLACES = [
-  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true, model: "models/3D_place_113.glb", rotationDeg: 60 },
+  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true, model: "models/3D_place_113.glb", rotationDeg: 270 },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -410, z: 94, model: "models/3D_place_101.glb", rotationDeg: 90 },
   { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -322, z: 46, model: "models/3D_place_102.glb", rotationDeg: 90 },
   { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -261, z: -16, model: "models/3D_place_103.glb", rotationDeg: 90 },
@@ -72,7 +72,7 @@ const PLACES = [
   { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -325, z: 150, model: "models/3D_place_109.glb", rotationDeg: 180 },
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -261, z: 136, model: "models/3D_place_110.glb", rotationDeg: 180 },
   { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -170, z: 144, model: "models/3D_place_111.glb", rotationDeg: 180 },
-  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75, model: "models/3D_place_112.glb", rotationDeg: 90 },
+  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75, model: "models/3D_place_112.glb", rotationDeg: 180 },
   { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 0, z: -93, model: "models/3D_place_114.glb", rotationDeg: 0 },
   { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -29, z: -149, model: "models/3D_place_115.glb", rotationDeg: 180 },
   { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -50, z: 134, model: "models/3D_place_116.glb", rotationDeg: 270 },
