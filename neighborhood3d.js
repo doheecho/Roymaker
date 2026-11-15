@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261116d";
+const ASSET_VERSION = "20261116e";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -60,23 +60,23 @@ const MOM_DANCE_POOL = [
 // 정밀한 실측은 아니고, 건물 간 상대적인 배치만 실제 동네와 비슷하게 맞췄다.
 // 0번(우리집)은 층수·유형 정보가 비어 있어서 주변 금호파크힐스 동과 같은 15층 아파트로 가정했다.
 const PLACES = [
-  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true, model: "models/3D_place_113.glb" },
-  { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -410, z: 94, model: "models/3D_place_101.glb" },
-  { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -322, z: 46, model: "models/3D_place_102.glb" },
-  { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -261, z: -16, model: "models/3D_place_103.glb" },
-  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -200, z: -69, model: "models/3D_place_104.glb" },
-  { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -136, z: -133, model: "models/3D_place_105.glb" },
-  { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -66, z: -77, model: "models/3D_place_106.glb" },
-  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -141, z: -8, model: "models/3D_place_107.glb" },
-  { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -208, z: 59, model: "models/3D_place_108.glb" },
-  { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -325, z: 150, model: "models/3D_place_109.glb" },
-  { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -261, z: 136, model: "models/3D_place_110.glb" },
-  { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -170, z: 144, model: "models/3D_place_111.glb" },
-  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75, model: "models/3D_place_112.glb" },
-  { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 0, z: -93, model: "models/3D_place_114.glb" },
-  { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -29, z: -149, model: "models/3D_place_115.glb" },
-  { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -50, z: 134, model: "models/3D_place_116.glb" },
-  { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 27, z: -160, diagonal: true, model: "models/3D_place_namkwang.glb" },
+  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true, model: "models/3D_place_113.glb", rotationDeg: 60 },
+  { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -410, z: 94, model: "models/3D_place_101.glb", rotationDeg: 90 },
+  { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -322, z: 46, model: "models/3D_place_102.glb", rotationDeg: 90 },
+  { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -261, z: -16, model: "models/3D_place_103.glb", rotationDeg: 90 },
+  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -200, z: -69, model: "models/3D_place_104.glb", rotationDeg: 90 },
+  { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -136, z: -133, model: "models/3D_place_105.glb", rotationDeg: 0 },
+  { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -66, z: -77, model: "models/3D_place_106.glb", rotationDeg: 90 },
+  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -141, z: -8, model: "models/3D_place_107.glb", rotationDeg: 90 },
+  { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -208, z: 59, model: "models/3D_place_108.glb", rotationDeg: 90 },
+  { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -325, z: 150, model: "models/3D_place_109.glb", rotationDeg: 180 },
+  { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -261, z: 136, model: "models/3D_place_110.glb", rotationDeg: 180 },
+  { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -170, z: 144, model: "models/3D_place_111.glb", rotationDeg: 180 },
+  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -74, z: 75, model: "models/3D_place_112.glb", rotationDeg: 90 },
+  { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 0, z: -93, model: "models/3D_place_114.glb", rotationDeg: 0 },
+  { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -29, z: -149, model: "models/3D_place_115.glb", rotationDeg: 180 },
+  { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -50, z: 134, model: "models/3D_place_116.glb", rotationDeg: 270 },
+  { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 27, z: -160, diagonal: true, model: "models/3D_place_namkwang.glb", rotationDeg: 0 },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -261, z: -114, church: true },
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -74, z: 203 },
   { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 46, z: 240 },
@@ -87,7 +87,7 @@ const PLACES = [
   { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 115, z: -88 },
   { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 104, z: -149, diagonal: true },
   { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 654, z: -352 },
-  { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 51, z: -229, diagonal: true, model: "models/3D_place_megacoffee.glb" },
+  { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 51, z: -229, diagonal: true, model: "models/3D_place_megacoffee.glb", rotationDeg: 0 },
   { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -104, z: -229 },
   { id: 30, name: "분식집", floors: 4, type: "식당", x: -56, z: -229 },
 ];
