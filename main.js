@@ -4133,6 +4133,7 @@ async function eveningTalkWithMom(clock, skipped) {
 
 // ── 일정이 다 끝난 뒤의 자유 시간 ──
 const BEDTIME_MIN = 22 * 60;
+const IDLE_TIME_MIN = 60;
 const HOMEWORK_MIN = 60;
 const HOMEWORK_PRAISE_MIN = 120;
 const HOMEWORK_PRAISE_BONUS_CHANCE = 0.5;
@@ -4335,6 +4336,7 @@ async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
       { label: "📖 집에서 독서를 한다", value: "reading" },
       { label: "🎮 집에서 게임을 한다", value: "game" },
       { label: "📱 휴대전화를 연다", value: "phone" },
+      { label: "🛋️ 그냥 1시간 시간을 보낸다", value: "idle" },
     ];
     if (canParty) options.push({ label: "🎉 엄마한테 파티하자고 말한다", value: "party" });
     options.push({ label: "😴 그냥 잔다", value: "sleep" });
@@ -4364,8 +4366,21 @@ async function eveningFreeTime(clock, pendingTalk = null, needsDinner = false) {
       clock = await playGame(clock);
       await maybeTriggerMomErrand(true);
     } else if (pick === "phone") clock += await openPhone(clock);
-    else if (pick === "party") clock = await askForParty(clock);
+    else if (pick === "idle") {
+      clock = await spendIdleTime(clock);
+      await maybeTriggerMomErrand(true);
+    } else if (pick === "party") clock = await askForParty(clock);
   }
+}
+
+// 딱히 뭘 하지는 않고 그냥 1시간을 흘려보낸다 — 능력치 변화는 없지만, 숙제·독서·게임처럼
+// 이 시간 중에도 엄마 심부름 같은 랜덤 이벤트가 생길 수 있다
+async function spendIdleTime(clock) {
+  const end = clock + IDLE_TIME_MIN;
+  await waitUntil(clock, end, "🛋️ 그냥 시간을 보내는 중", WAIT_PHASE_MS, { id: "rest" });
+  logLine(`${minutesToClock(end)} 딱히 할 일 없이 그냥 시간을 보냈다`);
+  diary("딱히 할 일이 없어서 그냥 빈둥거리며 한 시간을 보냈다.");
+  return end;
 }
 
 async function playOutside(clock) {
