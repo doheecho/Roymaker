@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261115b">
+<link rel="stylesheet" href="style.css?v=20261115d">
 </head>
 <body>
   <header>
@@ -44,7 +44,7 @@
         <button type="button" class="nav-btn" data-view="map">🗺️ 지도</button>
         <button type="button" class="nav-btn" data-view="shop">🛍️ 상점</button>
         <button type="button" class="nav-btn" data-view="exam">📝 월말시험</button>
-        <button type="button" class="nav-btn" data-view="neighborhood">🏘️ 우리동네 3D</button>
+        <button type="button" class="nav-btn" data-view="neighborhood">⚔️ 거리 모험</button>
       </nav>
     </section>
 
@@ -218,14 +218,27 @@
 
       <div id="view-neighborhood" class="view" hidden>
         <div class="view-head">
-          <h2>🏘️ 우리동네 3D</h2>
-          <button type="button" class="help-btn" data-help="neighborhood3d" data-title="🏘️ 우리동네 3D">❓ 설명보기</button>
+          <h2>⚔️ 거리 모험</h2>
+          <button type="button" class="help-btn" data-help="neighborhood3d" data-title="⚔️ 거리 모험">❓ 설명보기</button>
         </div>
-        <template id="help-neighborhood3d"><p>우리집(금호파크힐스) 둘레 약 220m 안의 <b>실제 건물 배치</b>를 아주 단순한 모양(화이트박스)으로 세운 동네예요. 사진처럼 정교하지는 않지만 건물 위치·모양은 실제와 같습니다. 방향키(←↑↓→) 또는 WASD로 이로이를 움직이고, "춤추기"를 눌러 보세요.</p></template>
+        <template id="help-neighborhood3d"><p>프린세스메이커의 무사수행처럼, 평범한 한국 거리를 돌아다니며 <b>동전을 줍고 불량배를 혼내주면 용돈</b>을 번다. 방향키(←↑↓→)·WASD·화면 안 방향 버튼으로 이로이를 움직이고, <b>스페이스바</b>로 점프한다. 화면을 마우스로 눌러 돌리거나 휠로 확대/축소할 수 있다. 걷기/뛰기를 고르고, "춤추기"를 누르면 매번 다른 춤을 춘다. 동전과 불량배를 다 치우면 "다시 하기"로 새로 시작할 수 있다.</p></template>
         <div id="neighborhood3d-wrap">
           <canvas id="neighborhood3d-canvas"></canvas>
           <p id="neighborhood3d-loading" class="muted">불러오는 중…</p>
-          <button type="button" id="neighborhood3d-dance-btn" class="neighborhood3d-dance-btn" hidden>💃 춤추기</button>
+          <p id="neighborhood3d-hud" class="neighborhood3d-hud" hidden></p>
+          <p id="neighborhood3d-toast" class="neighborhood3d-toast" hidden></p>
+          <button type="button" id="neighborhood3d-reset-btn" class="neighborhood3d-reset-btn" hidden>🔄 다시 하기</button>
+          <div class="neighborhood3d-move-group">
+            <button type="button" id="neighborhood3d-walk-btn" class="neighborhood3d-mode-btn active" hidden>🚶 걷기</button>
+            <button type="button" id="neighborhood3d-run-btn" class="neighborhood3d-mode-btn" hidden>🏃 뛰기</button>
+            <button type="button" id="neighborhood3d-dance-btn" class="neighborhood3d-mode-btn" hidden>💃 춤추기</button>
+          </div>
+          <div class="dpad" id="neighborhood3d-dpad" hidden>
+            <button type="button" data-dir="up" aria-label="위로 이동">▲</button>
+            <button type="button" data-dir="left" aria-label="왼쪽으로 이동">◀</button>
+            <button type="button" data-dir="right" aria-label="오른쪽으로 이동">▶</button>
+            <button type="button" data-dir="down" aria-label="아래로 이동">▼</button>
+          </div>
         </div>
       </div>
     </section>
@@ -330,8 +343,8 @@
       }
     }
   </script>
-  <script type="module" src="neighborhood3d.js?v=20261115d"></script>
-  <script src="main.js?v=20261115a"></script>
+  <script type="module" src="neighborhood3d.js?v=20261115h"></script>
+  <script src="main.js?v=20261115b"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

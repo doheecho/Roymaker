@@ -5143,6 +5143,16 @@ function wireExam() {
   document.getElementById("exam-finish-btn")?.addEventListener("click", finishExam);
 }
 
+// 거리 모험(neighborhood3d.js, ES 모듈)은 main.js의 전역 변수(state)를 직접 못 읽어서,
+// 동전·불량배 보상을 줄 때 이 다리 함수를 통해서 용돈/능력치에 반영한다
+function grantAdventureReward(amount) {
+  const applied = applyEffect({ wallet: amount }, { modifier: false });
+  renderStats(state.character);
+  saveGame();
+  return applied;
+}
+window.grantAdventureReward = grantAdventureReward;
+
 // 화면 설명 팝업 — 각 화면 제목 옆 "설명보기" 버튼
 function wireHelp() {
   const modal = document.getElementById("help-modal");
