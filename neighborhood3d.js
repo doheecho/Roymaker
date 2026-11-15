@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261115v";
+const ASSET_VERSION = "20261115x";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -63,11 +63,11 @@ const PLACES = [
   { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0, z: 0, home: true, model: "models/place_113.glb" },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -410, z: 94, model: "models/place_106.glb" },
   { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -322, z: 46, model: "models/place_106.glb" },
-  { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -261, z: -16 },
+  { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -261, z: -16, model: "models/place_106.glb" },
   { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -200, z: -69, model: "models/place_106.glb" },
   { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -136, z: -133 },
   { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -66, z: -77, model: "models/place_106.glb" },
-  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -141, z: -8, model: "models/place_106.glb" },
+  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -141, z: -8, model: "models/place_113.glb" },
   { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -208, z: 59, model: "models/place_106.glb" },
   { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -325, z: 150 },
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -261, z: 136 },
