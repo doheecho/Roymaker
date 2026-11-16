@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>남광빌딩 3D 정밀 렌더링 & GLB 추출</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #2c2f33; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(20, 22, 25, 0.85); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.18);
+      pointer-events: none; line-height: 1.55;
+    }
+    #controls-ui {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      background: rgba(20, 22, 25, 0.88); padding: 10px 14px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      max-width: 94vw;
+    }
+    button {
+      background: #3b4048; color: #fff; border: 1px solid #555b65;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #5B6675; border-color: #9CA3AF; }
+    button.export-btn {
+      background: #2b6cb0; border-color: #4299e1; font-weight: bold;
+    }
+    button.export-btn:hover { background: #3182ce; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>남광빌딩 3D 정밀 모델 (북·북동 모따기 코너·동측 실제 입면 반영)</strong><br/>
+    마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소
+  </div>
+
+  <div id="controls-ui">
+    <button onclick="setView('n')">북측 정면 (N)</button>
+    <button onclick="setView('ne')">북동 코너 (NE)</button>
+    <button onclick="setView('e')">동측 정면 (E)</button>
+    <button onclick="setView('se')">남동 (SE)</button>
+    <button onclick="setView('nw')">북서 (NW)</button>
+    <button onclick="setView('top')">상공 (Top)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // 1. 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#34383D');
+
+    const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // 기본 뷰: 북동 코너(NE)가 잘 보이는 각도
+    camera.position.set(36, 15, -36);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 10.5, 0);
+    controls.enableDamping = true;
+    controls.update();
+
+    // 좌표계 기준: -Z = 북(N), +Z = 남(S), +X = 동(E), -X = 서(W)
+    window.setView = (dir) => {
+      controls.target.set(0, 10.5, 0);
+      if (dir === 'n')   camera.position.set(-2, 13, -48);   // 북측 정면
+      if (dir === 'ne')  camera.position.set(36, 15, -36);   // 북동 코너 (파리바게뜨 모따기)
+      if (dir === 'e')   camera.position.set(46, 12, 2);     // 동측 정면
+      if (dir === 'se')  camera.position.set(38, 16, 38);    // 남동
+      if (dir === 'nw')  camera.position.set(-42, 16, -36);  // 북서
+      if (dir === 'top') camera.position.set(0, 74, 0.01);   // 상공
+      controls.update();
+    };
+
+    // 2. 조명 및 그리드
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(45, 75, -35);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdce6f2, 0.55);
+    fillLight.position.set(-45, 35, 35);
+    scene.add(fillLight);
+
+    const gridHelper = new THREE.GridHelper(120, 30, 0x555555, 0x42464C);
+    scene.add(gridHelper);
+
+    // =========================================================
+    // 텍스처 생성 헬퍼
+    // =========================================================
+    function drawStoneGrid(ctx, w, h, bg = '#C9C7C2', lineColor = '#ADABA6', stepX = 64, stepY = 32) {
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 2;
+      for (let y = 0; y <= h; y += stepY) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      }
+      for (let x = 0; x <= w; x += stepX) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      }
+    }
+
+    function drawWindow(ctx, x, y, w, h, fill = '#283642', frame = '#1A2229') {
+      ctx.fillStyle = frame;
+      ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+      ctx.fillStyle = fill;
+      ctx.fillRect(x, y, w, h);
+      // 유리 반사 하이라이트
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(x + 4, y + 4, w * 0.4, h - 8);
+    }
+
+    // ---------------------------------------------------------
+    // 1) 북측(-Z) 입면 텍스처 (image_79f236.jpg 정밀 반영)
+    //    좌측(x=0) = 동측(+X, 파리바게뜨 코너) / 우측(x=1400) = 서측(-X)
+    // ---------------------------------------------------------
+    function createNorthFacadeTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1400;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+      drawStoneGrid(ctx, 1400, 1024, '#CAC8C3', '#AEACA7', 64, 32);
+
+      // 최상층(6F) 창호열 (우측 5개 창호)
+      for (let i = 0; i < 5; i++) {
+        drawWindow(ctx, 510 + i * 135, 42, 85, 42, '#222E38');
+      }
+
+      // 5F 상부: 좌측 '깨비스크린골프' / 우측 '척추 · 관절 · 정형 · 통증'
+      drawWindow(ctx, 100, 145, 95, 58);
+      drawWindow(ctx, 230, 145, 95, 58);
+      ctx.fillStyle = '#2B303A';
+      ctx.fillRect(75, 200, 320, 26);
+      ctx.fillStyle = '#86EFAC';
+      ctx.font = 'bold 18px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('깨비스크린골프 2291-6030', 235, 219);
+
+      // 척추/관절/정형/통증 파란 창문 시트지
+      const spineLabels = [
+        { x: 510, t: '척 추' },
+        { x: 840, t: '관 절' },
+        { x: 945, t: '정 형' },
+        { x: 1050, t: '통 증' }
+      ];
+      spineLabels.forEach(item => {
+        drawWindow(ctx, item.x, 165, 82, 46, '#3B5998');
+        ctx.fillStyle = '#E0E7FF';
+        ctx.font = 'bold 17px "Malgun Gothic", sans-serif';
+        ctx.fillText(item.t, item.x + 41, 194);
+      });
+      drawWindow(ctx, 735, 165, 45, 34);
+
+      // 4F 창호 및 시트지 (핑크: 비엔나음악학원, 요가필라테스 / 화이트: 자이로토닉, 재활운동, 그룹레슨, 개인레슨)
+      drawWindow(ctx, 90, 285, 110, 62, '#F472B6');
+      drawWindow(ctx, 235, 285, 110, 62, '#F472B6');
+      ctx.fillStyle = '#1F2937';
+      ctx.font = 'bold 15px "Malgun Gothic", sans-serif';
+      ctx.fillText('비엔나음악학원', 290, 322);
+
+      // 좁은 세로창 3개
+      [390, 445, 675].forEach(wx => drawWindow(ctx, wx, 285, 26, 62));
+
+      drawWindow(ctx, 515, 285, 85, 62, '#F9A8D4');
+      ctx.fillStyle = '#831843';
+      ctx.font = 'bold 15px "Malgun Gothic", sans-serif';
+      ctx.fillText('요가', 557, 312);
+      ctx.fillText('필라테스', 557, 332);
+
+      drawWindow(ctx, 620, 285, 36, 62, '#991B1B');
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText('4F', 638, 320);
+
+      const f4White = [
+        { x: 740, l1: '자이로', l2: '토닉' },
+        { x: 855, l1: '재활', l2: '운동' },
+        { x: 965, l1: '그룹', l2: '레슨' },
+        { x: 1075, l1: '개인', l2: '레슨' }
+      ];
+      f4White.forEach(item => {
+        drawWindow(ctx, item.x, 285, 85, 62, '#E5E7EB');
+        ctx.fillStyle = '#374151';
+        ctx.font = 'bold 15px "Malgun Gothic", sans-serif';
+        ctx.fillText(item.l1, item.x + 42, 312);
+        ctx.fillText(item.l2, item.x + 42, 332);
+      });
+
+      // 4F 하단 돌출 간판 (가양어린이집 / 비엔나음악학원)
+      ctx.fillStyle = '#1F2937';
+      ctx.fillRect(65, 382, 290, 26);
+      ctx.fillStyle = '#FACC15';
+      ctx.font = 'bold 17px "Malgun Gothic", sans-serif';
+      ctx.fillText('가양어린이집', 210, 401);
+
+      ctx.fillStyle = '#1F2937';
+      ctx.fillRect(380, 382, 310, 26);
+      ctx.fillStyle = '#F9A8D4';
+      ctx.fillText('★ 비엔나 음악학원 ★', 535, 401);
+
+      // 3F 주황색 프레임 & 와이키즈 소아청소년과
+      ctx.strokeStyle = '#EA580C';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(485, 422, 695, 112);
+
+      const f3Wins = [
+        { x: 75, w: 95, c: '#3B5998', l1: '야간', l2: '진료' },
+        { x: 205, w: 95, c: '#3B5998', l1: '비수술', l2: '치료' },
+        { x: 505, w: 110, c: '#38BDF8', l1: '와이키즈', l2: '소아청소년과' },
+        { x: 745, w: 85, c: '#38BDF8', l1: '전문의', l2: '진료' },
+        { x: 860, w: 85, c: '#38BDF8', l1: '일요일', l2: '진료' },
+        { x: 975, w: 85, c: '#38BDF8', l1: '수액', l2: '성인진료' },
+        { x: 1085, w: 85, c: '#38BDF8', l1: '성장', l2: '알레르기' }
+      ];
+      f3Wins.forEach(item => {
+        drawWindow(ctx, item.x, 442, item.w, 66, item.c);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 15px "Malgun Gothic", sans-serif';
+        ctx.fillText(item.l1, item.x + item.w / 2, 470);
+        ctx.fillText(item.l2, item.x + item.w / 2, 492);
+      });
+      [355, 415, 645, 700].forEach(wx => drawWindow(ctx, wx, 442, 26, 66));
+      drawWindow(ctx, 645, 442, 34, 66, '#E0F2FE');
+      ctx.fillStyle = '#1E3A8A';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText('3F', 662, 480);
+
+      // 2F 간판: 연세더좋은플란트치과의원 / 깨비스크린골프존 2291-6030
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(15, 550, 380, 42);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 21px "Malgun Gothic", sans-serif';
+      ctx.fillText('연세', 55, 578);
+      ctx.fillStyle = '#FACC15';
+      ctx.fillText('더좋은플란트치과의원', 215, 578);
+
+      // 노란 프레임 치과 창문 (야간진료 주차완비 / 예약 T.2282-2211)
+      ctx.strokeStyle = '#FACC15';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(20, 602, 365, 130);
+      drawWindow(ctx, 28, 610, 350, 114, '#CBD5E1');
+      ctx.fillStyle = '#1E3A8A';
+      ctx.fillRect(55, 665, 145, 52);
+      ctx.fillRect(225, 665, 140, 52);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 18px "Malgun Gothic", sans-serif';
+      ctx.fillText('야간진료', 127, 687);
+      ctx.fillText('주차완비', 127, 709);
+      ctx.fillStyle = '#FDE047';
+      ctx.fillText('예약 T.2282', 295, 687);
+      ctx.fillText('-2211', 295, 709);
+
+      // 우측 2F 통유리: 깨비스크린골프존 2291-6030
+      drawWindow(ctx, 415, 585, 820, 145, '#334155');
+      ctx.fillStyle = '#E2E8F0';
+      ctx.font = 'bold 34px "Malgun Gothic", sans-serif';
+      ctx.fillText('깨 비 스 크 린   골 프 존   2 2 9 1 . 6 0 3 0', 825, 655);
+
+      // 1F 상가 라인 (좌 -> 우)
+      // 1) PARIS BAGUETTE Cafe
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(10, 745, 385, 279);
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(10, 745, 385, 52);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = 'italic bold 24px sans-serif';
+      ctx.fillText('PARIS BAGUETTE Cafe', 202, 780);
+      drawWindow(ctx, 28, 835, 350, 175, '#475569');
+
+      // 2) 남광빌딩 북측 출입구
+      ctx.fillStyle = '#A8A29E';
+      ctx.fillRect(402, 745, 130, 279);
+      ctx.fillStyle = '#44403C';
+      ctx.font = 'bold 18px "Malgun Gothic", sans-serif';
+      ctx.fillText('남광빌딩', 467, 778);
+      drawWindow(ctx, 425, 810, 84, 210, '#1F2937');
+
+      // 3) 아이스크림 할인점 (무인점포)
+      ctx.fillStyle = '#FDE047';
+      ctx.fillRect(540, 745, 225, 44);
+      ctx.fillStyle = '#DC2626';
+      ctx.font = 'bold 18px "Malgun Gothic", sans-serif';
+      ctx.fillText('아이스크림할인점', 652, 774);
+      ctx.fillStyle = '#F472B6';
+      ctx.fillRect(548, 800, 210, 220);
+
+      // 4) 초록약국
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(772, 745, 175, 44);
+      ctx.fillStyle = '#15803D';
+      ctx.font = 'bold 24px "Malgun Gothic", sans-serif';
+      ctx.fillText('초록약국', 860, 776);
+      drawWindow(ctx, 780, 800, 160, 220, '#14532D');
+      ctx.fillStyle = '#EF4444';
+      ctx.fillRect(855, 845, 52, 65);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 34px "Malgun Gothic", sans-serif';
+      ctx.fillText('약', 881, 890);
+
+      // 5) 24시 신의주찹쌀순대 / 감자탕
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(955, 745, 360, 44);
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 22px "Malgun Gothic", sans-serif';
+      ctx.fillText('24시  신의주 찹쌀순대', 1135, 776);
+      drawWindow(ctx, 965, 800, 340, 220, '#27272A');
+      ctx.fillStyle = '#FDE047';
+      ctx.font = 'bold 20px "Malgun Gothic", sans-serif';
+      ctx.fillText('감자탕 · 순대국', 1055, 875);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // ---------------------------------------------------------
+    // 2) 북동(NE) 모따기 코너 입면 텍스처 (image_79f1fb.jpg 정밀 반영)
+    // ---------------------------------------------------------
+    function createChamferNECornerTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+      drawStoneGrid(ctx, 512, 1024, '#CAC8C3', '#AEACA7', 64, 32);
+
+      // 5F 대형 보라색/네이비 배너 (통증 + 척추 픽토그램)
+      ctx.fillStyle = '#4338CA';
+      ctx.beginPath();
+      ctx.moveTo(20, 45);
+      ctx.lineTo(492, 20);
+      ctx.lineTo(492, 225);
+      ctx.lineTo(20, 225);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#1E1B4B';
+      ctx.font = 'bold 46px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('통증', 45, 110);
+
+      // 인체 척추·어깨 픽토그램 표현
+      ctx.fillStyle = '#312E81';
+      ctx.beginPath();
+      ctx.arc(340, 95, 34, 0, Math.PI * 2); // 머리
+      ctx.fill();
+      ctx.fillRect(285, 132, 115, 92); // 상체
+      ctx.fillStyle = '#CBD5E1';
+      ctx.beginPath();
+      ctx.arc(240, 175, 28, 0, Math.PI * 2); // 관절 강조 원
+      ctx.fill();
+
+      // 4F 비엔나음악학원 창문
+      drawWindow(ctx, 130, 260, 250, 95, '#F9A8D4');
+      ctx.fillStyle = '#1F2937';
+      ctx.font = 'bold 26px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('비엔나 음악학원', 255, 316);
+
+      // 3F 상단: 와이키즈 소아청소년과의원
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(16, 392, 480, 56);
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 30px "Malgun Gothic", sans-serif';
+      ctx.fillText('와이키즈 소아청소년과', 256, 430);
+
+      // 3F 중단: 연세엄지척 통증의학과 의원 / 정형외과
+      ctx.fillStyle = '#3730A3';
+      ctx.fillRect(16, 454, 480, 96);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 34px "Malgun Gothic", sans-serif';
+      ctx.fillText('통증의학과 의원', 210, 514);
+      ctx.fillStyle = '#CBD5E1';
+      ctx.fillRect(365, 464, 122, 46);
+      ctx.fillStyle = '#1E1B4B';
+      ctx.font = 'bold 20px "Malgun Gothic", sans-serif';
+      ctx.fillText('정형외과', 426, 494);
+
+      // 2F 상단 간판: 연세더좋은플란트치과의원 T.2282-2211
+      ctx.fillStyle = '#1F2937';
+      ctx.fillRect(16, 558, 480, 54);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 26px "Malgun Gothic", sans-serif';
+      ctx.fillText('연세', 65, 594);
+      ctx.fillStyle = '#FACC15';
+      ctx.fillText('더좋은플란트치과의원', 265, 594);
+
+      // 2F 대형 통유리 ('치 과' 노란 대형 시트지 + 전문의 진료 / 의학 박사)
+      ctx.strokeStyle = '#FACC15';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(20, 618, 472, 145);
+      drawWindow(ctx, 26, 624, 460, 133, '#475569');
+
+      ctx.fillStyle = '#FACC15';
+      ctx.font = 'bold 78px "Malgun Gothic", sans-serif';
+      ctx.fillText('치     과', 256, 706);
+
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(26, 718, 460, 38);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 22px "Malgun Gothic", sans-serif';
+      ctx.fillText('전문의 진료      |      의학 박사', 256, 745);
+
+      // 1F PARIS BAGUETTE Cafe 코너 입구
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(16, 770, 480, 254);
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(16, 770, 480, 56);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = 'italic bold 32px sans-serif';
+      ctx.fillText('PARIS BAGUETTE Cafe', 256, 808);
+      drawWindow(ctx, 40, 845, 432, 165, '#3F3F46');
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // ---------------------------------------------------------
+    // 3) 동측(+X) 입면 텍스처 (image_79f1bd.jpg 정밀 반영)
+    //    좌측(x=0) = 남측(+Z, 남광빌딩 입구) / 우측(x=1024) = 북동 코너(-Z)
+    // ---------------------------------------------------------
+    function createEastFacadeTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+      drawStoneGrid(ctx, 1024, 1024, '#CAC8C3', '#AEACA7', 64, 32);
+
+      // 5F 최상단: 5F 주사/물리/도수/운동 비수술치료 척추·관절·정형
+      ctx.fillStyle = '#E2E8F0';
+      ctx.fillRect(24, 24, 976, 98);
+      ctx.fillStyle = '#4338CA';
+      ctx.fillRect(150, 24, 850, 98);
+
+      ctx.fillStyle = '#1E1B4B';
+      ctx.font = 'bold 34px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('5F', 85, 86);
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 30px "Malgun Gothic", sans-serif';
+      ctx.fillText('비수술치료  ·  척추 | 관절 | 정형', 585, 84);
+
+      // 4F 간판열: 기구필라테스 3F / 깨비스크린 2291-6030
+      ctx.fillStyle = '#78350F';
+      ctx.fillRect(36, 175, 430, 56);
+      ctx.fillStyle = '#FDE68A';
+      ctx.font = 'bold 28px "Malgun Gothic", sans-serif';
+      ctx.fillText('기구필라테스 3F', 250, 213);
+
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(495, 175, 495, 56);
+      ctx.fillStyle = '#86EFAC';
+      ctx.fillText('깨비스크린 2291-6030', 742, 213);
+
+      // 3F 대형 간판: 3F 02-2299-1113 연세엄지척마취통증의학과
+      ctx.fillStyle = '#F1F5F9';
+      ctx.fillRect(24, 268, 390, 118);
+      ctx.fillStyle = '#3730A3';
+      ctx.fillRect(414, 268, 586, 118);
+
+      ctx.fillStyle = '#3730A3';
+      ctx.font = 'bold 42px "Malgun Gothic", sans-serif';
+      ctx.fillText('3F', 95, 342);
+      ctx.font = 'bold 28px "Malgun Gothic", sans-serif';
+      ctx.fillText('02-', 255, 318);
+      ctx.fillText('2299-1113', 255, 355);
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 36px "Malgun Gothic", sans-serif';
+      ctx.fillText('👍 연세엄지척마취통증의학과', 705, 340);
+
+      // 3F 하단 띠간판: 비전테니스 / 자이로토닉 요가 필라테스
+      ctx.fillStyle = '#1F2937';
+      ctx.fillRect(36, 406, 410, 44);
+      ctx.fillStyle = '#E2E8F0';
+      ctx.font = 'bold 24px "Malgun Gothic", sans-serif';
+      ctx.fillText('V 비전테니스', 240, 436);
+
+      ctx.fillStyle = '#1F2937';
+      ctx.fillRect(475, 406, 515, 44);
+      ctx.fillStyle = '#FDE047';
+      ctx.fillText('자이로토닉 요가 필라테스', 732, 436);
+
+      // 2F 노란 테두리 대형 창호열 (좌: 로고 / 중: 야간진료 주차완비 / 우: 예약 T.2282-2211)
+      ctx.strokeStyle = '#FACC15';
+      ctx.lineWidth = 9;
+      ctx.strokeRect(110, 482, 875, 195);
+
+      drawWindow(ctx, 120, 492, 185, 175, '#E2E8F0');
+      // 대학/의원 엠블럼 표현
+      ctx.strokeStyle = '#1E3A8A';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(212, 575, 58, 0, Math.PI * 2);
+      ctx.stroke();
+
+      drawWindow(ctx, 325, 492, 325, 175, '#CBD5E1');
+      ctx.fillStyle = '#3730A3';
+      ctx.fillRect(365, 585, 255, 76);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 26px "Malgun Gothic", sans-serif';
+      ctx.fillText('야간진료', 505, 617);
+      ctx.fillText('주차완비', 505, 649);
+
+      drawWindow(ctx, 670, 492, 305, 175, '#CBD5E1');
+      ctx.fillStyle = '#1E3A8A';
+      ctx.fillRect(695, 585, 255, 76);
+      ctx.fillStyle = '#FDE047';
+      ctx.font = 'bold 24px "Malgun Gothic", sans-serif';
+      ctx.fillText('예약 T.2282', 835, 617);
+      ctx.fillText('- 2211', 835, 649);
+
+      // 1F 상가열
+      // 1) 좌측: 남광빌딩 입구 뒷벽
+      ctx.fillStyle = '#9CA3AF';
+      ctx.fillRect(10, 700, 140, 324);
+
+      // 2) 중앙: 블루 기둥 + 적벽돌 기단 상가 (임대)
+      ctx.fillStyle = '#E2E8F0';
+      ctx.fillRect(160, 705, 540, 319);
+      // 3개의 파란색 기둥
+      [165, 415, 650].forEach(px => {
+        ctx.fillStyle = '#2563EB';
+        ctx.fillRect(px, 715, 52, 245);
+        // 하단 적벽돌 기단
+        ctx.fillStyle = '#9A3412';
+        ctx.fillRect(px, 955, 52, 69);
+      });
+      // 유리 쇼윈도 & 노란 임대 현수막
+      drawWindow(ctx, 222, 725, 188, 225, '#334155');
+      drawWindow(ctx, 472, 725, 173, 225, '#334155');
+      ctx.fillStyle = '#FDE047';
+      ctx.fillRect(520, 755, 75, 95);
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 24px "Malgun Gothic", sans-serif';
+      ctx.fillText('임대', 557, 812);
+
+      // 3) 우측: PARIS BAGUETTE 동측 매장
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(715, 705, 295, 319);
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(715, 705, 295, 48);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = 'italic bold 22px sans-serif';
+      ctx.fillText('PARIS BAGUETTE', 862, 736);
+      drawWindow(ctx, 735, 785, 255, 220, '#3F3F46');
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // ---------------------------------------------------------
+    // 4) 서측(-X) & 남측(+Z) 기본 석재 입면 텍스처
+    // ---------------------------------------------------------
+    function createSideStoneTexture(hasWindows = true) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+      drawStoneGrid(ctx, 1024, 1024, '#C4C2BD', '#A6A5A0', 64, 32);
+
+      if (hasWindows) {
+        for (let r = 0; r < 4; r++) {
+          const y = 75 + r * 155;
+          [110, 440, 770].forEach(x => drawWindow(ctx, x, y, 130, 72));
+        }
+      }
+      ctx.fillStyle = '#1E242B';
+      ctx.fillRect(40, 745, 944, 240);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createRoofTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#7A7E85';
+      ctx.fillRect(0, 0, 512, 512);
+      ctx.fillStyle = '#3B5E34';
+      ctx.fillRect(310, 45, 150, 260);
+      ctx.strokeStyle = '#B8BCC2';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(18, 18, 476, 476);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function addOutlines(mesh) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      const line = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0x1A1A1A })
+      );
+      mesh.add(line);
+    }
+
+    // =========================================================
+    // 남광빌딩 3D 형상 생성 (북동 모따기 평면 + 단차 코어 반영)
+    // =========================================================
+    export function createNamgwangBuilding() {
+      const building = new THREE.Group();
+      building.name = 'Namgwang_Building';
+
+      const H = 19.5; // 주동 높이
+      // 평면 좌표 (X: 서-동, Z: 북-남)
+      // 북동 코너(+X, -Z)가 모따기(Chamfer)된 오각형 평면
+      // (-13, -12) 북서 -> (7, -12) 북동시작 -> (12, -7) 북동끝 -> (12, 12) 남동 -> (-13, 12) 남서
+      const shape = new THREE.Shape();
+      // Shape는 XY 평면에 그린 뒤 rotateX(-Math.PI/2) 하므로 Shape의 Y는 월드 -Z가 됨
+      shape.moveTo(-13, 12);   // (-13, -12) 북서
+      shape.lineTo(7, 12);     // (7, -12)   북동 모따기 시작점
+      shape.lineTo(12, 7);     // (12, -7)   북동 모따기 끝점
+      shape.lineTo(12, -12);   // (12, 12)   남동
+      shape.lineTo(-13, -12);  // (-13, 12)  남서
+      shape.closePath();
+
+      const extrudeGeom = new THREE.ExtrudeGeometry(shape, {
+        depth: H,
+        bevelEnabled: false
+      });
+      extrudeGeom.rotateX(-Math.PI / 2);
+
+      const baseStoneMat = new THREE.MeshStandardMaterial({ color: '#C8C6C1', roughness: 0.85 });
+      const roofMat = new THREE.MeshStandardMaterial({ map: createRoofTexture(), roughness: 0.9 });
+
+      const coreMass = new THREE.Mesh(extrudeGeom, [baseStoneMat, roofMat]);
+      coreMass.castShadow = true;
+      coreMass.receiveShadow = true;
+      addOutlines(coreMass);
+      building.add(coreMass);
+
+      // ---------------------------------------------------------
+      // 각 입면 전용 고해상도 파사드 패널 부착 (Z-fighting 방지 오프셋 0.04)
+      // ---------------------------------------------------------
+      // 1) 북측(-Z) 입면 패널 (X: -13 ~ +7, 폭 20m, 중심 X = -3, Z = -12.04)
+      const northWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(20.0, H),
+        new THREE.MeshStandardMaterial({ map: createNorthFacadeTexture(), roughness: 0.78 })
+      );
+      northWall.position.set(-3.0, H / 2, -12.04);
+      northWall.rotation.y = Math.PI; // -Z 방향을 바라보도록 회전
+      building.add(northWall);
+
+      // 2) 북동(NE) 모따기 코너 패널 ((7, -12) ~ (12, -7), 폭 7.071m, 중심 (9.5, H/2, -9.5))
+      const chamferWidth = Math.hypot(5, 5); // 7.071m
+      const chamferWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(chamferWidth, H),
+        new THREE.MeshStandardMaterial({ map: createChamferNECornerTexture(), roughness: 0.78 })
+      );
+      chamferWall.position.set(9.53, H / 2, -9.53);
+      chamferWall.rotation.y = Math.PI * 0.75; // (+1, 0, -1) 방향 법선
+      building.add(chamferWall);
+
+      // 3) 동측(+X) 입면 패널 (Z: -7 ~ +12, 폭 19m, 중심 Z = 2.5, X = 12.04)
+      const eastWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(19.0, H),
+        new THREE.MeshStandardMaterial({ map: createEastFacadeTexture(), roughness: 0.78 })
+      );
+      eastWall.position.set(12.04, H / 2, 2.5);
+      eastWall.rotation.y = Math.PI / 2; // +X 방향을 바라보도록 회전
+      building.add(eastWall);
+
+      // 4) 서측(-X) & 남측(+Z) 패널
+      const westWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(24.0, H),
+        new THREE.MeshStandardMaterial({ map: createSideStoneTexture(true), roughness: 0.82 })
+      );
+      westWall.position.set(-13.04, H / 2, 0);
+      westWall.rotation.y = -Math.PI / 2;
+      building.add(westWall);
+
+      const southWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(25.0, H),
+        new THREE.MeshStandardMaterial({ map: createSideStoneTexture(false), roughness: 0.82 })
+      );
+      southWall.position.set(-0.5, H / 2, 12.04);
+      building.add(southWall);
+
+      // ---------------------------------------------------------
+      // 북측 상부 옥탑층 매스 (image_79f236.jpg 중앙 상단 돌출부)
+      // ---------------------------------------------------------
+      const penthouse = new THREE.Mesh(
+        new THREE.BoxGeometry(13.5, 2.2, 14.0),
+        baseStoneMat
+      );
+      penthouse.position.set(-5.8, H + 1.1, -4.5);
+      penthouse.castShadow = true;
+      addOutlines(penthouse);
+      building.add(penthouse);
+
+      // ---------------------------------------------------------
+      // 동측 좌측(+Z) 한 계단 들어간 창호 코어 & '남광빌딩' 출입구 (image_79f1bd.jpg)
+      // ---------------------------------------------------------
+      const southEastRecessedWing = new THREE.Mesh(
+        new THREE.BoxGeometry(5.5, 18.2, 4.5),
+        new THREE.MeshStandardMaterial({ map: createSideStoneTexture(true), roughness: 0.8 })
+      );
+      southEastRecessedWing.position.set(8.2, 9.1, 14.2);
+      southEastRecessedWing.castShadow = true;
+      addOutlines(southEastRecessedWing);
+      building.add(southEastRecessedWing);
+
+      // 남광빌딩 동측 입구 캐노피 & 기둥
+      const eastEntranceGroup = new THREE.Group();
+      eastEntranceGroup.name = 'Namgwang_East_Entrance';
+
+      const canopy = new THREE.Mesh(
+        new THREE.BoxGeometry(3.4, 0.7, 4.4),
+        new THREE.MeshStandardMaterial({ color: '#D6D3D1', roughness: 0.75 })
+      );
+      canopy.position.set(12.6, 4.4, 12.4);
+      canopy.castShadow = true;
+      addOutlines(canopy);
+      eastEntranceGroup.add(canopy);
+
+      // 캐노피 정면 간판 '남광빌딩'
+      const signCanvas = document.createElement('canvas');
+      signCanvas.width = 256;
+      signCanvas.height = 64;
+      const sCtx = signCanvas.getContext('2d');
+      sCtx.fillStyle = '#D6D3D1';
+      sCtx.fillRect(0, 0, 256, 64);
+      sCtx.fillStyle = '#44403C';
+      sCtx.font = 'bold 28px "Malgun Gothic", sans-serif';
+      sCtx.textAlign = 'center';
+      sCtx.fillText('남 광 빌 딩', 128, 42);
+      const signTex = new THREE.CanvasTexture(signCanvas);
+      signTex.colorSpace = THREE.SRGBColorSpace;
+
+      const signBoard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.65, 3.6),
+        new THREE.MeshStandardMaterial({ map: signTex })
+      );
+      signBoard.position.set(14.32, 4.4, 12.4);
+      eastEntranceGroup.add(signBoard);
+
+      // 캐노피 지지 기둥
+      const pillar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.45, 4.4, 0.45),
+        new THREE.MeshStandardMaterial({ color: '#A8A29E', roughness: 0.8 })
+      );
+      pillar.position.set(14.0, 2.2, 14.2);
+      pillar.castShadow = true;
+      addOutlines(pillar);
+      eastEntranceGroup.add(pillar);
+
+      // 입구 계단 & 초록색 미끄럼방지 경사로
+      const stairs = new THREE.Mesh(
+        new THREE.BoxGeometry(2.4, 1.1, 2.2),
+        new THREE.MeshStandardMaterial({ color: '#78716C', roughness: 0.88 })
+      );
+      stairs.position.set(13.0, 0.55, 13.2);
+      addOutlines(stairs);
+      eastEntranceGroup.add(stairs);
+
+      const ramp = new THREE.Mesh(
+        new THREE.BoxGeometry(2.4, 0.35, 2.0),
+        new THREE.MeshStandardMaterial({ color: '#15803D', roughness: 0.82 })
+      );
+      ramp.position.set(13.0, 0.55, 11.1);
+      ramp.rotation.z = -0.35;
+      eastEntranceGroup.add(ramp);
+
+      building.add(eastEntranceGroup);
+
+      // ---------------------------------------------------------
+      // PARIS BAGUETTE 네이비 어닝 (북측 + 북동 코너 + 동측 연속 차양)
+      // ---------------------------------------------------------
+      const awningMat = new THREE.MeshStandardMaterial({ color: '#1E293B', roughness: 0.7 });
+
+      const northAwning = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.4, 1.5), awningMat);
+      northAwning.position.set(3.4, 3.6, -12.75);
+      addOutlines(northAwning);
+
+      const chamferAwning = new THREE.Mesh(new THREE.BoxGeometry(chamferWidth + 0.4, 0.4, 1.5), awningMat);
+      chamferAwning.position.set(10.05, 3.6, -10.05);
+      chamferAwning.rotation.y = Math.PI * 0.75;
+      addOutlines(chamferAwning);
+
+      const eastAwning = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.4, 5.4), awningMat);
+      eastAwning.position.set(12.75, 3.6, -4.3);
+      addOutlines(eastAwning);
+
+      building.add(northAwning, chamferAwning, eastAwning);
+
+      // ---------------------------------------------------------
+      // 좌측(남측) 지하/지상 주차장 진입 경사로 & 차량 (image_79f1bd.jpg 좌측 하단)
+      // ---------------------------------------------------------
+      const driveway = new THREE.Mesh(
+        new THREE.BoxGeometry(18.0, 0.3, 7.5),
+        new THREE.MeshStandardMaterial({ color: '#4B5563', roughness: 0.9 })
+      );
+      driveway.position.set(5.0, 0.15, 19.5);
+      driveway.receiveShadow = true;
+      building.add(driveway);
+
+      const parkedCar = new THREE.Mesh(
+        new THREE.BoxGeometry(4.2, 1.35, 1.9),
+        new THREE.MeshStandardMaterial({ color: '#F8FAFC', roughness: 0.35 })
+      );
+      parkedCar.position.set(7.5, 0.95, 18.8);
+      addOutlines(parkedCar);
+      building.add(parkedCar);
+
+      return building;
+    }
+
+    // 씬에 건물 추가
+    const namgwang = createNamgwangBuilding();
+    scene.add(namgwang);
+
+    // =========================================================
+    // GLB 추출 함수
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        namgwang,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'namgwang_building_detailed.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (error) => {
+          console.error('GLB 추출 오류:', error);
+        },
+        { binary: true }
+      );
+    };
+
+    // 렌더링 루프
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

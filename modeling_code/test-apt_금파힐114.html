@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>금호파크힐스 114동 3D 모델링 (대칭 2개동 결합 · 남동 회색/북측 주황 e편한세상 로고 · 동북/서측 주출입구 반영)</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #2c2f33; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(20, 22, 25, 0.85); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.18);
+      pointer-events: none; line-height: 1.55;
+    }
+    #controls-ui {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      background: rgba(20, 22, 25, 0.88); padding: 10px 14px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      max-width: 96vw;
+    }
+    button {
+      background: #3b4048; color: #fff; border: 1px solid #555b65;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #C27650; color: #fff; border-color: #e69d78; }
+    button.highlight-btn {
+      background: #1d4ed8; border-color: #60a5fa; font-weight: bold;
+    }
+    button.highlight-btn:hover { background: #2563eb; }
+    button.export-btn {
+      background: #2b6cb0; border-color: #4299e1; font-weight: bold;
+    }
+    button.export-btn:hover { background: #3182ce; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>금호파크힐스 114동 (대칭 2개동 결합 · 남동 회색 입면 / 북측 주황 입면 e편한세상 로고 · 동북/서측 출입구)</strong><br/>
+    마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소
+  </div>
+
+  <div id="controls-ui">
+    <button class="highlight-btn" onclick="setView('ent_south_ne')">남쪽동 출입구 (동북향)</button>
+    <button class="highlight-btn" onclick="setView('ent_north_w')">북쪽동 출입구 (서향)</button>
+    <button onclick="setView('se')">남동 (SE · 회색 로고)</button>
+    <button onclick="setView('e')">동 (East · 연결부)</button>
+    <button onclick="setView('ne')">동북 (NE · 올려다봄)</button>
+    <button onclick="setView('n')">북 (North · 주황 로고)</button>
+    <button onclick="setView('top')">하늘 배치도 (Top)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // 1. 기본 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#34383D');
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.2, 1000);
+    // 초기 시점: 동북(NE) 방향에서 남쪽동의 회색 단부, 동북향 코어·출입구, 북쪽동의 전면부가 함께 보이는 구도
+    camera.position.set(56, 22, -46);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 22, 0);
+    controls.enableDamping = true;
+    controls.update();
+
+    // 좌표계 기준: -Z = 북(N), +Z = 남(S), +X = 동(E), -X = 서(W)
+    window.setView = (dir) => {
+      if (dir === 'ent_south_ne') {
+        // 남쪽동 동북향 주출입구 문주 근접 구도
+        controls.target.set(16, 5.5, 11);
+        camera.position.set(34, 9.5, -5);
+      } else if (dir === 'ent_north_w') {
+        // 북쪽동 서향 주출입구 문주 근접 구도
+        controls.target.set(-10, 5.5, -18);
+        camera.position.set(-34, 9.5, -18);
+      } else if (dir === 'se') {
+        // 남동측 실사 구도 (회색 입면 + 상단 e편한세상 로고 + 하단 114 표기)
+        controls.target.set(14, 24, 18);
+        camera.position.set(44, 16, 52);
+      } else if (dir === 'e') {
+        // 동측 실사 구도 (좌측 남쪽동 회색 단부·코어 + 우측 북쪽동 동측 전면)
+        controls.target.set(4, 23, 2);
+        camera.position.set(64, 15, 6);
+      } else if (dir === 'ne') {
+        // 동북측 올려다봄 실사 구도 (남쪽동 동북 코어·출입구 + 북쪽동 동측 전면)
+        controls.target.set(6, 23, 0);
+        camera.position.set(54, 14, -44);
+      } else if (dir === 'n') {
+        // 북측 실사 구도 (북쪽동 북향 주황색 입면 + 상단 e편한세상 로고)
+        controls.target.set(-2, 24, -24);
+        camera.position.set(-4, 16, -68);
+      } else if (dir === 'top') {
+        // 하늘에서 본 114동 배치도 (북쪽이 위, 남쪽이 아래)
+        controls.target.set(2, 20, -2);
+        camera.position.set(2, 124, -1.99);
+      }
+      controls.update();
+    };
+
+    // 2. 조명 및 뷰포트 그리드
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.94);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.06);
+    dirLight.position.set(55, 115, -35);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdce6f2, 0.52);
+    fillLight.position.set(-55, 55, 55);
+    scene.add(fillLight);
+
+    const gridHelper = new THREE.GridHelper(180, 45, 0x555555, 0x42464C);
+    scene.add(gridHelper);
+
+    // =========================================================
+    // 텍스처 생성 유틸리티 (114동 실제 사진 디테일 반영)
+    // =========================================================
+
+    // A. 자유 단부 측벽 텍스처 (남동향: 쿨 그레이 #C2C7CE / 북향: 주황·테라코타 #C27650 + e편한세상 로고 + 114)
+    function create114EndWallTexture({
+      baseColor = '#C2C7CE',     // '#C2C7CE' (남동 회색) 또는 '#C27650' (북측 주황색)
+      frontEdgeSide = 'left',    // 발코니 전면 코너 방향 ('left' 또는 'right')
+      showDongNumber = true
+    } = {}) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      // 메인 패널 바탕색
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 수평 + 수직 패널 줄눈 그리드
+      ctx.fillStyle = 'rgba(28, 30, 35, 0.22)';
+      for (let y = 0; y < canvas.height; y += 15) {
+        ctx.fillRect(0, y, canvas.width, 2);
+      }
+      ctx.fillStyle = 'rgba(28, 30, 35, 0.12)';
+      for (let x = 68; x < canvas.width - 68; x += 76) {
+        ctx.fillRect(x, 0, 1.8, canvas.height);
+      }
+
+      // 양 가장자리 화이트/아이보리 수직 프레임 띠 (전면부 쪽은 층별 그레이 악센트 밴드 포함)
+      const frontTrimW = Math.floor(canvas.width * 0.13);
+      const backTrimW = Math.floor(canvas.width * 0.09);
+
+      const frontX = frontEdgeSide === 'left' ? 0 : (canvas.width - frontTrimW);
+      const backX = frontEdgeSide === 'left' ? (canvas.width - backTrimW) : 0;
+
+      ctx.fillStyle = '#F2F2EE';
+      ctx.fillRect(frontX, 0, frontTrimW, canvas.height);
+      ctx.fillRect(backX, 0, backTrimW, canvas.height);
+
+      // 전면 코너 띠의 층별 수평 그레이 밴드 디테일 (사진 1, 4 좌측 모서리 줄무늬)
+      const floors = 17;
+      const fh = canvas.height / floors;
+      for (let f = 0; f < floors; f++) {
+        const y = f * fh;
+        ctx.fillStyle = '#9EA4AE';
+        ctx.fillRect(frontX + 4, y + fh * 0.52, frontTrimW - 8, fh * 0.42);
+        ctx.fillStyle = 'rgba(30, 32, 36, 0.25)';
+        ctx.fillRect(0, y, canvas.width, 2);
+      }
+
+      // 상단 중앙 'e편한세상' 브랜드 구름 심볼 + 로고 텍스트 (사진 1, 4 최상단)
+      const centerX = (frontEdgeSide === 'left')
+        ? (frontTrimW + (canvas.width - frontTrimW - backTrimW) / 2)
+        : (backTrimW + (canvas.width - frontTrimW - backTrimW) / 2);
+
+      // 구름 심볼 그림자
+      ctx.save();
+      ctx.fillStyle = 'rgba(25, 22, 22, 0.28)';
+      drawCloudSymbol(ctx, centerX + 3, 74, 1.0);
+      ctx.fill();
+
+      // 구름 심볼 본체 (코랄 레드 그라데이션)
+      const cloudGrad = ctx.createLinearGradient(centerX, 46, centerX, 96);
+      cloudGrad.addColorStop(0, '#E8837E');
+      cloudGrad.addColorStop(0.5, '#D4625D');
+      cloudGrad.addColorStop(1, '#B84B46');
+      ctx.fillStyle = cloudGrad;
+      drawCloudSymbol(ctx, centerX, 71, 1.0);
+      ctx.fill();
+      ctx.restore();
+
+      // 'e편한세상' 텍스트
+      ctx.font = 'bold 42px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(20, 22, 26, 0.45)';
+      ctx.fillText('e편한세상', centerX + 3, 134);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillText('e편한세상', centerX, 131);
+
+      // 하단 '114' 표기 (기단부 상단 바로 위, 사진 1 우측 하단)
+      if (showDongNumber) {
+        const numX = frontEdgeSide === 'left'
+          ? (canvas.width - backTrimW - 84)
+          : (backTrimW + 84);
+        const numY = canvas.height - 32;
+        ctx.font = 'bold 58px "Malgun Gothic", sans-serif';
+        ctx.fillStyle = 'rgba(20, 22, 26, 0.45)';
+        ctx.fillText('114', numX + 3, numY + 3);
+        ctx.fillStyle = '#F8FAFC';
+        ctx.fillText('114', numX, numY);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function drawCloudSymbol(ctx, cx, cy, s) {
+      ctx.beginPath();
+      ctx.moveTo(cx - 72 * s, cy + 16 * s);
+      ctx.bezierCurveTo(cx - 88 * s, cy + 16 * s, cx - 90 * s, cy - 6 * s, cx - 64 * s, cy - 8 * s);
+      ctx.bezierCurveTo(cx - 56 * s, cy - 26 * s, cx - 26 * s, cy - 28 * s, cx - 12 * s, cy - 16 * s);
+      ctx.bezierCurveTo(cx + 4 * s, cy - 30 * s, cx + 38 * s, cy - 28 * s, cx + 48 * s, cy - 10 * s);
+      ctx.bezierCurveTo(cx + 76 * s, cy - 12 * s, cx + 88 * s, cy + 12 * s, cx + 68 * s, cy + 16 * s);
+      ctx.closePath();
+    }
+
+    // B. 전면 발코니 입면 텍스처 (2세대 대칭 판상형 입면 - 사진 2, 3 우측 북쪽동 전면 디테일)
+    function create114FrontFacadeTexture(floors) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      const cols = [
+        { w: 0.05, bg: '#F2F2EE', type: 'edgeSlit' },
+        { w: 0.17, bg: '#F4F4F1', type: 'wide'     },
+        { w: 0.10, bg: '#9EA4AE', type: 'midGray'  },
+        { w: 0.15, bg: '#F4F4F1', type: 'innerWide'},
+        { w: 0.06, bg: '#8E949E', type: 'centerGap'},
+        { w: 0.15, bg: '#F4F4F1', type: 'innerWide'},
+        { w: 0.10, bg: '#9EA4AE', type: 'midGray'  },
+        { w: 0.17, bg: '#F4F4F1', type: 'wide'     },
+        { w: 0.05, bg: '#F2F2EE', type: 'edgeSlit' }
+      ];
+
+      let curX = 0;
+      cols.forEach(col => {
+        const cw = canvas.width * col.w;
+        ctx.fillStyle = col.bg;
+        ctx.fillRect(curX, 0, cw, canvas.height);
+        curX += cw;
+      });
+
+      const fh = canvas.height / floors;
+      for (let f = 0; f < floors; f++) {
+        const y = f * fh;
+        ctx.fillStyle = 'rgba(30, 34, 40, 0.22)';
+        ctx.fillRect(0, y, canvas.width, 2.2);
+
+        let x = 0;
+        cols.forEach((col, idx) => {
+          const cw = canvas.width * col.w;
+          const isLeftHalf = idx < 4;
+
+          if (col.type === 'edgeSlit') {
+            const wx = x + cw * 0.20;
+            const wy = y + fh * 0.24;
+            const ww = cw * 0.60;
+            const wh = fh * 0.52;
+            ctx.fillStyle = '#27323D';
+            ctx.fillRect(wx, wy, ww, wh);
+            ctx.strokeStyle = '#DCDAD4';
+            ctx.lineWidth = 1.8;
+            ctx.strokeRect(wx, wy, ww, wh);
+          } else if (col.type === 'centerGap') {
+            // 중앙 2열 슬릿 창호
+            const subW = cw * 0.34;
+            const wy = y + fh * 0.24;
+            const wh = fh * 0.52;
+            [x + cw * 0.12, x + cw * 0.54].forEach(sx => {
+              ctx.fillStyle = '#27323D';
+              ctx.fillRect(sx, wy, subW, wh);
+              ctx.strokeStyle = '#CBD5E1';
+              ctx.lineWidth = 1.6;
+              ctx.strokeRect(sx, wy, subW, wh);
+            });
+          } else if (col.type === 'midGray') {
+            const pad = cw * 0.12;
+            const gap = cw * 0.08;
+            const w1 = (cw - pad * 2 - gap) / 2;
+            const wy = y + fh * 0.22;
+            const wh = fh * 0.56;
+            [x + pad, x + pad + w1 + gap].forEach(gx => {
+              ctx.fillStyle = '#26303A';
+              ctx.fillRect(gx, wy, w1, wh);
+              ctx.strokeStyle = '#E2E8F0';
+              ctx.lineWidth = 1.8;
+              ctx.strokeRect(gx, wy, w1, wh);
+            });
+          } else {
+            // 화이트 발코니 베이 (좁은 침실 창 + 넓은 발코니 창 + 철제 난간)
+            const pad = cw * 0.10;
+            const gap = cw * 0.06;
+            const nW = (cw - pad * 2 - gap) * 0.33;
+            const wW = (cw - pad * 2 - gap) * 0.67;
+            const wy = y + fh * 0.18;
+            const wh = fh * 0.64;
+            const nX = isLeftHalf ? (x + pad) : (x + pad + wW + gap);
+            const wX = isLeftHalf ? (x + pad + nW + gap) : (x + pad);
+
+            ctx.fillStyle = '#26313B';
+            ctx.fillRect(nX, wy, nW, wh);
+            ctx.strokeStyle = '#DCDAD4';
+            ctx.lineWidth = 1.8;
+            ctx.strokeRect(nX, wy, nW, wh);
+
+            ctx.fillStyle = '#2B4C5E';
+            ctx.fillRect(wX, wy, wW, wh);
+            ctx.strokeStyle = '#E2E8F0';
+            ctx.lineWidth = 2.2;
+            ctx.strokeRect(wX, wy, wW, wh);
+
+            ctx.beginPath();
+            ctx.moveTo(wX + wW / 2, wy);
+            ctx.lineTo(wX + wW / 2, wy + wh);
+            ctx.stroke();
+
+            ctx.fillStyle = '#181B1F';
+            ctx.fillRect(wX - 1, wy + wh * 0.56, wW + 2, 2.2);
+            for (let rx = wX; rx <= wX + wW; rx += 7) {
+              ctx.fillRect(rx, wy + wh * 0.56, 1.5, wh * 0.44);
+            }
+          }
+          x += cw;
+        });
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // C. 후면 코어 및 돌출부 입면 텍스처 (솔리드 그레이 샤프트 · 계단실 유리 커튼월 · 보조 돌출부 · 오목 후면)
+    function create114BackWallTexture(floors, mode = 'glassCore') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      if (mode === 'solidShaft') {
+        // 중앙 코어 한쪽: 수평 줄눈 라이트 그레이 솔리드 패널 샤프트 (사진 2, 3)
+        ctx.fillStyle = '#C4C8D0';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      } else if (mode === 'glassCore') {
+        // 중앙 코어 다른 한쪽: 화이트 프레임 + 연속 계단실 커튼월 유리 + 최상단 다크 루버
+        ctx.fillStyle = '#ECEEEB';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#8A929E';
+        ctx.fillRect(canvas.width * 0.14, 0, canvas.width * 0.72, canvas.height);
+      } else if (mode === 'sideProtrusion') {
+        // 좌·우 보조 돌출부: 화이트 프레임 + 다크 수평 루버 그릴
+        ctx.fillStyle = '#ECEEEB';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      } else {
+        // 오목 후면 구간: 창호 + 다크 루버 실외기 열
+        ctx.fillStyle = '#E6E8EB';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      const fh = canvas.height / floors;
+      for (let f = 0; f < floors; f++) {
+        const y = f * fh;
+        ctx.fillStyle = 'rgba(24, 28, 34, 0.25)';
+        ctx.fillRect(0, y, canvas.width, 2.2);
+
+        if (mode === 'solidShaft') {
+          ctx.fillStyle = 'rgba(30, 34, 40, 0.16)';
+          ctx.fillRect(0, y + fh * 0.5, canvas.width, 1.5);
+        } else if (mode === 'glassCore') {
+          if (f === 0) {
+            ctx.fillStyle = '#22262C';
+            ctx.fillRect(canvas.width * 0.12, y + 3, canvas.width * 0.76, fh - 6);
+            ctx.fillStyle = '#4B525C';
+            for (let lx = canvas.width * 0.16; lx < canvas.width * 0.84; lx += 8) {
+              ctx.fillRect(lx, y + 5, 3, fh - 10);
+            }
+          } else {
+            const wx = canvas.width * 0.18;
+            const ww = canvas.width * 0.64;
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(wx, y + fh * 0.10, ww, fh * 0.80);
+            ctx.strokeStyle = '#E2E8F0';
+            ctx.lineWidth = 2.2;
+            ctx.strokeRect(wx, y + fh * 0.10, ww, fh * 0.80);
+          }
+        } else if (mode === 'sideProtrusion') {
+          const lx = canvas.width * 0.20;
+          const lw = canvas.width * 0.60;
+          ctx.fillStyle = '#262B33';
+          ctx.fillRect(lx, y + fh * 0.16, lw, fh * 0.68);
+          ctx.fillStyle = '#525864';
+          for (let ly = y + fh * 0.20; ly < y + fh * 0.80; ly += 5) {
+            ctx.fillRect(lx + 4, ly, lw - 8, 1.8);
+          }
+        } else {
+          // 오목 후면: 세대 창호 + 다크 루버
+          ctx.fillStyle = '#27323D';
+          ctx.fillRect(canvas.width * 0.16, y + fh * 0.20, canvas.width * 0.34, fh * 0.60);
+          ctx.strokeStyle = '#CBD5E1';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(canvas.width * 0.16, y + fh * 0.20, canvas.width * 0.34, fh * 0.60);
+
+          const lx = canvas.width * 0.56;
+          const lw = canvas.width * 0.28;
+          ctx.fillStyle = '#252930';
+          ctx.fillRect(lx, y + fh * 0.18, lw, fh * 0.64);
+          ctx.fillStyle = '#525864';
+          for (let ly = y + fh * 0.22; ly < y + fh * 0.78; ly += 5) {
+            ctx.fillRect(lx + 3, ly, lw - 6, 1.8);
+          }
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // D. 저층부 다크 차콜 석재 기단부 + 밝은 수평 줄눈 띠
+    function createDarkBaseWithBandsTexture(hasWindows = false) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#2B2E33';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = '#191B1F';
+      ctx.lineWidth = 2;
+      for (let y = 0; y < canvas.height; y += 32) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+      for (let x = 0; x < canvas.width; x += 64) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      }
+
+      ctx.fillStyle = '#A8ACB2';
+      ctx.fillRect(0, 62, canvas.width, 6);
+      ctx.fillRect(0, 146, canvas.width, 6);
+      ctx.fillRect(0, 224, canvas.width, 6);
+
+      if (hasWindows) {
+        for (let x = 42; x < canvas.width - 30; x += 120) {
+          ctx.fillStyle = '#1C2228';
+          ctx.fillRect(x, 18, 68, 36);
+          ctx.strokeStyle = '#8C9096';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x, 18, 68, 36);
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // E. 옥상 평면 텍스처
+    function createSatelliteRoofTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#B8BCC2';
+      ctx.fillRect(0, 0, 512, 512);
+
+      ctx.fillStyle = '#CDC5B4';
+      ctx.fillRect(42, 42, 428, 428);
+
+      ctx.strokeStyle = '#73777D';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(42, 42, 428, 428);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // F. 주출입구 문주 상단 정면 인방 텍스처 ('114' 실버 표기 + 상단 수직 루버 프리즈)
+    function createDong114PortalHeaderTexture(leftLine, rightLine) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 160;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#282B30';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 상단 수직 루버 프리즈
+      ctx.fillStyle = '#1B1D21';
+      ctx.fillRect(28, 12, canvas.width - 56, 46);
+      for (let lx = 34; lx < canvas.width - 34; lx += 8) {
+        ctx.fillStyle = '#4B5058';
+        ctx.fillRect(lx, 14, 3.5, 42);
+      }
+
+      ctx.strokeStyle = '#464B53';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(28, 66, canvas.width - 56, 78);
+
+      const cx = canvas.width / 2;
+
+      ctx.fillStyle = '#101214';
+      ctx.font = 'bold 34px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(leftLine, cx - 102, 118);
+      ctx.fillStyle = '#F1F5F9';
+      ctx.fillText(leftLine, cx - 104, 116);
+
+      ctx.fillStyle = '#101214';
+      ctx.font = 'bold 48px "Malgun Gothic", sans-serif';
+      ctx.fillText('114', cx + 2, 122);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillText('114', cx, 120);
+
+      ctx.fillStyle = '#101214';
+      ctx.font = 'bold 34px "Malgun Gothic", sans-serif';
+      ctx.fillText(rightLine, cx + 106, 118);
+      ctx.fillStyle = '#F1F5F9';
+      ctx.fillText(rightLine, cx + 104, 116);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createPortalVerticalLouverTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 160;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#282B30';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#1B1D21';
+      ctx.fillRect(16, 12, canvas.width - 32, 46);
+      for (let x = 22; x < canvas.width - 22; x += 8) {
+        ctx.fillStyle = '#4B5058';
+        ctx.fillRect(x, 14, 3.5, 42);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createLobbyCurtainWallTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#14171A';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      grad.addColorStop(0, 'rgba(65, 75, 65, 0.30)');
+      grad.addColorStop(0.5, 'rgba(30, 36, 34, 0.16)');
+      grad.addColorStop(1, 'rgba(85, 90, 75, 0.30)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#6E6349';
+      for (let x = 0; x <= canvas.width; x += 64) {
+        ctx.fillRect(x, 0, 6, canvas.height);
+      }
+      ctx.fillRect(0, 145, canvas.width, 6);
+      ctx.fillRect(0, 325, canvas.width, 6);
+
+      ctx.strokeStyle = '#CBD5E1';
+      ctx.lineWidth = 7;
+      ctx.strokeRect(180, 325, 152, 187);
+      ctx.beginPath();
+      ctx.moveTo(256, 325);
+      ctx.lineTo(256, 512);
+      ctx.stroke();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function addOutlines(mesh) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      const line = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0x161616 })
+      );
+      mesh.add(line);
+    }
+
+    // 옥상 화이트 파라펫 링 + 전면 중앙 옥탑 지붕 캐노피 (북쪽동 테라코타 캐노피 / 남쪽동 그레이 캐노피)
+    function createDong114RoofCrown(mainD, wingLen, canopyColor = '#C27650') {
+      const crownGroup = new THREE.Group();
+      const whiteParapetMat = new THREE.MeshStandardMaterial({ color: '#F2F2EE', roughness: 0.72 });
+      const canopyMat = new THREE.MeshStandardMaterial({ color: canopyColor, roughness: 0.75 });
+      const darkDeckMat = new THREE.MeshStandardMaterial({ color: '#5A5E66', roughness: 0.82 });
+
+      const ringW = mainD - 3.6;
+      const ringL = wingLen - 3.2;
+      const ringH = 2.0;
+      const t = 1.6;
+
+      const segments = [
+        { size: [ringW, ringH, t], pos: [0, ringH / 2, ringL / 2 - t / 2] },
+        { size: [ringW, ringH, t], pos: [0, ringH / 2, -ringL / 2 + t / 2] },
+        { size: [t, ringH, ringL - t * 2], pos: [ringW / 2 - t / 2, ringH / 2, 0] },
+        { size: [t, ringH, ringL - t * 2], pos: [-ringW / 2 + t / 2, ringH / 2, 0] }
+      ];
+      segments.forEach(s => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(...s.size), whiteParapetMat);
+        m.position.set(...s.pos);
+        m.castShadow = true;
+        addOutlines(m);
+        crownGroup.add(m);
+      });
+
+      // 전면(-X) 중앙 지붕 캐노피 (사진 2, 3 북쪽동 상단의 테라코타 옥탑 지붕 날개)
+      const canopyL = wingLen * 0.54;
+      const canopyH = 2.5;
+      const canopyD = 3.8;
+      const xPos = -(mainD / 2 - canopyD / 2 - 0.5);
+
+      [-1, 1].forEach(side => {
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(canopyD, canopyH, 1.6),
+          canopyMat
+        );
+        post.position.set(xPos, canopyH / 2, side * (canopyL / 2 - 0.8));
+        post.castShadow = true;
+        addOutlines(post);
+        crownGroup.add(post);
+      });
+
+      const topBeam = new THREE.Mesh(
+        new THREE.BoxGeometry(canopyD + 0.4, 0.7, canopyL + 0.6),
+        [canopyMat, canopyMat, darkDeckMat, darkDeckMat, canopyMat, canopyMat]
+      );
+      topBeam.position.set(xPos, canopyH + 0.35, 0);
+      topBeam.castShadow = true;
+      addOutlines(topBeam);
+      crownGroup.add(topBeam);
+
+      return crownGroup;
+    }
+
+    // =========================================================
+    // 주출입구 문주 생성 함수 (ㄷ자 다크 화강석 문주 + 루버 프리즈 + 유리 로비)
+    // =========================================================
+    function createDong114EntrancePortal(baseH, leftLine, rightLine) {
+      const entranceGroup = new THREE.Group();
+
+      const stoneMat = new THREE.MeshStandardMaterial({ color: '#282B30', roughness: 0.72 });
+      const stoneDarkMat = new THREE.MeshStandardMaterial({ color: '#1F2226', roughness: 0.78 });
+      const headerFrontMat = new THREE.MeshStandardMaterial({
+        map: createDong114PortalHeaderTexture(leftLine, rightLine),
+        roughness: 0.7
+      });
+      const louverSideMat = new THREE.MeshStandardMaterial({
+        map: createPortalVerticalLouverTexture(),
+        roughness: 0.72
+      });
+      const glassLobbyMat = new THREE.MeshStandardMaterial({
+        map: createLobbyCurtainWallTexture(),
+        roughness: 0.35,
+        metalness: 0.25
+      });
+
+      const portalW = 6.2;
+      const portalD = 4.2;
+      const portalH = baseH * 0.80;
+      const pillarW = 1.05;
+      const pillarD = 1.15;
+      const headerH = 2.0;
+
+      const leftPillar = new THREE.Mesh(
+        new THREE.BoxGeometry(pillarW, portalH - headerH, pillarD),
+        stoneMat
+      );
+      leftPillar.position.set(-(portalW / 2 - pillarW / 2), (portalH - headerH) / 2, portalD - pillarD / 2);
+      leftPillar.castShadow = true;
+      leftPillar.receiveShadow = true;
+      addOutlines(leftPillar);
+      entranceGroup.add(leftPillar);
+
+      const rightPillar = new THREE.Mesh(
+        new THREE.BoxGeometry(pillarW, portalH - headerH, pillarD),
+        stoneMat
+      );
+      rightPillar.position.set(portalW / 2 - pillarW / 2, (portalH - headerH) / 2, portalD - pillarD / 2);
+      rightPillar.castShadow = true;
+      rightPillar.receiveShadow = true;
+      addOutlines(rightPillar);
+      entranceGroup.add(rightPillar);
+
+      const headerRoof = new THREE.Mesh(
+        new THREE.BoxGeometry(portalW, headerH, portalD),
+        [
+          louverSideMat,
+          louverSideMat,
+          stoneDarkMat,
+          stoneDarkMat,
+          headerFrontMat,
+          stoneMat
+        ]
+      );
+      headerRoof.position.set(0, portalH - headerH / 2, portalD / 2);
+      headerRoof.castShadow = true;
+      headerRoof.receiveShadow = true;
+      addOutlines(headerRoof);
+      entranceGroup.add(headerRoof);
+
+      const lobbyDepth = 1.3;
+      const lobbyGlassBox = new THREE.Mesh(
+        new THREE.BoxGeometry(portalW - 0.3, portalH - headerH, lobbyDepth),
+        [
+          glassLobbyMat,
+          glassLobbyMat,
+          stoneDarkMat,
+          stoneDarkMat,
+          glassLobbyMat,
+          stoneDarkMat
+        ]
+      );
+      lobbyGlassBox.position.set(0, (portalH - headerH) / 2, lobbyDepth / 2);
+      lobbyGlassBox.castShadow = true;
+      lobbyGlassBox.receiveShadow = true;
+      addOutlines(lobbyGlassBox);
+      entranceGroup.add(lobbyGlassBox);
+
+      return entranceGroup;
+    }
+
+    // =========================================================
+    // 개별 날개 동(Wing) 생성 함수 (로컬 -X = 발코니 전면, +X = 돌출 코어·출입구 후면, +Z = 자유 단부)
+    // =========================================================
+    function create114Wing({
+      endWallColor = '#C2C7CE',
+      canopyColor = '#C27650',
+      frontEdgeSide = 'left',
+      showDongNumber = true,
+      leftLine = '2',
+      rightLine = '1'
+    }) {
+      const wingGroup = new THREE.Group();
+
+      const floorH = 2.55;
+      const totalFloors = 21;
+      const baseFloors = 4;
+      const upperFloors = totalFloors - baseFloors;
+      const baseH = floorH * baseFloors;
+      const upperH = floorH * upperFloors;
+
+      const mainD = 12.6;
+      const wingLen = 33.6;
+
+      const baseSolidMat = new THREE.MeshStandardMaterial({
+        map: createDarkBaseWithBandsTexture(false),
+        roughness: 0.8
+      });
+      const baseWinMat = new THREE.MeshStandardMaterial({
+        map: createDarkBaseWithBandsTexture(true),
+        roughness: 0.8
+      });
+      const roofMat = new THREE.MeshStandardMaterial({
+        map: createSatelliteRoofTexture(),
+        roughness: 0.88
+      });
+
+      // 1. 주동 본체 (기단부 4층 + 상부 주거 17층)
+      const mainBase = new THREE.Mesh(
+        new THREE.BoxGeometry(mainD + 0.25, baseH, wingLen + 0.25),
+        [baseWinMat, baseWinMat, baseSolidMat, baseSolidMat, baseSolidMat, baseSolidMat]
+      );
+      mainBase.position.set(0, baseH / 2, 0);
+      mainBase.castShadow = true;
+      mainBase.receiveShadow = true;
+      addOutlines(mainBase);
+      wingGroup.add(mainBase);
+
+      const backRecessedMat = new THREE.MeshStandardMaterial({
+        map: create114BackWallTexture(upperFloors, 'recessed')
+      });
+      const frontFacadeMat = new THREE.MeshStandardMaterial({
+        map: create114FrontFacadeTexture(upperFloors)
+      });
+      const freeEndMat = new THREE.MeshStandardMaterial({
+        map: create114EndWallTexture({ baseColor: endWallColor, frontEdgeSide, showDongNumber })
+      });
+      const innerEndMat = new THREE.MeshStandardMaterial({
+        color: '#8E95A0',
+        roughness: 0.8
+      });
+
+      const mainUpper = new THREE.Mesh(
+        new THREE.BoxGeometry(mainD, upperH, wingLen),
+        [backRecessedMat, frontFacadeMat, roofMat, baseSolidMat, freeEndMat, innerEndMat]
+      );
+      mainUpper.position.set(0, baseH + upperH / 2, 0);
+      mainUpper.castShadow = true;
+      mainUpper.receiveShadow = true;
+      addOutlines(mainUpper);
+      wingGroup.add(mainUpper);
+
+      // 옥상 파라펫 링 + 전면 중앙 옥탑 지붕 캐노피
+      const roofCrown = createDong114RoofCrown(mainD, wingLen, canopyColor);
+      roofCrown.position.set(0, baseH + upperH, 0);
+      wingGroup.add(roofCrown);
+
+      // 2. 후면(+X) 3단 돌출부 (중앙 이중 코어 샤프트 + 좌·우 보조 돌출부 2개)
+      const backFaceX = mainD / 2;
+      const coreShaftLen = 4.2;
+      const coreProtrudeD = 4.5;
+      const coreTotalH = baseH + upperH + 2.3;
+
+      // 2-1) 중앙 코어 A (자유 단부 쪽, +Z 방향): 수평 줄눈 솔리드 그레이 샤프트
+      const solidShaftBase = new THREE.Mesh(
+        new THREE.BoxGeometry(coreProtrudeD + 0.15, baseH, coreShaftLen + 0.15),
+        baseSolidMat
+      );
+      solidShaftBase.position.set(backFaceX + coreProtrudeD / 2 - 0.2, baseH / 2, coreShaftLen / 2);
+      addOutlines(solidShaftBase);
+      wingGroup.add(solidShaftBase);
+
+      const solidShaftUpper = new THREE.Mesh(
+        new THREE.BoxGeometry(coreProtrudeD, coreTotalH - baseH - 0.5, coreShaftLen),
+        [
+          new THREE.MeshStandardMaterial({ map: create114BackWallTexture(totalFloors, 'solidShaft') }),
+          new THREE.MeshStandardMaterial({ color: '#C4C8D0' }),
+          roofMat,
+          baseSolidMat,
+          new THREE.MeshStandardMaterial({ color: '#C4C8D0' }),
+          new THREE.MeshStandardMaterial({ color: '#C4C8D0' })
+        ]
+      );
+      solidShaftUpper.position.set(
+        backFaceX + coreProtrudeD / 2 - 0.2,
+        baseH + (coreTotalH - baseH - 0.5) / 2,
+        coreShaftLen / 2
+      );
+      solidShaftUpper.castShadow = true;
+      solidShaftUpper.receiveShadow = true;
+      addOutlines(solidShaftUpper);
+      wingGroup.add(solidShaftUpper);
+
+      // 2-2) 중앙 코어 B (내측 연결부 쪽, -Z 방향): 계단실 커튼월 유리 코어 + 최상단 다크 루버
+      const glassShaftBase = new THREE.Mesh(
+        new THREE.BoxGeometry(coreProtrudeD + 0.15, baseH, coreShaftLen + 0.15),
+        baseSolidMat
+      );
+      glassShaftBase.position.set(backFaceX + coreProtrudeD / 2 - 0.2, baseH / 2, -coreShaftLen / 2);
+      addOutlines(glassShaftBase);
+      wingGroup.add(glassShaftBase);
+
+      const glassShaftUpper = new THREE.Mesh(
+        new THREE.BoxGeometry(coreProtrudeD, coreTotalH - baseH, coreShaftLen),
+        [
+          new THREE.MeshStandardMaterial({ map: create114BackWallTexture(totalFloors, 'glassCore') }),
+          new THREE.MeshStandardMaterial({ color: '#ECEEEB' }),
+          roofMat,
+          baseSolidMat,
+          new THREE.MeshStandardMaterial({ color: '#ECEEEB' }),
+          new THREE.MeshStandardMaterial({ color: '#ECEEEB' })
+        ]
+      );
+      glassShaftUpper.position.set(
+        backFaceX + coreProtrudeD / 2 - 0.2,
+        baseH + (coreTotalH - baseH) / 2,
+        -coreShaftLen / 2
+      );
+      glassShaftUpper.castShadow = true;
+      glassShaftUpper.receiveShadow = true;
+      addOutlines(glassShaftUpper);
+      wingGroup.add(glassShaftUpper);
+
+      // 2-3) 좌·우 보조 돌출부 (하늘 배치도 image_4ec679.png 후면 양측 돌출 매스)
+      [-1, 1].forEach(side => {
+        const subZ = side * 11.2;
+        const subLen = 3.6;
+        const subD = 2.2;
+        const subH = baseH + upperH - 0.6;
+
+        const subBase = new THREE.Mesh(
+          new THREE.BoxGeometry(subD + 0.15, baseH, subLen + 0.15),
+          baseSolidMat
+        );
+        subBase.position.set(backFaceX + subD / 2 - 0.2, baseH / 2, subZ);
+        addOutlines(subBase);
+        wingGroup.add(subBase);
+
+        const subUpper = new THREE.Mesh(
+          new THREE.BoxGeometry(subD, subH - baseH, subLen),
+          [
+            new THREE.MeshStandardMaterial({ map: create114BackWallTexture(upperFloors, 'sideProtrusion') }),
+            new THREE.MeshStandardMaterial({ color: '#ECEEEB' }),
+            roofMat,
+            baseSolidMat,
+            new THREE.MeshStandardMaterial({ color: '#ECEEEB' }),
+            new THREE.MeshStandardMaterial({ color: '#ECEEEB' })
+          ]
+        );
+        subUpper.position.set(backFaceX + subD / 2 - 0.2, baseH + (subH - baseH) / 2, subZ);
+        subUpper.castShadow = true;
+        subUpper.receiveShadow = true;
+        addOutlines(subUpper);
+        wingGroup.add(subUpper);
+      });
+
+      // 3. ★ 주출입구 문주 (후면 +X 중앙 코어 하단에서 바깥 방향을 정면으로 돌출)
+      const portal = createDong114EntrancePortal(baseH, leftLine, rightLine);
+      portal.rotation.y = Math.PI / 2; // 로컬 +X 방향을 정면으로 향함
+      portal.position.set(backFaceX + coreProtrudeD - 0.25, 0, -2.0);
+      wingGroup.add(portal);
+
+      return wingGroup;
+    }
+
+    // =========================================================
+    // 금호파크힐스 114동 전체 조립 (북쪽동 + 남쪽동 대칭 결합)
+    // =========================================================
+    export function createKumho114Dong() {
+      const dong114 = new THREE.Group();
+      dong114.name = 'KumhoParkHills_114';
+
+      const floorH = 2.55;
+      const totalFloors = 21;
+      const baseFloors = 4;
+      const baseH = floorH * baseFloors;
+      const totalH = floorH * totalFloors;
+
+      const wingLen = 33.6;
+      const halfLen = wingLen / 2;
+
+      // ---------------------------------------------------------
+      // 1. 북쪽동 (North Wing):
+      //    - 자유 단부(북향, -Z): 주황색 입면 + e편한세상 로고
+      //    - 전면(동향, +X): 발코니 + 테라코타 옥탑 캐노피
+      //    - 후면·출입구(서향, -X): 3단 돌출부 + 서쪽 주출입구
+      // ---------------------------------------------------------
+      const northWing = create114Wing({
+        endWallColor: '#C27650',  // 북측 주황/테라코타 입면 (사진 4)
+        canopyColor: '#C27650',   // 동측 전면 상단 테라코타 캐노피 (사진 2, 3)
+        frontEdgeSide: 'left',    // +X(동측 전면) 모서리 화이트 수직 띠
+        showDongNumber: false,
+        leftLine: '4',
+        rightLine: '3'
+      });
+      const northAngle = Math.PI - 0.04; // 자유 단부가 정북(-Z), 출입구가 서쪽(-X)
+      northWing.rotation.y = northAngle;
+      // 내측 연결부가 원점 부근(z = -2.2)에 오도록 배치
+      northWing.position.set(
+        Math.sin(northAngle) * halfLen - 1.2,
+        0,
+        Math.cos(northAngle) * halfLen - 2.2
+      );
+      dong114.add(northWing);
+
+      // ---------------------------------------------------------
+      // 2. 남쪽동 (South Wing):
+      //    - 자유 단부(남동향): 회색 입면 + e편한세상 로고 + 하단 114 표기
+      //    - 전면(남서향): 발코니 입면
+      //    - 후면·출입구(동북향, NE): 3단 돌출부 + 동북쪽 주출입구
+      // ---------------------------------------------------------
+      const southWing = create114Wing({
+        endWallColor: '#C2C7CE',  // 남동측 쿨 라이트 그레이 입면 (사진 1)
+        canopyColor: '#9EA4AE',   // 남서측 상단 그레이 캐노피
+        frontEdgeSide: 'right',   // 남서측 전면 모서리 화이트 수직 띠
+        showDongNumber: true,     // 우측 하단 '114' 표기 (사진 1)
+        leftLine: '2',
+        rightLine: '1'
+      });
+      const southAngle = 0.72; // ~ +41.2도: 자유 단부가 남동(SE), 출입구가 동북(NE)
+      southWing.rotation.y = southAngle;
+      southWing.position.set(
+        Math.sin(southAngle) * halfLen + 2.4,
+        0,
+        Math.cos(southAngle) * halfLen + 3.2
+      );
+      dong114.add(southWing);
+
+      // ---------------------------------------------------------
+      // 3. 두 동 내측 연결부 코어 매스 (하늘 배치도 image_4ec679.png 중앙 꺾임부 접합)
+      // ---------------------------------------------------------
+      const jointGroup = new THREE.Group();
+      const baseSolidMat = new THREE.MeshStandardMaterial({
+        map: createDarkBaseWithBandsTexture(false),
+        roughness: 0.8
+      });
+      const jointWallMat = new THREE.MeshStandardMaterial({
+        color: '#D5D8DE',
+        roughness: 0.78
+      });
+      const roofMat = new THREE.MeshStandardMaterial({
+        map: createSatelliteRoofTexture(),
+        roughness: 0.88
+      });
+
+      const jointBase = new THREE.Mesh(
+        new THREE.BoxGeometry(10.8, baseH, 10.8),
+        baseSolidMat
+      );
+      jointBase.position.set(-0.6, baseH / 2, 1.0);
+      jointBase.castShadow = true;
+      jointBase.receiveShadow = true;
+      addOutlines(jointBase);
+      jointGroup.add(jointBase);
+
+      const jointUpper = new THREE.Mesh(
+        new THREE.BoxGeometry(10.5, totalH - baseH - 0.4, 10.5),
+        [jointWallMat, jointWallMat, roofMat, baseSolidMat, jointWallMat, jointWallMat]
+      );
+      jointUpper.position.set(-0.6, baseH + (totalH - baseH - 0.4) / 2, 1.0);
+      jointUpper.rotation.y = 0.34;
+      jointUpper.castShadow = true;
+      jointUpper.receiveShadow = true;
+      addOutlines(jointUpper);
+      jointGroup.add(jointUpper);
+
+      dong114.add(jointGroup);
+
+      return dong114;
+    }
+
+    // 씬에 114동 배치
+    const apt114 = createKumho114Dong();
+    scene.add(apt114);
+
+    // =========================================================
+    // 3D 모델링 파일(.glb) 추출 함수
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        apt114,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'kumho_114dong.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (error) => {
+          console.error('GLB 추출 중 오류:', error);
+        },
+        { binary: true }
+      );
+    };
+
+    // 애니메이션 루프
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

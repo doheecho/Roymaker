@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>현대식 3층 주택 3D 모델링 & GLB 추출</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #2c2f33; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(20, 22, 25, 0.82); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
+      pointer-events: none; line-height: 1.5;
+    }
+    #controls-ui {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      background: rgba(20, 22, 25, 0.88); padding: 10px 14px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.15);
+      max-width: 94vw;
+    }
+    button {
+      background: #3b4048; color: #fff; border: 1px solid #555b65;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #5B6675; color: #fff; border-color: #9CA3AF; }
+    button.export-btn {
+      background: #2b6cb0; border-color: #4299e1; font-weight: bold;
+    }
+    button.export-btn:hover { background: #3182ce; color: #fff; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>현대식 3층 주택 3D 모델 (정면·후면·좌측·우측·상면·하면 도면 기준)</strong><br/>
+    마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소
+  </div>
+
+  <div id="controls-ui">
+    <button onclick="setView('front')">정면도 (Front)</button>
+    <button onclick="setView('back')">후면도 (Back)</button>
+    <button onclick="setView('left')">좌측면도 (Left)</button>
+    <button onclick="setView('right')">우측면도 (Right)</button>
+    <button onclick="setView('top')">상면도 (Top)</button>
+    <button onclick="setView('bottom')">하면도 (Bottom)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // 치수 상수 (폭 W = 11.4m, 깊이 D = 13.8m, 3개층 총 높이 H = 10.8m)
+    const W = 11.4;
+    const D = 13.8;
+    const FLOOR_H = 3.6;
+    const TOTAL_H = FLOOR_H * 3;
+
+    // 1. 기본 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#34383D');
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(18, 13, 22);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, TOTAL_H / 2, 0);
+    controls.enableDamping = true;
+    controls.update();
+
+    // 좌표계: +Z = 정면, -Z = 후면, -X = 좌측면, +X = 우측면
+    window.setView = (dir) => {
+      controls.target.set(0, TOTAL_H / 2, 0);
+      if (dir === 'front')  camera.position.set(0, 6.2, 24);
+      if (dir === 'back')   camera.position.set(0, 6.2, -24);
+      if (dir === 'left')   camera.position.set(-24, 6.2, 0);
+      if (dir === 'right')  camera.position.set(24, 6.2, 0);
+      if (dir === 'top')    camera.position.set(0, 32, 0.01);
+      if (dir === 'bottom') camera.position.set(0, -20, 0.01);
+      controls.update();
+    };
+
+    // 2. 조명 및 그리드
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.88);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.05);
+    dirLight.position.set(24, 42, 28);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdce6f2, 0.45);
+    fillLight.position.set(-24, 20, -24);
+    scene.add(fillLight);
+
+    const gridHelper = new THREE.GridHelper(60, 30, 0x555555, 0x42464C);
+    scene.add(gridHelper);
+
+    // =========================================================
+    // 텍스처 생성 유틸리티
+    // =========================================================
+
+    // A. 1층 다크 석재 타일 기단 텍스처
+    function createDarkStoneTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#4A4E54';
+      ctx.fillRect(0, 0, 512, 512);
+
+      const rows = 8;
+      const cols = 8;
+      const rh = 512 / rows;
+      const cw = 512 / cols;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const tone = 68 + ((r * 7 + c * 13) % 16);
+          ctx.fillStyle = `rgb(${tone}, ${tone + 3}, ${tone + 7})`;
+          ctx.fillRect(c * cw + 2, r * rh + 2, cw - 4, rh - 4);
+        }
+      }
+
+      ctx.strokeStyle = '#2B2E33';
+      ctx.lineWidth = 2;
+      for (let y = 0; y <= 512; y += rh) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
+      }
+      for (let x = 0; x <= 512; x += cw) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // B. 2~3층 밝은 그레이 벽돌 텍스처
+    function createBrickTexture({ lightAccent = false } = {}) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = lightAccent ? '#DCD9D2' : '#B8B5AE';
+      ctx.fillRect(0, 0, 512, 512);
+
+      const brickH = 16;
+      const brickW = 48;
+      for (let row = 0; row * brickH < 512; row++) {
+        const y = row * brickH;
+        const offset = (row % 2) * (brickW / 2);
+        for (let x = -brickW; x < 512 + brickW; x += brickW) {
+          const bx = x + offset;
+          const base = lightAccent ? 210 : 174;
+          const delta = ((row * 11 + Math.abs(bx) * 3) % 18) - 9;
+          const v = Math.min(242, Math.max(120, base + delta));
+          ctx.fillStyle = `rgb(${v}, ${v - 2}, ${v - 5})`;
+          ctx.fillRect(bx + 1, y + 1, brickW - 2, brickH - 2);
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // C. 지붕 및 바닥 콘크리트 텍스처
+    function createConcreteSlabTexture(baseHex = '#A8A6A0') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = baseHex;
+      ctx.fillRect(0, 0, 512, 512);
+
+      ctx.strokeStyle = 'rgba(60, 62, 66, 0.25)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i <= 512; i += 64) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function addOutlines(mesh) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      const line = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0x1A1C1F })
+      );
+      mesh.add(line);
+    }
+
+    // 창호 생성 헬퍼
+    function createWindowAssembly(width, height, withGlow = false) {
+      const group = new THREE.Group();
+
+      const frameMat = new THREE.MeshStandardMaterial({ color: '#1F2328', roughness: 0.45, metalness: 0.3 });
+      const glassMat = new THREE.MeshStandardMaterial({
+        color: withGlow ? '#D9C39E' : '#26323D',
+        emissive: withGlow ? '#7A5C2E' : '#000000',
+        emissiveIntensity: withGlow ? 0.35 : 0,
+        roughness: 0.2,
+        metalness: 0.1
+      });
+
+      const outer = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.22), frameMat);
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(width - 0.18, height - 0.18, 0.24), glassMat);
+      const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.08, height - 0.16, 0.26), frameMat);
+
+      group.add(outer, glass, mullion);
+      return group;
+    }
+
+    // 발코니 철제 난간 생성 헬퍼
+    function createBalconyRailing(width, depth, height = 1.05) {
+      const group = new THREE.Group();
+      const railMat = new THREE.MeshStandardMaterial({ color: '#1C1F24', roughness: 0.45, metalness: 0.5 });
+
+      const topBar = new THREE.Mesh(new THREE.BoxGeometry(width, 0.08, 0.08), railMat);
+      topBar.position.set(0, height, depth / 2);
+      group.add(topBar);
+
+      const midBar = new THREE.Mesh(new THREE.BoxGeometry(width, 0.05, 0.05), railMat);
+      midBar.position.set(0, height * 0.52, depth / 2);
+      group.add(midBar);
+
+      const postCount = Math.max(6, Math.floor(width / 0.55));
+      for (let i = 0; i <= postCount; i++) {
+        const x = -width / 2 + (width / postCount) * i;
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.04, height, 0.04), railMat);
+        post.position.set(x, height / 2, depth / 2);
+        group.add(post);
+      }
+
+      // 좌·우 측면 난간
+      [-width / 2, width / 2].forEach((sx) => {
+        const sideTop = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, depth), railMat);
+        sideTop.position.set(sx, height, 0);
+        group.add(sideTop);
+
+        const sidePost = new THREE.Mesh(new THREE.BoxGeometry(0.05, height, 0.05), railMat);
+        sidePost.position.set(sx, height / 2, 0);
+        group.add(sidePost);
+      });
+
+      return group;
+    }
+
+    // =========================================================
+    // 현대식 3층 주택 3D 그룹 생성
+    // =========================================================
+    export function createModern3StoryHouse() {
+      const house = new THREE.Group();
+      house.name = 'Modern_3Story_House';
+
+      const darkStoneMat = new THREE.MeshStandardMaterial({ map: createDarkStoneTexture(), roughness: 0.85 });
+      const brickMat = new THREE.MeshStandardMaterial({ map: createBrickTexture({ lightAccent: false }), roughness: 0.82 });
+      const accentBrickMat = new THREE.MeshStandardMaterial({ map: createBrickTexture({ lightAccent: true }), roughness: 0.8 });
+      const fasciaMat = new THREE.MeshStandardMaterial({ color: '#2B2E33', roughness: 0.65 });
+      const roofMat = new THREE.MeshStandardMaterial({ map: createConcreteSlabTexture('#A8A6A0'), roughness: 0.9 });
+      const bottomMat = new THREE.MeshStandardMaterial({ map: createConcreteSlabTexture('#9A9892'), roughness: 0.92 });
+      const basePlinthMat = new THREE.MeshStandardMaterial({ color: '#8F9194', roughness: 0.88 });
+
+      // 기초 패드
+      const groundPad = new THREE.Mesh(new THREE.BoxGeometry(W + 0.6, 0.16, D + 0.6), basePlinthMat);
+      groundPad.position.set(0, 0.08, 0);
+      groundPad.receiveShadow = true;
+      house.add(groundPad);
+
+      // 1층 본체 (다크 석재 기단)
+      const floor1 = new THREE.Mesh(
+        new THREE.BoxGeometry(W, FLOOR_H, D),
+        [darkStoneMat, darkStoneMat, fasciaMat, bottomMat, darkStoneMat, darkStoneMat]
+      );
+      floor1.position.set(0, FLOOR_H / 2, 0);
+      floor1.castShadow = true;
+      floor1.receiveShadow = true;
+      addOutlines(floor1);
+      house.add(floor1);
+
+      // 2층 본체 (벽돌 외장)
+      const floor2 = new THREE.Mesh(
+        new THREE.BoxGeometry(W, FLOOR_H, D),
+        [brickMat, brickMat, fasciaMat, fasciaMat, brickMat, brickMat]
+      );
+      floor2.position.set(0, FLOOR_H * 1.5, 0);
+      floor2.castShadow = true;
+      floor2.receiveShadow = true;
+      addOutlines(floor2);
+      house.add(floor2);
+
+      // 3층 본체 (벽돌 외장)
+      const floor3 = new THREE.Mesh(
+        new THREE.BoxGeometry(W, FLOOR_H, D),
+        [brickMat, brickMat, roofMat, fasciaMat, brickMat, brickMat]
+      );
+      floor3.position.set(0, FLOOR_H * 2.5, 0);
+      floor3.castShadow = true;
+      floor3.receiveShadow = true;
+      addOutlines(floor3);
+      house.add(floor3);
+
+      // 좌·우 측면 전면 코너 포인트 벽돌 스트립 (좌측면도·우측면도)
+      [-W / 2 - 0.04, W / 2 + 0.04].forEach((sx) => {
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(0.12, FLOOR_H * 2.15, 2.5), accentBrickMat);
+        strip.position.set(sx, FLOOR_H * 1.9, D / 2 - 2.2);
+        house.add(strip);
+      });
+
+      // 층간 다크 수평 몰딩 및 최상부 파라펫
+      [FLOOR_H, FLOOR_H * 2, TOTAL_H].forEach((yPos, idx) => {
+        const hBand = idx === 2 ? 0.55 : 0.34;
+        const band = new THREE.Mesh(new THREE.BoxGeometry(W + 0.24, hBand, D + 0.24), fasciaMat);
+        band.position.set(0, yPos, 0);
+        band.castShadow = true;
+        addOutlines(band);
+        house.add(band);
+      });
+
+      // =========================================================
+      // 정면도 (+Z) 디테일: 현관·계단·창호·발코니·조명
+      // =========================================================
+      const doorFrameMat = new THREE.MeshStandardMaterial({ color: '#1B1E23', roughness: 0.45 });
+      const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(1.75, 2.55, 0.24), doorFrameMat);
+      frontDoor.position.set(-2.9, 1.35, D / 2 + 0.08);
+      house.add(frontDoor);
+
+      const sideLight = new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 2.55, 0.22),
+        new THREE.MeshStandardMaterial({ color: '#27333E', roughness: 0.2 })
+      );
+      sideLight.position.set(-1.75, 1.35, D / 2 + 0.07);
+      house.add(sideLight);
+
+      // 정면 현관 계단
+      [0.18, 0.36].forEach((sy, idx) => {
+        const step = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.18, 0.65), basePlinthMat);
+        step.position.set(-2.35, sy, D / 2 + 0.45 + idx * 0.45);
+        step.castShadow = true;
+        house.add(step);
+      });
+
+      // 1층 정면 와이드 창호
+      const f1Win = createWindowAssembly(4.4, 2.25, true);
+      f1Win.position.set(2.35, 1.85, D / 2 + 0.06);
+      house.add(f1Win);
+
+      // 2층·3층 정면 발코니 슬래브, 창호, 철제 난간
+      [FLOOR_H, FLOOR_H * 2].forEach((fStartY) => {
+        const balSlab = new THREE.Mesh(new THREE.BoxGeometry(W + 0.1, 0.26, 1.45), fasciaMat);
+        balSlab.position.set(0, fStartY + 0.13, D / 2 + 0.65);
+        balSlab.castShadow = true;
+        addOutlines(balSlab);
+        house.add(balSlab);
+
+        const balWin = createWindowAssembly(5.6, 2.35, true);
+        balWin.position.set(0, fStartY + 1.55, D / 2 + 0.06);
+        house.add(balWin);
+
+        const rail = createBalconyRailing(W - 0.3, 1.35, 1.05);
+        rail.position.set(0, fStartY + 0.26, D / 2 + 0.65);
+        house.add(rail);
+      });
+
+      // 외벽 브래킷 조명
+      const sconceMat = new THREE.MeshStandardMaterial({ color: '#FDE68A', emissive: '#FBBF24', emissiveIntensity: 0.6 });
+      [
+        [-4.3, 2.3, D / 2 + 0.18],
+        [0.1, 2.3, D / 2 + 0.18],
+        [-3.4, 5.9, D / 2 + 0.18],
+        [3.4, 5.9, D / 2 + 0.18],
+        [-3.4, 9.5, D / 2 + 0.18],
+        [3.4, 9.5, D / 2 + 0.18]
+      ].forEach(([lx, ly, lz]) => {
+        const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.32, 0.16), sconceMat);
+        lamp.position.set(lx, ly, lz);
+        house.add(lamp);
+      });
+
+      // =========================================================
+      // 후면도 (-Z) 디테일: 출입문·창호·우편함·설비함
+      // =========================================================
+      const backDoor = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.45, 0.24), doorFrameMat);
+      backDoor.position.set(-0.6, 1.3, -D / 2 - 0.08);
+      house.add(backDoor);
+
+      const backStep = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.22, 0.7), basePlinthMat);
+      backStep.position.set(-0.6, 0.11, -D / 2 - 0.45);
+      house.add(backStep);
+
+      const f1BackWin = createWindowAssembly(2.5, 1.65, false);
+      f1BackWin.position.set(2.8, 1.65, -D / 2 - 0.06);
+      house.add(f1BackWin);
+
+      // 후면 좌측 우편함/인터콤 박스
+      const utilBox = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.3, 0.22), basePlinthMat);
+      utilBox.position.set(-3.2, 1.45, -D / 2 - 0.12);
+      house.add(utilBox);
+
+      [FLOOR_H, FLOOR_H * 2].forEach((fStartY) => {
+        const leftW = createWindowAssembly(1.6, 1.85, false);
+        leftW.position.set(-3.3, fStartY + 1.85, -D / 2 - 0.06);
+        house.add(leftW);
+
+        const rightW = createWindowAssembly(2.6, 1.75, false);
+        rightW.position.set(2.6, fStartY + 1.85, -D / 2 - 0.06);
+        house.add(rightW);
+      });
+
+      // =========================================================
+      // 좌측면도 (-X) & 우측면도 (+X) 창호 및 실외기
+      // =========================================================
+      const sideWinCoords = [
+        { y: 1.7, z: -4.2, w: 1.0, h: 1.3 },
+        { y: 1.7, z: 2.4, w: 1.6, h: 1.4 },
+        { y: 5.3, z: -4.2, w: 1.0, h: 1.3 },
+        { y: 5.3, z: -1.2, w: 0.7, h: 0.7 },
+        { y: 5.3, z: 2.4, w: 1.6, h: 1.4 },
+        { y: 8.9, z: -4.2, w: 1.0, h: 1.3 },
+        { y: 8.9, z: -1.2, w: 0.7, h: 0.7 },
+        { y: 8.9, z: 2.4, w: 1.6, h: 1.4 }
+      ];
+
+      sideWinCoords.forEach((wc) => {
+        const winL = createWindowAssembly(wc.w, wc.h, false);
+        winL.rotation.y = Math.PI / 2;
+        winL.position.set(-W / 2 - 0.06, wc.y, wc.z);
+        house.add(winL);
+
+        const winR = createWindowAssembly(wc.w, wc.h, false);
+        winR.rotation.y = Math.PI / 2;
+        winR.position.set(W / 2 + 0.06, wc.y, wc.z);
+        house.add(winR);
+      });
+
+      // 실외기 (좌·우측면도 하단)
+      const acMat = new THREE.MeshStandardMaterial({ color: '#E5E7EB', roughness: 0.55 });
+      [-W / 2 - 0.55, W / 2 + 0.55].forEach((ax) => {
+        const acUnit = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.85, 0.55), acMat);
+        acUnit.position.set(ax, 0.52, 4.4);
+        acUnit.castShadow = true;
+        addOutlines(acUnit);
+        house.add(acUnit);
+      });
+
+      // 좌측면도 배관/계량기
+      const pipe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.06, 3.2, 10),
+        new THREE.MeshStandardMaterial({ color: '#9CA3AF', metalness: 0.5, roughness: 0.4 })
+      );
+      pipe.position.set(-W / 2 - 0.14, 1.7, -5.2);
+      house.add(pipe);
+
+      // =========================================================
+      // 상면도 (+Y) 옥탑 계단실 매스
+      // =========================================================
+      const penthouse = new THREE.Mesh(
+        new THREE.BoxGeometry(3.2, 2.2, 3.6),
+        [brickMat, brickMat, roofMat, fasciaMat, brickMat, brickMat]
+      );
+      penthouse.position.set(2.4, TOTAL_H + 1.1, -3.6);
+      penthouse.castShadow = true;
+      penthouse.receiveShadow = true;
+      addOutlines(penthouse);
+      house.add(penthouse);
+
+      return house;
+    }
+
+    const modernHouse = createModern3StoryHouse();
+    scene.add(modernHouse);
+
+    // =========================================================
+    // 3D 모델링 파일(.glb) 추출 함수
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        modernHouse,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'modern_3story_house.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (error) => {
+          console.error('GLB 추출 중 오류:', error);
+        },
+        { binary: true }
+      );
+    };
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

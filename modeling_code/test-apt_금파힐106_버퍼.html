@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>금호파크힐스 106동 3D 모델링 & GLB 추출</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #2c2f33; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(20, 22, 25, 0.78); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
+      pointer-events: none; line-height: 1.5;
+    }
+    #controls-ui {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      background: rgba(20, 22, 25, 0.85); padding: 10px 14px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.15);
+      max-width: 92vw;
+    }
+    button {
+      background: #3b4048; color: #fff; border: 1px solid #555b65;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #C9965B; color: #111; border-color: #e3b278; }
+    button.export-btn {
+      background: #2b6cb0; border-color: #4299e1; font-weight: bold;
+    }
+    button.export-btn:hover { background: #3182ce; color: #fff; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>금호파크힐스 106동 (전후좌우상하 6면 기반 3D 모델)</strong><br/>
+    마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소
+  </div>
+
+  <div id="controls-ui">
+    <button onclick="setView('front')">전면 (Front)</button>
+    <button onclick="setView('back')">후면 (Back)</button>
+    <button onclick="setView('left')">좌측면 (Left)</button>
+    <button onclick="setView('right')">우측면 (Right)</button>
+    <button onclick="setView('top')">상면 (Top)</button>
+    <button onclick="setView('bottom')">하면 (Bottom)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // 1. 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#34383D');
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(42, 46, 62);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 22, 0);
+    controls.enableDamping = true;
+    controls.update();
+
+    // 6면 시점 전환 함수
+    window.setView = (dir) => {
+      controls.target.set(0, 22, 0);
+      if (dir === 'front')  camera.position.set(36, 38, 62);
+      if (dir === 'back')   camera.position.set(-36, 38, -62);
+      if (dir === 'left')   camera.position.set(-68, 26, 8);
+      if (dir === 'right')  camera.position.set(68, 26, -8);
+      if (dir === 'top')    camera.position.set(0, 98, 4);
+      if (dir === 'bottom') camera.position.set(35, -35, -45);
+      controls.update();
+    };
+
+    // 2. 조명 및 뷰포트 그리드
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.82);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.05);
+    dirLight.position.set(55, 95, 45);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    const gridHelper = new THREE.GridHelper(160, 40, 0x555555, 0x42464C);
+    scene.add(gridHelper);
+
+    // =========================================================
+    // 텍스처 생성 유틸리티 (CanvasTexture)
+    // =========================================================
+
+    // A. 106동 베이지·오커 측벽 텍스처 ('106' 번호 / e편한세상 구름 로고)
+    function createBeigeSideTexture({ showNumber = false, showLogo = false }) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      // 106동 고유 베이지/오커 외벽 컬러
+      ctx.fillStyle = '#D4A366';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 층별 미세 가로줄 패턴
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+      for (let y = 0; y < canvas.height; y += 22) {
+        ctx.fillRect(0, y, canvas.width, 2);
+      }
+
+      // 상단·하단 '106' 동번호 표기
+      if (showNumber) {
+        ctx.fillStyle = '#222222';
+        ctx.font = 'bold 64px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('106', canvas.width / 2, 165);
+
+        ctx.font = 'bold 48px sans-serif';
+        ctx.fillText('106', canvas.width / 2, 955);
+      }
+
+      // e편한세상 오렌지 구름 로고 + '106'
+      if (showLogo) {
+        const cx = canvas.width / 2;
+        const cy = 140;
+        ctx.fillStyle = '#E87A24';
+        ctx.strokeStyle = '#1E1E1E';
+        ctx.lineWidth = 4;
+
+        ctx.beginPath();
+        ctx.arc(cx - 45, cy + 10, 26, 0, Math.PI * 2);
+        ctx.arc(cx - 15, cy - 12, 32, 0, Math.PI * 2);
+        ctx.arc(cx + 25, cy - 8, 28, 0, Math.PI * 2);
+        ctx.arc(cx + 52, cy + 12, 22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#181818';
+        ctx.font = 'bold 34px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('e편한세상', cx, cy + 66);
+
+        ctx.font = 'bold 44px sans-serif';
+        ctx.fillText('106', cx, cy + 118);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // B. 밝은 아이보리/그레이 창문 및 발코니 패턴 텍스처
+    function createWindowWallTexture(floors, cols = 3, wallColor = '#E4E1D8') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = wallColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const fh = canvas.height / floors;
+      const cw = canvas.width / cols;
+
+      for (let f = 0; f < floors; f++) {
+        const y = f * fh;
+        ctx.fillStyle = '#B5B2A8';
+        ctx.fillRect(0, y, canvas.width, 3);
+
+        for (let c = 0; c < cols; c++) {
+          const x = c * cw;
+          const winX = x + cw * 0.16;
+          const winY = y + fh * 0.22;
+          const winW = cw * 0.68;
+          const winH = fh * 0.62;
+
+          ctx.fillStyle = '#2A343E';
+          ctx.fillRect(winX, winY, winW, winH);
+
+          ctx.strokeStyle = '#DCDAD3';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(winX, winY, winW, winH);
+          ctx.beginPath();
+          ctx.moveTo(winX + winW / 2, winY);
+          ctx.lineTo(winX + winW / 2, winY + winH);
+          ctx.stroke();
+
+          // 발코니 난간 살
+          ctx.fillStyle = '#1B1E21';
+          ctx.fillRect(winX - 2, winY + winH * 0.55, winW + 4, 3);
+          for (let rx = winX; rx <= winX + winW; rx += 10) {
+            ctx.fillRect(rx, winY + winH * 0.55, 2, winH * 0.45);
+          }
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // C. 저층부 어두운 석재 기단부 텍스처
+    function createDarkStoneTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#383B40';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = '#222427';
+      ctx.lineWidth = 2;
+      for (let y = 0; y < canvas.height; y += 32) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+      for (let x = 0; x < canvas.width; x += 64) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // 외곽선(카툰/뷰포트 스타일) 추가 헬퍼
+    function addOutlines(mesh) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      const line = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0x161616 })
+      );
+      mesh.add(line);
+    }
+
+    // 옥상 검은색 철제 난간 생성 헬퍼
+    function createRoofRailing(w, d, h = 1.2) {
+      const railGroup = new THREE.Group();
+      const railMat = new THREE.MeshStandardMaterial({ color: '#1B1D1F' });
+      const t = 0.14;
+
+      const bars = [
+        { size: [w, t, t], pos: [0, h, d / 2] },
+        { size: [w, t, t], pos: [0, h, -d / 2] },
+        { size: [t, t, d], pos: [w / 2, h, 0] },
+        { size: [t, t, d], pos: [-w / 2, h, 0] },
+        { size: [w, t * 0.7, t * 0.7], pos: [0, h * 0.5, d / 2] },
+        { size: [w, t * 0.7, t * 0.7], pos: [0, h * 0.5, -d / 2] },
+        { size: [t * 0.7, t * 0.7, d], pos: [w / 2, h * 0.5, 0] },
+        { size: [t * 0.7, t * 0.7, d], pos: [-w / 2, h * 0.5, 0] }
+      ];
+
+      bars.forEach(b => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(...b.size), railMat);
+        m.position.set(...b.pos);
+        railGroup.add(m);
+      });
+      return railGroup;
+    }
+
+    // =========================================================
+    // 금호파크힐스 106동 복합 매스 조립 함수
+    // =========================================================
+    export function createKumho106Dong() {
+      const dong106 = new THREE.Group();
+      dong106.name = 'KumhoParkHills_106';
+
+      const floorH = 2.5;
+      const stoneMat = new THREE.MeshStandardMaterial({ map: createDarkStoneTexture(), roughness: 0.8 });
+      const roofMat = new THREE.MeshStandardMaterial({ color: '#C8C6BF', roughness: 0.9 });
+
+      // 1. 좌측 고층 메인 타워 (20층, 좌측벽 '106' 표기)
+      const w1Floors = 20, w1BaseH = floorH * 3, w1UpperH = floorH * (w1Floors - 3);
+      const w1 = 14.0, d1 = 13.5;
+      const leftTower = new THREE.Group();
+
+      const w1Base = new THREE.Mesh(new THREE.BoxGeometry(w1 + 0.3, w1BaseH, d1 + 0.3), stoneMat);
+      w1Base.position.y = w1BaseH / 2;
+      addOutlines(w1Base);
+      leftTower.add(w1Base);
+
+      const w1Upper = new THREE.Mesh(
+        new THREE.BoxGeometry(w1, w1UpperH, d1),
+        [
+          new THREE.MeshStandardMaterial({ map: createBeigeSideTexture({}) }),
+          new THREE.MeshStandardMaterial({ map: createBeigeSideTexture({ showNumber: true }) }),
+          roofMat, stoneMat,
+          new THREE.MeshStandardMaterial({ map: createWindowWallTexture(w1Floors - 3, 3) }),
+          new THREE.MeshStandardMaterial({ map: createWindowWallTexture(w1Floors - 3, 3, '#CFD0D2') })
+        ]
+      );
+      w1Upper.position.y = w1BaseH + w1UpperH / 2;
+      w1Upper.castShadow = true;
+      w1Upper.receiveShadow = true;
+      addOutlines(w1Upper);
+      leftTower.add(w1Upper);
+
+      const w1Rail = createRoofRailing(w1 - 0.3, d1 - 0.3);
+      w1Rail.position.y = w1BaseH + w1UpperH;
+      leftTower.add(w1Rail);
+
+      leftTower.position.set(-8.5, 0, -2.5);
+      dong106.add(leftTower);
+
+      // 2. 우측 전진형 서브 타워 (17층, 우측벽 'e편한세상 106' 로고 표기)
+      const w2Floors = 17, w2BaseH = floorH * 3, w2UpperH = floorH * (w2Floors - 3);
+      const w2 = 14.5, d2 = 13.0;
+      const rightTower = new THREE.Group();
+
+      const w2Base = new THREE.Mesh(new THREE.BoxGeometry(w2 + 0.3, w2BaseH, d2 + 0.3), stoneMat);
+      w2Base.position.y = w2BaseH / 2;
+      addOutlines(w2Base);
+      rightTower.add(w2Base);
+
+      const w2Upper = new THREE.Mesh(
+        new THREE.BoxGeometry(w2, w2UpperH, d2),
+        [
+          new THREE.MeshStandardMaterial({ map: createBeigeSideTexture({ showLogo: true }) }),
+          new THREE.MeshStandardMaterial({ map: createBeigeSideTexture({}) }),
+          roofMat, stoneMat,
+          new THREE.MeshStandardMaterial({ map: createWindowWallTexture(w2Floors - 3, 3) }),
+          new THREE.MeshStandardMaterial({ map: createWindowWallTexture(w2Floors - 3, 3, '#CFD0D2') })
+        ]
+      );
+      w2Upper.position.y = w2BaseH + w2UpperH / 2;
+      w2Upper.castShadow = true;
+      w2Upper.receiveShadow = true;
+      addOutlines(w2Upper);
+      rightTower.add(w2Upper);
+
+      const w2Rail = createRoofRailing(w2 - 0.3, d2 - 0.3);
+      w2Rail.position.y = w2BaseH + w2UpperH;
+      rightTower.add(w2Rail);
+
+      // 우측 타워 옥탑 루버/기계실 박스
+      const w2RoofBox = new THREE.Mesh(
+        new THREE.BoxGeometry(5.2, 3.8, 4.5),
+        new THREE.MeshStandardMaterial({ color: '#E4E1D8' })
+      );
+      w2RoofBox.position.set(2.8, w2BaseH + w2UpperH + 1.9, -2.2);
+      addOutlines(w2RoofBox);
+      rightTower.add(w2RoofBox);
+
+      rightTower.position.set(6.5, 0, 5.5);
+      dong106.add(rightTower);
+
+      // 3. 중앙 연결 계단실/엘리베이터 코어 타워
+      const coreH = w1BaseH + w1UpperH + 4.2;
+      const centerCore = new THREE.Mesh(
+        new THREE.BoxGeometry(5.5, coreH, 6.5),
+        new THREE.MeshStandardMaterial({ map: createWindowWallTexture(18, 1, '#D6D4CC') })
+      );
+      centerCore.position.set(-0.5, coreH / 2, 0.5);
+      addOutlines(centerCore);
+      dong106.add(centerCore);
+
+      // 4. 후면 필로티 주차장 데크 & 1층 현관 출입구
+      const deckBase = new THREE.Mesh(
+        new THREE.BoxGeometry(22, 4.8, 12),
+        new THREE.MeshStandardMaterial({ color: '#55585D', roughness: 0.85 })
+      );
+      deckBase.position.set(-1.0, 2.4, -11.5);
+      addOutlines(deckBase);
+      dong106.add(deckBase);
+
+      const deckRail = createRoofRailing(21.6, 11.6, 1.0);
+      deckRail.position.set(-1.0, 4.8, -11.5);
+      dong106.add(deckRail);
+
+      const entrance = new THREE.Mesh(new THREE.BoxGeometry(5.2, 4.2, 4.8), stoneMat);
+      entrance.position.set(1.5, 2.1, 12.2);
+      addOutlines(entrance);
+      dong106.add(entrance);
+
+      return dong106;
+    }
+
+    // 씬에 106동 배치
+    const apt106 = createKumho106Dong();
+    scene.add(apt106);
+
+    // =========================================================
+    // 3D 모델링 파일(.glb) 추출 함수
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        apt106,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'kumho_106dong.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (error) => {
+          console.error('GLB 추출 중 오류:', error);
+        },
+        { binary: true }
+      );
+    };
+
+    // 애니메이션 루프
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>메가커피 · 눈길헤어 빌딩 3D 모델링 & GLB 추출</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #2c2f33; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(20, 22, 25, 0.85); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.18);
+      pointer-events: none; line-height: 1.55;
+    }
+    #controls-ui {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      background: rgba(20, 22, 25, 0.88); padding: 10px 14px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      max-width: 94vw;
+    }
+    button {
+      background: #3b4048; color: #fff; border: 1px solid #555b65;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #E07A70; border-color: #F4A298; }
+    button.export-btn {
+      background: #2b6cb0; border-color: #4299e1; font-weight: bold;
+    }
+    button.export-btn:hover { background: #3182ce; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>메가커피 · 눈길헤어 빌딩 3D 모델 (캘리그라피 간판 & 남측 면 겹침 수정 완료)</strong><br/>
+    마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소
+  </div>
+
+  <div id="controls-ui">
+    <button onclick="setView('e')">동측 (E)</button>
+    <button onclick="setView('se')">동남 정면 (SE)</button>
+    <button onclick="setView('s')">남측 (S)</button>
+    <button onclick="setView('sw')">서남측 (SW)</button>
+    <button onclick="setView('top')">상공 (Top · 초록옥상)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // 1. 기본 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#34383D');
+
+    const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.2, 1000);
+    camera.position.set(14, 10, 24);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 4.5, 0);
+    controls.enableDamping = true;
+    controls.update();
+
+    // 좌표계 기준: -Z = 북(N), +Z = 남(S), +X = 동(E), -X = 서(W)
+    window.setView = (dir) => {
+      controls.target.set(0, 4.5, 0);
+      if (dir === 'e')   camera.position.set(24, 9, -2);    // 동측
+      if (dir === 'se')  camera.position.set(15, 8.5, 22);  // 동남측
+      if (dir === 's')   camera.position.set(3, 8.5, 25);   // 남측
+      if (dir === 'sw')  camera.position.set(-18, 9, 21);   // 서남측
+      if (dir === 'top') camera.position.set(0, 36, 0.01);  // 상공 초록 옥상
+      controls.update();
+    };
+
+    // 2. 조명 및 그리드
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.92);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.05);
+    dirLight.position.set(25, 45, 30);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdce6f2, 0.5);
+    fillLight.position.set(-25, 25, -25);
+    scene.add(fillLight);
+
+    const gridHelper = new THREE.GridHelper(80, 20, 0x555555, 0x42464C);
+    scene.add(gridHelper);
+
+    // =========================================================
+    // 실제 사진 속 '눈길헤어' 캘리그라피 손글씨 간판 드로잉 함수
+    // =========================================================
+    function drawNungilHairSign(ctx, x, y, width, height) {
+      ctx.save();
+      ctx.translate(x, y);
+
+      const scaleX = width / 560;
+      const scaleY = height / 90;
+      ctx.scale(scaleX, scaleY);
+
+      // 우측 검은색 보조 정보 바 ('02-6222-5788 2F')
+      ctx.fillStyle = '#1E1B18';
+      ctx.beginPath();
+      ctx.roundRect(355, 34, 195, 30, 4);
+      ctx.fill();
+
+      ctx.fillStyle = '#E5E7EB';
+      ctx.font = 'bold 16px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('02-6222-5788  2F', 452, 49);
+
+      // 좌측 '눈길헤어' 입체 캘리그라피 채널 문자 드로잉 함수
+      function strokeAndFillGlyphs(drawFn) {
+        // 1단계: 외벽 그림자
+        ctx.save();
+        ctx.translate(4, 5);
+        ctx.strokeStyle = 'rgba(40, 15, 12, 0.45)';
+        ctx.lineWidth = 15;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        drawFn();
+        ctx.stroke();
+        ctx.restore();
+
+        // 2단계: 짙은 다크브라운/블랙 채널 테두리
+        ctx.strokeStyle = '#1C1917';
+        ctx.lineWidth = 14;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        drawFn();
+        ctx.stroke();
+
+        // 3단계: 크림 화이트 전면 발광 채널
+        ctx.strokeStyle = '#FFFBEB';
+        ctx.lineWidth = 6.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        drawFn();
+        ctx.stroke();
+      }
+
+      strokeAndFillGlyphs(() => {
+        // [눈] - 부드럽게 휘어진 손글씨 ㄴ + ㅡ + ㄴ
+        ctx.beginPath();
+        // 상단 ㄴ
+        ctx.moveTo(26, 18);
+        ctx.quadraticCurveTo(25, 34, 28, 36);
+        ctx.quadraticCurveTo(52, 35, 74, 33);
+        // 중앙 ㅡ
+        ctx.moveTo(16, 48);
+        ctx.quadraticCurveTo(50, 45, 84, 44);
+        // 하단 ㄴ
+        ctx.moveTo(30, 56);
+        ctx.quadraticCurveTo(29, 71, 33, 73);
+        ctx.quadraticCurveTo(56, 72, 76, 70);
+
+        // [길] - 흘림 ㄱ + ㅣ + ㄹ
+        // ㄱ
+        ctx.moveTo(106, 20);
+        ctx.quadraticCurveTo(126, 18, 138, 19);
+        ctx.quadraticCurveTo(132, 34, 108, 44);
+        // ㅣ
+        ctx.moveTo(154, 14);
+        ctx.quadraticCurveTo(153, 32, 154, 46);
+        // 하단 ㄹ (유려한 S곡선)
+        ctx.moveTo(112, 53);
+        ctx.lineTo(152, 51);
+        ctx.quadraticCurveTo(153, 61, 148, 62);
+        ctx.lineTo(116, 64);
+        ctx.quadraticCurveTo(114, 73, 118, 75);
+        ctx.quadraticCurveTo(138, 74, 158, 72);
+
+        // [헤] - ㅎ + ㅔ
+        // ㅎ 상단 점과 가로획
+        ctx.moveTo(202, 14);
+        ctx.lineTo(204, 21);
+        ctx.moveTo(182, 29);
+        ctx.quadraticCurveTo(204, 27, 224, 26);
+        // ㅎ ㅇ
+        ctx.moveTo(203, 36);
+        ctx.bezierCurveTo(185, 36, 184, 62, 203, 62);
+        ctx.bezierCurveTo(221, 62, 221, 36, 203, 36);
+        // ㅔ (ㅓ + ㅣ)
+        ctx.moveTo(222, 45);
+        ctx.lineTo(234, 44);
+        ctx.moveTo(235, 22);
+        ctx.lineTo(235, 68);
+        ctx.moveTo(248, 17);
+        ctx.lineTo(248, 73);
+
+        // [어] - ㅇ + ㅓ
+        // ㅇ (약간 기울어진 둥근 타원)
+        ctx.moveTo(292, 25);
+        ctx.bezierCurveTo(270, 26, 269, 62, 292, 62);
+        ctx.bezierCurveTo(314, 62, 314, 25, 292, 25);
+        // ㅓ
+        ctx.moveTo(315, 44);
+        ctx.lineTo(332, 43);
+        ctx.moveTo(334, 17);
+        ctx.quadraticCurveTo(333, 46, 334, 74);
+      });
+
+      ctx.restore();
+    }
+
+    // =========================================================
+    // 공통 드로잉 유틸리티 (메가커피 로고, 코랄 벽면 질감)
+    // =========================================================
+    function drawMegaCoffeeLogo(ctx, centerX, centerY, scale = 1.0, darkOutline = false) {
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.scale(scale, scale);
+
+      // 1) 중앙 노란색 컵 모양 심볼 (위: M / 아래: GC)
+      ctx.fillStyle = '#FACC15';
+      ctx.strokeStyle = '#1F2937';
+      ctx.lineWidth = 4;
+
+      // 컵 뚜껑
+      ctx.fillRect(-36, -46, 72, 11);
+      ctx.strokeRect(-36, -46, 72, 11);
+
+      // 컵 몸체 (사다리꼴)
+      ctx.beginPath();
+      ctx.moveTo(-31, -35);
+      ctx.lineTo(31, -35);
+      ctx.lineTo(24, 34);
+      ctx.lineTo(-24, 34);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 컵 내부 텍스트: 위에 M, 밑에 GC
+      ctx.fillStyle = '#18181B';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '900 32px Arial, sans-serif';
+      ctx.fillText('M', 0, -14);
+      ctx.font = '900 22px Arial, sans-serif';
+      ctx.fillText('GC', 0, 17);
+
+      // 2) 좌측 'MEGA' & 하단 'BIG SIZE'
+      ctx.textAlign = 'right';
+      ctx.font = '900 54px Arial, sans-serif';
+      if (darkOutline) {
+        ctx.strokeStyle = '#18181B';
+        ctx.lineWidth = 5;
+        ctx.strokeText('MEGA', -46, -4);
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('MEGA', -46, -4);
+
+      ctx.font = 'bold 17px Arial, sans-serif';
+      ctx.fillStyle = darkOutline ? '#FDE047' : '#374151';
+      ctx.fillText('BIG SIZE', -50, 30);
+
+      // 3) 우측 'COFFEE' & 하단 '2SHOT'
+      ctx.textAlign = 'left';
+      ctx.font = '900 54px Arial, sans-serif';
+      if (darkOutline) {
+        ctx.strokeStyle = '#18181B';
+        ctx.lineWidth = 5;
+        ctx.strokeText('COFFEE', 46, -4);
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText('COFFEE', 46, -4);
+
+      ctx.font = 'bold 17px Arial, sans-serif';
+      ctx.fillStyle = darkOutline ? '#FDE047' : '#374151';
+      ctx.fillText('2SHOT', 50, 30);
+
+      ctx.restore();
+    }
+
+    function drawCoralWallBase(ctx, w, h) {
+      ctx.fillStyle = '#E0776E';
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+      for (let i = 0; i < 600; i++) {
+        const rx = (i * 73) % w;
+        const ry = (i * 137) % h;
+        ctx.fillRect(rx, ry, 14, 6);
+      }
+      ctx.fillStyle = 'rgba(130, 45, 38, 0.25)';
+      ctx.fillRect(0, h * 0.34, w, 6);
+      ctx.fillRect(0, h * 0.68, w, 5);
+    }
+
+    // ---------------------------------------------------------
+    // 1) 동남측(SE) 정면 파사드 텍스처 (메가커피 1층 + 눈길헤어 2층 통창)
+    // ---------------------------------------------------------
+    function createMegaCoffeeMainFacadeTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 840;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#272A2E';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 상단 코랄 띠
+      ctx.fillStyle = '#E0776E';
+      ctx.fillRect(0, 0, canvas.width, 48);
+
+      // 2층 눈길헤어 블랙 프레임 대형 통유리창
+      const winY = 48;
+      const winH = 332;
+      ctx.fillStyle = '#181A1D';
+      ctx.fillRect(0, winY, canvas.width, winH);
+
+      const glassGrad = ctx.createLinearGradient(0, winY, 0, winY + winH);
+      glassGrad.addColorStop(0, '#5B7083');
+      glassGrad.addColorStop(0.45, '#89A3B8');
+      glassGrad.addColorStop(0.48, '#D6E2EC');
+      glassGrad.addColorStop(0.85, '#B8C9D6');
+      glassGrad.addColorStop(1, '#334155');
+      ctx.fillStyle = glassGrad;
+      ctx.fillRect(16, winY + 14, canvas.width - 32, winH - 28);
+
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.22)';
+      for (let by = winY + 155; by < winY + 275; by += 6) {
+        ctx.fillRect(16, by, canvas.width - 32, 2);
+      }
+
+      ctx.fillStyle = '#181A1D';
+      const cols = 5;
+      for (let c = 1; c < cols; c++) {
+        const mx = (canvas.width / cols) * c;
+        ctx.fillRect(mx - 6, winY, 12, winH);
+      }
+      ctx.fillRect(0, winY + winH - 58, canvas.width, 10);
+
+      // 1층 좌측: 2층 눈길헤어 출입구 블랙 기둥 & 유리문
+      ctx.fillStyle = '#141619';
+      ctx.fillRect(0, 380, 195, 460);
+
+      ctx.fillStyle = '#272C33';
+      ctx.fillRect(26, 480, 138, 340);
+      ctx.strokeStyle = '#64748B';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(26, 480, 138, 340);
+
+      ctx.strokeStyle = '#E2E8F0';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(95, 620, 32, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#E2E8F0';
+      ctx.font = 'bold 14px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('눈길헤어', 95, 625);
+
+      // 1층 우측: 메가커피 파사드
+      const mcX = 195;
+      const mcW = canvas.width - mcX;
+
+      ctx.fillStyle = '#E5E7EB';
+      ctx.fillRect(mcX, 380, mcW, 185);
+      ctx.fillStyle = '#FACC15';
+      ctx.fillRect(mcX, 380, mcW, 18);
+      ctx.fillStyle = '#9CA3AF';
+      ctx.fillRect(mcX, 558, mcW, 7);
+
+      drawMegaCoffeeLogo(ctx, mcX + mcW * 0.5, 475, 1.32, false);
+
+      ctx.fillStyle = '#D1D5DB';
+      ctx.fillRect(mcX, 565, mcW, 150);
+
+      ctx.fillStyle = '#FACC15';
+      ctx.fillRect(mcX, 715, mcW, 125);
+      ctx.strokeStyle = '#CA8A04';
+      ctx.lineWidth = 4;
+      for (let px = mcX + 24; px < canvas.width - 140; px += 190) {
+        ctx.strokeRect(px, 732, 155, 92);
+      }
+
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(mcX + 165, 595, 290, 130);
+      ctx.fillStyle = '#FEF08A';
+      ctx.fillRect(mcX + 178, 608, 120, 104);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(mcX + 310, 608, 132, 104);
+
+      ctx.fillStyle = '#18181B';
+      ctx.fillRect(mcX + 760, 595, 165, 245);
+      ctx.strokeStyle = '#FACC15';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(mcX + 760, 595, 165, 245);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // ---------------------------------------------------------
+    // 2) 남측(S) 코랄 핑크 주벽면 텍스처 (캘리그라피 눈길헤어 + MEGA COFFEE)
+    // ---------------------------------------------------------
+    function createSouthCoralFacadeTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 768;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      drawCoralWallBase(ctx, canvas.width, canvas.height);
+
+      // 상단 캘리그라피 간판: 눈길헤어 (실제 폰트 디자인 적용)
+      drawNungilHairSign(ctx, 68, 125, 620, 96);
+
+      // 중단 스트라이프 루버 간판판 & MEGA COFFEE
+      const louverY = 470;
+      const louverH = 145;
+      ctx.fillStyle = '#4B3634';
+      ctx.fillRect(28, louverY, 712, louverH);
+
+      ctx.fillStyle = '#D6D3D1';
+      for (let ly = louverY + 8; ly < louverY + louverH - 6; ly += 14) {
+        ctx.fillRect(32, ly, 704, 6);
+      }
+
+      drawMegaCoffeeLogo(ctx, canvas.width / 2, louverY + louverH / 2, 1.05, true);
+
+      // 하단 좌측 출입문
+      ctx.fillStyle = '#C9635B';
+      ctx.fillRect(140, 695, 145, 290);
+      ctx.strokeStyle = '#9E4740';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(140, 695, 145, 290);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // ---------------------------------------------------------
+    // 3) 동측(E) 코랄 핑크 측벽 & 배관 텍스처
+    // ---------------------------------------------------------
+    function createEastCoralSideTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 840;
+      const ctx = canvas.getContext('2d');
+
+      drawCoralWallBase(ctx, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(465, 215, 72, 62);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(473, 223, 56, 46);
+
+      ctx.fillStyle = '#1F2428';
+      ctx.fillRect(30, 340, 125, 165);
+
+      ctx.strokeStyle = '#E5E7EB';
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(310, 45);
+      ctx.bezierCurveTo(370, 120, 290, 240, 210, 275);
+      ctx.bezierCurveTo(150, 290, 145, 200, 160, 140);
+      ctx.stroke();
+
+      ctx.fillStyle = '#C45D54';
+      ctx.fillRect(415, 180, 18, 560);
+      ctx.fillRect(40, 725, 393, 16);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // ---------------------------------------------------------
+    // 4) 서측(W) 코랄 핑크 측벽 & 창호 텍스처
+    // ---------------------------------------------------------
+    function createWestCoralSideTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 768;
+      canvas.height = 920;
+      const ctx = canvas.getContext('2d');
+
+      drawCoralWallBase(ctx, canvas.width, canvas.height);
+
+      [95, 285, 515].forEach((wx, idx) => {
+        const ww = idx === 2 ? 125 : 85;
+        ctx.fillStyle = '#E5E7EB';
+        ctx.fillRect(wx, 320, ww, 115);
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(wx + 6, 326, ww - 12, 103);
+      });
+
+      [65, 205, 395, 555].forEach((wx, idx) => {
+        const ww = idx >= 2 ? 135 : 95;
+        ctx.fillStyle = '#1F2937';
+        ctx.fillRect(wx, 560, ww, 135);
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(wx + 6, 566, ww - 12, 123);
+      });
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // ---------------------------------------------------------
+    // 5) 하늘에서 본 초록색 우레탄 방수 옥상 텍스처
+    // ---------------------------------------------------------
+    function createGreenRoofTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#2B5B44';
+      ctx.fillRect(0, 0, 512, 512);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.fillRect(40, 60, 180, 140);
+      ctx.fillRect(260, 220, 190, 210);
+
+      ctx.strokeStyle = '#1E4030';
+      ctx.lineWidth = 14;
+      ctx.strokeRect(7, 7, 498, 498);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function addOutlines(mesh) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      const line = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0x1A1A1A })
+      );
+      mesh.add(line);
+    }
+
+    // =========================================================
+    // 메가커피 · 눈길헤어 빌딩 3D 형상 조립
+    // =========================================================
+    export function createMegaCoffeeBuilding() {
+      const building = new THREE.Group();
+      building.name = 'MegaCoffee_NungilHair_Building';
+
+      const mainH = 7.4;  // 2개층 주동 높이
+      const towerH = 9.8; // 남서측 옥탑 계단실 타워 높이
+
+      const coralMat = new THREE.MeshStandardMaterial({ color: '#E0776E', roughness: 0.84 });
+      const greenRoofMat = new THREE.MeshStandardMaterial({ map: createGreenRoofTexture(), roughness: 0.85 });
+
+      // 1. 위성사진 기준 다각형 본체 평면
+      const shape = new THREE.Shape();
+      shape.moveTo(-6.5, 6.5);    // 북서 (-6.5, -6.5)
+      shape.lineTo(4.0, 6.5);     // 북동 (4.0, -6.5)
+      shape.lineTo(7.2, 0.5);     // 동측 꺾임점 (7.2, -0.5)
+      shape.lineTo(-0.5, -6.5);   // 남측 꺾임점 (-0.5, 6.5)
+      shape.lineTo(-6.5, -6.5);   // 남서 (-6.5, 6.5)
+      shape.closePath();
+
+      const mainGeom = new THREE.ExtrudeGeometry(shape, {
+        depth: mainH,
+        bevelEnabled: false
+      });
+      mainGeom.rotateX(-Math.PI / 2);
+
+      const mainMass = new THREE.Mesh(mainGeom, [coralMat, greenRoofMat]);
+      mainMass.castShadow = true;
+      mainMass.receiveShadow = true;
+      addOutlines(mainMass);
+      building.add(mainMass);
+
+      // 2. 남서측(SW) 계단실 코어 타워
+      // [Z-fighting 방지]: 본체(Z=6.5) 및 서측벽(X=-6.5)과 면이 겹치지 않도록 0.08m 전방/외측 배치
+      const towerW = 6.08;
+      const towerD = 4.68;
+      const southFacadeMat = new THREE.MeshStandardMaterial({
+        map: createSouthCoralFacadeTexture(),
+        roughness: 0.82,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1
+      });
+
+      const swTower = new THREE.Mesh(
+        new THREE.BoxGeometry(towerW, towerH, towerD),
+        [
+          coralMat,                                                                               // +X (동)
+          new THREE.MeshStandardMaterial({ map: createWestCoralSideTexture(), roughness: 0.82 }), // -X (서)
+          greenRoofMat,                                                                           // +Y (상공 초록 옥상)
+          coralMat,                                                                               // -Y
+          southFacadeMat,                                                                         // +Z (남측 MEGA COFFEE & 눈길헤어)
+          coralMat                                                                                // -Z (북)
+        ]
+      );
+      // 전면(+Z)이 Z = 4.24 + 2.34 = 6.58에 위치하여 본체(Z=6.5)와 완전히 분리됨
+      swTower.position.set(-3.54, towerH / 2, 4.24);
+      swTower.castShadow = true;
+      swTower.receiveShadow = true;
+      addOutlines(swTower);
+      building.add(swTower);
+
+      // 3. 동남측(SE) 메가커피 정면 & 2층 눈길헤어 통유리 입면 패널
+      const seDx = 7.2 - (-0.5);
+      const seDz = -0.5 - 6.5;
+      const seWidth = Math.hypot(seDx, seDz);
+
+      const seWallGroup = new THREE.Group();
+      seWallGroup.position.set(3.35, 0, 3.0);
+      seWallGroup.rotation.y = Math.atan2(7.0, 7.7);
+
+      const seFacadeMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(seWidth, mainH),
+        new THREE.MeshStandardMaterial({ map: createMegaCoffeeMainFacadeTexture(), roughness: 0.72 })
+      );
+      seFacadeMesh.position.set(0, mainH / 2, 0.05);
+      seWallGroup.add(seFacadeMesh);
+
+      // 3-1. 메가커피 돌출 노란색 어닝(차양)
+      const yellowAwningMat = new THREE.MeshStandardMaterial({ color: '#FACC15', roughness: 0.55 });
+      const awningW = seWidth * 0.83;
+      const awning = new THREE.Mesh(new THREE.BoxGeometry(awningW, 0.16, 1.35), yellowAwningMat);
+      awning.position.set(seWidth * 0.075, 2.55, 0.65);
+      awning.rotation.x = 0.24;
+      awning.castShadow = true;
+      addOutlines(awning);
+      seWallGroup.add(awning);
+
+      const valance = new THREE.Mesh(new THREE.BoxGeometry(awningW, 0.2, 0.06), yellowAwningMat);
+      valance.position.set(seWidth * 0.075, 2.34, 1.3);
+      seWallGroup.add(valance);
+
+      // 3-2. 2층 옥상 테라스 블랙 철제 난간 & 상단 캘리그라피 '눈길헤어' 입체 간판
+      const railMat = new THREE.MeshStandardMaterial({ color: '#18181B', roughness: 0.5 });
+      const topRail = new THREE.Mesh(new THREE.BoxGeometry(seWidth, 0.08, 0.08), railMat);
+      topRail.position.set(0, mainH + 1.05, 0.05);
+      const midRail = new THREE.Mesh(new THREE.BoxGeometry(seWidth, 0.06, 0.06), railMat);
+      midRail.position.set(0, mainH + 0.55, 0.05);
+      seWallGroup.add(topRail, midRail);
+
+      for (let rx = -seWidth / 2; rx <= seWidth / 2 + 0.1; rx += seWidth / 6) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.05, 0.08), railMat);
+        post.position.set(rx, mainH + 0.525, 0.05);
+        seWallGroup.add(post);
+      }
+
+      // 옥상 난간 부착 캘리그라피 '눈길헤어' 간판 (투명 배경 처리로 실제 채널 간판처럼 표현)
+      const roofSignCanvas = document.createElement('canvas');
+      roofSignCanvas.width = 580;
+      roofSignCanvas.height = 100;
+      const rCtx = roofSignCanvas.getContext('2d');
+      rCtx.clearRect(0, 0, 580, 100);
+      drawNungilHairSign(rCtx, 10, 5, 560, 90);
+
+      const roofSignTex = new THREE.CanvasTexture(roofSignCanvas);
+      roofSignTex.colorSpace = THREE.SRGBColorSpace;
+
+      const roofSignMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.8, 0.85),
+        new THREE.MeshStandardMaterial({
+          map: roofSignTex,
+          transparent: true,
+          alphaTest: 0.1,
+          side: THREE.DoubleSide
+        })
+      );
+      roofSignMesh.position.set(-1.6, mainH + 0.62, 0.14);
+      seWallGroup.add(roofSignMesh);
+
+      // 3-3. 동측 출입구 세로 간판 ('눈길헤어' 캘리그라피) & 야외 진녹색 파라솔
+      const vSignCanvas = document.createElement('canvas');
+      vSignCanvas.width = 110;
+      vSignCanvas.height = 420;
+      const vCtx = vSignCanvas.getContext('2d');
+      vCtx.fillStyle = '#F8FAFC';
+      vCtx.fillRect(0, 0, 110, 420);
+      vCtx.strokeStyle = '#1F2937';
+      vCtx.lineWidth = 6;
+      vCtx.strokeRect(3, 3, 104, 414);
+
+      // 세로 간판에도 동일한 손글씨 느낌의 캘리그라피 드로잉
+      vCtx.strokeStyle = '#18181B';
+      vCtx.lineWidth = 6.5;
+      vCtx.lineCap = 'round';
+      vCtx.lineJoin = 'round';
+      vCtx.beginPath();
+      // 눈
+      vCtx.moveTo(34, 38); vCtx.quadraticCurveTo(33, 52, 36, 54); vCtx.lineTo(74, 52);
+      vCtx.moveTo(26, 66); vCtx.lineTo(84, 65);
+      vCtx.moveTo(36, 76); vCtx.quadraticCurveTo(35, 90, 38, 92); vCtx.lineTo(76, 90);
+      // 길
+      vCtx.moveTo(32, 128); vCtx.lineTo(62, 127); vCtx.quadraticCurveTo(56, 142, 34, 152);
+      vCtx.moveTo(76, 122); vCtx.lineTo(76, 154);
+      vCtx.moveTo(38, 162); vCtx.lineTo(74, 161); vCtx.lineTo(74, 172);
+      vCtx.lineTo(40, 174); vCtx.lineTo(40, 186); vCtx.lineTo(78, 184);
+      // 헤
+      vCtx.moveTo(46, 214); vCtx.lineTo(48, 221);
+      vCtx.moveTo(30, 229); vCtx.lineTo(64, 228);
+      vCtx.moveTo(47, 236); vCtx.bezierCurveTo(32, 236, 32, 260, 47, 260);
+      vCtx.bezierCurveTo(62, 260, 62, 236, 47, 236);
+      vCtx.moveTo(62, 245); vCtx.lineTo(72, 244);
+      vCtx.moveTo(73, 222); vCtx.lineTo(73, 268);
+      vCtx.moveTo(85, 218); vCtx.lineTo(85, 272);
+      // 어
+      vCtx.moveTo(44, 305); vCtx.bezierCurveTo(26, 306, 26, 342, 44, 342);
+      vCtx.bezierCurveTo(62, 342, 62, 305, 44, 305);
+      vCtx.moveTo(63, 324); vCtx.lineTo(78, 323);
+      vCtx.moveTo(80, 298); vCtx.lineTo(80, 352);
+      vCtx.stroke();
+
+      const vSignTex = new THREE.CanvasTexture(vSignCanvas);
+      vSignTex.colorSpace = THREE.SRGBColorSpace;
+
+      const verticalSign = new THREE.Mesh(
+        new THREE.BoxGeometry(0.45, 2.1, 0.18),
+        new THREE.MeshStandardMaterial({ map: vSignTex })
+      );
+      verticalSign.position.set(-seWidth / 2 - 0.18, 3.2, 0.08);
+      seWallGroup.add(verticalSign);
+
+      // 야외 진녹색 대형 파라솔
+      const parasolGroup = new THREE.Group();
+      parasolGroup.position.set(-2.3, 0, 2.4);
+      const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 2.5, 8),
+        new THREE.MeshStandardMaterial({ color: '#27272A' })
+      );
+      pole.position.y = 1.25;
+      const canopy = new THREE.Mesh(
+        new THREE.ConeGeometry(1.75, 0.65, 8),
+        new THREE.MeshStandardMaterial({ color: '#14532D', roughness: 0.75 })
+      );
+      canopy.position.y = 2.45;
+      canopy.castShadow = true;
+      parasolGroup.add(pole, canopy);
+      seWallGroup.add(parasolGroup);
+
+      building.add(seWallGroup);
+
+      // 4. 동측(E) 코랄 핑크 측벽 패널
+      const eDx = 4.0 - 7.2;
+      const eDz = -6.5 - (-0.5);
+      const eWidth = Math.hypot(eDx, eDz);
+      const eWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(eWidth, mainH),
+        new THREE.MeshStandardMaterial({ map: createEastCoralSideTexture(), roughness: 0.84 })
+      );
+      eWall.position.set((7.2 + 4.0) / 2 + 0.05, mainH / 2, (-0.5 - 6.5) / 2);
+      eWall.rotation.y = Math.atan2(6.0, -3.2);
+      building.add(eWall);
+
+      // 5. 서측(W) 코랄 핑크 벽면 패널
+      const wWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(13.0, mainH),
+        new THREE.MeshStandardMaterial({ map: createWestCoralSideTexture(), roughness: 0.84 })
+      );
+      wWall.position.set(-6.54, mainH / 2, 0);
+      wWall.rotation.y = -Math.PI / 2;
+      building.add(wWall);
+
+      // 6. 옥상 실외기 박스
+      const acMat = new THREE.MeshStandardMaterial({ color: '#E5E7EB', roughness: 0.6 });
+      [-1.5, 0.2].forEach((az) => {
+        const acUnit = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.85, 1.1), acMat);
+        acUnit.position.set(-5.7, mainH + 0.425, az);
+        acUnit.castShadow = true;
+        addOutlines(acUnit);
+        building.add(acUnit);
+      });
+
+      // 7. 남측(S) 전면 계단 및 철제 난간 데크
+      const stairDeck = new THREE.Mesh(
+        new THREE.BoxGeometry(5.8, 0.6, 2.2),
+        new THREE.MeshStandardMaterial({ color: '#A8A29E', roughness: 0.9 })
+      );
+      stairDeck.position.set(-3.4, 0.3, 7.68);
+      stairDeck.receiveShadow = true;
+      addOutlines(stairDeck);
+      building.add(stairDeck);
+
+      const stairRailMat = new THREE.MeshStandardMaterial({ color: '#7F1D1D', roughness: 0.6 });
+      const frontFence = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.95, 0.08), stairRailMat);
+      frontFence.position.set(-3.4, 1.05, 8.72);
+      building.add(frontFence);
+
+      return building;
+    }
+
+    // 씬에 건물 추가
+    const megaBuilding = createMegaCoffeeBuilding();
+    scene.add(megaBuilding);
+
+    // =========================================================
+    // GLB 파일 추출 함수
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        megaBuilding,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'megacoffee_nungilhair_building_v2.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (error) => {
+          console.error('GLB 추출 중 오류:', error);
+        },
+        { binary: true }
+      );
+    };
+
+    // 렌더링 루프
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>한국형 벽돌 상가주택 3D 모델링 & GLB 추출</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #2c2f33; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(20, 22, 25, 0.82); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
+      pointer-events: none; line-height: 1.5;
+    }
+    #controls-ui {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      background: rgba(20, 22, 25, 0.88); padding: 10px 14px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.15);
+      max-width: 94vw;
+    }
+    button {
+      background: #3b4048; color: #fff; border: 1px solid #555b65;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #6D4C41; color: #fff; border-color: #A1887F; }
+    button.export-btn {
+      background: #2b6cb0; border-color: #4299e1; font-weight: bold;
+    }
+    button.export-btn:hover { background: #3182ce; color: #fff; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>한국형 벽돌 상가주택 3D 모델 (정면·후면·좌측·우측·상면·하면 6면도 기준)</strong><br/>
+    마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소
+  </div>
+
+  <div id="controls-ui">
+    <button onclick="setView('front')">정면도 (Front)</button>
+    <button onclick="setView('back')">후면도 (Back)</button>
+    <button onclick="setView('left')">좌측면도 (Left)</button>
+    <button onclick="setView('right')">우측면도 (Right)</button>
+    <button onclick="setView('top')">상면도 (Top)</button>
+    <button onclick="setView('bottom')">하면도 (Bottom)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // 치수 상수 (폭 W = 11.2m, 깊이 D = 13.4m, 3개층 총 높이 H = 10.8m)
+    const W = 11.2;
+    const D = 13.4;
+    const FLOOR_H = 3.6;
+    const TOTAL_H = FLOOR_H * 3;
+
+    // 1. 기본 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#34383D');
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(18, 13, 22);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, TOTAL_H / 2, 0);
+    controls.enableDamping = true;
+    controls.update();
+
+    // 좌표계: +Z = 정면, -Z = 후면, -X = 좌측면, +X = 우측면
+    window.setView = (dir) => {
+      controls.target.set(0, TOTAL_H / 2, 0);
+      if (dir === 'front')  camera.position.set(0, 6.2, 24);
+      if (dir === 'back')   camera.position.set(0, 6.2, -24);
+      if (dir === 'left')   camera.position.set(-24, 6.2, 0);
+      if (dir === 'right')  camera.position.set(24, 6.2, 0);
+      if (dir === 'top')    camera.position.set(0, 32, 0.01);
+      if (dir === 'bottom') camera.position.set(0, -20, 0.01);
+      controls.update();
+    };
+
+    // 2. 조명 및 그리드
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.88);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.05);
+    dirLight.position.set(24, 42, 28);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdce6f2, 0.45);
+    fillLight.position.set(-24, 20, -24);
+    scene.add(fillLight);
+
+    const gridHelper = new THREE.GridHelper(60, 30, 0x555555, 0x42464C);
+    scene.add(gridHelper);
+
+    // =========================================================
+    // 텍스처 생성 유틸리티
+    // =========================================================
+
+    // A. 적갈색 벽돌 텍스처
+    function createRedBrickTexture({ darkTone = false } = {}) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = darkTone ? '#4A3B35' : '#6E4B3E';
+      ctx.fillRect(0, 0, 512, 512);
+
+      const brickH = 16;
+      const brickW = 48;
+      for (let row = 0; row * brickH < 512; row++) {
+        const y = row * brickH;
+        const offset = (row % 2) * (brickW / 2);
+        for (let x = -brickW; x < 512 + brickW; x += brickW) {
+          const bx = x + offset;
+          const seed = (row * 13 + Math.abs(bx) * 7) % 28;
+          const r = (darkTone ? 92 : 128) + seed;
+          const g = (darkTone ? 64 : 84) + Math.floor(seed * 0.65);
+          const b = (darkTone ? 54 : 68) + Math.floor(seed * 0.5);
+          ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+          ctx.fillRect(bx + 1, y + 1, brickW - 2, brickH - 2);
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // B. 1층 다크 차콜 석재 기단 텍스처
+    function createDarkPierTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#3C4046';
+      ctx.fillRect(0, 0, 512, 512);
+
+      const rows = 8;
+      const cols = 6;
+      const rh = 512 / rows;
+      const cw = 512 / cols;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const tone = 56 + ((r * 5 + c * 11) % 16);
+          ctx.fillStyle = `rgb(${tone}, ${tone + 2}, ${tone + 5})`;
+          ctx.fillRect(c * cw + 2, r * rh + 2, cw - 4, rh - 4);
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // C. 'Nice to CU' 간판 텍스처
+    function createCUSignTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#181A1E';
+      ctx.fillRect(0, 0, 1024, 256);
+
+      ctx.strokeStyle = '#343840';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(6, 6, 1012, 244);
+
+      // 좌측 연두색 타원 'Nice to'
+      ctx.fillStyle = '#65C434';
+      ctx.beginPath();
+      ctx.ellipse(270, 128, 125, 56, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 34px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Nice to', 270, 130);
+
+      // 우측 흰색 'CU' 로고
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '900 132px sans-serif';
+      ctx.fillText('CU', 585, 134);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // D. 1층 편의점 유리창(내부 진열 선반 표현) 텍스처
+    function createStorefrontGlassTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 384;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#1E2630';
+      ctx.fillRect(0, 0, 512, 384);
+
+      // 내부 진열대 가로 선반 및 상품 블록
+      for (let shelf = 0; shelf < 4; shelf++) {
+        const sy = 75 + shelf * 68;
+        ctx.fillStyle = '#3B424C';
+        ctx.fillRect(24, sy, 464, 8);
+
+        for (let item = 0; item < 14; item++) {
+          const ix = 34 + item * 32;
+          const colors = ['#E53935', '#1E88E5', '#FDD835', '#43A047', '#FB8C00', '#8E24AA'];
+          ctx.fillStyle = colors[(shelf * 7 + item * 3) % colors.length];
+          ctx.fillRect(ix, sy - 26, 22, 24);
+        }
+      }
+
+      // 창호 프레임
+      ctx.strokeStyle = '#181B20';
+      ctx.lineWidth = 14;
+      ctx.strokeRect(7, 7, 498, 370);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // E. 지붕 및 바닥 슬래브 텍스처
+    function createSlabTexture(baseHex = '#9E9C96') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = baseHex;
+      ctx.fillRect(0, 0, 512, 512);
+
+      ctx.strokeStyle = 'rgba(40, 42, 46, 0.22)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i <= 512; i += 64) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function addOutlines(mesh) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      const line = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0x18191C })
+      );
+      mesh.add(line);
+    }
+
+    // 창호 생성 헬퍼
+    function createWindowAssembly(width, height, withGlow = false) {
+      const group = new THREE.Group();
+      const frameMat = new THREE.MeshStandardMaterial({ color: '#1B1E23', roughness: 0.45, metalness: 0.35 });
+      const glassMat = new THREE.MeshStandardMaterial({
+        color: withGlow ? '#D7C09A' : '#232F3A',
+        emissive: withGlow ? '#6E5226' : '#000000',
+        emissiveIntensity: withGlow ? 0.32 : 0,
+        roughness: 0.2,
+        metalness: 0.1
+      });
+
+      const outer = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.22), frameMat);
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(width - 0.18, height - 0.18, 0.24), glassMat);
+      const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.08, height - 0.16, 0.26), frameMat);
+
+      group.add(outer, glass, mullion);
+      return group;
+    }
+
+    // 발코니 철제 난간 생성 헬퍼
+    function createBalconyRailing(width, depth, height = 1.05) {
+      const group = new THREE.Group();
+      const railMat = new THREE.MeshStandardMaterial({ color: '#191C20', roughness: 0.45, metalness: 0.55 });
+
+      const topBar = new THREE.Mesh(new THREE.BoxGeometry(width, 0.08, 0.08), railMat);
+      topBar.position.set(0, height, depth / 2);
+      group.add(topBar);
+
+      const midBar = new THREE.Mesh(new THREE.BoxGeometry(width, 0.05, 0.05), railMat);
+      midBar.position.set(0, height * 0.5, depth / 2);
+      group.add(midBar);
+
+      const postCount = Math.max(8, Math.floor(width / 0.45));
+      for (let i = 0; i <= postCount; i++) {
+        const x = -width / 2 + (width / postCount) * i;
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.04, height, 0.04), railMat);
+        post.position.set(x, height / 2, depth / 2);
+        group.add(post);
+      }
+
+      [-width / 2, width / 2].forEach((sx) => {
+        const sideTop = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, depth), railMat);
+        sideTop.position.set(sx, height, 0);
+        group.add(sideTop);
+
+        const sidePost = new THREE.Mesh(new THREE.BoxGeometry(0.05, height, 0.05), railMat);
+        sidePost.position.set(sx, height / 2, 0);
+        group.add(sidePost);
+      });
+
+      return group;
+    }
+
+    // =========================================================
+    // 한국형 벽돌 상가주택 3D 그룹 생성
+    // =========================================================
+    export function createKoreanBrickMixedBuilding() {
+      const building = new THREE.Group();
+      building.name = 'Korean_Brick_Mixed_Building';
+
+      const brickMat = new THREE.MeshStandardMaterial({ map: createRedBrickTexture({ darkTone: false }), roughness: 0.84 });
+      const darkBrickMat = new THREE.MeshStandardMaterial({ map: createRedBrickTexture({ darkTone: true }), roughness: 0.86 });
+      const darkPierMat = new THREE.MeshStandardMaterial({ map: createDarkPierTexture(), roughness: 0.85 });
+      const bandMat = new THREE.MeshStandardMaterial({ color: '#4A4744', roughness: 0.75 });
+      const roofMat = new THREE.MeshStandardMaterial({ map: createSlabTexture('#9E9C96'), roughness: 0.9 });
+      const bottomMat = new THREE.MeshStandardMaterial({ map: createSlabTexture('#5E6063'), roughness: 0.92 });
+      const plinthMat = new THREE.MeshStandardMaterial({ color: '#7D7F82', roughness: 0.88 });
+
+      // 기초 패드
+      const groundPad = new THREE.Mesh(new THREE.BoxGeometry(W + 0.5, 0.16, D + 0.5), plinthMat);
+      groundPad.position.set(0, 0.08, 0);
+      groundPad.receiveShadow = true;
+      building.add(groundPad);
+
+      // 1층 본체 (좌·우 다크 석재 기단부 + 중앙 벽돌)
+      const floor1 = new THREE.Mesh(
+        new THREE.BoxGeometry(W, FLOOR_H, D),
+        [darkPierMat, darkPierMat, bandMat, bottomMat, brickMat, brickMat]
+      );
+      floor1.position.set(0, FLOOR_H / 2, 0);
+      floor1.castShadow = true;
+      floor1.receiveShadow = true;
+      addOutlines(floor1);
+      building.add(floor1);
+
+      // 1층 좌·우 코너 다크 석재 기둥
+      [-W / 2 + 0.55, W / 2 - 0.55].forEach((px) => {
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(1.1, FLOOR_H, D + 0.08), darkPierMat);
+        pier.position.set(px, FLOOR_H / 2, 0);
+        pier.castShadow = true;
+        addOutlines(pier);
+        building.add(pier);
+      });
+
+      // 2층·3층 본체 (적갈색 벽돌)
+      [FLOOR_H * 1.5, FLOOR_H * 2.5].forEach((yCenter, idx) => {
+        const topM = idx === 1 ? roofMat : bandMat;
+        const floorMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(W, FLOOR_H, D),
+          [brickMat, brickMat, topM, bandMat, brickMat, brickMat]
+        );
+        floorMesh.position.set(0, yCenter, 0);
+        floorMesh.castShadow = true;
+        floorMesh.receiveShadow = true;
+        addOutlines(floorMesh);
+        building.add(floorMesh);
+      });
+
+      // 층간 수평 몰딩 및 최상부 파라펫
+      [FLOOR_H, FLOOR_H * 2, TOTAL_H].forEach((yPos, idx) => {
+        const hBand = idx === 2 ? 0.52 : 0.28;
+        const band = new THREE.Mesh(new THREE.BoxGeometry(W + 0.2, hBand, D + 0.2), bandMat);
+        band.position.set(0, yPos, 0);
+        band.castShadow = true;
+        addOutlines(band);
+        building.add(band);
+      });
+
+      // =========================================================
+      // 정면도 (+Z): 1층 CU 상가 + 보라색 차양 + 2·3층 발코니
+      // =========================================================
+      const doorMat = new THREE.MeshStandardMaterial({ color: '#1B1E23', roughness: 0.45 });
+      const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(1.55, 2.55, 0.24), doorMat);
+      frontDoor.position.set(-3.4, 1.35, D / 2 + 0.08);
+      building.add(frontDoor);
+
+      // 좌측 출입 계단
+      const frontStep = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.2, 0.7), plinthMat);
+      frontStep.position.set(-3.4, 0.1, D / 2 + 0.45);
+      frontStep.castShadow = true;
+      building.add(frontStep);
+
+      // 1층 CU 상가 유리창
+      const cuGlassMat = new THREE.MeshStandardMaterial({ map: createStorefrontGlassTexture(), roughness: 0.25 });
+      const cuGlass = new THREE.Mesh(new THREE.BoxGeometry(5.6, 2.55, 0.24), cuGlassMat);
+      cuGlass.position.set(1.35, 1.35, D / 2 + 0.08);
+      building.add(cuGlass);
+
+      // 보라색 차양막 (1층 상가 상단)
+      const purpleAwningMat = new THREE.MeshStandardMaterial({ color: '#6D28D9', roughness: 0.65 });
+      const purpleAwning = new THREE.Mesh(new THREE.BoxGeometry(W - 0.6, 0.22, 1.25), purpleAwningMat);
+      purpleAwning.position.set(0, 2.75, D / 2 + 0.65);
+      purpleAwning.rotation.x = 0.18;
+      purpleAwning.castShadow = true;
+      addOutlines(purpleAwning);
+      building.add(purpleAwning);
+
+      // 'Nice to CU' 간판 보드
+      const cuSignMat = new THREE.MeshStandardMaterial({ map: createCUSignTexture(), roughness: 0.5 });
+      const cuSign = new THREE.Mesh(new THREE.BoxGeometry(W - 0.5, 0.95, 0.34), cuSignMat);
+      cuSign.position.set(0, 3.35, D / 2 + 0.18);
+      cuSign.castShadow = true;
+      addOutlines(cuSign);
+      building.add(cuSign);
+
+      // 2층·3층 정면 발코니 슬래브·창호·철제 난간
+      [FLOOR_H, FLOOR_H * 2].forEach((fStartY) => {
+        const balSlab = new THREE.Mesh(new THREE.BoxGeometry(W + 0.12, 0.24, 1.35), bandMat);
+        balSlab.position.set(0, fStartY + 0.12, D / 2 + 0.62);
+        balSlab.castShadow = true;
+        addOutlines(balSlab);
+        building.add(balSlab);
+
+        const wideWin = createWindowAssembly(6.6, 2.35, true);
+        wideWin.position.set(0, fStartY + 1.55, D / 2 + 0.06);
+        building.add(wideWin);
+
+        const rail = createBalconyRailing(W - 0.4, 1.25, 1.05);
+        rail.position.set(0, fStartY + 0.24, D / 2 + 0.62);
+        building.add(rail);
+      });
+
+      // 정면 외벽 브래킷 조명
+      const lampMat = new THREE.MeshStandardMaterial({ color: '#FEF08A', emissive: '#FBBF24', emissiveIntensity: 0.55 });
+      [
+        [-4.4, 2.45, D / 2 + 0.2],
+        [4.4, 2.45, D / 2 + 0.2],
+        [-3.9, 6.05, D / 2 + 0.2],
+        [3.9, 6.05, D / 2 + 0.2],
+        [-3.9, 9.65, D / 2 + 0.2],
+        [3.9, 9.65, D / 2 + 0.2]
+      ].forEach(([lx, ly, lz]) => {
+        const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.14), lampMat);
+        lamp.position.set(lx, ly, lz);
+        building.add(lamp);
+      });
+
+      // =========================================================
+      // 후면도 (-Z): 출입문·창호·계량기함
+      // =========================================================
+      const backDoor = new THREE.Mesh(new THREE.BoxGeometry(1.35, 2.45, 0.24), doorMat);
+      backDoor.position.set(-0.8, 1.3, -D / 2 - 0.08);
+      building.add(backDoor);
+
+      const backStep = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.2, 0.65), plinthMat);
+      backStep.position.set(-0.8, 0.1, -D / 2 - 0.42);
+      building.add(backStep);
+
+      const f1BackWin = createWindowAssembly(2.5, 1.65, true);
+      f1BackWin.position.set(2.8, 1.65, -D / 2 - 0.06);
+      building.add(f1BackWin);
+
+      // 후면 좌측 계량기/설비함
+      const meterBox = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.2, 0.22), plinthMat);
+      meterBox.position.set(-3.2, 1.35, -D / 2 - 0.12);
+      building.add(meterBox);
+
+      [FLOOR_H, FLOOR_H * 2].forEach((fStartY) => {
+        const leftW = createWindowAssembly(2.1, 1.75, false);
+        leftW.position.set(-3.0, fStartY + 1.85, -D / 2 - 0.06);
+        building.add(leftW);
+
+        const rightW = createWindowAssembly(2.6, 1.75, false);
+        rightW.position.set(2.7, fStartY + 1.85, -D / 2 - 0.06);
+        building.add(rightW);
+      });
+
+      // =========================================================
+      // 좌측면도 (-X) & 우측면도 (+X): 창호·실외기·배관
+      // =========================================================
+      const sideWindows = [
+        { y: 1.65, z: -4.2, w: 0.9, h: 1.1 },
+        { y: 1.65, z: 2.2, w: 2.0, h: 1.55 },
+        { y: 5.25, z: -4.2, w: 0.9, h: 1.1 },
+        { y: 5.25, z: 2.2, w: 2.0, h: 1.55 },
+        { y: 8.85, z: -4.2, w: 0.9, h: 1.1 },
+        { y: 8.85, z: 2.2, w: 2.0, h: 1.55 }
+      ];
+
+      sideWindows.forEach((sw) => {
+        const winL = createWindowAssembly(sw.w, sw.h, sw.y < 3);
+        winL.rotation.y = Math.PI / 2;
+        winL.position.set(-W / 2 - 0.06, sw.y, sw.z);
+        building.add(winL);
+
+        const winR = createWindowAssembly(sw.w, sw.h, sw.y < 3);
+        winR.rotation.y = Math.PI / 2;
+        winR.position.set(W / 2 + 0.06, sw.y, sw.z);
+        building.add(winR);
+      });
+
+      // 실외기 및 배관
+      const acMat = new THREE.MeshStandardMaterial({ color: '#E2E5E9', roughness: 0.55 });
+      [-W / 2 - 0.55, W / 2 + 0.55].forEach((ax) => {
+        const acUnit = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.85, 0.55), acMat);
+        acUnit.position.set(ax, 0.52, 4.5);
+        acUnit.castShadow = true;
+        addOutlines(acUnit);
+        building.add(acUnit);
+      });
+
+      const pipe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.06, 3.0, 10),
+        new THREE.MeshStandardMaterial({ color: '#9CA3AF', metalness: 0.5, roughness: 0.4 })
+      );
+      pipe.position.set(-W / 2 - 0.14, 1.6, -5.2);
+      building.add(pipe);
+
+      // =========================================================
+      // 상면도 (+Y): 옥탑 계단실 및 난간
+      // =========================================================
+      const penthouse = new THREE.Mesh(
+        new THREE.BoxGeometry(3.4, 2.3, 3.8),
+        [darkBrickMat, darkBrickMat, roofMat, bandMat, darkBrickMat, darkBrickMat]
+      );
+      penthouse.position.set(2.5, TOTAL_H + 1.15, -3.5);
+      penthouse.castShadow = true;
+      penthouse.receiveShadow = true;
+      addOutlines(penthouse);
+      building.add(penthouse);
+
+      const roofRail = createBalconyRailing(W - 0.8, D - 0.8, 0.95);
+      roofRail.position.set(0, TOTAL_H + 0.25, 0);
+      building.add(roofRail);
+
+      return building;
+    }
+
+    const mixedBuilding = createKoreanBrickMixedBuilding();
+    scene.add(mixedBuilding);
+
+    // =========================================================
+    // 3D 모델링 파일(.glb) 추출 함수
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        mixedBuilding,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'korean_brick_mixed_building.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (error) => {
+          console.error('GLB 추출 중 오류:', error);
+        },
+        { binary: true }
+      );
+    };
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
