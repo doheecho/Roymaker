@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>성동구 상가건물 3D 모델링 (방위별 사진 기반 재현)</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #2c2f33; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(20, 22, 25, 0.85); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.18);
+      pointer-events: none; line-height: 1.55;
+    }
+    #controls-ui {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      background: rgba(20, 22, 25, 0.88); padding: 10px 14px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      max-width: 95vw;
+    }
+    button {
+      background: #3b4048; color: #fff; border: 1px solid #555b65;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #2563eb; color: #fff; border-color: #60a5fa; }
+    button.export-btn {
+      background: #2b6cb0; border-color: #4299e1; font-weight: bold;
+    }
+    button.export-btn:hover { background: #3182ce; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>상가건물 3D 모델링 (서울미소드림치과 · 성모우리이비인후과 · 성동온누리약국 · 멍냥스토어 · 커튼명가 창)</strong><br/>
+    마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소
+  </div>
+
+  <div id="controls-ui">
+    <button onclick="setView('nw')">북서측 (NW)</button>
+    <button onclick="setView('n')">북측 (N)</button>
+    <button onclick="setView('w')">서측 (W · 도로면)</button>
+    <button onclick="setView('sw')">남서측 (SW)</button>
+    <button onclick="setView('ne')">북동측 (NE)</button>
+    <button onclick="setView('e')">동측 (E · 아파트면)</button>
+    <button onclick="setView('top')">상면 (Top · 배치도)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // 1. 기본 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#87CEEB');
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.2, 1000);
+    camera.position.set(-24, 14, -22);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 6.5, 0);
+    controls.enableDamping = true;
+    controls.update();
+
+    window.setView = (dir) => {
+      controls.target.set(0, 6.5, 0);
+      if (dir === 'nw') {
+        camera.position.set(-24, 13, -22);
+      } else if (dir === 'n') {
+        camera.position.set(-4, 11, -26);
+      } else if (dir === 'w') {
+        camera.position.set(-28, 9, 2);
+      } else if (dir === 'sw') {
+        camera.position.set(-18, 9, 22);
+      } else if (dir === 'ne') {
+        camera.position.set(22, 12, -20);
+      } else if (dir === 'e') {
+        camera.position.set(26, 9, 0);
+      } else if (dir === 'top') {
+        controls.target.set(0, 0, 0);
+        camera.position.set(0, 42, -0.1);
+      }
+      controls.update();
+    };
+
+    // 2. 조명 및 바닥
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.15);
+    dirLight.position.set(25, 45, -25);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdce6f2, 0.45);
+    fillLight.position.set(-25, 20, 25);
+    scene.add(fillLight);
+
+    const groundGeo = new THREE.PlaneGeometry(80, 80);
+    const groundMat = new THREE.MeshStandardMaterial({ color: '#4A4E54', roughness: 0.9 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const gridHelper = new THREE.GridHelper(80, 40, 0x666666, 0x555555);
+    gridHelper.position.y = 0.01;
+    scene.add(gridHelper);
+
+    function addOutlines(mesh, color = 0x222222) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color }));
+      mesh.add(line);
+    }
+
+    function createConcreteTexture(baseColor = '#8E9196') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512; canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(0, 0, 512, 512);
+
+      for (let i = 0; i < 1500; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)';
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 4, 4);
+      }
+      ctx.strokeStyle = 'rgba(40,42,45,0.25)';
+      ctx.lineWidth = 2;
+      for (let y = 0; y < 512; y += 64) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createSignTexture({
+      bg = '#FFFFFF', fg = '#111111', text = '', subText = '',
+      fontSize = 48, borderColor = null, accentText = null, accentColor = '#E11D48'
+    }) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, 512, 128);
+
+      if (borderColor) {
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 6;
+        ctx.strokeRect(3, 3, 506, 122);
+      }
+
+      ctx.fillStyle = fg;
+      ctx.font = `bold ${fontSize}px "Malgun Gothic", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      if (accentText) {
+        ctx.fillText(text, 200, subText ? 50 : 64);
+        ctx.fillStyle = accentColor;
+        ctx.fillText(accentText, 390, subText ? 50 : 64);
+      } else {
+        ctx.fillText(text, 256, subText ? 48 : 64);
+      }
+
+      if (subText) {
+        ctx.fillStyle = fg;
+        ctx.font = 'bold 22px "Malgun Gothic", sans-serif';
+        ctx.fillText(subText, 256, 96);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createVerticalSignTexture(items) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128; canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      const h = 512 / items.length;
+
+      items.forEach((item, idx) => {
+        const y = idx * h;
+        ctx.fillStyle = item.bg;
+        ctx.fillRect(0, y, 128, h);
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(1.5, y + 1.5, 125, h - 3);
+
+        ctx.fillStyle = item.fg;
+        ctx.font = `bold ${item.size || 24}px "Malgun Gothic", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const lines = item.text.split('\n');
+        lines.forEach((line, lIdx) => {
+          const ly = y + h / 2 + (lIdx - (lines.length - 1) / 2) * (item.size || 24) * 1.15;
+          ctx.fillText(line, 64, ly);
+        });
+      });
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createCurtainWallTexture(cols = 6, rows = 4, stickers = []) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024; canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      const grad = ctx.createLinearGradient(0, 0, 1024, 512);
+      grad.addColorStop(0, '#3B5C6E');
+      grad.addColorStop(0.5, '#52788C');
+      grad.addColorStop(1, '#2D4756');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1024, 512);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.beginPath();
+      ctx.moveTo(100, 0); ctx.lineTo(350, 0);
+      ctx.lineTo(150, 512); ctx.lineTo(-100, 512);
+      ctx.fill();
+
+      const cw = 1024 / cols;
+      const rh = 512 / rows;
+
+      stickers.forEach(s => {
+        ctx.fillStyle = s.bg || '#1D4ED8';
+        ctx.fillRect(s.c * cw + 8, s.r * rh + 8, (s.w || 1) * cw - 16, rh - 16);
+        ctx.fillStyle = s.fg || '#FFFFFF';
+        ctx.font = `bold ${s.size || 24}px "Malgun Gothic", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(s.text, (s.c + (s.w || 1) / 2) * cw, (s.r + 0.5) * rh);
+      });
+
+      ctx.strokeStyle = '#1E2022';
+      ctx.lineWidth = 10;
+      for (let c = 0; c <= cols; c++) {
+        ctx.beginPath(); ctx.moveTo(c * cw, 0); ctx.lineTo(c * cw, 512); ctx.stroke();
+      }
+      for (let r = 0; r <= rows; r++) {
+        ctx.beginPath(); ctx.moveTo(0, r * rh); ctx.lineTo(1024, r * rh); ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createCrossBoxTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#F3F4F6';
+      ctx.fillRect(0, 0, 256, 256);
+      ctx.fillStyle = '#15803D';
+      ctx.fillRect(104, 36, 48, 184);
+      ctx.fillRect(36, 104, 184, 48);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createCommercialBuilding() {
+      const building = new THREE.Group();
+      building.name = 'Commercial_Building';
+
+      const concreteMat = new THREE.MeshStandardMaterial({ map: createConcreteTexture('#8C8F94'), roughness: 0.88 });
+      const roofMat = new THREE.MeshStandardMaterial({ color: '#787B80', roughness: 0.92 });
+
+      const W = 9.5;
+      const D = 22.0;
+      const h1 = 3.6;
+      const h23 = 6.4;
+      const h4 = 3.4;
+
+      const floor1 = new THREE.Mesh(new THREE.BoxGeometry(W, h1, D), concreteMat);
+      floor1.position.y = h1 / 2;
+      floor1.castShadow = true; floor1.receiveShadow = true;
+      addOutlines(floor1);
+      building.add(floor1);
+
+      const shopSigns = [
+        { z: -6.8, w: 6.2, bg: '#1E3A8A', fg: '#FFFFFF', text: '커·튼·명·가 창', sub: '블라인드 / 침구 / 카페트 02-2297-0098' },
+        { z: -2.0, w: 2.6, bg: '#78716C', fg: '#FDE047', text: '건물 출입구', sub: '치과 · 이비인후과' },
+        { z: 2.5,  w: 4.8, bg: '#1D4ED8', fg: '#FFFFFF', text: '멍냥스토어 24', sub: '24시 무인 반려동물 용품점' },
+        { z: 7.8,  w: 5.2, bg: '#ECFDF5', fg: '#15803D', text: '성동온누리약국', accent: '약', sub: '동물의약품 · 처방조제' }
+      ];
+
+      shopSigns.forEach(s => {
+        const signMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.15, 0.95, s.w),
+          new THREE.MeshStandardMaterial({
+            map: createSignTexture({ bg: s.bg, fg: s.fg, text: s.text, subText: s.sub, fontSize: 38, accentText: s.accent })
+          })
+        );
+        signMesh.position.set(-W / 2 - 0.08, h1 - 0.55, s.z);
+        building.add(signMesh);
+
+        const winMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(s.w - 0.4, h1 - 1.2),
+          new THREE.MeshStandardMaterial({ color: '#243442', roughness: 0.25, metalness: 0.4 })
+        );
+        winMesh.rotation.y = -Math.PI / 2;
+        winMesh.position.set(-W / 2 - 0.02, (h1 - 1.2) / 2, s.z);
+        building.add(winMesh);
+      });
+
+      const cwWestMat = new THREE.MeshStandardMaterial({
+        map: createCurtainWallTexture(8, 4, [
+          { c: 0, r: 1, w: 3, bg: '#1E3A8A', fg: '#FFFFFF', text: '서울미소드림 치과' },
+          { c: 0, r: 2, w: 2, bg: '#2563EB', fg: '#FFFFFF', text: '고압산소클리닉' },
+          { c: 2, r: 2, w: 2, bg: '#1D4ED8', fg: '#FFFFFF', text: '청각재활 / 보청기' },
+          { c: 4, r: 2, w: 4, bg: '#1E40AF', fg: '#FFFFFF', text: '2F 성모우리 이비인후과  02-2281-0412' }
+        ]),
+        roughness: 0.25, metalness: 0.35
+      });
+
+      const cwNorthMat = new THREE.MeshStandardMaterial({
+        map: createCurtainWallTexture(4, 4, [
+          { c: 2, r: 1, w: 2, bg: '#3730A3', fg: '#FFFFFF', text: 'T. 2299-7528' },
+          { c: 0, r: 2, w: 2, bg: '#FFFFFF', fg: '#1E3A8A', text: '성모우리이비인후과' }
+        ]),
+        roughness: 0.25, metalness: 0.35
+      });
+
+      const cwSouthMat = new THREE.MeshStandardMaterial({
+        map: createCurtainWallTexture(3, 4, [
+          { c: 0, r: 2, w: 2, bg: '#1D4ED8', fg: '#FFFFFF', text: '이비인후과 보청기' },
+          { c: 2, r: 2, w: 1, bg: '#1E40AF', fg: '#FFFFFF', text: '고압산소' }
+        ]),
+        roughness: 0.25, metalness: 0.35
+      });
+
+      const floor23 = new THREE.Mesh(
+        new THREE.BoxGeometry(W, h23, D),
+        [
+          concreteMat,
+          cwWestMat,
+          roofMat,
+          concreteMat,
+          cwSouthMat,
+          cwNorthMat
+        ]
+      );
+      floor23.position.y = h1 + h23 / 2;
+      floor23.castShadow = true; floor23.receiveShadow = true;
+      addOutlines(floor23);
+      building.add(floor23);
+
+      const d4 = D * 0.72;
+      const floor4 = new THREE.Mesh(new THREE.BoxGeometry(W, h4, d4), concreteMat);
+      floor4.position.set(0, h1 + h23 + h4 / 2, -(D - d4) / 2);
+      floor4.castShadow = true; floor4.receiveShadow = true;
+      addOutlines(floor4);
+      building.add(floor4);
+
+      const winMat = new THREE.MeshStandardMaterial({ color: '#1F2937', roughness: 0.2, metalness: 0.5 });
+      [-8.5, -5.0, -1.5, 2.0].forEach(wz => {
+        const wWest = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.6), winMat);
+        wWest.rotation.y = -Math.PI / 2;
+        wWest.position.set(-W / 2 - 0.02, h1 + h23 + h4 * 0.55, wz);
+        building.add(wWest);
+
+        const wEast = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.6), winMat);
+        wEast.rotation.y = Math.PI / 2;
+        wEast.position.set(W / 2 + 0.02, h1 + h23 + h4 * 0.55, wz);
+        building.add(wEast);
+      });
+
+      [-2.2, 2.0].forEach(wx => {
+        const wNorth = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), winMat);
+        wNorth.rotation.y = Math.PI;
+        wNorth.position.set(wx, h1 + h23 + h4 * 0.55, -D / 2 - 0.02);
+        building.add(wNorth);
+      });
+
+      const signNorthDental = new THREE.Mesh(
+        new THREE.BoxGeometry(W * 0.9, 1.1, 0.15),
+        new THREE.MeshStandardMaterial({
+          map: createSignTexture({
+            bg: '#8C8F94', fg: '#1F2937', text: '서울미소드림', accentText: '치과',
+            accentColor: '#EA580C', subText: '2299-7528', fontSize: 52
+          })
+        })
+      );
+      signNorthDental.position.set(0, h1 + h23 + 0.55, -D / 2 - 0.08);
+      building.add(signNorthDental);
+
+      const signWestENT = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 1.1, 10.5),
+        new THREE.MeshStandardMaterial({
+          map: createSignTexture({
+            bg: '#E5E7EB', fg: '#1E3A8A', text: '성모우리이비인후과 2F',
+            subText: '고압산소클리닉 · 보청기클리닉 T.02.2281.0412', fontSize: 42
+          })
+        })
+      );
+      signWestENT.position.set(-W / 2 - 0.08, h1 + h23 + 0.55, -3.5);
+      building.add(signWestENT);
+
+      const signWestDental = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 1.1, 4.5),
+        new THREE.MeshStandardMaterial({
+          map: createSignTexture({
+            bg: '#8C8F94', fg: '#FACC15', text: '치과', accentText: '3F', accentColor: '#DC2626', fontSize: 56
+          })
+        })
+      );
+      signWestDental.position.set(-W / 2 - 0.08, h1 + h23 + 0.55, 6.5);
+      building.add(signWestDental);
+
+      const signEastDental = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 1.2, 11.5),
+        new THREE.MeshStandardMaterial({
+          map: createSignTexture({
+            bg: '#9D4EDD', fg: '#FFFFFF', text: '서울미소드림 치과 의원', subText: '2299-7528', fontSize: 46
+          })
+        })
+      );
+      signEastDental.position.set(W / 2 + 0.08, h1 + h23 + 0.2, -2.5);
+      building.add(signEastDental);
+
+      const signSouthPet = new THREE.Mesh(
+        new THREE.BoxGeometry(4.8, 0.9, 0.15),
+        new THREE.MeshStandardMaterial({
+          map: createSignTexture({ bg: '#1E3A8A', fg: '#FFFFFF', text: '멍냥스토어', subText: '24시 무인 반려동물 용품점', fontSize: 42 })
+        })
+      );
+      signSouthPet.position.set(0, h1 + h23 * 0.52, D / 2 + 0.08);
+      building.add(signSouthPet);
+
+      const vSignTex = createVerticalSignTexture([
+        { bg: '#1E3A8A', fg: '#FACC15', text: '치과', size: 30 },
+        { bg: '#EFF6FF', fg: '#1E40AF', text: '이비인후과', size: 22 },
+        { bg: '#1E293B', fg: '#FFFFFF', text: '24\n반려동물', size: 22 },
+        { bg: '#F3F4F6', fg: '#DC2626', text: '약', size: 38 }
+      ]);
+      const vSignMat = new THREE.MeshStandardMaterial({ map: vSignTex });
+
+      const vSignNE = new THREE.Mesh(new THREE.BoxGeometry(0.9, 8.2, 0.35), vSignMat);
+      vSignNE.position.set(W / 2 + 0.5, h1 + 5.2, -D / 2 + 0.2);
+      addOutlines(vSignNE);
+      building.add(vSignNE);
+
+      const vSignSW = new THREE.Mesh(new THREE.BoxGeometry(0.35, 8.2, 0.9), vSignMat);
+      vSignSW.position.set(-W / 2 - 0.2, h1 + 5.2, D / 2 - 0.5);
+      addOutlines(vSignSW);
+      building.add(vSignSW);
+
+      const crossMat = new THREE.MeshStandardMaterial({ map: createCrossBoxTexture() });
+      const crossBox = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 2.6), crossMat);
+      crossBox.position.set(W * 0.22, h1 + h23 + h4 + 1.3, -D / 2 + 2.2);
+      crossBox.castShadow = true;
+      addOutlines(crossBox);
+      building.add(crossBox);
+
+      const wallGroup = new THREE.Group();
+      const greenWall = new THREE.Mesh(
+        new THREE.BoxGeometry(0.4, 2.2, 14.0),
+        new THREE.MeshStandardMaterial({
+          map: createSignTexture({ bg: '#14532D', fg: '#EAB308', text: '금호동 벽산 아파트', fontSize: 44 })
+        })
+      );
+      greenWall.position.set(W / 2 + 3.2, 1.1, -1.0);
+      greenWall.castShadow = true;
+      addOutlines(greenWall);
+      wallGroup.add(greenWall);
+      building.add(wallGroup);
+
+      return building;
+    }
+
+    const commercialBldg = createCommercialBuilding();
+    scene.add(commercialBldg);
+
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        commercialBldg,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'commercial_building.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (error) => console.error('GLB 추출 중 오류:', error),
+        { binary: true }
+      );
+    };
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
