@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261116h";
+const ASSET_VERSION = "20261116i";
 
 const KEY_DIR = {
   ArrowUp: "up",
