@@ -18,8 +18,8 @@ const KEY_DIR = {
   a: "left",
   d: "right",
 };
-const WALK_SPEED = 2.4; // m/s
-const RUN_SPEED = 5.4; // m/s
+const WALK_SPEED = 3.0; // m/s
+const RUN_SPEED = 7.5; // m/s
 
 // "춤추기"를 누르면 이 중 하나를 무작위로 고른다(뛰기/걷기 자체 동작은 제외)
 const DANCE_POOL = [
