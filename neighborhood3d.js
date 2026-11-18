@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261116i";
+const ASSET_VERSION = "20261118a";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -480,9 +480,11 @@ const allLabelSprites = [];
 const LABEL_FONT_SIZE = 46; // 캔버스에 그리는 실제 글자 크기(px) — 아래 padY와 함께 캔버스 전체 높이를 이룬다
 const LABEL_PAD_Y = 14;
 const LABEL_TARGET_FONT_PX = 14; // 화면에 보일 때 글자 높이의 목표 픽셀 크기 — HUD의 font-size:14px과 맞춘다
-// 행당동 쪽 건물이 늘면서 라벨이 지도에 너무 많이 쌓여서, 캐릭터와 가까운(약 300m) 장소 + 심부름
-// 목적지(파란 점멸이 켜지는 곳)만 라벨을 보이게 한다 — 300m는 실측 미터라 WORLD_SCALE을 곱해 둔다.
-const LABEL_VISIBLE_RANGE = 300 * WORLD_SCALE;
+// 행당동 쪽 건물이 늘면서 라벨이 지도에 너무 많이 쌓이고, 실제 glb도 전부 한꺼번에 불러오면
+// 버벅여서, 둘 다 캐릭터와 가까운(약 300m) 곳만 — 라벨은 보이게, glb는 그때 가서 불러오게 —
+// 바꿨다. 300m는 실측 미터라 WORLD_SCALE을 곱해 둔다.
+const VISIBLE_RANGE_M = 300;
+const LABEL_VISIBLE_RANGE = VISIBLE_RANGE_M * WORLD_SCALE;
 function makeLabelSprite(text, scale = 0.05) {
   if (!labelTextureCache[text]) {
     const canvas = document.createElement("canvas");
@@ -750,19 +752,21 @@ function buildRoads() {
 // 금호파크힐스 동들은 대부분 실제 3D 모델(loadPlaceModel)을 쓰지만, 모델이 없는 동(예: 117동)은
 // 이 스타일화 매싱으로 대신한다 — 동 번호 짝/홀수로 두 템플릿을 번갈아 적용해 타워 여러 개를
 // 높이 다르게 붙이고 저층부는 어둡게, 상층부는 주황/베이지 투톤으로 나눠서 단지 느낌을 흉내낸다.
-function addTowerBox(px, pz, offX, offZ, w, d, h, color) {
+function addTowerBox(px, pz, offX, offZ, w, d, h, color, parent = scene) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color }));
   mesh.position.set(px + offX, h / 2, pz + offZ);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  scene.add(mesh);
+  parent.add(mesh);
   return mesh;
 }
 
-function buildApartmentCluster(place, px, pz, floors) {
+// parent를 넘기면(모델이 있는 동의 임시 매싱용) scene에 바로 넣지 않고 그 그룹에 담아서
+// 나중에 실제 glb가 로드되면 그룹째로 숨길 수 있게 한다.
+function buildApartmentCluster(place, px, pz, floors, parent = scene) {
   const baseH = Math.max(0.6, Math.min(floors, 6) * 3 * WORLD_SCALE);
   const BASE_COLOR = 0x3a3a40;
-  addTowerBox(px, pz, 0, 0, 20 * WORLD_SCALE, 12 * WORLD_SCALE, baseH, BASE_COLOR);
+  addTowerBox(px, pz, 0, 0, 20 * WORLD_SCALE, 12 * WORLD_SCALE, baseH, BASE_COLOR, parent);
 
   const useTemplateA = place.home || place.id % 2 === 1;
   let topHeight;
@@ -772,36 +776,64 @@ function buildApartmentCluster(place, px, pz, floors) {
     const mainH = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 3 * WORLD_SCALE);
     const sideH = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 2.4 * WORLD_SCALE);
     const spireH = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 3.3 * WORLD_SCALE);
-    addTowerBox(px, pz, -4 * WORLD_SCALE, -1 * WORLD_SCALE, 9 * WORLD_SCALE, 9 * WORLD_SCALE, mainH, mainColor);
-    addTowerBox(px, pz, 3 * WORLD_SCALE, 2 * WORLD_SCALE, 8 * WORLD_SCALE, 7 * WORLD_SCALE, sideH, 0xe8e2d0);
-    addTowerBox(px, pz, 6 * WORLD_SCALE, -3 * WORLD_SCALE, 5 * WORLD_SCALE, 5 * WORLD_SCALE, spireH, 0xcfd0d2);
+    addTowerBox(px, pz, -4 * WORLD_SCALE, -1 * WORLD_SCALE, 9 * WORLD_SCALE, 9 * WORLD_SCALE, mainH, mainColor, parent);
+    addTowerBox(px, pz, 3 * WORLD_SCALE, 2 * WORLD_SCALE, 8 * WORLD_SCALE, 7 * WORLD_SCALE, sideH, 0xe8e2d0, parent);
+    addTowerBox(px, pz, 6 * WORLD_SCALE, -3 * WORLD_SCALE, 5 * WORLD_SCALE, 5 * WORLD_SCALE, spireH, 0xcfd0d2, parent);
     topHeight = Math.max(mainH, sideH, spireH);
   } else {
     // 106동 스타일: 비슷한 높이의 타워 3개를 나란히(주황-크림-주황)
     const h1 = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 2.9 * WORLD_SCALE);
     const h2 = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 2.6 * WORLD_SCALE);
     const h3 = Math.max(baseH + 0.3 * WORLD_SCALE, floors * 3 * WORLD_SCALE);
-    addTowerBox(px, pz, -6 * WORLD_SCALE, 0, 7 * WORLD_SCALE, 9 * WORLD_SCALE, h1, 0xd98a4a);
-    addTowerBox(px, pz, 0, 0, 7 * WORLD_SCALE, 9 * WORLD_SCALE, h2, 0xe8e2d0);
-    addTowerBox(px, pz, 6 * WORLD_SCALE, 0, 7 * WORLD_SCALE, 9 * WORLD_SCALE, h3, 0xd98a4a);
+    addTowerBox(px, pz, -6 * WORLD_SCALE, 0, 7 * WORLD_SCALE, 9 * WORLD_SCALE, h1, 0xd98a4a, parent);
+    addTowerBox(px, pz, 0, 0, 7 * WORLD_SCALE, 9 * WORLD_SCALE, h2, 0xe8e2d0, parent);
+    addTowerBox(px, pz, 6 * WORLD_SCALE, 0, 7 * WORLD_SCALE, 9 * WORLD_SCALE, h3, 0xd98a4a, parent);
     topHeight = Math.max(h1, h2, h3);
   }
   return topHeight;
 }
 
-// 동마다 실제로 제작된 3D 모델(3D_place_101.glb ~ 116.glb 등)을 불러와서 자리에 앉힌다. 모델 자체의
-// 단위가 PLACES 좌표와 같은 "실측 미터" 기준이라 WORLD_SCALE을 그대로 곱해서 쓰고, 모델이 세로 중심을
-// 기준으로 만들어져 있어서(바닥이 y=0이 아님) 불러온 뒤 바운딩박스를 재서 바닥이 지면에 닿도록 보정한다.
-// rotY는 사거리 대각선 배치(place.diagonal) 자리의 기본 회전값 — place.rotationDeg를 넣어 두면
-// (모델마다 정면 방향이 다를 수 있어서) 그 값으로 덮어써 미세 조정할 수 있다.
-function loadPlaceModel(place, px, pz, rotY = 0) {
+// 동네가 넓어지면서(행당한진타운·행당대림아파트 등) glb를 전부 한꺼번에 불러오면 버벅여서, 실제
+// 모델은 캐릭터가 MODEL_LOAD_RANGE(300m) 안에 들어왔을 때만 불러오고, MODEL_UNLOAD_RANGE 밖으로
+// 나가면 다시 지워서 메모리를 돌려준다. 두 거리 사이에 여유를 둔 건 경계에서 왔다 갔다 할 때마다
+// 불러오고 지우기를 반복하지 않게 하는 히스테리시스다. 로딩 전/지워진 동안은 건물이 아예 안 보이면
+// 어색하니, 모델 없는 동과 같은 임시 매싱(placeholder)을 세워 두고 모델이 뜨면 숨긴다.
+const MODEL_LOAD_RANGE = LABEL_VISIBLE_RANGE;
+const MODEL_UNLOAD_RANGE = MODEL_LOAD_RANGE * 1.3;
+const MODEL_STREAM_CHECK_INTERVAL = 0.4; // 매 프레임 전부 검사하면 낭비라 이 간격으로만 확인한다
+const modelStreamEntries = []; // buildPlaces가 model이 있는 장소마다 하나씩 채운다
+let modelStreamTimer = 0;
+
+function disposeObject3D(obj) {
+  obj.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry?.dispose();
+    const materials = Array.isArray(o.material) ? o.material : [o.material];
+    materials.forEach((mat) => {
+      if (!mat) return;
+      ["map", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "aoMap", "bumpMap"].forEach((key) => mat[key]?.dispose());
+      mat.dispose();
+    });
+  });
+}
+
+// 모델 자체의 단위가 PLACES 좌표와 같은 "실측 미터" 기준이라 WORLD_SCALE을 그대로 곱해서 쓰고,
+// 모델이 세로 중심을 기준으로 만들어져 있어서(바닥이 y=0이 아님) 불러온 뒤 바운딩박스를 재서
+// 바닥이 지면에 닿도록 보정한다. rotY는 사거리 대각선 배치(place.diagonal) 자리의 기본 회전값 —
+// place.rotationDeg를 넣어 두면(모델마다 정면 방향이 다를 수 있어서) 그 값으로 덮어써 미세조정한다.
+function loadPlaceModelInto(entry) {
+  entry.loading = true;
   new GLTFLoader().load(
-    `${place.model}?v=${ASSET_VERSION}`,
+    `${entry.place.model}?v=${ASSET_VERSION}`,
     (gltf) => {
+      entry.loading = false;
+      // 로딩하는 동안 캐릭터가 다시 멀어졌으면 받아 둔 모델을 바로 버린다
+      const curDist = character ? Math.hypot(character.position.x - entry.px, character.position.z - entry.pz) : Infinity;
+      if (curDist > MODEL_UNLOAD_RANGE) return;
       const model = gltf.scene;
       model.scale.setScalar(WORLD_SCALE);
-      model.position.set(px, 0, pz);
-      model.rotation.y = place.rotationDeg != null ? THREE.MathUtils.degToRad(place.rotationDeg) : rotY;
+      model.position.set(entry.px, 0, entry.pz);
+      model.rotation.y = entry.place.rotationDeg != null ? THREE.MathUtils.degToRad(entry.place.rotationDeg) : entry.rotY;
       model.traverse((o) => {
         if (o.isMesh) {
           o.castShadow = true;
@@ -812,10 +844,34 @@ function loadPlaceModel(place, px, pz, rotY = 0) {
       const box = new THREE.Box3().setFromObject(model);
       model.position.y -= box.min.y;
       scene.add(model);
+      entry.loadedModel = model;
+      if (entry.placeholder) entry.placeholder.visible = false;
     },
     undefined,
-    (err) => console.warn(`${place.name} 모델을 못 불러왔다`, err)
+    (err) => {
+      entry.loading = false;
+      console.warn(`${entry.place.name} 모델을 못 불러왔다`, err);
+    }
   );
+}
+
+function updateModelStreaming(dt) {
+  if (!character || !modelStreamEntries.length) return;
+  modelStreamTimer += dt;
+  if (modelStreamTimer < MODEL_STREAM_CHECK_INTERVAL) return;
+  modelStreamTimer = 0;
+  const cp = character.position;
+  modelStreamEntries.forEach((entry) => {
+    const dist = Math.hypot(cp.x - entry.px, cp.z - entry.pz);
+    if (dist <= MODEL_LOAD_RANGE) {
+      if (!entry.loadedModel && !entry.loading) loadPlaceModelInto(entry);
+    } else if (dist > MODEL_UNLOAD_RANGE && entry.loadedModel) {
+      scene.remove(entry.loadedModel);
+      disposeObject3D(entry.loadedModel);
+      entry.loadedModel = null;
+      if (entry.placeholder) entry.placeholder.visible = true;
+    }
+  });
 }
 
 function buildPlaces() {
@@ -831,8 +887,21 @@ function buildPlaces() {
     const rotY = place.diagonal ? Math.PI / 4 : 0;
 
     if (place.model) {
-      // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동)은 그 모델을 그대로 불러와 쓴다
-      loadPlaceModel(place, px, pz, rotY);
+      // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동 등)은 캐릭터가 가까워지면 불러와 쓴다
+      // (updateModelStreaming) — 그전엔 모델 없는 동과 같은 임시 매싱을 세워 둔다.
+      const placeholder = new THREE.Group();
+      if (place.type === "아파트") {
+        height = buildApartmentCluster(place, px, pz, floors, placeholder);
+      } else {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), new THREE.MeshStandardMaterial({ color }));
+        mesh.position.set(px, height / 2, pz);
+        mesh.rotation.y = rotY;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        placeholder.add(mesh);
+      }
+      scene.add(placeholder);
+      modelStreamEntries.push({ place, px, pz, rotY, placeholder, loadedModel: null, loading: false });
     } else if (place.type === "아파트") {
       height = buildApartmentCluster(place, px, pz, floors);
     } else {
@@ -1412,6 +1481,7 @@ function animate() {
   updateCamera();
   updateLabelScales();
   updateLabelVisibility();
+  updateModelStreaming(dt);
   renderer.render(scene, camera);
 }
 
