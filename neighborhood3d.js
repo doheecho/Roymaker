@@ -480,6 +480,9 @@ const allLabelSprites = [];
 const LABEL_FONT_SIZE = 46; // 캔버스에 그리는 실제 글자 크기(px) — 아래 padY와 함께 캔버스 전체 높이를 이룬다
 const LABEL_PAD_Y = 14;
 const LABEL_TARGET_FONT_PX = 14; // 화면에 보일 때 글자 높이의 목표 픽셀 크기 — HUD의 font-size:14px과 맞춘다
+// 행당동 쪽 건물이 늘면서 라벨이 지도에 너무 많이 쌓여서, 캐릭터와 가까운(약 300m) 장소 + 심부름
+// 목적지(파란 점멸이 켜지는 곳)만 라벨을 보이게 한다 — 300m는 실측 미터라 WORLD_SCALE을 곱해 둔다.
+const LABEL_VISIBLE_RANGE = 300 * WORLD_SCALE;
 function makeLabelSprite(text, scale = 0.05) {
   if (!labelTextureCache[text]) {
     const canvas = document.createElement("canvas");
@@ -534,6 +537,28 @@ function updateLabelScales() {
     const capFactor = targetScaleY / sprite.userData.baseH;
     const factor = Math.min(1 / dist, capFactor);
     sprite.scale.set(sprite.userData.baseW * factor, sprite.userData.baseH * factor, 1);
+  });
+}
+
+// 장소 라벨은 캐릭터와 LABEL_VISIBLE_RANGE(약 300m) 안에 있거나, 지금 심부름 목적지로 지정된
+// 곳(updateErrandHighlights의 파란 점멸과 같은 기준)일 때만 보인다 — placeId가 없는 라벨(불량배
+// 이름표 등)은 건드리지 않는다.
+function updateLabelVisibility() {
+  if (!character) return;
+  const activeIds = new Set();
+  if (currentErrand?.phase === "toStore") currentErrand.storeIds.forEach((id) => activeIds.add(id));
+  else if (currentErrand?.phase === "toHome") activeIds.add(0);
+  const cp = character.position;
+  allLabelSprites.forEach((sprite) => {
+    const placeId = sprite.userData.placeId;
+    if (placeId == null) return;
+    if (activeIds.has(placeId)) {
+      sprite.visible = true;
+      return;
+    }
+    const dx = cp.x - sprite.position.x;
+    const dz = cp.z - sprite.position.z;
+    sprite.visible = Math.hypot(dx, dz) <= LABEL_VISIBLE_RANGE;
   });
 }
 
@@ -839,6 +864,7 @@ function buildPlaces() {
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
     label.position.set(px, height + 1.1, pz);
+    label.userData.placeId = place.id; // updateLabelVisibility에서 거리·목적지 판정에 쓴다
     scene.add(label);
 
     // 심부름 목적지로 지정되면 이 라벨 뒤에서 파란 점멸 표시가 켜진다(기본은 숨김)
@@ -1385,6 +1411,7 @@ function animate() {
   if (momMixer) momMixer.update(dt);
   updateCamera();
   updateLabelScales();
+  updateLabelVisibility();
   renderer.render(scene, camera);
 }
 
