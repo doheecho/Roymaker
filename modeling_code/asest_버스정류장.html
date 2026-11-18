@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>서울시 버스정류장 3D 모델링</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #262a30; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(18, 21, 26, 0.88); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.18);
+      pointer-events: none; line-height: 1.55;
+    }
+    #controls-ui {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      background: rgba(18, 21, 26, 0.90); padding: 10px 14px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      max-width: 96vw;
+    }
+    button {
+      background: #374151; color: #fff; border: 1px solid #4b5563;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #16a34a; border-color: #4ade80; }
+    button.primary-btn { background: #15803d; border-color: #22c55e; font-weight: bold; }
+    button.export-btn { background: #b45309; border-color: #f59e0b; font-weight: bold; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info"></div>
+
+  <div id="controls-ui">
+    <button class="primary-btn" onclick="setView('front_angle')">정면 사선 (12807 구도)</button>
+    <button onclick="setView('front')">정면 전체 (12805 구도)</button>
+    <button onclick="setView('pole_close')">정류장 표지판 근접 (12803 구도)</button>
+    <button onclick="setView('shelter_header')">승차대 상단 정류장명 근접</button>
+    <button onclick="setView('rear')">후면 투명유리 확인</button>
+    <button onclick="setView('top')">상면 (Top)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    // =========================================================================
+    // [사용자 설정 영역] 정류장명, 정류소 ID, 이전·다음 정류장, 노선을 수정하세요!
+    // =========================================================================
+    const STOP_CONFIG = {
+      stopName:    '왕십리역10번출구',               // 현재 정류장명
+      englishName: 'Wangsimni Station Exit 10',     // 영문 정류장명
+      stopId:      '04-135',                        // 정류소 고유번호 (ARS 번호)
+      prevStop:    '무학여고',                       // 이전 정류장명
+      nextStop:    '왕십리광장.왕십리역4번출구',      // 다음 정류장명
+
+      // 운행 노선 목록 (type: '간선' 파랑 | '지선' 초록 | '마을' 연두 | '광역' 빨강 | '순환' 노랑)
+      routes: [
+        { number: '110A',   type: '간선', desc: '정릉 ↔ 상왕십리 · 한양대' },
+        { number: '141',    type: '간선', desc: '도봉산 ↔ 염곡동 · 왕십리' },
+        { number: '2016',   type: '지선', desc: '중랑공영차고지 ↔ 효창동' },
+        { number: '2222',   type: '지선', desc: '자양동 ↔ 고려대 · 왕십리' },
+        { number: '성동02', type: '마을', desc: '금호동 ↔ 왕십리역' },
+        { number: '성동03', type: '마을', desc: '행당동 ↔ 왕십리광장' }
+      ]
+    };
+    // =========================================================================
+
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    const ROUTE_COLORS = {
+      '간선': '#2563EB',
+      '지선': '#16A34A',
+      '마을': '#22C55E',
+      '광역': '#DC2626',
+      '순환': '#EAB308'
+    };
+
+    document.getElementById('info').innerHTML = `
+      <strong>서울시 버스정류장 — ${STOP_CONFIG.stopName} (${STOP_CONFIG.stopId}) 3D 모델링</strong><br/>
+      마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소
+    `;
+
+    // 1. 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#8BA8C7');
+
+    const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.position.set(-4.2, 2.35, 5.4);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(-0.35, 1.35, -0.1);
+    controls.enableDamping = true;
+    controls.update();
+
+    window.setView = (mode) => {
+      const presets = {
+        front_angle:    { pos: [-4.2, 2.35, 5.4],   target: [-0.35, 1.35, -0.1] },
+        front:          { pos: [-0.45, 1.85, 6.2],  target: [-0.45, 1.35, -0.2] },
+        pole_close:     { pos: [-4.55, 1.75, 1.35], target: [-2.65, 1.65, 0.42] },
+        shelter_header: { pos: [0.65, 2.15, 2.45],  target: [0.65, 2.22, -0.65] },
+        rear:           { pos: [-2.6, 2.0, -4.6],   target: [-0.35, 1.35, -0.3] },
+        top:            { pos: [-0.45, 9.5, 0.01],  target: [-0.45, 0.5, -0.1] }
+      };
+      const v = presets[mode];
+      if (!v) return;
+      camera.position.set(...v.pos);
+      controls.target.set(...v.target);
+      controls.update();
+    };
+
+    // 2. 조명 설정
+    scene.add(new THREE.AmbientLight(0xffffff, 0.95));
+
+    const dirLight = new THREE.DirectionalLight(0xfffdf9, 1.15);
+    dirLight.position.set(18, 35, 22);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    dirLight.shadow.camera.left = -12;
+    dirLight.shadow.camera.right = 12;
+    dirLight.shadow.camera.top = 12;
+    dirLight.shadow.camera.bottom = -12;
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdbeafe, 0.55);
+    fillLight.position.set(-18, 16, -16);
+    scene.add(fillLight);
+
+    // =========================================================
+    // 프로시저럴 텍스처 & 유틸리티
+    // =========================================================
+    function makeTex(canvas, rx = 1, ry = 1) {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      if (rx !== 1 || ry !== 1) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(rx, ry);
+      }
+      return tex;
+    }
+
+    function addOutline(mesh, color = 0x1e2228) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 28);
+      mesh.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color })));
+    }
+
+    // A. 보도블록 & 전면 노란 점자블록 텍스처
+    function createSidewalkTexture() {
+      const c = document.createElement('canvas');
+      c.width = 1024; c.height = 512;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#C7CBD0';
+      ctx.fillRect(0, 0, 1024, 512);
+
+      const cols = 28, rows = 14;
+      const bw = 1024 / cols, bh = 512 / rows;
+      for (let r = 0; r < rows; r++) {
+        const off = (r % 2) * (bw * 0.5);
+        for (let col = -1; col <= cols; col++) {
+          const hash = (r * 17 + col * 31) % 13;
+          ctx.fillStyle = hash === 0 ? '#B2B7BE' : (hash % 3 === 0 ? '#D3D7DC' : '#C2C6CC');
+          ctx.fillRect(col * bw + off + 1.5, r * bh + 1.5, bw - 3, bh - 3);
+        }
+      }
+
+      const stripY = 408;
+      const stripH = 44;
+      ctx.fillStyle = '#EAB308';
+      ctx.fillRect(140, stripY, 790, stripH);
+      ctx.fillRect(140, stripY - 48, 76, 48);
+
+      ctx.strokeStyle = '#CA8A04';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(140, stripY, 790, stripH);
+      ctx.strokeRect(140, stripY - 48, 76, 48);
+
+      for (let tx = 180; tx < 930; tx += 40) {
+        ctx.beginPath();
+        ctx.moveTo(tx, stripY);
+        ctx.lineTo(tx, stripY + stripH);
+        ctx.stroke();
+      }
+
+      return makeTex(c);
+    }
+
+    // B. 승차대 상단 정류장명 · 이전/다음 정류장 안내판 텍스처
+    function createShelterHeaderTexture(cfg) {
+      const c = document.createElement('canvas');
+      c.width = 1600; c.height = 280;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#25282D';
+      ctx.fillRect(0, 0, 1600, 280);
+
+      ctx.strokeStyle = '#3F444D';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(3, 3, 1594, 274);
+
+      ctx.strokeStyle = '#4B5563';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(390, 42); ctx.lineTo(390, 238);
+      ctx.moveTo(1180, 42); ctx.lineTo(1180, 238);
+      ctx.stroke();
+
+      ctx.fillStyle = '#9CA3AF';
+      ctx.font = 'bold 24px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('이전 정류장', 195, 92);
+
+      ctx.fillStyle = '#E5E7EB';
+      const prevTxt = cfg.prevStop || '';
+      const prevFont = prevTxt.length > 9 ? 26 : 32;
+      ctx.font = `bold ${prevFont}px "Malgun Gothic", sans-serif`;
+      ctx.fillText(prevTxt, 195, 152);
+
+      const nameStr = cfg.stopName || '왕십리역10번출구';
+      const mainFont = nameStr.length > 10 ? 54 : (nameStr.length > 7 ? 64 : 74);
+      ctx.fillStyle = '#F9FAFB';
+      ctx.font = `bold ${mainFont}px "Malgun Gothic", sans-serif`;
+      ctx.fillText(nameStr, 785, 96);
+
+      if (cfg.englishName) {
+        ctx.fillStyle = '#D1D5DB';
+        ctx.font = 'bold 28px Arial, sans-serif';
+        ctx.fillText(cfg.englishName, 785, 166);
+      }
+
+      if (cfg.stopId) {
+        ctx.fillStyle = '#9CA3AF';
+        ctx.font = 'bold 25px "Malgun Gothic", Arial, sans-serif';
+        ctx.fillText(`[ 정류소 ID   ${cfg.stopId} ]`, 785, 222);
+      }
+
+      ctx.fillStyle = '#E5E7EB';
+      ctx.font = 'bold 26px Arial, sans-serif';
+      ctx.fillText('◀', 1218, 128);
+
+      ctx.fillStyle = '#9CA3AF';
+      ctx.font = 'bold 24px "Malgun Gothic", sans-serif';
+      ctx.fillText('다음 정류장', 1405, 92);
+
+      ctx.fillStyle = '#F3F4F6';
+      const nextTxt = cfg.nextStop || '';
+      if (nextTxt.includes('.')) {
+        const parts = nextTxt.split('.');
+        ctx.font = 'bold 27px "Malgun Gothic", sans-serif';
+        ctx.fillText(parts[0], 1405, 142);
+        ctx.fillText(parts.slice(1).join('.'), 1405, 182);
+      } else {
+        const nextFont = nextTxt.length > 9 ? 25 : 31;
+        ctx.font = `bold ${nextFont}px "Malgun Gothic", sans-serif`;
+        ctx.fillText(nextTxt, 1405, 152);
+      }
+
+      return makeTex(c);
+    }
+
+    // C. 유리벽 부착용 노선도 및 버스 이용 안내판 텍스처
+    function createGlassRouteBoardTexture(cfg) {
+      const c = document.createElement('canvas');
+      c.width = 768; c.height = 560;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(0, 0, 768, 560);
+
+      ctx.fillStyle = '#1F2937';
+      ctx.fillRect(0, 0, 768, 66);
+
+      ctx.fillStyle = '#10B981';
+      ctx.fillRect(0, 0, 14, 66);
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 28px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${cfg.stopName} 정차 노선 안내`, 28, 34);
+
+      ctx.fillStyle = '#9CA3AF';
+      ctx.font = 'bold 22px Arial, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`ID ${cfg.stopId}`, 742, 34);
+
+      const list = (cfg.routes || []).slice(0, 6);
+      list.forEach((rt, idx) => {
+        const rowY = 86 + idx * 66;
+        ctx.fillStyle = idx % 2 === 0 ? '#FFFFFF' : '#F1F5F9';
+        ctx.fillRect(16, rowY, 736, 56);
+
+        ctx.strokeStyle = '#E2E8F0';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(16, rowY, 736, 56);
+
+        const badgeColor = ROUTE_COLORS[rt.type] || '#2563EB';
+        ctx.fillStyle = badgeColor;
+        ctx.beginPath();
+        ctx.roundRect(28, rowY + 12, 64, 32, 6);
+        ctx.fill();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 19px "Malgun Gothic", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(rt.type || '간선', 60, rowY + 28);
+
+        ctx.fillStyle = badgeColor;
+        ctx.font = 'bold 28px Arial, "Malgun Gothic", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(rt.number, 108, rowY + 29);
+
+        ctx.fillStyle = '#334155';
+        ctx.font = '22px "Malgun Gothic", sans-serif';
+        ctx.fillText(rt.desc || '', 245, rowY + 29);
+      });
+
+      ctx.fillStyle = '#FEE2E2';
+      ctx.fillRect(16, 492, 736, 50);
+      ctx.fillStyle = '#DC2626';
+      ctx.font = 'bold 22px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🚭 버스정류소 및 경계 10m 이내는 금연구역입니다 (과태료 10만원)', 384, 518);
+
+      return makeTex(c);
+    }
+
+    // D. 독립형 정류장 표지판 지주 — 상단 원형 버스 심볼 텍스처
+    function createPoleRoundHeadTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 512;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#25282D';
+      ctx.fillRect(0, 0, 512, 512);
+
+      ctx.beginPath();
+      ctx.arc(256, 256, 212, 0, Math.PI * 2);
+      ctx.fillStyle = '#2E7D52';
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.roundRect(156, 128, 200, 232, 30);
+      ctx.fill();
+
+      ctx.fillStyle = '#2E7D52';
+      ctx.fillRect(196, 148, 120, 22);
+      ctx.beginPath();
+      ctx.roundRect(178, 184, 156, 94, 12);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(194, 316, 16, 0, Math.PI * 2);
+      ctx.arc(318, 316, 16, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(180, 358, 36, 30);
+      ctx.fillRect(296, 358, 36, 30);
+
+      return makeTex(c);
+    }
+
+    // E. 독립형 정류장 표지판 지주 — 직사각 안내판 텍스처
+    function createPoleBoardTexture(cfg) {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 1360;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#25282D';
+      ctx.fillRect(0, 0, 512, 1360);
+
+      const titleStr = cfg.stopName || '왕십리역10번출구';
+      const titleFont = titleStr.length > 9 ? 40 : (titleStr.length > 7 ? 46 : 52);
+      ctx.fillStyle = '#F9FAFB';
+      ctx.font = `bold ${titleFont}px "Malgun Gothic", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(titleStr, 256, 86);
+
+      if (cfg.englishName) {
+        ctx.fillStyle = '#D1D5DB';
+        ctx.font = 'bold 22px Arial, sans-serif';
+        ctx.fillText(cfg.englishName, 256, 142);
+      }
+
+      if (cfg.stopId) {
+        ctx.fillStyle = '#9CA3AF';
+        ctx.font = 'bold 24px "Malgun Gothic", Arial, sans-serif';
+        ctx.fillText(`[ 정류소 ID  ${cfg.stopId} ]`, 256, 188);
+      }
+
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(28, 232, 456, 840);
+
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(28, 232, 456, 54);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 24px "Malgun Gothic", sans-serif';
+      ctx.fillText('운행 노선 및 방면 안내', 256, 260);
+
+      const list = (cfg.routes || []).slice(0, 6);
+      list.forEach((rt, idx) => {
+        const yTop = 304 + idx * 124;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(42, yTop, 428, 110);
+        ctx.strokeStyle = '#CBD5E1';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(42, yTop, 428, 110);
+
+        const badgeColor = ROUTE_COLORS[rt.type] || '#2563EB';
+        ctx.fillStyle = badgeColor;
+        ctx.fillRect(42, yTop, 12, 110);
+
+        ctx.beginPath();
+        ctx.roundRect(68, yTop + 16, 62, 30, 5);
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 18px "Malgun Gothic", sans-serif';
+        ctx.fillText(rt.type || '간선', 99, yTop + 31);
+
+        ctx.fillStyle = badgeColor;
+        ctx.font = 'bold 34px Arial, "Malgun Gothic", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(rt.number, 144, yTop + 32);
+
+        ctx.fillStyle = '#334155';
+        ctx.font = '21px "Malgun Gothic", sans-serif';
+        ctx.fillText(rt.desc || '', 68, yTop + 80);
+        ctx.textAlign = 'center';
+      });
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(28, 1094, 456, 112);
+
+      ctx.beginPath();
+      ctx.arc(110, 1150, 34, 0, Math.PI * 2);
+      ctx.strokeStyle = '#DC2626';
+      ctx.lineWidth = 7;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(86, 1126);
+      ctx.lineTo(134, 1174);
+      ctx.stroke();
+
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 34px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('금연구역', 166, 1140);
+      ctx.fillStyle = '#4B5563';
+      ctx.font = 'bold 20px Arial, sans-serif';
+      ctx.fillText('NO SMOKING AREA', 166, 1176);
+
+      return makeTex(c);
+    }
+
+    // =========================================================
+    // 3. 서울시 버스정류장 3D 조립
+    // =========================================================
+    const busStopGroup = new THREE.Group();
+    busStopGroup.name = `SeoulBusStop_${STOP_CONFIG.stopName}`;
+    scene.add(busStopGroup);
+
+    const charcoalMetalMat = new THREE.MeshStandardMaterial({
+      color: '#2B2F36',
+      metalness: 0.48,
+      roughness: 0.38
+    });
+    const darkTrimMat = new THREE.MeshStandardMaterial({
+      color: '#1E2126',
+      metalness: 0.52,
+      roughness: 0.42
+    });
+    const benchTopMat = new THREE.MeshStandardMaterial({
+      color: '#C8CBD0',
+      roughness: 0.55,
+      metalness: 0.12
+    });
+    const clearGlassMat = new THREE.MeshPhysicalMaterial({
+      color: '#DCEEEB',
+      transparent: true,
+      opacity: 0.28,
+      roughness: 0.08,
+      metalness: 0.08,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const roofGlassMat = new THREE.MeshPhysicalMaterial({
+      color: '#64748B',
+      transparent: true,
+      opacity: 0.52,
+      roughness: 0.18,
+      metalness: 0.15,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    // ---------------------------------------------------------
+    // A) 지면 배치용 보도블록 & 전면 노란 점자블록 (y = -0.14 ~ 0.00)
+    // ---------------------------------------------------------
+    const sidewalk = new THREE.Mesh(
+      new THREE.BoxGeometry(5.65, 0.14, 2.35),
+      new THREE.MeshStandardMaterial({ map: createSidewalkTexture(), roughness: 0.86 })
+    );
+    sidewalk.position.set(-0.45, -0.07, -0.05);
+    sidewalk.receiveShadow = true;
+    busStopGroup.add(sidewalk);
+
+    // ---------------------------------------------------------
+    // B) 서울시 표준형 캔틸레버 버스 승차대 (Shelter)
+    // ---------------------------------------------------------
+    const shelterGroup = new THREE.Group();
+    shelterGroup.name = 'Seoul_Bus_Shelter';
+
+    const xLeft = -1.50;
+    const xMid  = -0.45;
+    const xRight = 1.85;
+    const zBack = -0.78;
+    const zRoofBack = -0.88;
+    const zRoofFront = 0.68;
+    const hShelter = 2.52;
+
+    const leftPost = new THREE.Mesh(
+      new THREE.BoxGeometry(0.11, hShelter, 0.12),
+      charcoalMetalMat
+    );
+    leftPost.position.set(xLeft, hShelter / 2, zBack);
+    leftPost.castShadow = true;
+    addOutline(leftPost);
+    shelterGroup.add(leftPost);
+
+    const midPost = new THREE.Mesh(
+      new THREE.BoxGeometry(0.11, hShelter, 0.12),
+      charcoalMetalMat
+    );
+    midPost.position.set(xMid, hShelter / 2, zBack);
+    midPost.castShadow = true;
+    addOutline(midPost);
+    shelterGroup.add(midPost);
+
+    const rightRoundPost = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.085, 0.085, hShelter + 0.06, 20),
+      charcoalMetalMat
+    );
+    rightRoundPost.position.set(xRight, (hShelter + 0.06) / 2, zBack);
+    rightRoundPost.castShadow = true;
+    shelterGroup.add(rightRoundPost);
+
+    [xLeft, xMid, xRight].forEach(px => {
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.22, 0.025, 0.22),
+        darkTrimMat
+      );
+      plate.position.set(px, 0.0125, zBack);
+      shelterGroup.add(plate);
+    });
+
+    const leftBayW = xMid - xLeft - 0.11;
+    const leftBayCenterX = (xLeft + xMid) / 2;
+
+    const leftTopBar = new THREE.Mesh(new THREE.BoxGeometry(leftBayW, 0.09, 0.10), charcoalMetalMat);
+    leftTopBar.position.set(leftBayCenterX, hShelter - 0.08, zBack);
+    const leftBotBar = new THREE.Mesh(new THREE.BoxGeometry(leftBayW, 0.09, 0.10), charcoalMetalMat);
+    leftBotBar.position.set(leftBayCenterX, 0.09, zBack);
+    shelterGroup.add(leftTopBar, leftBotBar);
+
+    const leftGlassPane = new THREE.Mesh(
+      new THREE.PlaneGeometry(leftBayW - 0.02, hShelter - 0.26),
+      clearGlassMat
+    );
+    leftGlassPane.position.set(leftBayCenterX, hShelter / 2, zBack);
+    shelterGroup.add(leftGlassPane);
+
+    const rightBayW = xRight - xMid - 0.12;
+    const rightBayCenterX = (xMid + xRight) / 2;
+    const headerH = 0.42;
+    const headerY = hShelter - 0.10 - headerH / 2;
+
+    const headerTex = createShelterHeaderTexture(STOP_CONFIG);
+    const headerFrontMat = new THREE.MeshStandardMaterial({ map: headerTex, roughness: 0.42 });
+    const headerSignBox = new THREE.Mesh(
+      new THREE.BoxGeometry(rightBayW, headerH, 0.09),
+      [
+        darkTrimMat,
+        darkTrimMat,
+        darkTrimMat,
+        darkTrimMat,
+        headerFrontMat,
+        darkTrimMat
+      ]
+    );
+    headerSignBox.position.set(rightBayCenterX, headerY, zBack);
+    headerSignBox.castShadow = true;
+    addOutline(headerSignBox);
+    shelterGroup.add(headerSignBox);
+
+    const rightBotBar = new THREE.Mesh(
+      new THREE.BoxGeometry(rightBayW, 0.08, 0.10),
+      charcoalMetalMat
+    );
+    rightBotBar.position.set(rightBayCenterX, 0.09, zBack);
+    shelterGroup.add(rightBotBar);
+
+    const glassTopY = headerY - headerH / 2;
+    const glassBotY = 0.13;
+    const rightGlassH = glassTopY - glassBotY;
+    const rightGlassPane = new THREE.Mesh(
+      new THREE.PlaneGeometry(rightBayW - 0.02, rightGlassH),
+      clearGlassMat
+    );
+    rightGlassPane.position.set(rightBayCenterX, (glassTopY + glassBotY) / 2, zBack);
+    shelterGroup.add(rightGlassPane);
+
+    const stickerW = 0.96;
+    const stickerH = 0.70;
+    const routeStickerTex = createGlassRouteBoardTexture(STOP_CONFIG);
+    const routeStickerMat = new THREE.MeshStandardMaterial({
+      map: routeStickerTex,
+      roughness: 0.35,
+      side: THREE.DoubleSide
+    });
+    const routeSticker = new THREE.Mesh(
+      new THREE.PlaneGeometry(stickerW, stickerH),
+      routeStickerMat
+    );
+    routeSticker.position.set(
+      xMid + 0.14 + stickerW / 2,
+      glassTopY - 0.08 - stickerH / 2,
+      zBack + 0.008
+    );
+    shelterGroup.add(routeSticker);
+
+    const roofW = xRight - xLeft + 0.22;
+    const roofD = zRoofFront - zRoofBack;
+    const roofCenterX = (xLeft + xRight) / 2;
+    const roofCenterZ = (zRoofBack + zRoofFront) / 2;
+    const roofY = hShelter + 0.03;
+
+    const frontBeam = new THREE.Mesh(new THREE.BoxGeometry(roofW, 0.10, 0.09), charcoalMetalMat);
+    frontBeam.position.set(roofCenterX, roofY + 0.02, zRoofFront);
+    frontBeam.castShadow = true;
+    addOutline(frontBeam);
+
+    const backBeam = new THREE.Mesh(new THREE.BoxGeometry(roofW, 0.11, 0.10), charcoalMetalMat);
+    backBeam.position.set(roofCenterX, roofY, zRoofBack);
+    backBeam.castShadow = true;
+    addOutline(backBeam);
+
+    shelterGroup.add(frontBeam, backBeam);
+
+    [xLeft - 0.04, xMid, 0.32, 1.08, xRight].forEach(rx => {
+      const rib = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.095, roofD),
+        charcoalMetalMat
+      );
+      rib.position.set(rx, roofY + 0.01, roofCenterZ);
+      rib.rotation.x = -0.025;
+      rib.castShadow = true;
+      addOutline(rib);
+      shelterGroup.add(rib);
+    });
+
+    const roofCanopy = new THREE.Mesh(
+      new THREE.BoxGeometry(roofW - 0.08, 0.025, roofD - 0.08),
+      roofGlassMat
+    );
+    roofCanopy.position.set(roofCenterX, roofY + 0.025, roofCenterZ);
+    roofCanopy.rotation.x = -0.025;
+    shelterGroup.add(roofCanopy);
+
+    const shelterLed = new THREE.Mesh(
+      new THREE.BoxGeometry(rightBayW - 0.35, 0.025, 0.08),
+      new THREE.MeshBasicMaterial({ color: '#FFFBEB' })
+    );
+    shelterLed.position.set(rightBayCenterX, roofY - 0.035, -0.15);
+    shelterGroup.add(shelterLed);
+
+    const benchGroup = new THREE.Group();
+    const benchW = 1.88;
+    const benchD = 0.44;
+    const benchH = 0.45;
+    const benchX = 0.70;
+    const benchZ = -0.46;
+
+    const seatSlab = new THREE.Mesh(
+      new THREE.BoxGeometry(benchW, 0.065, benchD),
+      benchTopMat
+    );
+    seatSlab.position.set(benchX, benchH - 0.0325, benchZ);
+    seatSlab.castShadow = true;
+    seatSlab.receiveShadow = true;
+    addOutline(seatSlab, 0x4b5563);
+    benchGroup.add(seatSlab);
+
+    const underFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(benchW - 0.08, 0.04, benchD - 0.08),
+      charcoalMetalMat
+    );
+    underFrame.position.set(benchX, benchH - 0.08, benchZ);
+    benchGroup.add(underFrame);
+
+    [-benchW / 2 + 0.07, benchW / 2 - 0.07].forEach(dx => {
+      const leg = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, benchH - 0.06, benchD - 0.04),
+        charcoalMetalMat
+      );
+      leg.position.set(benchX + dx, (benchH - 0.06) / 2, benchZ);
+      leg.castShadow = true;
+      addOutline(leg);
+      benchGroup.add(leg);
+    });
+
+    shelterGroup.add(benchGroup);
+    busStopGroup.add(shelterGroup);
+
+    // ---------------------------------------------------------
+    // C) 독립형 서울시 버스정류장 표지판 지주 (90도 회전 & 양면 무가림 구조)
+    // ---------------------------------------------------------
+    const poleGroup = new THREE.Group();
+    poleGroup.name = 'Seoul_Bus_Stop_Pole';
+
+    const poleX = -2.65;
+    const poleZ = 0.42;
+
+    // 지주 바닥 플랜지
+    const poleBase = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.03, 0.24),
+      darkTrimMat
+    );
+    poleBase.position.set(poleX, 0.015, poleZ);
+    poleGroup.add(poleBase);
+
+    // 수직 사각 철제 지주 기둥 (안내판 두께 0.106m보다 얇은 0.072m로 내부 통과, 원형 헤드 하단 y=2.24까지 연결)
+    const poleShaft = new THREE.Mesh(
+      new THREE.BoxGeometry(0.072, 2.24, 0.072),
+      charcoalMetalMat
+    );
+    poleShaft.position.set(poleX, 1.12, poleZ);
+    poleShaft.castShadow = true;
+    addOutline(poleShaft);
+    poleGroup.add(poleShaft);
+
+    // 직사각 노선·정류장 안내 보드 (90도 회전 -> +X, -X 양방향 정면 배치, 두께 0.106m로 기둥 가림 없음)
+    const boardW = 0.46;
+    const boardH = 1.26;
+    const boardThick = 0.106;
+    const boardTex = createPoleBoardTexture(STOP_CONFIG);
+    const boardFaceMat = new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.42 });
+
+    const poleBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(boardThick, boardH, boardW),
+      [
+        boardFaceMat, // +X (승차대·접근 차량 방면 정면)
+        boardFaceMat, // -X (보행자 진입 방면 정면)
+        darkTrimMat,
+        darkTrimMat,
+        darkTrimMat,
+        darkTrimMat
+      ]
+    );
+    poleBoard.position.set(poleX, 1.50, poleZ);
+    poleBoard.castShadow = true;
+    addOutline(poleBoard);
+    poleGroup.add(poleBoard);
+
+    // 상단 원형 서울시 버스 심볼 헤드 (+X, -X 양면 모두 버스 아이콘 정방향 정렬)
+    const headRadius = 0.24;
+    const headDepth = 0.106;
+
+    // -X 면용 텍스처 (rotation.z = +90도 기준 정방향)
+    const headTexNegX = createPoleRoundHeadTexture();
+    const headMatNegX = new THREE.MeshStandardMaterial({ map: headTexNegX, roughness: 0.38 });
+
+    // +X 면용 텍스처 (상하 반전 보정하여 정방향 정렬)
+    const headTexPosX = createPoleRoundHeadTexture();
+    headTexPosX.center.set(0.5, 0.5);
+    headTexPosX.rotation = Math.PI;
+    const headMatPosX = new THREE.MeshStandardMaterial({ map: headTexPosX, roughness: 0.38 });
+
+    const roundHead = new THREE.Mesh(
+      new THREE.CylinderGeometry(headRadius, headRadius, headDepth, 32),
+      [darkTrimMat, headMatNegX, headMatPosX]
+    );
+    roundHead.rotation.z = Math.PI / 2;
+    roundHead.position.set(poleX, 2.42, poleZ);
+    roundHead.castShadow = true;
+    poleGroup.add(roundHead);
+
+    busStopGroup.add(poleGroup);
+
+    // =========================================================
+    // 4. GLB 3D 파일 추출 & 렌더링 루프
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        busStopGroup,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${STOP_CONFIG.stopName}_bus_stop.glb`;
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (err) => console.error('GLB 추출 오류:', err),
+        { binary: true }
+      );
+    };
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

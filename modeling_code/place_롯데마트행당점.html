@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>롯데마트 행당점 (한진종합상가) 3D 모델링</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #262a30; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 12.5px;
+      background: rgba(18, 21, 26, 0.88); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.18);
+      pointer-events: none; line-height: 1.55; max-width: 720px;
+    }
+    #controls-ui {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+      background: rgba(18, 21, 26, 0.90); padding: 10px 12px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      max-width: 98vw;
+    }
+    button {
+      background: #374151; color: #fff; border: 1px solid #4b5563;
+      padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11.5px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #dc2626; border-color: #f87171; }
+    button.sky-btn { background: #1e3a8a; border-color: #3b82f6; }
+    button.front-btn { background: #0f766e; border-color: #2dd4bf; }
+    button.rear-btn { background: #7f1d1d; border-color: #ef4444; }
+    button.export-btn { background: #b45309; border-color: #f59e0b; font-weight: bold; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>롯데마트 행당점 (한진종합상가) 3D 모델링</strong><br/>
+    · 28° 대지 방위각 · 동→서 경사 단차 · 전면 LOTTERIA/DALDAGOMI/PARIS BAGUETTE/WELCOME! 및 지하통로 유리 캐노피<br/>
+    · 후면 고객 주차장 · LOTTE Mart 매장입구 빨간 캐노피 · 동측 수직 유리 계단실 탑 · 지하주차장 램프 반영
+  </div>
+
+  <div id="controls-ui">
+    <button class="sky-btn" onclick="setView('view1_sky')">1. 스카이뷰 (Top)</button>
+    <button class="front-btn" onclick="setView('view2_nnw_east_low')">2. 북북서-동측 하부</button>
+    <button class="front-btn" onclick="setView('view3_nnw_east_high')">3. 북북서-동측 상부</button>
+    <button class="front-btn" onclick="setView('view4_nnw_west_low')">4. 북북서-서측 하부</button>
+    <button class="front-btn" onclick="setView('view5_nnw_west_high')">5. 북북서-서측 상부</button>
+    <button class="front-btn" onclick="setView('view6_west_step')">6. 서측 단차·전면 조망</button>
+    <button class="rear-btn" onclick="setView('view7_se_out')">7. 남동 외부·주차장입구</button>
+    <button class="rear-btn" onclick="setView('view8_sse_right')">8. 남남동 주차장 (씨티은행)</button>
+    <button class="rear-btn" onclick="setView('view9_sse_full')">9. 남남동 주차장 (전체)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // 1. 씬, 카메라, 렌더러 설정 (좌표계: -Z = 북(N), +Z = 남(S), +X = 동(E), -X = 서(W))
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#7FA6C9');
+
+    const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.3, 1200);
+    camera.position.set(16, 16, -54);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(-2, 11, -4);
+    controls.enableDamping = true;
+    controls.update();
+
+    // 9장 사진 구도 프리셋 (대지 회전각 28도 반영)
+    window.setView = (name) => {
+      const presets = {
+        view1_sky:          { pos: [0, 124, 14],      target: [0, 2, 4] },
+        view2_nnw_east_low: { pos: [-4, 7.5, -46],    target: [-6, 8.5, -10] },
+        view3_nnw_east_high:{ pos: [-2, 8.5, -48],    target: [-5, 17.5, -10] },
+        view4_nnw_west_low: { pos: [-22, 7.5, -36],   target: [14, 8.0, -18] },
+        view5_nnw_west_high:{ pos: [-20, 8.5, -38],   target: [15, 17.5, -18] },
+        view6_west_step:    { pos: [-46, 9.5, -24],   target: [-4, 13.0, -8] },
+        view7_se_out:       { pos: [44, 6.2, 22],     target: [12, 9.5, 4] },
+        view8_sse_right:    { pos: [28, 6.0, 32],     target: [14, 11.5, 2] },
+        view9_sse_full:     { pos: [6, 6.2, 44],      target: [6, 11.0, 2] }
+      };
+      const v = presets[name];
+      if (!v) return;
+      camera.position.set(...v.pos);
+      controls.target.set(...v.target);
+      controls.update();
+    };
+
+    // 2. 조명 설정
+    scene.add(new THREE.AmbientLight(0xffffff, 0.92));
+
+    const sunLight = new THREE.DirectionalLight(0xfffdf8, 1.12);
+    sunLight.position.set(70, 130, -55);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.left = -90;
+    sunLight.shadow.camera.right = 90;
+    sunLight.shadow.camera.top = 90;
+    sunLight.shadow.camera.bottom = -90;
+    scene.add(sunLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdbeafe, 0.50);
+    fillLight.position.set(-70, 60, 65);
+    scene.add(fillLight);
+
+    // =========================================================
+    // 유틸리티 & 프로시저럴 텍스처 생성기
+    // =========================================================
+    function makeTex(canvas, repeatX = 1, repeatY = 1) {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      if (repeatX !== 1 || repeatY !== 1) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(repeatX, repeatY);
+      }
+      return tex;
+    }
+
+    function addOutline(mesh, color = 0x26292e) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      mesh.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color })));
+    }
+
+    // 연회색 화강석 패널 메지(줄눈) 텍스처
+    function createGranitePanelTexture(cols = 6, rows = 14, baseHex = '#D2D4D7') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = baseHex;
+      ctx.fillRect(0, 0, 512, 512);
+
+      const cw = 512 / cols;
+      const rh = 512 / rows;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const delta = ((r * 11 + c * 17) % 5) * 2 - 4;
+          ctx.fillStyle = delta >= 0
+            ? `rgba(255,255,255,${delta * 0.015})`
+            : `rgba(0,0,0,${Math.abs(delta) * 0.015})`;
+          ctx.fillRect(c * cw + 1, r * rh + 1, cw - 2, rh - 2);
+        }
+      }
+
+      ctx.strokeStyle = 'rgba(65, 70, 78, 0.36)';
+      ctx.lineWidth = 2;
+      for (let c = 0; c <= cols; c++) {
+        ctx.beginPath(); ctx.moveTo(c * cw, 0); ctx.lineTo(c * cw, 512); ctx.stroke();
+      }
+      for (let r = 0; r <= rows; r++) {
+        ctx.beginPath(); ctx.moveTo(0, r * rh); ctx.lineTo(512, r * rh); ctx.stroke();
+      }
+
+      return makeTex(canvas);
+    }
+
+    // 다층 상가·병원·학원 간판 입면 텍스처 생성기
+    function createSignboardColumnTexture(items, {
+      bgHex = '#D2D4D7',
+      showSideWindows = false,
+      panelCols = 4,
+      panelRows = 14
+    } = {}) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      // 화강석 패널 바탕
+      ctx.fillStyle = bgHex;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const cw = canvas.width / panelCols;
+      const rh = canvas.height / panelRows;
+      ctx.strokeStyle = 'rgba(60, 65, 72, 0.34)';
+      ctx.lineWidth = 2;
+      for (let c = 0; c <= panelCols; c++) {
+        ctx.beginPath(); ctx.moveTo(c * cw, 0); ctx.lineTo(c * cw, canvas.height); ctx.stroke();
+      }
+      for (let r = 0; r <= panelRows; r++) {
+        ctx.beginPath(); ctx.moveTo(0, r * rh); ctx.lineTo(canvas.width, r * rh); ctx.stroke();
+      }
+
+      items.forEach(item => {
+        const x = item.x * canvas.width;
+        const y = item.y * canvas.height;
+        const w = item.w * canvas.width;
+        const h = item.h * canvas.height;
+
+        if (item.type === 'window') {
+          ctx.fillStyle = '#24303C';
+          ctx.fillRect(x, y, w, h);
+          ctx.strokeStyle = '#64748B';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(x, y, w, h);
+          ctx.beginPath();
+          ctx.moveTo(x + w * 0.5, y); ctx.lineTo(x + w * 0.5, y + h);
+          ctx.moveTo(x, y + h * 0.45); ctx.lineTo(x + w, y + h * 0.45);
+          ctx.stroke();
+          return;
+        }
+
+        if (item.type === 'cross') {
+          ctx.fillStyle = '#15803D';
+          const cx = x + w / 2, cy = y + h / 2, arm = Math.min(w, h) * 0.36;
+          ctx.fillRect(cx - arm * 0.32, cy - arm, arm * 0.64, arm * 2);
+          ctx.fillRect(cx - arm, cy - arm * 0.32, arm * 2, arm * 0.64);
+          return;
+        }
+
+        // 간판 박스 + 그림자
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
+        ctx.fillRect(x + 3, y + 4, w, h);
+
+        ctx.fillStyle = item.bg || '#F8FAFC';
+        ctx.fillRect(x, y, w, h);
+
+        ctx.strokeStyle = item.border || '#334155';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(x, y, w, h);
+
+        if (item.accentLeft) {
+          ctx.fillStyle = item.accentLeft;
+          ctx.fillRect(x, y, Math.min(26, w * 0.14), h);
+        }
+
+        if (item.text) {
+          ctx.fillStyle = item.fg || '#111827';
+          const fontSize = Math.max(15, Math.min(h * 0.62, (w * 0.86) / Math.max(3, item.text.length * 0.72)));
+          ctx.font = `bold ${Math.round(fontSize)}px "Malgun Gothic", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const tx = item.accentLeft ? x + w * 0.55 : x + w * 0.5;
+          ctx.fillText(item.text, tx, y + h * 0.52);
+        }
+      });
+
+      return makeTex(canvas);
+    }
+
+    // 1층 상가 점포 입면 텍스처 (LOTTERIA / DALDAGOMI / PARIS BAGUETTE / WELCOME! / LOTTE Mart)
+    function createStorefrontTexture({
+      title = '',
+      sub = '',
+      bgHex = '#1F242B',
+      fasciaHex = '#181B20',
+      fgHex = '#FFFFFF',
+      accentHex = '#DC2626',
+      hasGlassDoors = true
+    }) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      // 상단 간판 띠
+      const fasciaH = 74;
+      ctx.fillStyle = fasciaHex;
+      ctx.fillRect(0, 0, 512, fasciaH);
+
+      if (accentHex) {
+        ctx.fillStyle = accentHex;
+        ctx.fillRect(0, fasciaH - 6, 512, 6);
+      }
+
+      if (title) {
+        ctx.fillStyle = fgHex;
+        ctx.font = 'bold 34px "Malgun Gothic", Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(title, sub ? 215 : 256, fasciaH * 0.5);
+      }
+      if (sub) {
+        ctx.fillStyle = '#E2E8F0';
+        ctx.font = 'bold 18px "Malgun Gothic", sans-serif';
+        ctx.fillText(sub, 415, fasciaH * 0.5);
+      }
+
+      // 하부 유리 쇼윈도 & 출입문
+      ctx.fillStyle = bgHex;
+      ctx.fillRect(0, fasciaH, 512, 256 - fasciaH);
+
+      if (hasGlassDoors) {
+        const glassGrad = ctx.createLinearGradient(0, fasciaH, 512, 256);
+        glassGrad.addColorStop(0, '#16202A');
+        glassGrad.addColorStop(0.5, '#253545');
+        glassGrad.addColorStop(1, '#141C24');
+        ctx.fillStyle = glassGrad;
+        ctx.fillRect(14, fasciaH + 10, 484, 256 - fasciaH - 14);
+
+        ctx.strokeStyle = '#94A3B8';
+        ctx.lineWidth = 4;
+        for (let x = 14; x <= 498; x += 96.8) {
+          ctx.beginPath();
+          ctx.moveTo(x, fasciaH + 10);
+          ctx.lineTo(x, 252);
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.moveTo(14, fasciaH + 56);
+        ctx.lineTo(498, fasciaH + 56);
+        ctx.stroke();
+      }
+
+      return makeTex(canvas);
+    }
+
+    // 수직 유리 커튼월 (계단실/슬릿 창호) 텍스처
+    function createVerticalGlassShaftTexture(floors = 7, cols = 2) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      const grad = ctx.createLinearGradient(0, 0, 256, 1024);
+      grad.addColorStop(0, '#1E3A3A');
+      grad.addColorStop(0.5, '#2B4C4E');
+      grad.addColorStop(1, '#182F30');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 256, 1024);
+
+      const fh = 1024 / floors;
+      for (let f = 0; f < floors; f++) {
+        const y = f * fh;
+        // 층간 스팬드럴 띠
+        ctx.fillStyle = '#111E20';
+        ctx.fillRect(0, y, 256, fh * 0.24);
+        // 실내 형광등/계단 은은한 비침
+        ctx.fillStyle = 'rgba(186, 230, 253, 0.16)';
+        ctx.fillRect(12, y + fh * 0.28, 232, fh * 0.66);
+      }
+
+      ctx.strokeStyle = '#64748B';
+      ctx.lineWidth = 5;
+      for (let c = 0; c <= cols; c++) {
+        const x = (256 * c) / cols;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1024); ctx.stroke();
+      }
+      for (let f = 0; f <= floors; f++) {
+        const y = f * fh;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke();
+      }
+
+      return makeTex(canvas);
+    }
+
+    // 옥상 방수바닥 + 채광/환기 모니터 루버 텍스처 (12765.jpg 스카이뷰 기준)
+    function createGreenRoofTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // 녹색 우레탄 방수 바닥
+      ctx.fillStyle = '#3E6B52';
+      ctx.fillRect(0, 0, 1024, 512);
+
+      // 방수 시트 줄눈 패턴
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 2;
+      for (let x = 0; x <= 1024; x += 32) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke();
+      }
+      for (let y = 0; y <= 512; y += 32) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1024, y); ctx.stroke();
+      }
+
+      // 북측·남측 채광/환기 루버 열 (스카이뷰 상의 사다리꼴/직사각 그릴)
+      const drawVentRow = (vx, vy, vw, vh, slots) => {
+        ctx.fillStyle = '#CBD5E1';
+        ctx.fillRect(vx, vy, vw, vh);
+        ctx.fillStyle = '#334155';
+        const sw = (vw - 16) / slots;
+        for (let s = 0; s < slots; s++) {
+          ctx.fillRect(vx + 8 + s * sw + 3, vy + 6, sw - 6, vh - 12);
+        }
+      };
+      drawVentRow(480, 34, 240, 54, 9);
+      drawVentRow(160, 420, 460, 48, 16);
+
+      return makeTex(canvas);
+    }
+
+    // 후면 주차장 아스팔트 + 주차구획선 텍스처
+    function createParkingLotTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#3C4149';
+      ctx.fillRect(0, 0, 1024, 512);
+
+      // 노면 질감
+      for (let i = 0; i < 6000; i++) {
+        const rx = (i * 97) % 1024;
+        const ry = (i * 151 + Math.floor(i / 512) * 37) % 512;
+        ctx.fillStyle = (i % 2 === 0) ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.05)';
+        ctx.fillRect(rx, ry, 2, 2);
+      }
+
+      // 상단(건물측) 직각 주차 구획선
+      ctx.strokeStyle = '#F1F5F9';
+      ctx.lineWidth = 4;
+      const stalls = 18;
+      const sw = 780 / stalls;
+      for (let s = 0; s <= stalls; s++) {
+        const x = 50 + s * sw;
+        ctx.beginPath();
+        ctx.moveTo(x, 18);
+        ctx.lineTo(x, 128);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(50, 128);
+      ctx.lineTo(830, 128);
+      ctx.stroke();
+
+      // 하단(남측 담장측) 주차 구획선
+      for (let s = 0; s <= 15; s++) {
+        const x = 50 + s * sw;
+        ctx.beginPath();
+        ctx.moveTo(x, 382);
+        ctx.lineTo(x, 494);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(50, 382);
+      ctx.lineTo(50 + 15 * sw, 382);
+      ctx.stroke();
+
+      // 중앙 통행로 황색 유도선
+      ctx.strokeStyle = '#EAB308';
+      ctx.setLineDash([18, 14]);
+      ctx.beginPath();
+      ctx.moveTo(40, 256);
+      ctx.lineTo(860, 256);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      return makeTex(canvas);
+    }
+
+    // 조경수 생성 헬퍼
+    function createTree(scale = 1.0) {
+      const g = new THREE.Group();
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.16 * scale, 0.25 * scale, 2.4 * scale, 8),
+        new THREE.MeshStandardMaterial({ color: '#5C4033', roughness: 0.9 })
+      );
+      trunk.position.y = 1.2 * scale;
+      trunk.castShadow = true;
+      g.add(trunk);
+
+      const leafColors = ['#2D6A3E', '#3A7D4C', '#488F5A'];
+      [
+        [0, 3.3, 0, 1.75],
+        [0.8, 2.9, 0.4, 1.25],
+        [-0.75, 3.0, -0.35, 1.2]
+      ].forEach(([cx, cy, cz, r], i) => {
+        const crown = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(r * scale, 1),
+          new THREE.MeshStandardMaterial({ color: leafColors[i], roughness: 0.82 })
+        );
+        crown.position.set(cx * scale, cy * scale, cz * scale);
+        crown.castShadow = true;
+        g.add(crown);
+      });
+      return g;
+    }
+
+    // 간이 차량 모델 (주차장 배치용)
+    function createParkedCar(colorHex = '#E2E8F0', isTruck = false) {
+      const car = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.35, metalness: 0.25 });
+      const glassMat = new THREE.MeshStandardMaterial({ color: '#1E293B', roughness: 0.2 });
+
+      if (isTruck) {
+        // 흰색 소형 탑차/포터 (12763.jpg, 12765.jpg 우측 하단 트럭)
+        const cab = new THREE.Mesh(new THREE.BoxGeometry(1.75, 1.55, 1.5), bodyMat);
+        cab.position.set(0, 0.95, 1.45);
+        cab.castShadow = true;
+        const bed = new THREE.Mesh(
+          new THREE.BoxGeometry(1.85, 0.55, 2.8),
+          new THREE.MeshStandardMaterial({ color: '#CBD5E1', roughness: 0.6 })
+        );
+        bed.position.set(0, 0.72, -0.65);
+        bed.castShadow = true;
+        car.add(cab, bed);
+      } else {
+        const lower = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.68, 4.3), bodyMat);
+        lower.position.y = 0.56;
+        lower.castShadow = true;
+        const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.58, 2.25), glassMat);
+        cabin.position.set(0, 1.14, -0.15);
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.08, 2.15), bodyMat);
+        roof.position.set(0, 1.44, -0.15);
+        car.add(lower, cabin, roof);
+      }
+
+      const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 12);
+      wheelGeo.rotateZ(Math.PI / 2);
+      const wheelMat = new THREE.MeshStandardMaterial({ color: '#111827', roughness: 0.8 });
+      [[-0.86, 1.32], [0.86, 1.32], [-0.86, -1.32], [0.86, -1.32]].forEach(([wx, wz]) => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat);
+        w.position.set(wx, 0.32, wz);
+        car.add(w);
+      });
+      return car;
+    }
+
+    // =========================================================
+    // 3. 롯데마트 행당점(한진종합상가) 전체 조립
+    // =========================================================
+    const siteGroup = new THREE.Group();
+    siteGroup.name = 'LotteMart_Haengdang_Site';
+    scene.add(siteGroup);
+
+    // 대지 전체를 실제 방위각(약 28도 반시계 회전)으로 정렬
+    siteGroup.rotation.y = THREE.MathUtils.degToRad(28);
+
+    // 기본 대지 지반
+    const baseTerrain = new THREE.Mesh(
+      new THREE.BoxGeometry(180, 0.6, 160),
+      new THREE.MeshStandardMaterial({ color: '#4B525E', roughness: 0.9 })
+    );
+    baseTerrain.position.set(0, -0.3, 0);
+    baseTerrain.receiveShadow = true;
+    siteGroup.add(baseTerrain);
+
+    // ---------------------------------------------------------
+    // A) 전면 간선도로 (왕십리로/행당로) & 횡단보도 (12765.jpg 상단)
+    // ---------------------------------------------------------
+    const roadCanvas = document.createElement('canvas');
+    roadCanvas.width = 1024;
+    roadCanvas.height = 256;
+    const rctx = roadCanvas.getContext('2d');
+    rctx.fillStyle = '#3B4048';
+    rctx.fillRect(0, 0, 1024, 256);
+
+    // 중앙 황색 복선
+    rctx.fillStyle = '#EAB308';
+    rctx.fillRect(0, 122, 1024, 4);
+    rctx.fillRect(0, 130, 1024, 4);
+
+    // 차선 점선
+    rctx.fillStyle = '#F8FAFC';
+    for (let x = 20; x < 1024; x += 64) {
+      rctx.fillRect(x, 62, 32, 4);
+      rctx.fillRect(x, 190, 32, 4);
+    }
+    // 횡단보도
+    for (let y = 16; y < 240; y += 22) {
+      rctx.fillRect(190, y, 42, 12);
+    }
+
+    const mainRoad = new THREE.Mesh(
+      new THREE.PlaneGeometry(170, 22),
+      new THREE.MeshStandardMaterial({ map: makeTex(roadCanvas), roughness: 0.85 })
+    );
+    mainRoad.rotation.x = -Math.PI / 2;
+    mainRoad.position.set(0, 0.03, -34.5);
+    mainRoad.receiveShadow = true;
+    siteGroup.add(mainRoad);
+
+    // 전면 보행자 보도블록 (-Z = -23.5 ~ -14.0)
+    const frontSidewalk = new THREE.Mesh(
+      new THREE.BoxGeometry(140, 0.16, 9.5),
+      new THREE.MeshStandardMaterial({ color: '#B4B9C0', roughness: 0.85 })
+    );
+    frontSidewalk.position.set(0, 0.08, -18.75);
+    frontSidewalk.receiveShadow = true;
+    siteGroup.add(frontSidewalk);
+
+    // ---------------------------------------------------------
+    // B) 전면 도로변 초록빛 유리·석재 지하보도 캐노피 구조물 (12747.jpg, 12753.jpg, 12759.jpg)
+    // ---------------------------------------------------------
+    const subwayCanopyGroup = new THREE.Group();
+    const canopyLen = 19.5;
+    const canopyW = 3.5;
+    const canopyH = 3.35;
+
+    const stoneFasciaMat = new THREE.MeshStandardMaterial({ color: '#AEB3BA', roughness: 0.72 });
+    const greenGlassMat = new THREE.MeshPhysicalMaterial({
+      color: '#4B8B7B',
+      transparent: true,
+      opacity: 0.58,
+      roughness: 0.18,
+      metalness: 0.12
+    });
+
+    // 상단 석재 두겁 띠
+    const canopyTop = new THREE.Mesh(new THREE.BoxGeometry(canopyLen, 0.62, canopyW), stoneFasciaMat);
+    canopyTop.position.set(0, canopyH - 0.31, 0);
+    canopyTop.castShadow = true;
+    addOutline(canopyTop);
+    subwayCanopyGroup.add(canopyTop);
+
+    // 좌·우 끝 석재 기둥벽
+    [-canopyLen / 2 + 0.35, canopyLen / 2 - 0.35].forEach(px => {
+      const sidePier = new THREE.Mesh(new THREE.BoxGeometry(0.7, canopyH - 0.62, canopyW), stoneFasciaMat);
+      sidePier.position.set(px, (canopyH - 0.62) / 2, 0);
+      sidePier.castShadow = true;
+      addOutline(sidePier);
+      subwayCanopyGroup.add(sidePier);
+    });
+
+    // 중앙 초록빛 통유리 박스
+    const glassBody = new THREE.Mesh(
+      new THREE.BoxGeometry(canopyLen - 1.4, canopyH - 0.65, canopyW - 0.25),
+      greenGlassMat
+    );
+    glassBody.position.set(0, (canopyH - 0.65) / 2, 0);
+    subwayCanopyGroup.add(glassBody);
+
+    // 세로 메탈 멀리언 프레임
+    const mullionMat = new THREE.MeshStandardMaterial({ color: '#475569', metalness: 0.6, roughness: 0.35 });
+    for (let mx = -canopyLen / 2 + 1.4; mx <= canopyLen / 2 - 1.4; mx += 2.2) {
+      [-canopyW / 2 + 0.12, canopyW / 2 - 0.12].forEach(mz => {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.08, canopyH - 0.62, 0.08), mullionMat);
+        bar.position.set(mx, (canopyH - 0.62) / 2, mz);
+        subwayCanopyGroup.add(bar);
+      });
+    }
+
+    subwayCanopyGroup.position.set(4.5, 0.16, -20.6);
+    siteGroup.add(subwayCanopyGroup);
+
+    // ---------------------------------------------------------
+    // C) 서측(좌측) 지형 상승부: 옹벽 화단 + 상부 테라스 + 스텝형 4층 별관 (12747.jpg, 12759.jpg)
+    // ---------------------------------------------------------
+    const graniteMat = new THREE.MeshStandardMaterial({
+      map: createGranitePanelTexture(6, 14, '#D2D4D7'),
+      roughness: 0.72
+    });
+    const granitePlainMat = new THREE.MeshStandardMaterial({ color: '#D0D2D5', roughness: 0.74 });
+
+    // 1) DALDAGOMI · LOTTERIA 앞 elevated 테라스 데크 & 녹지 화단
+    const westTerraceH = 1.75;
+    const westTerraceDeck = new THREE.Mesh(
+      new THREE.BoxGeometry(24.0, westTerraceH, 5.2),
+      granitePlainMat
+    );
+    westTerraceDeck.position.set(-18.5, westTerraceH / 2, -16.2);
+    westTerraceDeck.castShadow = true;
+    westTerraceDeck.receiveShadow = true;
+    addOutline(westTerraceDeck);
+    siteGroup.add(westTerraceDeck);
+
+    // 테라스 앞 옹벽 화단 & 관목 띠
+    const planterBox = new THREE.Mesh(
+      new THREE.BoxGeometry(22.0, 0.85, 1.4),
+      new THREE.MeshStandardMaterial({ color: '#9CA3AF', roughness: 0.8 })
+    );
+    planterBox.position.set(-19.2, 0.425, -19.2);
+    siteGroup.add(planterBox);
+
+    const hedgeStrip = new THREE.Mesh(
+      new THREE.BoxGeometry(21.6, 0.95, 1.2),
+      new THREE.MeshStandardMaterial({ color: '#2F6F3E', roughness: 0.85 })
+    );
+    hedgeStrip.position.set(-19.2, 1.15, -19.2);
+    siteGroup.add(hedgeStrip);
+
+    // 테라스 안전 난간
+    const railMat = new THREE.MeshStandardMaterial({ color: '#334155', metalness: 0.5, roughness: 0.4 });
+    const topRail = new THREE.Mesh(new THREE.BoxGeometry(23.5, 0.08, 0.08), railMat);
+    topRail.position.set(-18.5, westTerraceH + 1.05, -18.6);
+    siteGroup.add(topRail);
+    for (let rx = -30; rx <= -7; rx += 1.8) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.05, 0.06), railMat);
+      post.position.set(rx, westTerraceH + 0.525, -18.6);
+      siteGroup.add(post);
+    }
+
+    // 2) 최서측(좌측) 스텝형 저층 별관 + 옥상 조경수 (12759.jpg 좌측 상단)
+    const westAnnexUpper = new THREE.Mesh(
+      new THREE.BoxGeometry(9.5, 15.5, 22.0),
+      graniteMat
+    );
+    westAnnexUpper.position.set(-34.2, 7.75, 1.5);
+    westAnnexUpper.castShadow = true;
+    westAnnexUpper.receiveShadow = true;
+    addOutline(westAnnexUpper);
+    siteGroup.add(westAnnexUpper);
+
+    // 별관 옥상 녹지 및 나무 (12759.jpg에 보이는 건물 위 나무)
+    const annexRoofGreen = new THREE.Mesh(
+      new THREE.BoxGeometry(8.6, 0.3, 21.0),
+      new THREE.MeshStandardMaterial({ color: '#3B6E52', roughness: 0.85 })
+    );
+    annexRoofGreen.position.set(-34.2, 15.55, 1.5);
+    siteGroup.add(annexRoofGreen);
+
+    const annexTree = createTree(1.25);
+    annexTree.position.set(-33.5, 15.6, -4.5);
+    siteGroup.add(annexTree);
+
+    // 전방 돌출 2단 저층 박스 (12759.jpg 좌측 중단)
+    const westAnnexFrontStep = new THREE.Mesh(
+      new THREE.BoxGeometry(8.5, 10.2, 8.8),
+      graniteMat
+    );
+    westAnnexFrontStep.position.set(-33.6, 5.1, -12.6);
+    westAnnexFrontStep.castShadow = true;
+    addOutline(westAnnexFrontStep);
+    siteGroup.add(westAnnexFrontStep);
+
+    // ---------------------------------------------------------
+    // D) 메인 본관 매스 (7층 규모, 길이 61m × 깊이 27.6m × 높이 26.8m)
+    // ---------------------------------------------------------
+    const MAIN_W = 61.0;
+    const MAIN_D = 27.6;
+    const MAIN_H = 26.8;
+
+    // 1) 본관 코어 박스 + 옥상 방수바닥
+    const greenRoofMat = new THREE.MeshStandardMaterial({
+      map: createGreenRoofTexture(),
+      roughness: 0.85
+    });
+
+    const mainBody = new THREE.Mesh(
+      new THREE.BoxGeometry(MAIN_W, MAIN_H, MAIN_D),
+      [
+        graniteMat,       // +X 동측면
+        graniteMat,       // -X 서측면
+        greenRoofMat,     // +Y 옥상 녹색 방수바닥
+        granitePlainMat,  // -Y 하면
+        graniteMat,       // +Z 남남동 후면 바탕
+        graniteMat        // -Z 북북서 전면 바탕
+      ]
+    );
+    mainBody.position.set(0, MAIN_H / 2, 0);
+    mainBody.castShadow = true;
+    mainBody.receiveShadow = true;
+    addOutline(mainBody);
+    siteGroup.add(mainBody);
+
+    // 옥상 파라펫 테두리 & 옥탑 계단실/기계실 3동 (12751.jpg, 12765.jpg)
+    const parapetH = 1.15;
+    const parapetT = 0.55;
+    [
+      [MAIN_W + 0.4, parapetH, parapetT, 0, MAIN_H + parapetH / 2, -MAIN_D / 2 + parapetT / 2],
+      [MAIN_W + 0.4, parapetH, parapetT, 0, MAIN_H + parapetH / 2,  MAIN_D / 2 - parapetT / 2],
+      [parapetT, parapetH, MAIN_D, -MAIN_W / 2 + parapetT / 2, MAIN_H + parapetH / 2, 0],
+      [parapetT, parapetH, MAIN_D,  MAIN_W / 2 - parapetT / 2, MAIN_H + parapetH / 2, 0]
+    ].forEach(([w, h, d, px, py, pz]) => {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), granitePlainMat);
+      p.position.set(px, py, pz);
+      p.castShadow = true;
+      addOutline(p);
+      siteGroup.add(p);
+    });
+
+    // 옥탑 구조물 3개 (12751.jpg 상단 스카이라인)
+    [
+      [-4.5, 3.2, -3.5, 6.4, 3.2, 5.2],
+      [ 6.5, 3.6, -2.5, 5.8, 3.6, 5.0],
+      [18.0, 2.8,  2.0, 5.2, 2.8, 4.6]
+    ].forEach(([ox, oh, oz, ow, oht, od]) => {
+      const ph = new THREE.Mesh(new THREE.BoxGeometry(ow, oht, od), granitePlainMat);
+      ph.position.set(ox, MAIN_H + oht / 2, oz);
+      ph.castShadow = true;
+      addOutline(ph);
+      siteGroup.add(ph);
+    });
+
+    // ---------------------------------------------------------
+    // E) 북북서(NNW, -Z) 전면 파사드 6개 베이 + 간판 + 1층 상가·어닝 정밀 배치
+    // ---------------------------------------------------------
+    const frontZ = -MAIN_D / 2 - 0.04;
+
+    // [Bay 1: 좌측 병원 간판 베이, x = -23.8, width = 12.6]
+    const bay1Signs = [
+      { type: 'cross', x: 0.44, y: 0.05, w: 0.12, h: 0.045 },
+      { x: 0.14, y: 0.11, w: 0.72, h: 0.036, text: '치 과 의 원', bg: '#F8FAFC', fg: '#1E3A8A' },
+      { x: 0.14, y: 0.17, w: 0.72, h: 0.036, text: '이 비 인 후 과', bg: '#F8FAFC', fg: '#0F172A' },
+      { x: 0.14, y: 0.24, w: 0.72, h: 0.036, text: '강 태 욱 피 부 과', bg: '#F8FAFC', fg: '#7F1D1D', accentLeft: '#DC2626' },
+      { x: 0.14, y: 0.31, w: 0.72, h: 0.036, text: '중 앙 한 의 원', bg: '#F8FAFC', fg: '#14532D' },
+      { x: 0.14, y: 0.39, w: 0.72, h: 0.038, text: '어 린 이 소 아 청 소 년 과', bg: '#F1F5F9', fg: '#1E293B' },
+      { x: 0.14, y: 0.47, w: 0.72, h: 0.038, text: '한 솔 내 과 의 원', bg: '#F1F5F9', fg: '#0F172A' },
+      { x: 0.12, y: 0.61, w: 0.76, h: 0.040, text: '화 이 트 치 과 의 원', bg: '#FEF9C3', fg: '#1E3A8A' },
+      { x: 0.12, y: 0.69, w: 0.76, h: 0.040, text: '지 중 해 성 형 외 과 · 피 부 과', bg: '#F8FAFC', fg: '#334155' }
+    ];
+    const bay1Panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(12.6, MAIN_H - 5.2),
+      new THREE.MeshStandardMaterial({ map: createSignboardColumnTexture(bay1Signs, { panelCols: 3, panelRows: 12 }) })
+    );
+    bay1Panel.position.set(-23.8, 5.2 + (MAIN_H - 5.2) / 2, frontZ - 0.18);
+    bay1Panel.rotation.y = Math.PI;
+    siteGroup.add(bay1Panel);
+
+    // Bay 1 돌출 외벽 매스 (약간 앞으로 돌출된 서측 날개)
+    const bay1Mass = new THREE.Mesh(new THREE.BoxGeometry(12.8, MAIN_H + 0.6, 0.35), granitePlainMat);
+    bay1Mass.position.set(-23.8, (MAIN_H + 0.6) / 2, frontZ + 0.02);
+    addOutline(bay1Mass);
+    siteGroup.add(bay1Mass);
+
+    // 1F LOTTERIA 점포 + 빨간 돌출 어닝 (12747.jpg 좌측 하단)
+    const lotteriaStore = new THREE.Mesh(
+      new THREE.PlaneGeometry(12.2, 3.6),
+      new THREE.MeshStandardMaterial({
+        map: createStorefrontTexture({
+          title: 'LOTTERIA',
+          sub: '롯데리아',
+          fasciaHex: '#DC2626',
+          accentHex: '#991B1B'
+        })
+      })
+    );
+    lotteriaStore.position.set(-23.8, westTerraceH + 1.8, frontZ - 0.18);
+    lotteriaStore.rotation.y = Math.PI;
+    siteGroup.add(lotteriaStore);
+
+    const redAwning = new THREE.Mesh(
+      new THREE.BoxGeometry(12.4, 0.55, 1.85),
+      new THREE.MeshStandardMaterial({ color: '#C82828', roughness: 0.5 })
+    );
+    redAwning.position.set(-23.8, westTerraceH + 2.85, frontZ - 0.95);
+    redAwning.rotation.x = -0.18;
+    redAwning.castShadow = true;
+    addOutline(redAwning);
+    siteGroup.add(redAwning);
+
+    // [Bay 2: 수직 리세스 발코니 슬롯 + 1F DALDAGOMI 브라운 어닝, x = -14.2, width = 6.4]
+    const bay2Slot = new THREE.Mesh(
+      new THREE.BoxGeometry(6.2, MAIN_H, 1.4),
+      new THREE.MeshStandardMaterial({ color: '#9CA3AF', roughness: 0.8 })
+    );
+    bay2Slot.position.set(-14.2, MAIN_H / 2, frontZ + 0.72);
+    siteGroup.add(bay2Slot);
+
+    // 층간 수평 브릿지 빔 (12751.jpg 중앙 좌측 5단 수평 돌출 슬래브)
+    for (let fl = 2; fl <= 6; fl++) {
+      const bridge = new THREE.Mesh(new THREE.BoxGeometry(6.1, 0.58, 1.25), granitePlainMat);
+      bridge.position.set(-14.2, fl * 3.85, frontZ + 0.12);
+      bridge.castShadow = true;
+      addOutline(bridge);
+      siteGroup.add(bridge);
+    }
+
+    // 1F DALDAGOMI 브라운 어닝 (12747.jpg)
+    const daldaStore = new THREE.Mesh(
+      new THREE.PlaneGeometry(6.0, 3.6),
+      new THREE.MeshStandardMaterial({
+        map: createStorefrontTexture({
+          title: 'DALDAGOMI',
+          fasciaHex: '#4A251E',
+          accentHex: '#7C2D12'
+        })
+      })
+    );
+    daldaStore.position.set(-14.2, westTerraceH + 1.8, frontZ - 0.02);
+    daldaStore.rotation.y = Math.PI;
+    siteGroup.add(daldaStore);
+
+    const brownAwning = new THREE.Mesh(
+      new THREE.BoxGeometry(6.1, 0.58, 1.65),
+      new THREE.MeshStandardMaterial({ color: '#582921', roughness: 0.55 })
+    );
+    brownAwning.position.set(-14.2, westTerraceH + 2.85, frontZ - 0.82);
+    brownAwning.rotation.x = -0.18;
+    addOutline(brownAwning);
+    siteGroup.add(brownAwning);
+
+    // [Bay 3: 중앙 좌측 다층 상가 간판 피어 + 1F PARIS BAGUETTE, x = -4.8, width = 11.4]
+    const bay3Signs = [
+      { x: 0.05, y: 0.15, w: 0.42, h: 0.032, text: '행당연세내과', bg: '#F8FAFC', fg: '#1E3A8A' },
+      { x: 0.53, y: 0.15, w: 0.42, h: 0.032, text: '프라임입시학원', bg: '#EFF6FF', fg: '#1D4ED8' },
+      { x: 0.05, y: 0.21, w: 0.18, h: 0.032, text: '3F', bg: '#334155', fg: '#FFFFFF' },
+      { x: 0.25, y: 0.21, w: 0.70, h: 0.032, text: '한진종합상가 관리사무소', bg: '#F1F5F9', fg: '#0F172A' },
+      { x: 0.05, y: 0.27, w: 0.18, h: 0.032, text: '2F', bg: '#334155', fg: '#FFFFFF' },
+      { x: 0.25, y: 0.27, w: 0.70, h: 0.032, text: '행당삼성치과의원', bg: '#F8FAFC', fg: '#0F766E' },
+      { x: 0.05, y: 0.34, w: 0.18, h: 0.032, text: '1F', bg: '#334155', fg: '#FFFFFF' },
+      { x: 0.25, y: 0.34, w: 0.70, h: 0.032, text: '파리바게뜨 · 롯데리아', bg: '#EFF6FF', fg: '#1E40AF' },
+      { x: 0.05, y: 0.41, w: 0.42, h: 0.034, text: 'F&C GALLERY', bg: '#E2E8F0', fg: '#111827' },
+      { x: 0.53, y: 0.41, w: 0.42, h: 0.034, text: '행당안경콘택트', bg: '#F8FAFC', fg: '#1E293B' },
+      { x: 0.05, y: 0.48, w: 0.18, h: 0.032, text: 'B1', bg: '#1E293B', fg: '#FFFFFF' },
+      { x: 0.25, y: 0.48, w: 0.70, h: 0.032, text: '롯데마트 행당점 지하1층', bg: '#FEF2F2', fg: '#B91C1C' },
+      { x: 0.05, y: 0.55, w: 0.42, h: 0.034, text: '네일아트/패디', bg: '#FDF2F8', fg: '#9D174D' },
+      { x: 0.53, y: 0.55, w: 0.42, h: 0.034, text: '행당수선명장', bg: '#F8FAFC', fg: '#1E293B' },
+      { x: 0.05, y: 0.62, w: 0.42, h: 0.034, text: '포토스튜디오', bg: '#F1F5F9', fg: '#0F172A' },
+      { x: 0.53, y: 0.62, w: 0.42, h: 0.034, text: '클리닝하우스', bg: '#ECFDF5', fg: '#065F46' },
+      { x: 0.05, y: 0.69, w: 0.42, h: 0.034, text: '머리하는날', bg: '#F8FAFC', fg: '#111827' },
+      { x: 0.53, y: 0.69, w: 0.42, h: 0.034, text: '아름다운수산', bg: '#EFF6FF', fg: '#1E3A8A' },
+      { x: 0.05, y: 0.76, w: 0.42, h: 0.034, text: '리안헤어샵', bg: '#F8FAFC', fg: '#7E22CE' },
+      { x: 0.53, y: 0.76, w: 0.42, h: 0.034, text: 'IG패션·의류', bg: '#FEF3C7', fg: '#92400E' },
+      { x: 0.05, y: 0.83, w: 0.42, h: 0.034, text: '김누리컴퓨터', bg: '#F1F5F9', fg: '#1E293B' },
+      { x: 0.53, y: 0.83, w: 0.42, h: 0.034, text: '주니어북서점', bg: '#ECFDF5', fg: '#047857' }
+    ];
+    const bay3Panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(11.4, MAIN_H - 4.4),
+      new THREE.MeshStandardMaterial({ map: createSignboardColumnTexture(bay3Signs, { panelCols: 3, panelRows: 13 }) })
+    );
+    bay3Panel.position.set(-4.8, 4.4 + (MAIN_H - 4.4) / 2, frontZ - 0.02);
+    bay3Panel.rotation.y = Math.PI;
+    siteGroup.add(bay3Panel);
+
+    const parisStore = new THREE.Mesh(
+      new THREE.PlaneGeometry(11.2, 4.1),
+      new THREE.MeshStandardMaterial({
+        map: createStorefrontTexture({
+          title: 'PARIS BAGUETTE',
+          fasciaHex: '#1E242E',
+          accentHex: '#2563EB'
+        })
+      })
+    );
+    parisStore.position.set(-4.8, 0.35 + 2.05, frontZ - 0.02);
+    parisStore.rotation.y = Math.PI;
+    siteGroup.add(parisStore);
+
+    // [수직 유리 슬릿 1, x = +1.45, width = 1.1]
+    const glassSlit1 = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.1, MAIN_H - 0.8),
+      new THREE.MeshStandardMaterial({ map: createVerticalGlassShaftTexture(7, 1) })
+    );
+    glassSlit1.position.set(1.45, (MAIN_H - 0.8) / 2, frontZ - 0.03);
+    glassSlit1.rotation.y = Math.PI;
+    siteGroup.add(glassSlit1);
+
+    // [Bay 4: 중앙 우측 다층 간판 피어 (C&C 애니스타 미술학원 등), x = +7.7, width = 11.4]
+    const bay4Signs = [
+      { x: 0.06, y: 0.14, w: 0.88, h: 0.038, text: '유 파 라 스 음 악 학 원', bg: '#FDF2F8', fg: '#9D174D' },
+      { x: 0.06, y: 0.20, w: 0.88, h: 0.044, text: 'C&C 애니스타 미술학원', bg: '#FEF3C7', fg: '#92400E', accentLeft: '#EA580C' },
+      { x: 0.06, y: 0.27, w: 0.42, h: 0.036, text: '한 솔 약 국', bg: '#ECFDF5', fg: '#065F46' },
+      { x: 0.52, y: 0.27, w: 0.42, h: 0.036, text: '대 한 공 인 중 개 사', bg: '#F8FAFC', fg: '#1E3A8A' },
+      { x: 0.06, y: 0.36, w: 0.42, h: 0.036, text: '행 당 마 트', bg: '#EFF6FF', fg: '#1D4ED8' },
+      { x: 0.52, y: 0.36, w: 0.42, h: 0.036, text: 'LIVART 리바트', bg: '#F1F5F9', fg: '#0F172A' },
+      { x: 0.06, y: 0.43, w: 0.42, h: 0.036, text: '아 름 인 테 리 어', bg: '#F8FAFC', fg: '#334155' },
+      { x: 0.52, y: 0.43, w: 0.42, h: 0.036, text: '하 프 다 이 어 트', bg: '#ECFDF5', fg: '#047857' },
+      { x: 0.06, y: 0.50, w: 0.42, h: 0.036, text: '뷰 테 라 피', bg: '#FDF2F8', fg: '#831843' },
+      { x: 0.52, y: 0.50, w: 0.42, h: 0.036, text: '벨 라 다 이 닝', bg: '#FEF2F2', fg: '#991B1B' },
+      { x: 0.06, y: 0.57, w: 0.42, h: 0.036, text: 'Ziin 지인창호', bg: '#F1F5F9', fg: '#1E293B' },
+      { x: 0.52, y: 0.57, w: 0.42, h: 0.036, text: '에 르 다 스 파', bg: '#F8FAFC', fg: '#0F766E' },
+      { x: 0.06, y: 0.65, w: 0.88, h: 0.038, text: '종 로 엠 스 쿨 입 시 학 원', bg: '#EFF6FF', fg: '#1E3A8A' },
+      { x: 0.06, y: 0.72, w: 0.42, h: 0.038, text: '장 터 마 을', bg: '#FEF9C3', fg: '#78350F' },
+      { x: 0.52, y: 0.72, w: 0.42, h: 0.038, text: '두 부 촌', bg: '#F8FAFC', fg: '#111827' },
+      { x: 0.06, y: 0.79, w: 0.88, h: 0.038, text: '다 이 소 · 생활용품', bg: '#FEF2F2', fg: '#DC2626', accentLeft: '#DC2626' }
+    ];
+    const bay4Panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(11.4, MAIN_H - 4.4),
+      new THREE.MeshStandardMaterial({ map: createSignboardColumnTexture(bay4Signs, { panelCols: 3, panelRows: 13 }) })
+    );
+    bay4Panel.position.set(7.7, 4.4 + (MAIN_H - 4.4) / 2, frontZ - 0.02);
+    bay4Panel.rotation.y = Math.PI;
+    siteGroup.add(bay4Panel);
+
+    const bay4Store = new THREE.Mesh(
+      new THREE.PlaneGeometry(11.2, 4.1),
+      new THREE.MeshStandardMaterial({
+        map: createStorefrontTexture({
+          title: '비잔티안홍삼',
+          sub: '건강식품',
+          fasciaHex: '#27272A',
+          accentHex: '#EAB308'
+        })
+      })
+    );
+    bay4Store.position.set(7.7, 0.35 + 2.05, frontZ - 0.02);
+    bay4Store.rotation.y = Math.PI;
+    siteGroup.add(bay4Store);
+
+    // [수직 유리 슬릿 2, x = +13.95, width = 1.1]
+    const glassSlit2 = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.1, MAIN_H - 0.8),
+      new THREE.MeshStandardMaterial({ map: createVerticalGlassShaftTexture(7, 1) })
+    );
+    glassSlit2.position.set(13.95, (MAIN_H - 0.8) / 2, frontZ - 0.03);
+    glassSlit2.rotation.y = Math.PI;
+    siteGroup.add(glassSlit2);
+
+    // [Bay 5: 우측 주출입구(WELCOME! 매장입구) & 창호 베이, x = +20.2, width = 11.2]
+    const bay5Signs = [
+      { type: 'window', x: 0.62, y: 0.14, w: 0.30, h: 0.12 },
+      { x: 0.06, y: 0.16, w: 0.52, h: 0.038, text: '매 쓰 프 라 임 수 학', bg: '#FEF2F2', fg: '#B91C1C' },
+      { x: 0.06, y: 0.22, w: 0.52, h: 0.042, text: '비 비 드 팡 미 술 학 원', bg: '#EFF6FF', fg: '#1D4ED8' },
+      { type: 'window', x: 0.62, y: 0.30, w: 0.30, h: 0.12 },
+      { x: 0.06, y: 0.32, w: 0.52, h: 0.038, text: '최 강 영 어 학 원', bg: '#F8FAFC', fg: '#0F172A' },
+      { type: 'window', x: 0.62, y: 0.46, w: 0.30, h: 0.12 },
+      { x: 0.06, y: 0.62, w: 0.86, h: 0.046, text: '행 당 부 동 산 중 개 법 인', bg: '#FEF9C3', fg: '#78350F', accentLeft: '#16A34A' },
+      { x: 0.06, y: 0.72, w: 0.86, h: 0.044, text: 'STUDIO · 필 라 테 스 · PT', bg: '#F1F5F9', fg: '#1E293B' },
+      { x: 0.06, y: 0.80, w: 0.86, h: 0.056, text: 'LOTTE Mart  롯데마트', bg: '#DC2626', fg: '#FFFFFF', border: '#991B1B' }
+    ];
+    const bay5Panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(11.2, MAIN_H - 4.8),
+      new THREE.MeshStandardMaterial({ map: createSignboardColumnTexture(bay5Signs, { panelCols: 3, panelRows: 12 }) })
+    );
+    bay5Panel.position.set(20.2, 4.8 + (MAIN_H - 4.8) / 2, frontZ - 0.02);
+    bay5Panel.rotation.y = Math.PI;
+    siteGroup.add(bay5Panel);
+
+    // 1F WELCOME! 매장입구 포털 & 화강석 6단 계단 (12753.jpg 우측 하단)
+    const welcomePortal = new THREE.Mesh(
+      new THREE.PlaneGeometry(10.8, 3.8),
+      new THREE.MeshStandardMaterial({
+        map: createStorefrontTexture({
+          title: 'WELCOME!',
+          sub: '매장입구',
+          fasciaHex: '#F1F5F9',
+          fgHex: '#1E3A8A',
+          accentHex: '#2563EB'
+        })
+      })
+    );
+    welcomePortal.position.set(20.2, 1.05 + 1.9, frontZ - 0.02);
+    welcomePortal.rotation.y = Math.PI;
+    siteGroup.add(welcomePortal);
+
+    // 정문 6단 화강석 진입 계단
+    for (let st = 0; st < 6; st++) {
+      const sh = (6 - st) * 0.16;
+      const stepMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(10.8, sh, 0.42),
+        new THREE.MeshStandardMaterial({ color: '#CBD5E1', roughness: 0.78 })
+      );
+      stepMesh.position.set(20.2, 0.16 + sh / 2, frontZ - 0.21 - st * 0.42);
+      stepMesh.receiveShadow = true;
+      addOutline(stepMesh, 0x64748b);
+      siteGroup.add(stepMesh);
+    }
+
+    // [Bay 6: 최우측 코너 점포 ('행당한진공인중개사'), x = +28.1, width = 4.4]
+    const bay6Store = new THREE.Mesh(
+      new THREE.PlaneGeometry(4.2, 3.8),
+      new THREE.MeshStandardMaterial({
+        map: createStorefrontTexture({
+          title: '행당한진',
+          fasciaHex: '#FEF08A',
+          fgHex: '#111827',
+          accentHex: '#16A34A'
+        })
+      })
+    );
+    bay6Store.position.set(28.1, 0.65 + 1.9, frontZ - 0.02);
+    bay6Store.rotation.y = Math.PI;
+    siteGroup.add(bay6Store);
+
+    // ---------------------------------------------------------
+    // F) 동측(ENE, +X) 수직 통유리 계단실 탑 & 동측 부속동 & SK world 돌출간판 (12755.jpg, 12761.jpg, 12763.jpg)
+    // ---------------------------------------------------------
+    const eastX = MAIN_W / 2;
+
+    // 1) 전층 수직 그린-틴트 유리 계단실/엘리베이터 타워 (12761.jpg, 12763.jpg 우측)
+    const glassTowerH = MAIN_H + 1.6;
+    const glassTower = new THREE.Mesh(
+      new THREE.BoxGeometry(4.2, glassTowerH, 5.2),
+      [
+        new THREE.MeshStandardMaterial({ map: createVerticalGlassShaftTexture(8, 2) }), // +X 동측 유리면
+        granitePlainMat,
+        granitePlainMat,
+        granitePlainMat,
+        new THREE.MeshStandardMaterial({ map: createVerticalGlassShaftTexture(8, 2) }), // +Z 남측 유리면
+        granitePlainMat
+      ]
+    );
+    glassTower.position.set(eastX + 1.6, glassTowerH / 2, 7.8);
+    glassTower.castShadow = true;
+    addOutline(glassTower);
+    siteGroup.add(glassTower);
+
+    // 유리 타워 모서리 화강석 기둥
+    const towerPillar = new THREE.Mesh(new THREE.BoxGeometry(1.1, glassTowerH, 1.1), granitePlainMat);
+    towerPillar.position.set(eastX + 3.4, glassTowerH / 2, 10.1);
+    addOutline(towerPillar);
+    siteGroup.add(towerPillar);
+
+    // 세로형 'SK world' 돌출 지주 간판 (12763.jpg, 12765.jpg 우측 기둥)
+    const skCanvas = document.createElement('canvas');
+    skCanvas.width = 128; skCanvas.height = 512;
+    const skCtx = skCanvas.getContext('2d');
+    skCtx.fillStyle = '#F8FAFC';
+    skCtx.fillRect(0, 0, 128, 512);
+    skCtx.fillStyle = '#EF4444';
+    skCtx.beginPath(); skCtx.arc(64, 96, 34, 0, Math.PI * 2); skCtx.fill();
+    skCtx.save();
+    skCtx.translate(64, 280);
+    skCtx.rotate(Math.PI / 2);
+    skCtx.fillStyle = '#1E3A8A';
+    skCtx.font = 'bold 48px Arial, sans-serif';
+    skCtx.textAlign = 'center';
+    skCtx.fillText('world', 0, 14);
+    skCtx.restore();
+    skCtx.fillStyle = '#EA580C';
+    skCtx.fillRect(0, 440, 128, 72);
+
+    const skBladeSign = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 9.2, 1.4),
+      new THREE.MeshStandardMaterial({ map: makeTex(skCanvas) })
+    );
+    skBladeSign.position.set(eastX + 3.5, 6.2, 11.4);
+    skBladeSign.castShadow = true;
+    addOutline(skBladeSign);
+    siteGroup.add(skBladeSign);
+
+    // 2) 동측 후방 별관 (지하주차장 램프 상부 건물, 12765.jpg 우측 백색 지붕 동)
+    const eastAnnex = new THREE.Mesh(
+      new THREE.BoxGeometry(10.5, 16.5, 14.0),
+      graniteMat
+    );
+    eastAnnex.position.set(eastX + 6.8, 8.25, -2.5);
+    eastAnnex.castShadow = true;
+    addOutline(eastAnnex);
+    siteGroup.add(eastAnnex);
+
+    // ---------------------------------------------------------
+    // G) 남남동(SSE, +Z) 후면 파사드 · citibank 간판 · LOTTE Mart 매장입구 빨간 캐노피 (12761.jpg, 12763.jpg, 12765.jpg)
+    // ---------------------------------------------------------
+    const rearZ = MAIN_D / 2 + 0.04;
+
+    // 후면 5개 수직 기둥 필라스터 (베이 분할)
+    [-25.5, -15.5, -5.5, 4.5, 14.5, 25.0].forEach(px => {
+      const pilaster = new THREE.Mesh(new THREE.BoxGeometry(0.95, MAIN_H, 0.55), granitePlainMat);
+      pilaster.position.set(px, MAIN_H / 2, rearZ + 0.22);
+      pilaster.castShadow = true;
+      addOutline(pilaster);
+      siteGroup.add(pilaster);
+    });
+
+    // 후면 베이 간판들 (좌→우: 한진치과/동명한의원 -> 늘푸른교회/가로고스/한진태권도 -> citibank/한솔내과/LG프라임학원/월드휘트니스)
+    const rearLeftSigns = [
+      { x: 0.06, y: 0.22, w: 0.88, h: 0.055, text: '한 진 치 과 의 원', bg: '#DBEAFE', fg: '#1E3A8A' },
+      { x: 0.06, y: 0.34, w: 0.88, h: 0.055, text: '동 명 한 의 원', bg: '#E0F2FE', fg: '#0C4A6E' },
+      { x: 0.06, y: 0.46, w: 0.88, h: 0.055, text: '피 아 노 · 미 술 교 습 소', bg: '#F1F5F9', fg: '#334155' },
+      { x: 0.06, y: 0.58, w: 0.88, h: 0.055, text: '영 어 수 학 전 문 학 원', bg: '#EFF6FF', fg: '#1D4ED8' }
+    ];
+    const rearBay1 = new THREE.Mesh(
+      new THREE.PlaneGeometry(9.0, MAIN_H - 4.8),
+      new THREE.MeshStandardMaterial({ map: createSignboardColumnTexture(rearLeftSigns, { panelCols: 2, panelRows: 12 }) })
+    );
+    rearBay1.position.set(-10.5, 4.8 + (MAIN_H - 4.8) / 2, rearZ + 0.02);
+    siteGroup.add(rearBay1);
+
+    const rearMidSigns = [
+      { x: 0.06, y: 0.16, w: 0.88, h: 0.052, text: '행 당 세 무 회 계', bg: '#FEE2E2', fg: '#991B1B' },
+      { x: 0.06, y: 0.25, w: 0.88, h: 0.055, text: '늘 푸 른 교 회', bg: '#7DD3FC', fg: '#0C4A6E' },
+      { x: 0.06, y: 0.35, w: 0.88, h: 0.055, text: '가 로 고 스 학 원', bg: '#BAE6FD', fg: '#1E3A8A' },
+      { x: 0.06, y: 0.45, w: 0.88, h: 0.058, text: '한 진 태 권 도 장', bg: '#DBEAFE', fg: '#1E40AF' },
+      { x: 0.06, y: 0.56, w: 0.88, h: 0.055, text: '행 당 인 테 리 어', bg: '#F8FAFC', fg: '#111827' }
+    ];
+    const rearBay2 = new THREE.Mesh(
+      new THREE.PlaneGeometry(9.0, MAIN_H - 4.8),
+      new THREE.MeshStandardMaterial({ map: createSignboardColumnTexture(rearMidSigns, { panelCols: 2, panelRows: 12 }) })
+    );
+    rearBay2.position.set(-0.5, 4.8 + (MAIN_H - 4.8) / 2, rearZ + 0.02);
+    siteGroup.add(rearBay2);
+
+    // 우측 메인 간판 베이 (12763.jpg, 12765.jpg의 citibank / 한솔내과 / LG프라임학원 / 월드 휘트니스)
+    const rearRightSigns = [
+      { x: 0.06, y: 0.10, w: 0.88, h: 0.075, text: 'citibank', bg: '#D2D4D7', fg: '#1E3A8A', border: '#D2D4D7' },
+      { x: 0.06, y: 0.19, w: 0.88, h: 0.060, text: '한 솔 내 과 의 원', bg: '#E2E8F0', fg: '#0F172A' },
+      { x: 0.06, y: 0.28, w: 0.88, h: 0.058, text: '메 리 츠 종 합 증 권', bg: '#DBEAFE', fg: '#1E3A8A' },
+      { x: 0.06, y: 0.38, w: 0.88, h: 0.062, text: '한 진 음 악 학 원', bg: '#E0F2FE', fg: '#0369A1' },
+      { x: 0.06, y: 0.48, w: 0.88, h: 0.068, text: 'LG 프 라 임 학 원', bg: '#F1F5F9', fg: '#1E293B', border: '#1E293B' },
+      { x: 0.06, y: 0.58, w: 0.88, h: 0.062, text: '월드 휘트니스 헬스', bg: '#EDE9FE', fg: '#4C1D95' },
+      { x: 0.06, y: 0.68, w: 0.88, h: 0.064, text: '우 리 동 네 농 장', bg: '#65A30D', fg: '#1A2E05' }
+    ];
+    const rearBay3 = new THREE.Mesh(
+      new THREE.PlaneGeometry(9.6, MAIN_H - 4.8),
+      new THREE.MeshStandardMaterial({ map: createSignboardColumnTexture(rearRightSigns, { panelCols: 2, panelRows: 12 }) })
+    );
+    rearBay3.position.set(9.5, 4.8 + (MAIN_H - 4.8) / 2, rearZ + 0.02);
+    siteGroup.add(rearBay3);
+
+    // 1F LOTTE Mart 매장입구 빨간 대형 캐노피 (12761.jpg, 12763.jpg, 12765.jpg)
+    const martCanopyW = 19.8;
+    const martCanopyH = 0.92;
+    const martCanopyD = 3.2;
+
+    const canopyFrontTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = 1024; c.height = 128;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#C92A2A';
+      ctx.fillRect(0, 0, 1024, 128);
+      ctx.fillStyle = '#991B1B';
+      ctx.fillRect(0, 114, 1024, 14);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 52px Arial, "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('LOTTE Mart   매장입구', 512, 60);
+      return makeTex(c);
+    })();
+
+    const canopySideTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 128;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#C92A2A';
+      ctx.fillRect(0, 0, 256, 128);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 34px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('LOTTE Mart', 128, 60);
+      return makeTex(c);
+    })();
+
+    const redMat = new THREE.MeshStandardMaterial({ color: '#C92A2A', roughness: 0.45 });
+    const martCanopy = new THREE.Mesh(
+      new THREE.BoxGeometry(martCanopyW, martCanopyH, martCanopyD),
+      [
+        new THREE.MeshStandardMaterial({ map: canopySideTex }),
+        new THREE.MeshStandardMaterial({ map: canopySideTex }),
+        redMat,
+        new THREE.MeshStandardMaterial({ color: '#E2E8F0', roughness: 0.6 }),
+        new THREE.MeshStandardMaterial({ map: canopyFrontTex }),
+        redMat
+      ]
+    );
+    martCanopy.position.set(4.5, 4.15, rearZ + martCanopyD / 2);
+    martCanopy.castShadow = true;
+    addOutline(martCanopy, 0x7f1d1d);
+    siteGroup.add(martCanopy);
+
+    // 캐노피 하부 매장 유리 출입구
+    const martDoors = new THREE.Mesh(
+      new THREE.PlaneGeometry(martCanopyW - 0.6, 3.7),
+      new THREE.MeshStandardMaterial({
+        map: createStorefrontTexture({
+          title: '',
+          fasciaHex: '#1E293B',
+          accentHex: '#DC2626'
+        })
+      })
+    );
+    martDoors.position.set(4.5, 1.85, rearZ + 0.03);
+    siteGroup.add(martDoors);
+
+    // 좌측 1층 상가 점포들 (약국/세탁소 등)
+    const rearLeftShops = new THREE.Mesh(
+      new THREE.PlaneGeometry(18.5, 3.7),
+      new THREE.MeshStandardMaterial({
+        map: createStorefrontTexture({
+          title: '크린토피아 · 한솔약국',
+          fasciaHex: '#1E3A8A',
+          accentHex: '#10B981'
+        })
+      })
+    );
+    rearLeftShops.position.set(-15.5, 1.85, rearZ + 0.03);
+    siteGroup.add(rearLeftShops);
+
+    // ---------------------------------------------------------
+    // H) 남남동(SSE) 고객 주차장 · 지하주차장 램프 · 대형 빨간 지주 간판 (12761.jpg, 12763.jpg, 12765.jpg)
+    // ---------------------------------------------------------
+    const parkingLot = new THREE.Mesh(
+      new THREE.PlaneGeometry(66.0, 21.0),
+      new THREE.MeshStandardMaterial({ map: createParkingLotTexture(), roughness: 0.85 })
+    );
+    parkingLot.rotation.x = -Math.PI / 2;
+    parkingLot.position.set(-1.5, 0.04, rearZ + 10.5);
+    parkingLot.receiveShadow = true;
+    siteGroup.add(parkingLot);
+
+    // 주차장 내 주차된 차량 및 흰색 트럭 배치 (12763.jpg, 12765.jpg)
+    const carSpecs = [
+      [-23.5, rearZ + 3.2, '#E2E8F0', false, 0],
+      [-20.2, rearZ + 3.2, '#1E293B', false, 0],
+      [-16.8, rearZ + 3.2, '#94A3B8', false, 0],
+      [-13.4, rearZ + 3.2, '#F8FAFC', false, 0],
+      [-22.0, rearZ + 17.5, '#CBD5E1', false, Math.PI],
+      [-18.6, rearZ + 17.5, '#334155', false, Math.PI],
+      [-15.2, rearZ + 17.5, '#F1F5F9', false, Math.PI],
+      [-11.8, rearZ + 17.5, '#64748B', false, Math.PI],
+      [ 15.2, rearZ + 13.5, '#FFFFFF', true, -0.35] // 우측 흰색 1톤 트럭
+    ];
+    carSpecs.forEach(([cx, cz, col, truck, rot]) => {
+      const c = createParkedCar(col, truck);
+      c.position.set(cx, 0.04, cz);
+      c.rotation.y = rot;
+      siteGroup.add(c);
+    });
+
+    // 1) 동측 지하주차장 출입구 램프 & '주차장 출입구 / 제한높이 2.1m' 상부 빔 (12761.jpg, 12763.jpg 우측)
+    const rampGroup = new THREE.Group();
+    const rampWallMat = new THREE.MeshStandardMaterial({ color: '#CBD5E1', roughness: 0.78 });
+
+    // 경사 램프 바닥판 (동쪽에서 서쪽으로 하강)
+    const rampSlope = new THREE.Mesh(
+      new THREE.BoxGeometry(12.5, 0.3, 6.4),
+      new THREE.MeshStandardMaterial({ color: '#334155', roughness: 0.9 })
+    );
+    rampSlope.position.set(0, -0.95, 0);
+    rampSlope.rotation.z = 0.16;
+    rampGroup.add(rampSlope);
+
+    // 전면·후면 파라펫 옹벽
+    const rampFrontWall = new THREE.Mesh(new THREE.BoxGeometry(12.5, 1.35, 0.45), rampWallMat);
+    rampFrontWall.position.set(0, 0.675, 3.2);
+    addOutline(rampFrontWall);
+    rampGroup.add(rampFrontWall);
+
+    // 상부 '주차장 출입구 / 제한높이 2.1m' 가로 빔 (12763.jpg)
+    const rampBeamTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 128;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#CBD5E1';
+      ctx.fillRect(0, 0, 512, 128);
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 42px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('주 차 장   출 입 구', 256, 54);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(156, 70, 200, 42);
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(156, 70, 200, 42);
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 26px "Malgun Gothic", sans-serif';
+      ctx.fillText('제한높이 2.1M', 256, 100);
+      return makeTex(c);
+    })();
+
+    const rampHeaderBeam = new THREE.Mesh(
+      new THREE.BoxGeometry(0.65, 1.45, 7.2),
+      [
+        new THREE.MeshStandardMaterial({ map: rampBeamTex }),
+        new THREE.MeshStandardMaterial({ map: rampBeamTex }),
+        rampWallMat, rampWallMat, rampWallMat, rampWallMat
+      ]
+    );
+    rampHeaderBeam.position.set(4.8, 3.35, 0);
+    rampHeaderBeam.castShadow = true;
+    addOutline(rampHeaderBeam);
+    rampGroup.add(rampHeaderBeam);
+
+    // 우측 지지 기둥
+    const rampCol = new THREE.Mesh(new THREE.BoxGeometry(0.75, 4.1, 0.75), rampWallMat);
+    rampCol.position.set(4.8, 2.05, 3.2);
+    addOutline(rampCol);
+    rampGroup.add(rampCol);
+
+    rampGroup.position.set(eastX + 2.5, 0, rearZ + 3.6);
+    siteGroup.add(rampGroup);
+
+    // 2) 남동측 입구 대형 빨간 지주 간판 '롯데마트 / 고객 주차장 P ↗' (12761.jpg 전경)
+    const pylonTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 384;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#991B1B';
+      ctx.fillRect(0, 0, 512, 384);
+      ctx.fillStyle = '#450A0A';
+      ctx.fillRect(0, 245, 512, 139);
+      ctx.strokeStyle = '#FCA5A5';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(10, 10, 492, 364);
+
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = 'bold 76px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('롯데마트', 256, 145);
+
+      ctx.font = 'bold 42px "Malgun Gothic", sans-serif';
+      ctx.fillText('고객 주차장  P  ↗', 256, 326);
+      return makeTex(c);
+    })();
+
+    const redParkingSign = new THREE.Mesh(
+      new THREE.BoxGeometry(4.4, 3.2, 0.45),
+      [
+        redMat, redMat, redMat, redMat,
+        new THREE.MeshStandardMaterial({ map: pylonTex }),
+        new THREE.MeshStandardMaterial({ map: pylonTex })
+      ]
+    );
+    redParkingSign.position.set(eastX - 2.5, 1.9, rearZ + 18.8);
+    redParkingSign.rotation.y = 0.25;
+    redParkingSign.castShadow = true;
+    addOutline(redParkingSign, 0x450a0a);
+    siteGroup.add(redParkingSign);
+
+    // ---------------------------------------------------------
+    // I) 건물 주변 조경수 (유리탑 앞 소나무·침엽수 + 남측 주차장 가로수)
+    // ---------------------------------------------------------
+    [
+      [eastX + 0.6, rearZ + 1.4, 1.35],
+      [eastX + 2.8, rearZ + 1.4, 1.25],
+      [-28.0, rearZ + 21.8, 1.15],
+      [-18.0, rearZ + 21.8, 1.20],
+      [ -8.0, rearZ + 21.8, 1.15],
+      [  2.0, rearZ + 21.8, 1.22],
+      [ 12.0, rearZ + 21.8, 1.18]
+    ].forEach(([tx, tz, sc]) => {
+      const t = createTree(sc);
+      t.position.set(tx, 0, tz);
+      siteGroup.add(t);
+    });
+
+    // =========================================================
+    // 4. GLB 3D 파일 추출 & 렌더링 루프
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        siteGroup,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'lotte_mart_haengdang.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (err) => console.error('GLB 추출 오류:', err),
+        { binary: true }
+      );
+    };
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

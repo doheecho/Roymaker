@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>극동미라주 102동 3D 모델링 (엘베홀 계단·남측 끝선 정렬 완료)</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #2c2f33; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 12.5px;
+      background: rgba(20, 22, 25, 0.88); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.18);
+      pointer-events: none; line-height: 1.55;
+    }
+    #controls-ui {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+      background: rgba(20, 22, 25, 0.90); padding: 10px 12px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      max-width: 98vw;
+    }
+    button {
+      background: #3b4048; color: #fff; border: 1px solid #555b65;
+      padding: 5px 9px; border-radius: 6px; cursor: pointer; font-size: 11.5px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #2563eb; border-color: #93c5fd; }
+    button.in-btn { background: #1e3a8a; border-color: #3b82f6; }
+    button.out-btn { background: #0f766e; border-color: #2dd4bf; }
+    button.top-btn { background: #4338ca; border-color: #818cf8; font-weight: bold; }
+    button.export-btn { background: #b45309; border-color: #f59e0b; font-weight: bold; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>극동미라주 102동 — 엘베홀 남측 벽체·출입구 내측 후퇴 & 반층 계단 남측 끝선 정렬</strong><br/>
+    남측(서→동): 엘베홀(25F·동측 무창벽·남측 반층계단 끝선=1·2호 남측선 일치) | 2호(15F) | 1·2호 코어(17F·남측 출입구) | 1호(15F)<br/>
+    서측(남→북): 3호 · 4호 | 중앙 기둥 띠 | 5호 · 6호 · 7호 (대·특대 중간 규격 4짝 창문 5연속 · 23F · 북측 출입구 없음)
+  </div>
+
+  <div id="controls-ui">
+    <button class="out-btn" onclick="setView('v0_south_entrances')">1. 남측 정면 (계단·1·2호 끝선 정렬)</button>
+    <button class="out-btn" onclick="setView('v0_junction_12554')">2. ㄴ자 연결부 & 25F 엘베홀 (12554_2)</button>
+    <button class="out-btn" onclick="setView('v0_sw_bird')">3. 남서쪽 조감뷰 (12546 구도)</button>
+    <button class="in-btn" onclick="setView('v2_west_zoom')">4. 단지내 서향 5연속 창문 (12529_2)</button>
+    <button class="in-btn" onclick="setView('v1_west_all')">5. 단지내 서측동 전체 (12527)</button>
+    <button class="in-btn" onclick="setView('v3_south_in')">6. 단지내 남향 1·2호 북면 (12531)</button>
+    <button class="out-btn" onclick="setView('v5_out_w')">7. 단지밖 서향 KUKDONG 102 (12535)</button>
+    <button class="top-btn" onclick="setView('v8_sky')">8. 스카이뷰 (ㄴ자 배치도 · 12543)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#2E343D');
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.5, 1000);
+    // 초기 시점: 엘베홀 내측 후퇴 벽면·반층 계단 끝선과 1·2호 남측 끝선 일치를 바로 확인할 수 있는 남서측 시점
+    camera.position.set(-28, 12, 46);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(-10, 12, 16);
+    controls.enableDamping = true;
+    controls.update();
+
+    // 좌표계: -Z = 북(N), +Z = 남(S), -X = 서(W), +X = 동(E)
+    window.setView = (viewName) => {
+      const views = {
+        v0_south_entrances: { target: [-10, 12, 16],    pos: [-28, 12, 46] },     // 1. 남측 정면 (계단·1·2호 끝선 정렬)
+        v0_junction_12554:  { target: [-14, 34, 4],     pos: [16, 74, 52] },      // 2. ㄴ자 연결부 & 25F 엘베홀 (12554_2.jpg)
+        v0_sw_bird:         { target: [-12, 24, 4],     pos: [-52, 38, 56] },     // 3. 남서쪽 조감뷰 (12546.jpg)
+        v2_west_zoom:       { target: [-22, 26, -10],   pos: [11, 9.5, -10] },    // 4. 단지내 서향 5연속 창문 (12529_2.jpg)
+        v1_west_all:        { target: [-22, 28, -10],   pos: [24, 10.5, -10] },   // 5. 단지내 서측동 전체 (12527.jpg)
+        v3_south_in:        { target: [-4.0, 21, 12],   pos: [-4.0, 7.5, -22] },  // 6. 단지내 남향 1·2호 북면 (12531.jpg)
+        v5_out_w:           { target: [-6, 24, 4],      pos: [46, 10.5, -16] },   // 7. 단지밖 서향 KUKDONG 102 (12535.jpg)
+        v8_sky:             { target: [-8, 20, -4],     pos: [-8, 126, -3.99] }   // 8. 스카이뷰 (12543.jpg)
+      };
+      const v = views[viewName];
+      if (!v) return;
+      controls.target.set(...v.target);
+      camera.position.set(...v.pos);
+      controls.update();
+    };
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.96));
+
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.08);
+    sunLight.position.set(55, 110, -45);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    scene.add(sunLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdce6f2, 0.58);
+    fillLight.position.set(-55, 70, 55);
+    scene.add(fillLight);
+
+    scene.add(new THREE.GridHelper(200, 50, 0x525864, 0x3E434D));
+
+    function addOutlines(mesh) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 26);
+      mesh.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x181B20 })));
+    }
+
+    function makeTex(canvas) {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // =========================================================
+    // 1. 열(Bay) 단위 정밀 입면 텍스처 생성기
+    // =========================================================
+    function createBayFacadeTexture(totalFloors, bays, baseFloors = 4) {
+      const totalW = bays.reduce((s, b) => s + b.w, 0);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.min(3400, Math.round(totalW * 68));
+      canvas.height = totalFloors * 48;
+      const ctx = canvas.getContext('2d');
+      const fh = canvas.height / totalFloors;
+
+      for (let f = 0; f < totalFloors; f++) {
+        const y = f * fh;
+        const floorNum = totalFloors - f;
+        const isBase = floorNum <= baseFloors;
+        let x = 0;
+
+        bays.forEach(bay => {
+          const cw = (bay.w / totalW) * canvas.width;
+
+          if (bay.band === 'gray') {
+            ctx.fillStyle = isBase ? '#4B515B' : '#737C8A';
+            ctx.fillRect(x, y, cw, fh);
+          } else {
+            ctx.fillStyle = isBase ? '#545A65' : '#F1F4F8';
+            ctx.fillRect(x, y, cw, fh);
+          }
+
+          ctx.fillStyle = isBase ? '#E2E8F0' : '#94A3B8';
+          ctx.fillRect(x, y, cw, isBase ? 3 : 2);
+
+          if (bay.type === 'solidPier') {
+            ctx.strokeStyle = 'rgba(30, 41, 59, 0.25)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(x, y, cw, fh);
+          } else if (bay.type === 'large') {
+            const wx = x + cw * 0.14;
+            const ww = cw * 0.72;
+            const wy = y + fh * 0.22;
+            const wh = fh * 0.56;
+            ctx.fillStyle = '#2B3E4D';
+            ctx.fillRect(wx, wy, ww, wh);
+            ctx.strokeStyle = '#F8FAFC';
+            ctx.lineWidth = 2.4;
+            ctx.strokeRect(wx, wy, ww, wh);
+            ctx.beginPath();
+            ctx.moveTo(wx + ww * 0.5, wy);
+            ctx.lineTo(wx + ww * 0.5, wy + wh);
+            ctx.stroke();
+          } else if (bay.type === 'xlargeCorridor') {
+            const wx = x + cw * 0.08;
+            const ww = cw * 0.84;
+            const wy = y + fh * 0.20;
+            const wh = fh * 0.60;
+            ctx.fillStyle = '#263847';
+            ctx.fillRect(wx, wy, ww, wh);
+            ctx.strokeStyle = '#F8FAFC';
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(wx, wy, ww, wh);
+            for (let k = 1; k <= 3; k++) {
+              const mx = wx + (ww * k) / 4;
+              ctx.beginPath();
+              ctx.moveTo(mx, wy);
+              ctx.lineTo(mx, wy + wh);
+              ctx.stroke();
+            }
+          } else if (bay.type === 'stairwellSquare') {
+            const wx = x + cw * 0.30;
+            const ww = cw * 0.40;
+            const wy = y + fh * 0.22;
+            const wh = fh * 0.56;
+            ctx.fillStyle = '#253340';
+            ctx.fillRect(wx, wy, ww, wh);
+            ctx.strokeStyle = '#E2E8F0';
+            ctx.lineWidth = 2.2;
+            ctx.strokeRect(wx, wy, ww, wh);
+          } else if (bay.type === 'small') {
+            const ww = cw * 0.44;
+            const wx = x + (cw - ww) * 0.5;
+            const wy = y + fh * 0.24;
+            const wh = fh * 0.52;
+            ctx.fillStyle = '#253340';
+            ctx.fillRect(wx, wy, ww, wh);
+            ctx.strokeStyle = '#F8FAFC';
+            ctx.lineWidth = 2.2;
+            ctx.strokeRect(wx, wy, ww, wh);
+          } else if (bay.type === 'midLargeBack') {
+            const wx = x + cw * 0.08;
+            const ww = cw * 0.84;
+            const wy = y + fh * 0.22;
+            const wh = fh * 0.56;
+            ctx.fillStyle = '#2B3E4D';
+            ctx.fillRect(wx, wy, ww, wh);
+            ctx.strokeStyle = '#F8FAFC';
+            ctx.lineWidth = 2.4;
+            ctx.strokeRect(wx, wy, ww, wh);
+            for (let k = 1; k <= 3; k++) {
+              const mx = wx + (ww * k) / 4;
+              ctx.beginPath();
+              ctx.moveTo(mx, wy);
+              ctx.lineTo(mx, wy + wh);
+              ctx.stroke();
+            }
+          } else if (
+            bay.type === 'balconyLarge' ||
+            bay.type === 'balconyMidLarge' ||
+            bay.type === 'balconyXLarge'
+          ) {
+            const margin =
+              bay.type === 'balconyXLarge' ? 0.045 :
+              bay.type === 'balconyMidLarge' ? 0.035 : 0.08;
+            const gx = x + cw * margin;
+            const gw = cw * (1 - margin * 2);
+            const gy = y + fh * 0.11;
+            const gh = fh * 0.80;
+
+            const grad = ctx.createLinearGradient(gx, gy, gx + gw, gy + gh);
+            grad.addColorStop(0, '#365B6E');
+            grad.addColorStop(0.5, '#55859B');
+            grad.addColorStop(1, '#2B4857');
+            ctx.fillStyle = grad;
+            ctx.fillRect(gx, gy, gw, gh);
+
+            ctx.strokeStyle = '#F8FAFC';
+            ctx.lineWidth = 2.1;
+            ctx.strokeRect(gx, gy, gw, gh);
+
+            const panes =
+              bay.type === 'balconyXLarge' ? 6 :
+              bay.type === 'balconyMidLarge' ? 4 : 3;
+
+            for (let k = 1; k < panes; k++) {
+              const mx = gx + (gw * k) / panes;
+              ctx.lineWidth = (panes % 2 === 0 && k === panes / 2) ? 3.0 : 1.8;
+              ctx.beginPath();
+              ctx.moveTo(mx, gy);
+              ctx.lineTo(mx, gy + gh);
+              ctx.stroke();
+            }
+
+            const railY = gy + gh * 0.54;
+            ctx.fillStyle = '#CBD5E1';
+            ctx.fillRect(gx, railY, gw, 2.5);
+            for (let rx = gx + 5; rx < gx + gw; rx += 7.5) {
+              ctx.fillRect(rx, railY, 1.4, gh * 0.46);
+            }
+
+            if (bay.type === 'balconyMidLarge') {
+              const seed = bay.acSeed || 0;
+              const acW = gw * 0.15;
+              const acH = gh * 0.35;
+              const acY = gy + gh - acH - 2;
+              if ((floorNum + seed) % 2 === 0 && floorNum > 1) {
+                const acX = gx + 3;
+                ctx.fillStyle = '#E2E8F0';
+                ctx.fillRect(acX, acY, acW, acH);
+                ctx.fillStyle = '#334155';
+                ctx.beginPath();
+                ctx.arc(acX + acW * 0.45, acY + acH * 0.5, acH * 0.32, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              if ((floorNum + seed + 1) % 3 === 0 && floorNum > 1) {
+                const acX = gx + gw - acW - 3;
+                ctx.fillStyle = '#E2E8F0';
+                ctx.fillRect(acX, acY, acW, acH);
+                ctx.fillStyle = '#334155';
+                ctx.beginPath();
+                ctx.arc(acX + acW * 0.45, acY + acH * 0.5, acH * 0.32, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            } else if (bay.type === 'balconyXLarge') {
+              if ((floorNum + (bay.acSeed || 0)) % 2 === 0 && floorNum > 1) {
+                const acW = gw * 0.11;
+                const acH = gh * 0.34;
+                const acY = gy + gh - acH - 2;
+                [gx + 3, gx + gw - acW - 3].forEach(acX => {
+                  ctx.fillStyle = '#E2E8F0';
+                  ctx.fillRect(acX, acY, acW, acH);
+                  ctx.fillStyle = '#334155';
+                  ctx.beginPath();
+                  ctx.arc(acX + acW * 0.45, acY + acH * 0.5, acH * 0.32, 0, Math.PI * 2);
+                  ctx.fill();
+                });
+              }
+            } else if ((floorNum + (bay.acSeed || 0)) % 3 === 0 && floorNum > 1) {
+              const acW = gw * 0.22;
+              const acH = gh * 0.34;
+              const acX = gx + gw - acW - 3;
+              const acY = gy + gh - acH - 2;
+              ctx.fillStyle = '#E2E8F0';
+              ctx.fillRect(acX, acY, acW, acH);
+              ctx.fillStyle = '#334155';
+              ctx.beginPath();
+              ctx.arc(acX + acW * 0.45, acY + acH * 0.5, acH * 0.32, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+
+          x += cw;
+        });
+      }
+
+      return makeTex(canvas);
+    }
+
+    // =========================================================
+    // 2. 엘베홀(25층) 및 출입구 수직 코어 텍스처
+    // =========================================================
+    function createEntranceTowerTexture(mainFloors, extraFloors = 0, baseFloors = 4, frontType = 'entrance') {
+      const totalFloors = mainFloors + extraFloors;
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = totalFloors * 48;
+      const ctx = canvas.getContext('2d');
+      const fh = canvas.height / totalFloors;
+
+      for (let f = 0; f < totalFloors; f++) {
+        const y = f * fh;
+        const floorNum = totalFloors - f;
+        const isBase = floorNum <= baseFloors;
+
+        ctx.fillStyle = isBase ? '#545A65' : '#F4F6F9';
+        ctx.fillRect(0, y, canvas.width, fh);
+
+        ctx.fillStyle = isBase ? '#E2E8F0' : 'rgba(51, 65, 85, 0.22)';
+        ctx.fillRect(0, y, canvas.width, isBase ? 3 : 2);
+
+        const wx = canvas.width * 0.30;
+        const ww = canvas.width * 0.40;
+        const wy = y + fh * 0.20;
+        const wh = fh * 0.60;
+
+        ctx.fillStyle = '#253340';
+        ctx.fillRect(wx, wy, ww, wh);
+        ctx.strokeStyle = '#E2E8F0';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(wx, wy, ww, wh);
+
+        if (frontType === 'entrance') {
+          ctx.fillStyle = '#253340';
+          ctx.fillRect(canvas.width * 0.12, wy + 2, canvas.width * 0.09, wh - 4);
+        }
+      }
+
+      return makeTex(canvas);
+    }
+
+    // =========================================================
+    // 3. 창문 없는 막힌 벽체 텍스처 (엘베홀 동쪽 벽체 및 인접 측면 벽체)
+    // =========================================================
+    function createPlainEndWallTexture(totalFloors, baseFloors = 4) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = totalFloors * 48;
+      const ctx = canvas.getContext('2d');
+      const fh = canvas.height / totalFloors;
+
+      ctx.fillStyle = '#E8ECF1';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const baseH = fh * baseFloors;
+      ctx.fillStyle = '#545A65';
+      ctx.fillRect(0, canvas.height - baseH, canvas.width, baseH);
+
+      for (let f = 0; f < totalFloors; f++) {
+        const y = f * fh;
+        const isBase = (totalFloors - f) <= baseFloors;
+        ctx.fillStyle = isBase ? '#E2E8F0' : 'rgba(71, 85, 105, 0.22)';
+        ctx.fillRect(0, y, canvas.width, isBase ? 3 : 2);
+      }
+
+      return makeTex(canvas);
+    }
+
+    // =========================================================
+    // 4. 서측 동 남측 단부 입면 텍스처
+    // =========================================================
+    function createWestSouthEndTexture(totalFloors, baseFloors = 4) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = totalFloors * 48;
+      const ctx = canvas.getContext('2d');
+      const fh = canvas.height / totalFloors;
+
+      for (let f = 0; f < totalFloors; f++) {
+        const y = f * fh;
+        const floorNum = totalFloors - f;
+        const isBase = floorNum <= baseFloors;
+
+        ctx.fillStyle = isBase ? '#545A65' : '#E8ECF1';
+        ctx.fillRect(0, y, canvas.width, fh);
+
+        ctx.fillStyle = isBase ? '#E2E8F0' : 'rgba(71, 85, 105, 0.22)';
+        ctx.fillRect(0, y, canvas.width, isBase ? 3 : 2);
+
+        const gx = canvas.width * 0.08;
+        const gw = canvas.width * 0.48;
+        const gy = y + fh * 0.14;
+        const gh = fh * 0.74;
+
+        ctx.fillStyle = '#334E5E';
+        ctx.fillRect(gx, gy, gw, gh);
+        ctx.strokeStyle = '#F8FAFC';
+        ctx.lineWidth = 2.2;
+        ctx.strokeRect(gx, gy, gw, gh);
+
+        ctx.beginPath();
+        ctx.moveTo(gx + gw * 0.5, gy);
+        ctx.lineTo(gx + gw * 0.5, gy + gh);
+        ctx.stroke();
+
+        ctx.fillStyle = '#CBD5E1';
+        ctx.fillRect(gx, gy + gh * 0.56, gw, 2);
+      }
+
+      return makeTex(canvas);
+    }
+
+    // =========================================================
+    // 5. 측벽 텍스처 ('KUKDONG 102')
+    // =========================================================
+    function createSideWallTexture(totalFloors, brandText = 'KUKDONG', dongNum = '102', baseFloors = 4) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = totalFloors * 48;
+      const ctx = canvas.getContext('2d');
+      const fh = canvas.height / totalFloors;
+
+      ctx.fillStyle = '#E5E8ED';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const baseH = fh * baseFloors;
+      ctx.fillStyle = '#545A65';
+      ctx.fillRect(0, canvas.height - baseH, canvas.width, baseH);
+
+      ctx.fillStyle = '#6B7280';
+      ctx.fillRect(18, 0, 56, canvas.height);
+      ctx.strokeStyle = '#374151';
+      ctx.lineWidth = 2;
+      for (let rx = 24; rx < 72; rx += 8) {
+        ctx.beginPath(); ctx.moveTo(rx, 0); ctx.lineTo(rx, canvas.height); ctx.stroke();
+      }
+
+      for (let f = 0; f < totalFloors; f++) {
+        const y = f * fh;
+        const isBase = (totalFloors - f) <= baseFloors;
+        ctx.fillStyle = isBase ? '#E2E8F0' : 'rgba(71, 85, 105, 0.25)';
+        ctx.fillRect(0, y, canvas.width, isBase ? 3 : 2);
+
+        const wy = y + fh * 0.26;
+        ctx.fillStyle = '#263440';
+        ctx.fillRect(132, wy, 36, fh * 0.48);
+        ctx.strokeStyle = '#F8FAFC';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(132, wy, 36, fh * 0.48);
+      }
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#64748B';
+      ctx.font = 'bold 44px Georgia, serif';
+      ctx.fillText(brandText, canvas.width * 0.56, fh * 1.6);
+
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(canvas.width * 0.56 - 2, fh * 0.9, 4, 22);
+      ctx.fillRect(canvas.width * 0.56 - 12, fh * 0.9 + 9, 24, 4);
+
+      ctx.fillStyle = '#334155';
+      ctx.font = 'bold 52px "Malgun Gothic", sans-serif';
+      ctx.fillText(dongNum, canvas.width * 0.56, fh * 3.1);
+
+      return makeTex(canvas);
+    }
+
+    // =========================================================
+    // 6. 화강석 문주 및 반층 계단 출입구 생성기
+    // =========================================================
+    function createPortalHeaderTexture(leftUnit, rightUnit) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 140;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#8C6249';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#5C3D2B';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#3E271A';
+      ctx.font = 'bold 38px "Malgun Gothic", sans-serif';
+      ctx.fillText(leftUnit, 102, 88);
+      ctx.fillText(rightUnit, 412, 88);
+      ctx.font = 'bold 52px "Malgun Gothic", sans-serif';
+      ctx.fillText('102', 258, 92);
+
+      ctx.fillStyle = '#FDE68A';
+      ctx.font = 'bold 38px "Malgun Gothic", sans-serif';
+      ctx.fillText(leftUnit, 100, 86);
+      ctx.fillText(rightUnit, 410, 86);
+      ctx.font = 'bold 52px "Malgun Gothic", sans-serif';
+      ctx.fillText('102', 256, 90);
+
+      return makeTex(canvas);
+    }
+
+    function createMirajuEntrancePortal(leftUnit, rightUnit, hasRamp = false, customW = 4.2) {
+      const group = new THREE.Group();
+      const stoneMat = new THREE.MeshStandardMaterial({ color: '#8C6249', roughness: 0.72 });
+      const darkStoneMat = new THREE.MeshStandardMaterial({ color: '#5C3D2B', roughness: 0.78 });
+      const headerMat = new THREE.MeshStandardMaterial({ map: createPortalHeaderTexture(leftUnit, rightUnit), roughness: 0.65 });
+      const glassDoorMat = new THREE.MeshStandardMaterial({ color: '#1E293B', roughness: 0.25, metalness: 0.35 });
+
+      const w = customW, d = 1.9, h = 4.0, pillarW = Math.min(0.70, customW * 0.16), headerH = 1.1;
+
+      [-1, 1].forEach(side => {
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(pillarW, h - headerH, d), stoneMat);
+        pillar.position.set(side * (w / 2 - pillarW / 2), (h - headerH) / 2, d / 2);
+        pillar.castShadow = true;
+        addOutlines(pillar);
+        group.add(pillar);
+      });
+
+      const lintel = new THREE.Mesh(
+        new THREE.BoxGeometry(w + 0.12, headerH, d + 0.20),
+        [stoneMat, stoneMat, darkStoneMat, darkStoneMat, headerMat, stoneMat]
+      );
+      lintel.position.set(0, h - headerH / 2, d / 2 + 0.05);
+      lintel.castShadow = true;
+      addOutlines(lintel);
+      group.add(lintel);
+
+      const gableCap = new THREE.Mesh(new THREE.BoxGeometry(w + 0.22, 0.24, d + 0.28), darkStoneMat);
+      gableCap.position.set(0, h + 0.11, d / 2 + 0.05);
+      addOutlines(gableCap);
+      group.add(gableCap);
+
+      const doorBox = new THREE.Mesh(new THREE.BoxGeometry(w - pillarW * 2, h - headerH, 0.4), glassDoorMat);
+      doorBox.position.set(0, (h - headerH) / 2, 0.35);
+      addOutlines(doorBox);
+      group.add(doorBox);
+
+      if (hasRamp) {
+        const ramp = new THREE.Mesh(
+          new THREE.BoxGeometry(4.0, 0.65, 1.35),
+          new THREE.MeshStandardMaterial({ color: '#CBD5E1', roughness: 0.8 })
+        );
+        ramp.position.set(w / 2 + 2.0, 0.32, 0.65);
+        addOutlines(ramp);
+        group.add(ramp);
+      }
+      return group;
+    }
+
+    // 계단을 반층 올라가서 진입하는 엘베홀 남측 출입구 (총 돌출 길이 = landingD + stairTotalD = 4.34m)
+    function createHalfFloorStairEntrance(leftUnit, rightUnit, halfH, slotW = 3.5) {
+      const group = new THREE.Group();
+      const baseStoneMat = new THREE.MeshStandardMaterial({ color: '#78716C', roughness: 0.82 });
+      const treadMat = new THREE.MeshStandardMaterial({ color: '#CBD5E1', roughness: 0.75 });
+      const railMat = new THREE.MeshStandardMaterial({ color: '#334155', roughness: 0.4, metalness: 0.5 });
+
+      const landingW = slotW;
+      const landingD = 2.10;
+      const stairSteps = 7;
+      const stepD = 0.32;
+      const stepH = halfH / stairSteps;
+      const stairTotalD = stairSteps * stepD; // 2.24m
+      const totalProjection = landingD + stairTotalD; // 4.34m
+
+      // 1) 반층 높이의 계단참(플랫폼)
+      const landing = new THREE.Mesh(new THREE.BoxGeometry(landingW, halfH, landingD), baseStoneMat);
+      landing.position.set(0, halfH / 2, landingD / 2);
+      landing.castShadow = true;
+      landing.receiveShadow = true;
+      addOutlines(landing);
+      group.add(landing);
+
+      // 2) 반층 계단 단수 (7단, 최하단 남쪽 끝 = totalProjection = 4.34m)
+      for (let i = 0; i < stairSteps; i++) {
+        const currentH = halfH - (i + 1) * stepH + stepH * 0.5;
+        if (currentH <= 0.02) continue;
+        const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(landingW - 0.44, currentH, stepD), treadMat);
+        stepMesh.position.set(0, currentH / 2, landingD + stepD * (i + 0.5));
+        stepMesh.castShadow = true;
+        stepMesh.receiveShadow = true;
+        addOutlines(stepMesh);
+        group.add(stepMesh);
+      }
+
+      // 3) 좌·우 계단 측면 연석 및 손스침 난간 (남쪽 끝 = totalProjection = 4.34m에 맞춤)
+      const curbStartZ = landingD - 0.15;
+      const curbD = totalProjection - curbStartZ;
+      const curbCZ = (curbStartZ + totalProjection) / 2;
+
+      [-1, 1].forEach(side => {
+        const curb = new THREE.Mesh(new THREE.BoxGeometry(0.22, halfH * 0.65, curbD), baseStoneMat);
+        curb.position.set(side * (landingW / 2 - 0.11), halfH * 0.325, curbCZ);
+        addOutlines(curb);
+        group.add(curb);
+
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.85, stairTotalD + landingD * 0.35), railMat);
+        rail.position.set(side * (landingW / 2 - 0.11), halfH + 0.15, landingD * 0.8 + stairTotalD * 0.45);
+        rail.rotation.x = Math.atan2(halfH, stairTotalD);
+        group.add(rail);
+      });
+
+      // 4) 반층 계단참 위에 올라앉은 화강석 출입구 문주 (엘베홀 벽면 바로 앞에 밀착)
+      const portal = createMirajuEntrancePortal(leftUnit, rightUnit, false, slotW - 0.16);
+      portal.position.set(0, halfH, 0);
+      group.add(portal);
+
+      group.userData.totalProjection = totalProjection;
+      return group;
+    }
+
+    function createGableParapet(widthX, depthZ, peakH = 1.4) {
+      const shape = new THREE.Shape();
+      const halfZ = depthZ / 2;
+      shape.moveTo(-halfZ, 0);
+      shape.lineTo(halfZ, 0);
+      shape.lineTo(0, peakH);
+      shape.closePath();
+
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: widthX, bevelEnabled: false });
+      geo.rotateY(Math.PI / 2);
+
+      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#E5E8ED', roughness: 0.72 }));
+      mesh.castShadow = true;
+      addOutlines(mesh);
+      return mesh;
+    }
+
+    // =========================================================
+    // 극동미라주 102동 전체 조립
+    // =========================================================
+    export function createKukdongMiraju102() {
+      const root = new THREE.Group();
+      root.name = 'KukdongMiraju_102';
+
+      const floorH = 2.75;
+      const wingD = 12.0; // 주동 깊이 (12.0m)
+      const roofMat = new THREE.MeshStandardMaterial({ color: '#C7CCD4', roughness: 0.85 });
+      const bottomMat = new THREE.MeshStandardMaterial({ color: '#333842' });
+      const whiteWallMat = new THREE.MeshStandardMaterial({ color: '#F4F6F9', roughness: 0.72 });
+
+      // 창문 너비 규격
+      const W_LARGE    = 3.4;                      // 대 (3.4m · 3짝)
+      const W_XLARGE   = W_LARGE * 2;              // 특대 (6.8m · 6짝)
+      const W_MIDLARGE = (W_LARGE + W_XLARGE) / 2; // 대와 특대 사이 (5.1m · 4짝)
+      const W_CORE     = 2.8;                      // 출입구 / 계단실 폭 (2.8m)
+
+      // ---------------------------------------------------------
+      // [PART 1] 서측 동 (남북축 날개 · 23층 · 3~7호 대·특대 중간 크기 5연속 창문)
+      //          X: -30.0 ~ -18.0 (중심 -24.0)
+      //          Z: 남쪽 단부(+13.5) -> 북쪽 끝(-28.55)
+      // ---------------------------------------------------------
+      const westFloors = 23;
+      const westH = westFloors * floorH; // 63.25m
+
+      const W_OVERLAP_Z   = 9.4;
+      const W_PIER_EDGE   = 0.9;
+      const W_PIER_THIN   = 0.45;
+      const W_PIER_CENTER = 1.2;
+
+      const westEastBays = [
+        { w: W_OVERLAP_Z,   band: 'white', type: 'solidPier' },
+        { w: W_PIER_EDGE,   band: 'white', type: 'solidPier' },
+        { w: W_MIDLARGE,    band: 'white', type: 'balconyMidLarge', acSeed: 1 },  // 3호
+        { w: W_PIER_THIN,   band: 'white', type: 'solidPier' },
+        { w: W_MIDLARGE,    band: 'white', type: 'balconyMidLarge', acSeed: 2 },  // 4호
+        { w: W_PIER_CENTER, band: 'white', type: 'solidPier' },
+        { w: W_MIDLARGE,    band: 'white', type: 'balconyMidLarge', acSeed: 0 },  // 5호
+        { w: W_PIER_THIN,   band: 'white', type: 'solidPier' },
+        { w: W_MIDLARGE,    band: 'white', type: 'balconyMidLarge', acSeed: 1 },  // 6호
+        { w: W_PIER_THIN,   band: 'white', type: 'solidPier' },
+        { w: W_MIDLARGE,    band: 'white', type: 'balconyMidLarge', acSeed: 2 },  // 7호
+        { w: W_PIER_EDGE,   band: 'white', type: 'solidPier' },
+        { w: W_CORE,        band: 'white', type: 'stairwellSquare' }              // 북측 단부 계단실
+      ];
+
+      const westL = westEastBays.reduce((s, b) => s + b.w, 0); // 42.05m
+      const westCX = -24.0;
+      const westSouthZ = 13.5;
+      const westCZ = westSouthZ - westL / 2; // -7.525
+
+      const westBackBays = [...westEastBays].reverse().map(b => {
+        if (b.type === 'balconyMidLarge') {
+          return { w: b.w, band: 'white', type: 'midLargeBack' };
+        }
+        return { ...b };
+      });
+
+      const westWing = new THREE.Mesh(
+        new THREE.BoxGeometry(wingD, westH, westL),
+        [
+          new THREE.MeshStandardMaterial({ map: createBayFacadeTexture(westFloors, westEastBays, 4), roughness: 0.52 }),
+          new THREE.MeshStandardMaterial({ map: createBayFacadeTexture(westFloors, westBackBays, 4), roughness: 0.72 }),
+          roofMat,
+          bottomMat,
+          new THREE.MeshStandardMaterial({ map: createWestSouthEndTexture(westFloors, 4), roughness: 0.65 }),
+          new THREE.MeshStandardMaterial({ map: createSideWallTexture(westFloors, 'KUKDONG', '102', 4), roughness: 0.75 })
+        ]
+      );
+      westWing.position.set(westCX, westH / 2, westCZ);
+      westWing.castShadow = true;
+      westWing.receiveShadow = true;
+      addOutlines(westWing);
+      root.add(westWing);
+
+      // 북측 단부 계단실 옥탑 (출입구 없음)
+      const northEndZ = westSouthZ - westL; // -28.55
+      const northPenthouse = new THREE.Mesh(
+        new THREE.BoxGeometry(wingD * 0.55, floorH * 1.4, W_CORE),
+        [whiteWallMat, whiteWallMat, roofMat, bottomMat, whiteWallMat, whiteWallMat]
+      );
+      northPenthouse.position.set(westCX + wingD * 0.22, westH + floorH * 0.7, northEndZ + W_CORE / 2);
+      northPenthouse.castShadow = true;
+      addOutlines(northPenthouse);
+      root.add(northPenthouse);
+
+      // ---------------------------------------------------------
+      // [PART 2] 엘베홀 (25층 · 계단 남쪽 끝을 1·2호 남쪽 끝 Z=+19.5와 일치시키고,
+      //          그만큼 출입구와 남측 벽면을 북쪽(-Z) 안쪽으로 후퇴) & 남측 동 (15층)
+      // ---------------------------------------------------------
+      const southCZ = 13.5;
+      const southWingNorthZ = southCZ - wingD / 2; // +7.5
+      const southWingSouthZ = southCZ + wingD / 2; // +19.5 (1·2호 라인의 남쪽 끝)
+      const sMainFloors = 15;
+      const sMainH = sMainFloors * floorH; // 41.25m
+
+      // 2-1) 엘베홀 (25층 · X: -21.5 ~ -18.0, 폭 3.5m)
+      const elevFloors = 25;
+      const elevH = elevFloors * floorH; // 68.75m
+      const elevW = 3.5;
+      const elevCX = -18.0 - elevW / 2; // -19.75
+
+      // 반층 계단 출입구 먼저 생성하여 총 돌출 깊이(4.34m) 확인
+      const portalElevHalfFloor = createHalfFloorStairEntrance('3', '7', floorH * 0.5, elevW);
+      const stairProjection = portalElevHalfFloor.userData.totalProjection; // 4.34m
+
+      // 계단의 남쪽 끝이 1·2호 남쪽 끝(Z = +19.5)과 일치하도록 엘베홀 남측 벽면을 북쪽으로 후퇴
+      const elevNorthZ = southWingNorthZ - 3.4; // +4.1 (북측 돌출 유지)
+      const elevSouthZ = southWingSouthZ - stairProjection; // 19.5 - 4.34 = +15.16
+      const elevD = elevSouthZ - elevNorthZ; // 11.06m
+      const elevCZ = (elevNorthZ + elevSouthZ) / 2; // +9.63
+
+      // 동쪽 방향(+X)은 창문 없이 막힌 벽체
+      const elevEastSolidWallMat = new THREE.MeshStandardMaterial({
+        map: createPlainEndWallTexture(elevFloors, 4),
+        roughness: 0.74
+      });
+      const elevSouthMat = new THREE.MeshStandardMaterial({
+        map: createEntranceTowerTexture(elevFloors, 0, 4, 'entrance'),
+        roughness: 0.68
+      });
+      const elevNorthMat = new THREE.MeshStandardMaterial({
+        map: createEntranceTowerTexture(elevFloors, 0, 4, 'stairwell'),
+        roughness: 0.68
+      });
+
+      const elevHallMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(elevW, elevH, elevD),
+        [elevEastSolidWallMat, whiteWallMat, roofMat, bottomMat, elevSouthMat, elevNorthMat]
+      );
+      elevHallMesh.position.set(elevCX, elevH / 2, elevCZ);
+      elevHallMesh.castShadow = true;
+      elevHallMesh.receiveShadow = true;
+      addOutlines(elevHallMesh);
+      root.add(elevHallMesh);
+
+      // [출입구 ①] 후퇴한 엘베홀 남측 벽면(Z = +15.16)에 배치 -> 계단 남쪽 끝이 Z = +19.5(1·2호 남쪽 끝)와 일치
+      portalElevHalfFloor.rotation.y = 0;
+      portalElevHalfFloor.position.set(elevCX, 0, elevSouthZ);
+      root.add(portalElevHalfFloor);
+
+      // 2-2) 2호 구간 (15층 · 대1 / 특대1 / 대1 · 폭 13.6m, X: -18.0 ~ -4.4)
+      const unitW = W_LARGE + W_XLARGE + W_LARGE; // 13.6m
+      const u2CX = -18.0 + unitW / 2; // -11.2
+
+      const u2NorthBays = [
+        { w: W_LARGE,  band: 'white', type: 'large' },
+        { w: W_XLARGE, band: 'gray',  type: 'xlargeCorridor' },
+        { w: W_LARGE,  band: 'white', type: 'large' }
+      ];
+      const u2SouthBays = [
+        { w: W_LARGE,  band: 'white', type: 'balconyLarge',  acSeed: 0 },
+        { w: W_XLARGE, band: 'gray',  type: 'balconyXLarge', acSeed: 1 },
+        { w: W_LARGE,  band: 'white', type: 'balconyLarge',  acSeed: 2 }
+      ];
+
+      // 2호 서쪽(-X, X=-18.0) 측벽 중 Z=+15.16~+19.50 구간이 엘베홀 후퇴로 노출되므로 기단·줄눈 텍스처 적용
+      const u2WestWallMat = new THREE.MeshStandardMaterial({
+        map: createPlainEndWallTexture(sMainFloors, 4),
+        roughness: 0.74
+      });
+
+      const unit2Mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(unitW, sMainH, wingD),
+        [
+          whiteWallMat,
+          u2WestWallMat,
+          roofMat,
+          bottomMat,
+          new THREE.MeshStandardMaterial({ map: createBayFacadeTexture(sMainFloors, u2SouthBays, 4), roughness: 0.52 }),
+          new THREE.MeshStandardMaterial({ map: createBayFacadeTexture(sMainFloors, u2NorthBays, 4), roughness: 0.72 })
+        ]
+      );
+      unit2Mesh.position.set(u2CX, sMainH / 2, southCZ);
+      unit2Mesh.castShadow = true;
+      unit2Mesh.receiveShadow = true;
+      addOutlines(unit2Mesh);
+      root.add(unit2Mesh);
+
+      // 2-3) 1·2호 코어 라인 (소1 · 15층 + 상부 2층 옥탑 돌출 = 17층 높이 · X: -4.4 ~ -1.6, 폭 2.8m)
+      const sCoreCX = -4.4 + W_CORE / 2; // -3.0
+      const sCoreH = (sMainFloors + 2) * floorH;
+      const sCoreFrontMat = new THREE.MeshStandardMaterial({
+        map: createEntranceTowerTexture(sMainFloors, 2, 4, 'entrance'),
+        roughness: 0.7
+      });
+      const sCoreBackMat = new THREE.MeshStandardMaterial({
+        map: createEntranceTowerTexture(sMainFloors, 2, 4, 'back'),
+        roughness: 0.7
+      });
+
+      const southCoreMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(W_CORE, sCoreH, wingD + 1.0),
+        [whiteWallMat, whiteWallMat, roofMat, bottomMat, sCoreFrontMat, sCoreBackMat]
+      );
+      southCoreMesh.position.set(sCoreCX, sCoreH / 2, southCZ - 0.25);
+      southCoreMesh.castShadow = true;
+      addOutlines(southCoreMesh);
+      root.add(southCoreMesh);
+
+      // [출입구 ②] 1·2호 코어 남측(+Z) 1층 출입구 문주
+      const portal12South = createMirajuEntrancePortal('1', '2', true, 4.2);
+      portal12South.rotation.y = 0;
+      portal12South.position.set(sCoreCX, 0, southCZ - 0.25 + (wingD + 1.0) / 2);
+      root.add(portal12South);
+
+      // 2-4) 1호 구간 (15층 · 대1 / 특대1 / 대1 · 폭 13.6m, X: -1.6 ~ +12.0)
+      const u1CX = -1.6 + unitW / 2; // +5.2
+
+      const u1NorthBays = [
+        { w: W_LARGE,  band: 'white', type: 'large' },
+        { w: W_XLARGE, band: 'gray',  type: 'xlargeCorridor' },
+        { w: W_LARGE,  band: 'white', type: 'large' }
+      ];
+      const u1SouthBays = [
+        { w: W_LARGE,  band: 'white', type: 'balconyLarge',  acSeed: 1 },
+        { w: W_XLARGE, band: 'gray',  type: 'balconyXLarge', acSeed: 2 },
+        { w: W_LARGE,  band: 'white', type: 'balconyLarge',  acSeed: 0 }
+      ];
+
+      const unit1Mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(unitW, sMainH, wingD),
+        [
+          new THREE.MeshStandardMaterial({ map: createSideWallTexture(sMainFloors, 'KUKDONG', '102', 4), roughness: 0.72 }),
+          whiteWallMat,
+          roofMat,
+          bottomMat,
+          new THREE.MeshStandardMaterial({ map: createBayFacadeTexture(sMainFloors, u1SouthBays, 4), roughness: 0.52 }),
+          new THREE.MeshStandardMaterial({ map: createBayFacadeTexture(sMainFloors, u1NorthBays, 4), roughness: 0.72 })
+        ]
+      );
+      unit1Mesh.position.set(u1CX, sMainH / 2, southCZ);
+      unit1Mesh.castShadow = true;
+      unit1Mesh.receiveShadow = true;
+      addOutlines(unit1Mesh);
+      root.add(unit1Mesh);
+
+      // 1호 동측 끝 상부 박공 파라펫 ('KUKDONG 102' 지붕선)
+      const eastGable = createGableParapet(unitW, wingD, 1.45);
+      eastGable.position.set(-1.6, sMainH, southCZ);
+      root.add(eastGable);
+
+      // ---------------------------------------------------------
+      // [PART 3] 단지 마당 · 파고라 · 자전거 보관소
+      // ---------------------------------------------------------
+      const courtGround = new THREE.Mesh(
+        new THREE.BoxGeometry(62, 0.1, 58),
+        new THREE.MeshStandardMaterial({ color: '#4B525E', roughness: 0.9 })
+      );
+      courtGround.position.set(-6, -0.05, -6);
+      courtGround.receiveShadow = true;
+      root.add(courtGround);
+
+      // 단지 내 목재 파고라
+      const woodMat = new THREE.MeshStandardMaterial({ color: '#5C3A21', roughness: 0.85 });
+      const pergola = new THREE.Group();
+      [[-2.0, -1.5], [2.0, -1.5], [-2.0, 1.5], [2.0, 1.5]].forEach(([px, pz]) => {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.5, 0.18), woodMat);
+        post.position.set(px, 1.25, pz);
+        pergola.add(post);
+      });
+      const pergolaTop = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.16, 3.6), woodMat);
+      pergolaTop.position.set(0, 2.55, 0);
+      pergola.add(pergolaTop);
+      pergola.position.set(-13.8, 0, 1.2);
+      root.add(pergola);
+
+      // 초록 아치형 자전거 보관소
+      const bikeShelter = new THREE.Mesh(
+        new THREE.BoxGeometry(4.4, 2.3, 2.2),
+        new THREE.MeshStandardMaterial({ color: '#166534', transparent: true, opacity: 0.82, roughness: 0.45 })
+      );
+      bikeShelter.position.set(-10.2, 1.15, 3.8);
+      addOutlines(bikeShelter);
+      root.add(bikeShelter);
+
+      return root;
+    }
+
+    const miraju102 = createKukdongMiraju102();
+    scene.add(miraju102);
+
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        miraju102,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'kukdong_miraju_102dong_aligned.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (error) => console.error('GLB 추출 오류:', error),
+        { binary: true }
+      );
+    };
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

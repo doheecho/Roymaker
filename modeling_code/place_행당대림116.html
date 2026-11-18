@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>행당대림아파트 116동 3D 모델링 (평지형 정밀)</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #1e242b; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(16, 20, 26, 0.88); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.18);
+      pointer-events: none; line-height: 1.55;
+    }
+    #controls-ui {
+      position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 5px;
+      background: rgba(16, 20, 26, 0.92); padding: 9px 11px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      max-width: 98vw;
+    }
+    button {
+      background: #374151; color: #fff; border: 1px solid #4b5563;
+      padding: 6px 9px; border-radius: 6px; cursor: pointer; font-size: 11.5px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #2563eb; border-color: #60a5fa; }
+    button.primary-btn { background: #1d4ed8; border-color: #3b82f6; font-weight: bold; }
+    button.export-btn { background: #b45309; border-color: #f59e0b; font-weight: bold; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info">
+    <strong>행당대림아파트 116동 3D 모델링 (15층 · 6개 라인 · 평지 기준)</strong><br/>
+    좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소 (전면: 서북쪽 +Z / 후면: 동남쪽 -Z)
+  </div>
+
+  <div id="controls-ui">
+    <button onclick="setView('sky')">1번: 스카이뷰</button>
+    <button onclick="setView('ent12')">2번: 1-2호 현관</button>
+    <button onclick="setView('ent34')">3번: 3-4호 현관</button>
+    <button class="primary-btn" onclick="setView('ent56')">4번: 5-6호 현관</button>
+    <button onclick="setView('ent56_up')">5번: 5-6호 올려다보기</button>
+    <button onclick="setView('nw_far')">6번: 서북쪽 멀리</button>
+    <button onclick="setView('sw_out')">7번: 남서쪽 밖</button>
+    <button onclick="setView('se_out')">8번: 남동쪽 밖</button>
+    <button onclick="setView('east_side')">9번: 동쪽 측면</button>
+    <button onclick="setView('sw_up')">10번: 남서측벽 올려다보기</button>
+    <button class="export-btn" onclick="exportGLB()">3D 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    // 1. 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#9EC1E6');
+    scene.fog = new THREE.Fog('#9EC1E6', 140, 360);
+
+    const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.1, 600);
+    camera.position.set(16.2, 3.6, 18.8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(17.6, 2.4, 7.2);
+    controls.enableDamping = true;
+    controls.update();
+
+    // 10개 사진 각도 프리셋
+    window.setView = (mode) => {
+      const presets = {
+        sky:      { pos: [0.0, 104.0, 0.01],   target: [0.0, 15.0, 0.0] },      // 1번: 스카이뷰
+        ent12:    { pos: [-23.8, 3.6, 18.8],   target: [-22.4, 2.4, 7.2] },     // 2번: 1-2호 현관·경사로
+        ent34:    { pos: [-3.8, 3.6, 18.8],    target: [-2.4, 2.4, 7.2] },      // 3번: 3-4호 현관·경사로
+        ent56:    { pos: [16.2, 3.6, 18.8],    target: [17.6, 2.4, 7.2] },      // 4번: 5-6호 현관·경사로
+        ent56_up: { pos: [20.0, 2.2, 17.0],    target: [19.0, 16.0, 5.4] },     // 5번: 5-6호 올려다보기
+        nw_far:   { pos: [-24.0, 18.0, 58.0],  target: [0.0, 20.5, 0.0] },      // 6번: 서북쪽 멀리
+        sw_out:   { pos: [43.0, 12.0, 26.0],   target: [10.0, 19.0, 0.0] },     // 7번: 남서쪽 밖
+        se_out:   { pos: [-22.0, 17.0, -56.0], target: [0.0, 20.5, 0.0] },      // 8번: 남동쪽 밖
+        east_side:{ pos: [-46.0, 15.0, -22.0], target: [-16.0, 20.0, 0.0] },    // 9번: 동쪽 측면
+        sw_up:    { pos: [38.0, 1.8, 3.5],     target: [30.0, 24.0, 0.0] }      // 10번: 남서측벽 올려다보기
+      };
+      const v = presets[mode];
+      if (!v) return;
+      camera.position.set(...v.pos);
+      controls.target.set(...v.target);
+      controls.update();
+    };
+
+    // 2. 조명 설정
+    scene.add(new THREE.AmbientLight(0xffffff, 0.95));
+
+    const sunLight = new THREE.DirectionalLight(0xfffdf5, 1.30);
+    sunLight.position.set(-38, 76, 52);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.left = -52;
+    sunLight.shadow.camera.right = 52;
+    sunLight.shadow.camera.top = 56;
+    sunLight.shadow.camera.bottom = -10;
+    sunLight.shadow.bias = -0.0005;
+    scene.add(sunLight);
+
+    const seSunLight = new THREE.DirectionalLight(0xf8fafc, 0.90);
+    seSunLight.position.set(36, 54, -58);
+    scene.add(seSunLight);
+
+    // =========================================================
+    // 프로시저럴 텍스처 유틸리티
+    // =========================================================
+    function makeTex(canvas, rx = 1, ry = 1, isLinear = false) {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = isLinear ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      if (rx !== 1 || ry !== 1) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(rx, ry);
+      }
+      return tex;
+    }
+
+    function addOutline(mesh, color = 0x525866) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 35);
+      mesh.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color })));
+    }
+
+    // 순수 회색 시멘트 외벽 텍스처
+    function createCementTexture(baseHex, rx = 4, ry = 8) {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 256;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = baseHex;
+      ctx.fillRect(0, 0, 256, 256);
+
+      for (let i = 0; i < 1800; i++) {
+        const x = (i * 73) % 256;
+        const y = (i * 137) % 256;
+        ctx.fillStyle = (i % 2 === 0) ? 'rgba(0,0,0,0.025)' : 'rgba(255,255,255,0.03)';
+        ctx.fillRect(x, y, 2, 2);
+      }
+      return makeTex(c, rx, ry);
+    }
+
+    // 동측/서측 측벽 컬러 텍스처 + 입체 요철(Bump) 텍스처 생성
+    // (15개 층별 가로 줄눈 + 중앙 세로 홈 줄무늬 + 좌우 기둥 수평 슬래브 띠 + e·편한세상 / 116)
+    function createEndWallTextures() {
+      const W = 1024;
+      const H = 3072;
+      const totalFloors = 15;
+      const floorPx = H / totalFloors;   // 204.8px / 층
+      const lowerStartY = 12 * floorPx;  // 1~3층 투톤 경계 (y = 2457.6)
+      const sideBandW = 96;              // 좌·우측 회색 세로 띠 너비
+
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+
+      const bc = document.createElement('canvas');
+      bc.width = W; bc.height = H;
+      const bctx = bc.getContext('2d');
+
+      // 1) 기본 바탕색 (상단 4~15층 밝은 회백색 / 하단 1~3층 진한 회색)
+      ctx.fillStyle = '#E6E9EE';
+      ctx.fillRect(0, 0, W, lowerStartY);
+      ctx.fillStyle = '#9EA5B0';
+      ctx.fillRect(0, lowerStartY, W, H - lowerStartY);
+
+      bctx.fillStyle = '#D8D8D8';
+      bctx.fillRect(0, 0, W, H);
+
+      // 2) 중앙 면 세로 줄무늬 (수직 홈 파기 - Fluted Concrete Grooves)
+      const groovePitch = 8; // 8px 간격 세로 홈
+      for (let gx = sideBandW; gx < W - sideBandW; gx += groovePitch) {
+        // 상단 밝은 외벽 영역 홈 음영
+        ctx.fillStyle = 'rgba(71, 85, 105, 0.14)';
+        ctx.fillRect(gx, 0, 3, lowerStartY);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.fillRect(gx + 3, 0, 2, lowerStartY);
+
+        // 하단 1~3층 진한 외벽 영역 홈 음영
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.18)';
+        ctx.fillRect(gx, lowerStartY, 3, H - lowerStartY);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+        ctx.fillRect(gx + 3, lowerStartY, 2, H - lowerStartY);
+
+        // Bump 맵: 홈(어둡게) / 돌출부(밝게)
+        bctx.fillStyle = '#3A3A3A';
+        bctx.fillRect(gx, 0, 3, H);
+        bctx.fillStyle = '#8A8A8A';
+        bctx.fillRect(gx + 3, 0, 1, H);
+        bctx.fillStyle = '#F2F2F2';
+        bctx.fillRect(gx + 4, 0, groovePitch - 4, H);
+      }
+
+      // 3) 좌·우측 세로 회색 기둥 띠 (매끈한 면)
+      ctx.fillStyle = '#B8BEC7';
+      ctx.fillRect(0, 0, sideBandW, lowerStartY);
+      ctx.fillRect(W - sideBandW, 0, sideBandW, lowerStartY);
+
+      ctx.fillStyle = '#8B929E';
+      ctx.fillRect(0, lowerStartY, sideBandW, H - lowerStartY);
+      ctx.fillRect(W - sideBandW, lowerStartY, sideBandW, H - lowerStartY);
+
+      bctx.fillStyle = '#E0E0E0';
+      bctx.fillRect(0, 0, sideBandW, H);
+      bctx.fillRect(W - sideBandW, 0, sideBandW, H);
+
+      // 4) 층마다 가로 줄 긋기 (1층~15층 전 층 수평 줄눈 + 양쪽 기둥 밝은 슬래브 띠)
+      for (let f = 1; f < totalFloors; f++) {
+        const fy = Math.round(f * floorPx);
+        const isLower = fy >= lowerStartY;
+
+        // 4-1) 좌·우측 회색 기둥을 가로지르는 밝은 수평 슬래브 띠
+        ctx.fillStyle = isLower ? '#CBD2DC' : '#EEF1F5';
+        ctx.fillRect(0, fy - 7, sideBandW, 14);
+        ctx.fillRect(W - sideBandW, fy - 7, sideBandW, 14);
+
+        // 슬래브 띠 상·하단 미세 음영선
+        ctx.fillStyle = isLower ? 'rgba(51, 65, 85, 0.30)' : 'rgba(100, 116, 139, 0.28)';
+        ctx.fillRect(0, fy - 7, sideBandW, 2);
+        ctx.fillRect(W - sideBandW, fy - 7, sideBandW, 2);
+        ctx.fillRect(0, fy + 6, sideBandW, 2);
+        ctx.fillRect(W - sideBandW, fy + 6, sideBandW, 2);
+
+        // 4-2) 중앙 세로 홈 면을 가로지르는 층별 수평 줄눈 + 점선형 물끊기 홈
+        ctx.fillStyle = isLower ? 'rgba(51, 65, 85, 0.42)' : 'rgba(100, 116, 139, 0.40)';
+        ctx.fillRect(sideBandW, fy - 2, W - sideBandW * 2, 4);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.fillRect(sideBandW, fy + 2, W - sideBandW * 2, 2);
+
+        // 수평 줄눈 위 주기적 물끊기 홈 디테일
+        ctx.fillStyle = isLower ? 'rgba(30, 41, 59, 0.50)' : 'rgba(71, 85, 105, 0.45)';
+        for (let dx = sideBandW + 8; dx < W - sideBandW - 8; dx += 16) {
+          ctx.fillRect(dx, fy - 3, 9, 5);
+        }
+
+        // Bump 맵 가로 줄눈 홈
+        bctx.fillStyle = '#202020';
+        bctx.fillRect(0, fy - 3, W, 6);
+      }
+
+      // 5) e·편한세상 로고 & 상/하단 116동 표기 (세로 홈 위에 도장된 느낌으로 자연스럽게 합성)
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      ctx.translate(W / 2, 420);
+      ctx.rotate(-0.14);
+      ctx.strokeStyle = '#D97706';
+      ctx.lineWidth = 20;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 250, 84, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#EA580C';
+      ctx.font = 'bold 68px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('e·편한세상', 0, 4);
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = 0.88;
+      ctx.fillStyle = '#6B7280';
+      ctx.font = '900 210px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('116', W / 2, 740);
+
+      ctx.fillStyle = '#4B5563';
+      ctx.font = '900 184px "Malgun Gothic", sans-serif';
+      ctx.fillText('116', W / 2, 2680);
+      ctx.restore();
+
+      return {
+        map: makeTex(c, 1, 1, false),
+        bumpMap: makeTex(bc, 1, 1, true)
+      };
+    }
+
+    // 현관 박공 캐노피 간판 ('116' 및 좌/우 호수 라인 번호, 중앙 장식 바 포함)
+    function createEntrancePedimentTexture(leftNum, rightNum) {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 176;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#E6E9EE';
+      ctx.fillRect(0, 0, 512, 176);
+
+      ctx.fillStyle = '#334155';
+      ctx.font = '900 54px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('116', 256, 62);
+
+      ctx.fillStyle = '#CBD5E1';
+      ctx.fillRect(0, 108, 512, 6);
+
+      ctx.fillStyle = '#64748B';
+      ctx.fillRect(72, 118, 42, 46);
+      ctx.fillRect(398, 118, 42, 46);
+
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillRect(247, 122, 18, 38);
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 30px "Malgun Gothic", sans-serif';
+      ctx.fillText(String(leftNum), 93, 142);
+      ctx.fillText(String(rightNum), 419, 142);
+
+      return makeTex(c);
+    }
+
+    // =========================================================
+    // 3. 행당대림아파트 116동 건축 조립 (도로/콘크리트 바닥 제거 버전)
+    // =========================================================
+    const aptGroup = new THREE.Group();
+    aptGroup.name = 'Haengdang_Daelim_116_Detailed';
+    scene.add(aptGroup);
+
+    // 4~15층 밝은 회백색 시멘트 / 1~3층 진한 회색 시멘트 재질
+    const upperCementMat = new THREE.MeshStandardMaterial({
+      map: createCementTexture('#E6E9EE', 6, 12),
+      roughness: 0.72,
+      metalness: 0.03
+    });
+    const lowerCementMat = new THREE.MeshStandardMaterial({
+      map: createCementTexture('#9EA5B0', 6, 3),
+      roughness: 0.76,
+      metalness: 0.04
+    });
+    const upperGrayStripMat = new THREE.MeshStandardMaterial({
+      map: createCementTexture('#B6BDC7', 1, 12),
+      roughness: 0.74
+    });
+    const lowerGrayStripMat = new THREE.MeshStandardMaterial({
+      map: createCementTexture('#818996', 1, 3),
+      roughness: 0.78
+    });
+    const upperRecessedMat = new THREE.MeshStandardMaterial({
+      map: createCementTexture('#D5DAE1', 2, 12),
+      roughness: 0.75
+    });
+    const lowerRecessedMat = new THREE.MeshStandardMaterial({
+      map: createCementTexture('#8F96A2', 2, 3),
+      roughness: 0.78
+    });
+
+    const darkRoofCapMat = new THREE.MeshStandardMaterial({
+      color: '#3B3432',
+      roughness: 0.55,
+      metalness: 0.15
+    });
+    const greenRoofMat = new THREE.MeshStandardMaterial({
+      color: '#4B6B53',
+      roughness: 0.85
+    });
+    const windowGlassMat = new THREE.MeshStandardMaterial({
+      color: '#3B6482',
+      roughness: 0.18,
+      metalness: 0.50
+    });
+    const sashFrameMat = new THREE.MeshStandardMaterial({
+      color: '#333A44',
+      roughness: 0.45,
+      metalness: 0.30
+    });
+    const silverRailingMat = new THREE.MeshStandardMaterial({
+      color: '#E5E7EB',
+      emissive: '#475569',
+      emissiveIntensity: 0.18,
+      roughness: 0.24,
+      metalness: 0.78
+    });
+    const porchWhiteWallMat = new THREE.MeshStandardMaterial({
+      map: createCementTexture('#E2E6EC', 2, 1),
+      roughness: 0.76
+    });
+    const graniteStepMat = new THREE.MeshStandardMaterial({
+      color: '#C7CDD6',
+      roughness: 0.72
+    });
+    const sidewalkMat = new THREE.MeshStandardMaterial({
+      map: createCementTexture('#AEB4BE', 4, 2),
+      roughness: 0.86
+    });
+    const acUnitMat = new THREE.MeshStandardMaterial({
+      color: '#E5E7EB',
+      roughness: 0.48,
+      metalness: 0.15
+    });
+
+    const endWallTextures = createEndWallTextures();
+    const endWallMat = new THREE.MeshStandardMaterial({
+      map: endWallTextures.map,
+      bumpMap: endWallTextures.bumpMap,
+      bumpScale: 0.045,
+      roughness: 0.72
+    });
+
+    // ---------------------------------------------------------
+    // B) 아파트 기본 제원 (15층 · 6개 라인 · 3개 출입구 코어)
+    // ---------------------------------------------------------
+    const floors = 15;
+    const floorH = 2.85;
+    const lowerFloorsH = 3 * floorH;          // 1~3층 진한 외벽: 8.55m
+    const upperFloorsH = 12 * floorH;         // 4~15층 밝은 외벽: 34.20m
+    const totalH = lowerFloorsH + upperFloorsH; // 총 높이: 42.75m
+
+    const aptW = 60.00; // 총 가로 길이 (X: -30.00 ~ +30.00, 20m × 3쌍)
+    const aptD = 12.00; // 본체 기본 깊이 (Z: -6.00 ~ +6.00)
+    const frontBaseZ = aptD / 2;  // +6.00m (서북쪽)
+    const backBaseZ  = -aptD / 2; // -6.00m (동남쪽)
+
+    const coreW = 3.10;
+    const coreRecessDepth = 0.65;
+    const coreCentersX = [-20.00, 0.00, 20.00];
+
+    const wingSegments = [
+      { x1: -30.00, x2: -21.55 },
+      { x1: -18.45, x2: -1.55  },
+      { x1: 1.55,   x2: 18.45  },
+      { x1: 21.55,  x2: 30.00  }
+    ];
+
+    wingSegments.forEach(seg => {
+      const w = seg.x2 - seg.x1;
+      const cx = (seg.x1 + seg.x2) / 2;
+
+      const lowerWing = new THREE.Mesh(
+        new THREE.BoxGeometry(w, lowerFloorsH, aptD),
+        lowerCementMat
+      );
+      lowerWing.position.set(cx, lowerFloorsH / 2, 0);
+      lowerWing.castShadow = true;
+      lowerWing.receiveShadow = true;
+      aptGroup.add(lowerWing);
+
+      const upperWing = new THREE.Mesh(
+        new THREE.BoxGeometry(w, upperFloorsH, aptD),
+        upperCementMat
+      );
+      upperWing.position.set(cx, lowerFloorsH + upperFloorsH / 2, 0);
+      upperWing.castShadow = true;
+      upperWing.receiveShadow = true;
+      aptGroup.add(upperWing);
+    });
+
+    const coreRecessedFrontZ = frontBaseZ - coreRecessDepth; // +5.35m
+    const coreBodyD = aptD - coreRecessDepth;                // 11.35m
+    const coreBodyCenterZ = (backBaseZ + coreRecessedFrontZ) / 2;
+
+    coreCentersX.forEach(cx => {
+      const lowerCore = new THREE.Mesh(
+        new THREE.BoxGeometry(coreW, lowerFloorsH, coreBodyD),
+        lowerRecessedMat
+      );
+      lowerCore.position.set(cx, lowerFloorsH / 2, coreBodyCenterZ);
+      lowerCore.castShadow = true;
+      lowerCore.receiveShadow = true;
+      aptGroup.add(lowerCore);
+
+      const upperCore = new THREE.Mesh(
+        new THREE.BoxGeometry(coreW, upperFloorsH, coreBodyD),
+        upperRecessedMat
+      );
+      upperCore.position.set(cx, lowerFloorsH + upperFloorsH / 2, coreBodyCenterZ);
+      upperCore.castShadow = true;
+      upperCore.receiveShadow = true;
+      aptGroup.add(upperCore);
+    });
+
+    // 옥상 슬래브, 녹색 방수 바닥, 파라펫 및 3개 옥탑
+    const greenRoofSlab = new THREE.Mesh(
+      new THREE.BoxGeometry(aptW - 0.6, 0.12, aptD - 1.4),
+      greenRoofMat
+    );
+    greenRoofSlab.position.set(0, totalH + 0.06, -0.3);
+    aptGroup.add(greenRoofSlab);
+
+    const parapetFront = new THREE.Mesh(new THREE.BoxGeometry(aptW + 0.1, 0.75, 0.32), upperCementMat);
+    parapetFront.position.set(0, totalH + 0.375, frontBaseZ - 0.16);
+    const parapetBack = new THREE.Mesh(new THREE.BoxGeometry(aptW + 0.1, 0.75, 0.32), upperCementMat);
+    parapetBack.position.set(0, totalH + 0.375, backBaseZ + 0.16);
+    aptGroup.add(parapetFront, parapetBack);
+
+    coreCentersX.forEach(cx => {
+      const towerH = 4.50;
+      const towerW = 4.20;
+      const towerD = 7.00;
+
+      const pentLower = new THREE.Mesh(
+        new THREE.BoxGeometry(towerW, 1.30, towerD),
+        lowerCementMat
+      );
+      pentLower.position.set(cx, totalH + 0.65, -0.35);
+      pentLower.castShadow = true;
+      addOutline(pentLower);
+      aptGroup.add(pentLower);
+
+      const pentUpper = new THREE.Mesh(
+        new THREE.BoxGeometry(towerW + 0.20, towerH - 1.30, towerD + 0.20),
+        upperCementMat
+      );
+      pentUpper.position.set(cx, totalH + 1.30 + (towerH - 1.30) / 2, -0.35);
+      pentUpper.castShadow = true;
+      addOutline(pentUpper);
+      aptGroup.add(pentUpper);
+
+      const pentCap = new THREE.Mesh(
+        new THREE.BoxGeometry(towerW + 0.48, 0.30, towerD + 0.48),
+        darkRoofCapMat
+      );
+      pentCap.position.set(cx, totalH + towerH + 0.15, -0.35);
+      aptGroup.add(pentCap);
+    });
+
+    // 동측(-X) 및 서측(+X) 측벽 (층별 가로줄 + 세로 음각 홈 + e·편한세상 + 116동)
+    const sidePlaneGeo = new THREE.PlaneGeometry(aptD, totalH);
+    const eastEndWall = new THREE.Mesh(sidePlaneGeo, endWallMat);
+    eastEndWall.rotation.y = -Math.PI / 2;
+    eastEndWall.position.set(-aptW / 2 - 0.01, totalH / 2, 0);
+    eastEndWall.receiveShadow = true;
+    aptGroup.add(eastEndWall);
+
+    const westEndWall = new THREE.Mesh(sidePlaneGeo, endWallMat);
+    westEndWall.rotation.y = Math.PI / 2;
+    westEndWall.position.set(aptW / 2 + 0.01, totalH / 2, 0);
+    westEndWall.receiveShadow = true;
+    aptGroup.add(westEndWall);
+
+    // InstancedMesh용 변환 행렬 수집 배열
+    const frameMatrices = [];
+    const glassMatrices = [];
+    const railMatrices  = [];
+    const acMatrices    = [];
+
+    const dummy = new THREE.Object3D();
+    function pushBox(arr, x, y, z, sx, sy, sz, ry = 0) {
+      dummy.position.set(x, y, z);
+      dummy.rotation.set(0, ry, 0);
+      dummy.scale.set(sx, sy, sz);
+      dummy.updateMatrix();
+      arr.push(dummy.matrix.clone());
+    }
+
+    function addMultiPaneWindow(x, y, wallZ, w, h, panes = 2, facing = 'front', halfSilverFence = false) {
+      const t = 0.065;
+      const m = 0.045;
+      const d = 0.08;
+
+      if (facing === 'front') {
+        const zCenter = wallZ + 0.01;
+        pushBox(glassMatrices, x, y, zCenter + 0.005, w - t * 1.6, h - t * 1.6, 0.02, 0);
+        pushBox(frameMatrices, x, y + h / 2 - t / 2, zCenter, w, t, d, 0);
+        pushBox(frameMatrices, x, y - h / 2 + t / 2, zCenter, w, t, d, 0);
+        pushBox(frameMatrices, x - w / 2 + t / 2, y, zCenter, t, h, d, 0);
+        pushBox(frameMatrices, x + w / 2 - t / 2, y, zCenter, t, h, d, 0);
+        for (let p = 1; p < panes; p++) {
+          const mx = x - w / 2 + (w / panes) * p;
+          pushBox(frameMatrices, mx, y, zCenter, m, h - t, d, 0);
+        }
+      } else if (facing === 'back') {
+        const zCenter = wallZ - 0.01;
+        pushBox(glassMatrices, x, y, zCenter - 0.005, w - t * 1.6, h - t * 1.6, 0.02, 0);
+        pushBox(frameMatrices, x, y + h / 2 - t / 2, zCenter, w, t, d, 0);
+        pushBox(frameMatrices, x, y - h / 2 + t / 2, zCenter, w, t, d, 0);
+        pushBox(frameMatrices, x - w / 2 + t / 2, y, zCenter, t, h, d, 0);
+        pushBox(frameMatrices, x + w / 2 - t / 2, y, zCenter, t, h, d, 0);
+        for (let p = 1; p < panes; p++) {
+          const mx = x - w / 2 + (w / panes) * p;
+          pushBox(frameMatrices, mx, y, zCenter, m, h - t, d, 0);
+        }
+
+        if (halfSilverFence) {
+          const railZ = wallZ - 0.045;
+          const fenceH = h * 0.50;
+          const fenceTopY = y;
+          const fenceBotY = y - fenceH + 0.03;
+          const fenceMidY = (fenceTopY + fenceBotY) / 2;
+
+          pushBox(railMatrices, x, fenceTopY, railZ, w - 0.04, 0.045, 0.035, 0);
+          pushBox(railMatrices, x, fenceBotY, railZ, w - 0.04, 0.045, 0.035, 0);
+
+          const barCount = Math.max(8, Math.round(w / 0.22));
+          const spanW = w - 0.12;
+          for (let b = 0; b <= barCount; b++) {
+            const bx = x - spanW / 2 + (b / barCount) * spanW;
+            pushBox(railMatrices, bx, fenceMidY, railZ, 0.022, fenceH - 0.03, 0.025, 0);
+          }
+        }
+      } else if (facing === 'east' || facing === 'west') {
+        const dir = facing === 'east' ? 1 : -1;
+        const xCenter = wallZ + dir * 0.01;
+        pushBox(glassMatrices, xCenter + dir * 0.005, y, x, 0.02, h - t * 1.6, w - t * 1.6, 0);
+        pushBox(frameMatrices, xCenter, y + h / 2 - t / 2, x, d, t, w, 0);
+        pushBox(frameMatrices, xCenter, y - h / 2 + t / 2, x, d, t, w, 0);
+        pushBox(frameMatrices, xCenter, y, x - w / 2 + t / 2, d, h, t, 0);
+        pushBox(frameMatrices, xCenter, y, x + w / 2 - t / 2, d, h, t, 0);
+      }
+    }
+
+    // ---------------------------------------------------------
+    // C) 전면(서북쪽 +Z) 창문 대/소/대 + ㄱ자 굽은 벽체 + 출입구 위 창문
+    // ---------------------------------------------------------
+    const pairFrontTemplate = [
+      { type: 'blank',   w: 0.55 },
+      { type: 'L_flush', w: 3.25 },
+      { type: 'S_flush', w: 1.95 },
+      { type: 'L_bent',  w: 2.70, bendSide: 'right' },
+      { type: 'core',    w: 3.10 },
+      { type: 'L_bent',  w: 2.70, bendSide: 'left' },
+      { type: 'S_flush', w: 1.95 },
+      { type: 'L_flush', w: 3.25 },
+      { type: 'blank',   w: 0.55 }
+    ];
+
+    const frontBays = [];
+    for (let pairIdx = 0; pairIdx < 3; pairIdx++) {
+      pairFrontTemplate.forEach(item => {
+        if (item.type === 'core') {
+          frontBays.push({
+            type: 'core',
+            w: item.w,
+            leftUnit: pairIdx * 2 + 1,
+            rightUnit: pairIdx * 2 + 2
+          });
+        } else {
+          frontBays.push({ ...item });
+        }
+      });
+    }
+
+    let curX = -aptW / 2; // -30.00m
+    const bentDepth = 0.62;
+
+    frontBays.forEach((bay, bIdx) => {
+      const cx = curX + bay.w / 2;
+
+      if (bay.type === 'blank') {
+        // 순수 회색 시멘트 빈칸
+      } else if (bay.type === 'L_flush') {
+        for (let f = 0; f < floors; f++) {
+          const wy = f * floorH + 1.48;
+          addMultiPaneWindow(cx, wy, frontBaseZ, 2.20, 1.42, 2, 'front', false);
+          if ((f + bIdx) % 4 === 1 && f >= 2) {
+            pushBox(acMatrices, cx + 0.74, wy - 0.44, frontBaseZ + 0.16, 0.68, 0.52, 0.32, 0);
+          }
+        }
+      } else if (bay.type === 'S_flush') {
+        for (let f = 0; f < floors; f++) {
+          const wy = f * floorH + 1.54;
+          addMultiPaneWindow(cx, wy, frontBaseZ, 0.90, 1.15, 1, 'front', false);
+        }
+      } else if (bay.type === 'L_bent') {
+        const bentLower = new THREE.Mesh(
+          new THREE.BoxGeometry(bay.w, lowerFloorsH, bentDepth),
+          lowerCementMat
+        );
+        bentLower.position.set(cx, lowerFloorsH / 2, frontBaseZ + bentDepth / 2);
+        bentLower.castShadow = true;
+        bentLower.receiveShadow = true;
+        aptGroup.add(bentLower);
+
+        const bentUpper = new THREE.Mesh(
+          new THREE.BoxGeometry(bay.w, upperFloorsH, bentDepth),
+          upperCementMat
+        );
+        bentUpper.position.set(cx, lowerFloorsH + upperFloorsH / 2, frontBaseZ + bentDepth / 2);
+        bentUpper.castShadow = true;
+        bentUpper.receiveShadow = true;
+        aptGroup.add(bentUpper);
+
+        const ledge3F = new THREE.Mesh(
+          new THREE.BoxGeometry(bay.w + 0.10, 0.24, bentDepth + 0.48),
+          graniteStepMat
+        );
+        ledge3F.position.set(cx, lowerFloorsH + 0.04, frontBaseZ + (bentDepth + 0.48) / 2);
+        ledge3F.castShadow = true;
+        addOutline(ledge3F);
+        aptGroup.add(ledge3F);
+
+        const sideWallX = bay.bendSide === 'right' ? (curX + bay.w) : curX;
+        const sideFacing = bay.bendSide === 'right' ? 'east' : 'west';
+
+        for (let f = 0; f < floors; f++) {
+          const wy = f * floorH + 1.48;
+          const frontWinX = bay.bendSide === 'right' ? cx - 0.12 : cx + 0.12;
+          addMultiPaneWindow(frontWinX, wy, frontBaseZ + bentDepth, 1.78, 1.42, 2, 'front', false);
+          addMultiPaneWindow(frontBaseZ + bentDepth * 0.52, wy, sideWallX, 0.38, 1.30, 1, sideFacing, false);
+
+          if (f >= 1 && f % 2 === 0) {
+            const acX = bay.bendSide === 'right' ? sideWallX - 0.38 : sideWallX + 0.38;
+            pushBox(acMatrices, acX, wy - 0.42, frontBaseZ + bentDepth + 0.16, 0.64, 0.50, 0.32, 0);
+          }
+        }
+      } else if (bay.type === 'core') {
+        for (let f = 1; f < floors; f++) {
+          const wy = f * floorH + 1.42;
+          addMultiPaneWindow(cx, wy, coreRecessedFrontZ, 1.38, 1.35, 2, 'front', false);
+        }
+
+        const coreLedge3F = new THREE.Mesh(
+          new THREE.BoxGeometry(bay.w, 0.22, coreRecessDepth + 0.15),
+          graniteStepMat
+        );
+        coreLedge3F.position.set(cx, lowerFloorsH + 0.04, coreRecessedFrontZ + (coreRecessDepth + 0.15) / 2);
+        coreLedge3F.castShadow = true;
+        addOutline(coreLedge3F);
+        aptGroup.add(coreLedge3F);
+
+        buildEntranceWithParallelRamp(cx, coreRecessedFrontZ, frontBaseZ, bay.leftUnit, bay.rightUnit);
+      }
+
+      curX += bay.w;
+    });
+
+    // ---------------------------------------------------------
+    // D) 1층 현관 포치, 정면 5단 계단(양쪽 경사 옹벽), 좌측 평행 경사면
+    // ---------------------------------------------------------
+    function buildEntranceWithParallelRamp(cx, recessedZ, mainZ, leftUnit, rightUnit) {
+      const porchGroup = new THREE.Group();
+      const porchW = 3.25;
+      const porchStartZ = recessedZ;    // +5.35m (깊게 파인 벽)
+      const porchEndZ   = mainZ + 2.15; // +8.15m (기둥 및 계단 최상단 앞선)
+      const porchD      = porchEndZ - porchStartZ; // 2.80m
+      const baseY       = 0.00;         // 지면 기준 높이
+      const deckH       = 0.85;         // 현관 바닥 높이
+      const colH        = 2.65;
+
+      // 1) 현관 상부 데크
+      const deck = new THREE.Mesh(
+        new THREE.BoxGeometry(porchW, deckH, porchD),
+        porchWhiteWallMat
+      );
+      deck.position.set(cx, deckH / 2, porchStartZ + porchD / 2);
+      deck.castShadow = true;
+      deck.receiveShadow = true;
+      addOutline(deck);
+      porchGroup.add(deck);
+
+      // 2) 좌·우 원형 기둥 2개
+      [-porchW / 2 + 0.22, porchW / 2 - 0.22].forEach(dx => {
+        const col = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.20, colH, 18),
+          lowerCementMat
+        );
+        col.position.set(cx + dx, deckH + colH / 2, porchEndZ - 0.24);
+        col.castShadow = true;
+        porchGroup.add(col);
+      });
+
+      // 3) 삼각 박공 지붕 & '116 / 호수' 페디먼트 간판
+      const eaveY = deckH + colH;
+      const peakH = 0.78;
+      const roofShape = new THREE.Shape();
+      roofShape.moveTo(-porchW / 2 - 0.24, 0);
+      roofShape.lineTo(0, peakH);
+      roofShape.lineTo(porchW / 2 + 0.24, 0);
+      roofShape.lineTo(-porchW / 2 - 0.24, 0);
+
+      const gableGeo = new THREE.ExtrudeGeometry(roofShape, {
+        depth: porchD + 0.18,
+        bevelEnabled: false
+      });
+      const gableMesh = new THREE.Mesh(gableGeo, darkRoofCapMat);
+      gableMesh.position.set(cx, eaveY, porchStartZ);
+      gableMesh.castShadow = true;
+      porchGroup.add(gableMesh);
+
+      const signTex = createEntrancePedimentTexture(leftUnit, rightUnit);
+      const signPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(porchW - 0.10, 0.74),
+        new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.45 })
+      );
+      signPlane.position.set(cx, eaveY + 0.04, porchEndZ + 0.19);
+      porchGroup.add(signPlane);
+
+      // 4) 현관 투명 유리 자동문 (recessedZ 벽면)
+      const doorFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(2.45, 2.45, 0.12),
+        sashFrameMat
+      );
+      doorFrame.position.set(cx, deckH + 1.225, recessedZ + 0.05);
+      porchGroup.add(doorFrame);
+
+      const glassDoor = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.26, 2.26),
+        new THREE.MeshPhysicalMaterial({
+          color: '#BAE6FD',
+          transparent: true,
+          opacity: 0.34,
+          roughness: 0.1,
+          depthWrite: false
+        })
+      );
+      glassDoor.position.set(cx, deckH + 1.18, recessedZ + 0.12);
+      porchGroup.add(glassDoor);
+
+      // 현관 우측 낮은 콘크리트 난간 벽체
+      const porchRightWall = new THREE.Mesh(
+        new THREE.BoxGeometry(0.22, 0.78, 1.45),
+        porchWhiteWallMat
+      );
+      porchRightWall.position.set(cx + porchW / 2 - 0.11, deckH + 0.39, porchEndZ - 0.725);
+      porchRightWall.castShadow = true;
+      addOutline(porchRightWall);
+      porchGroup.add(porchRightWall);
+
+      // 5) 현관 앞 정면 5단 계단 (포치 전체 폭)
+      const stepCount = 5;
+      const stairW = porchW - 0.44;
+      const stepD = 0.32;
+      const stepRise = (deckH - baseY) / stepCount;
+      const stairTotalD = stepCount * stepD;
+
+      for (let s = 0; s < stepCount; s++) {
+        const topY = deckH - s * stepRise;
+        const zPos = porchEndZ + (s + 0.5) * stepD;
+        const tread = new THREE.Mesh(
+          new THREE.BoxGeometry(stairW, topY, stepD + 0.02),
+          graniteStepMat
+        );
+        tread.position.set(cx, topY / 2, zPos);
+        tread.castShadow = true;
+        tread.receiveShadow = true;
+        addOutline(tread, 0x64748b);
+        porchGroup.add(tread);
+      }
+
+      // 6) 계단 좌·우측 경사진 콘크리트 측벽(경사 옹벽)
+      const cheekThick = 0.24;
+      const cheekShape = new THREE.Shape();
+      cheekShape.moveTo(0, 0);
+      cheekShape.lineTo(stairTotalD + 0.12, 0);
+      cheekShape.lineTo(stairTotalD + 0.12, baseY + 0.26);
+      cheekShape.lineTo(0, deckH + 0.24);
+      cheekShape.closePath();
+
+      const cheekGeo = new THREE.ExtrudeGeometry(cheekShape, {
+        depth: cheekThick,
+        bevelEnabled: false
+      });
+      cheekGeo.rotateY(-Math.PI / 2);
+
+      [-porchW / 2 + cheekThick, porchW / 2].forEach(offsetX => {
+        const cheekMesh = new THREE.Mesh(cheekGeo, porchWhiteWallMat);
+        cheekMesh.position.set(cx + offsetX, 0, porchEndZ);
+        cheekMesh.castShadow = true;
+        cheekMesh.receiveShadow = true;
+        addOutline(cheekMesh);
+        porchGroup.add(cheekMesh);
+      });
+
+      // 7) 좌측(-X) 건물과 나란히 뻗은 휠체어·유모차 경사면 + 끝단 도보 연결 판
+      const rampStartX    = cx - 7.80;            // 경사로 하단 끝점
+      const rampSlopeEndX = cx - 2.95;            // 경사 상단 끝점 / 회전 참 시작점
+      const rampTurnEndX  = cx - porchW / 2;      // 현관 좌측 벽면 접합점
+      const rampBackZ     = mainZ + 0.72;         // +6.72m
+      const rampFrontZ    = porchEndZ - 0.08;     // +8.07m
+      const rampInnerW    = rampFrontZ - rampBackZ; // 1.35m
+      const wallThick     = 0.22;
+
+      // 7-0) 경사면 끝단(rampStartX 좌측) 도보 연결 판 및 좌측 마감 연석
+      const entryPadW = 1.45;
+      const entryPadH = 0.05;
+      const rampEndSidewalk = new THREE.Mesh(
+        new THREE.BoxGeometry(entryPadW, entryPadH, rampInnerW),
+        sidewalkMat
+      );
+      rampEndSidewalk.position.set(
+        rampStartX - entryPadW / 2 + 0.05,
+        entryPadH / 2,
+        rampBackZ + rampInnerW / 2
+      );
+      rampEndSidewalk.receiveShadow = true;
+      porchGroup.add(rampEndSidewalk);
+
+      const endLeftCurb = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.20, rampInnerW),
+        porchWhiteWallMat
+      );
+      endLeftCurb.position.set(
+        rampStartX - entryPadW,
+        0.10,
+        rampBackZ + rampInnerW / 2
+      );
+      endLeftCurb.castShadow = true;
+      addOutline(endLeftCurb);
+      porchGroup.add(endLeftCurb);
+
+      // 7-1) 경사로 상부 수평 회전 참 (x: rampSlopeEndX ~ rampTurnEndX)
+      const turnLandingW = rampTurnEndX - rampSlopeEndX;
+      const turnLandingD = rampFrontZ - (porchStartZ + 0.10);
+      const turnLanding = new THREE.Mesh(
+        new THREE.BoxGeometry(turnLandingW + 0.05, deckH, turnLandingD),
+        porchWhiteWallMat
+      );
+      turnLanding.position.set(
+        (rampSlopeEndX + rampTurnEndX) / 2,
+        deckH / 2,
+        porchStartZ + 0.10 + turnLandingD / 2
+      );
+      turnLanding.castShadow = true;
+      turnLanding.receiveShadow = true;
+      addOutline(turnLanding);
+      porchGroup.add(turnLanding);
+
+      // 7-2) 경사로 본체 슬래브 + 하부 솔리드 받침벽 (x: rampStartX ~ rampSlopeEndX)
+      const slopeSpanX = rampSlopeEndX - rampStartX; // 4.85m
+      const rampBodyShape = new THREE.Shape();
+      rampBodyShape.moveTo(0, 0);
+      rampBodyShape.lineTo(slopeSpanX, 0);
+      rampBodyShape.lineTo(slopeSpanX, deckH);
+      rampBodyShape.lineTo(0, entryPadH);
+      rampBodyShape.closePath();
+
+      const rampBodyGeo = new THREE.ExtrudeGeometry(rampBodyShape, {
+        depth: rampInnerW - wallThick,
+        bevelEnabled: false
+      });
+      const rampBodyMesh = new THREE.Mesh(rampBodyGeo, graniteStepMat);
+      rampBodyMesh.position.set(rampStartX, 0, rampBackZ);
+      rampBodyMesh.castShadow = true;
+      rampBodyMesh.receiveShadow = true;
+      porchGroup.add(rampBodyMesh);
+
+      // 7-3) 경사로 전면(+Z) 하얀색/밝은 회색 콘크리트 경사 옹벽
+      const frontWallStartTopY = entryPadH + 0.14; // 0.19m
+      const frontWallEndTopY   = deckH + 0.14;     // 0.99m
+      const frontWallShape = new THREE.Shape();
+      frontWallShape.moveTo(-0.08, 0);
+      frontWallShape.lineTo(rampTurnEndX - rampStartX, 0);
+      frontWallShape.lineTo(rampTurnEndX - rampStartX, frontWallEndTopY);
+      frontWallShape.lineTo(slopeSpanX, frontWallEndTopY);
+      frontWallShape.lineTo(-0.08, frontWallStartTopY);
+      frontWallShape.closePath();
+
+      const frontWallGeo = new THREE.ExtrudeGeometry(frontWallShape, {
+        depth: wallThick,
+        bevelEnabled: false
+      });
+      const frontWallMesh = new THREE.Mesh(frontWallGeo, porchWhiteWallMat);
+      frontWallMesh.position.set(rampStartX, 0, rampFrontZ - wallThick);
+      frontWallMesh.castShadow = true;
+      frontWallMesh.receiveShadow = true;
+      addOutline(frontWallMesh);
+      porchGroup.add(frontWallMesh);
+
+      // 7-4) 경사로 2단 은색 파이프 손잡이(핸드레일)
+      const railZ = rampFrontZ - wallThick / 2;
+      const railStartX = rampStartX - 0.04;
+      const railRiseY  = frontWallEndTopY - frontWallStartTopY;
+      const railRunX   = rampSlopeEndX - railStartX;
+      const slopeAngle = Math.atan2(railRiseY, railRunX);
+      const slopeLen   = Math.hypot(railRunX, railRiseY);
+
+      const postCount = 6;
+      const postH = 0.84;
+      for (let i = 0; i <= postCount; i++) {
+        const t = i / postCount;
+        const px = railStartX + t * railRunX;
+        const wallTopY = frontWallStartTopY + t * railRiseY;
+        const post = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.022, 0.022, postH, 10),
+          silverRailingMat
+        );
+        post.position.set(px, wallTopY + postH / 2, railZ);
+        porchGroup.add(post);
+      }
+
+      [rampSlopeEndX + 0.65, rampTurnEndX - 0.12].forEach(px => {
+        const post = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.022, 0.022, postH, 10),
+          silverRailingMat
+        );
+        post.position.set(px, frontWallEndTopY + postH / 2, railZ);
+        porchGroup.add(post);
+      });
+
+      [0.52, 0.82].forEach(hOff => {
+        const slopedRail = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.024, 0.024, slopeLen + 0.06, 12),
+          silverRailingMat
+        );
+        slopedRail.rotation.z = -Math.PI / 2 + slopeAngle;
+        slopedRail.position.set(
+          (railStartX + rampSlopeEndX) / 2,
+          (frontWallStartTopY + frontWallEndTopY) / 2 + hOff,
+          railZ
+        );
+        porchGroup.add(slopedRail);
+
+        const levelRail = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.024, 0.024, turnLandingW + 0.06, 12),
+          silverRailingMat
+        );
+        levelRail.rotation.z = Math.PI / 2;
+        levelRail.position.set(
+          (rampSlopeEndX + rampTurnEndX) / 2,
+          frontWallEndTopY + hOff,
+          railZ
+        );
+        porchGroup.add(levelRail);
+      });
+
+      // 8) 경사로 상단 전면 모서리 화단 + 전나무(침엽수) 및 경사로 뒤편 관목
+      const nookCurb = new THREE.Mesh(
+        new THREE.BoxGeometry(1.18, 0.24, 1.35),
+        graniteStepMat
+      );
+      nookCurb.position.set(cx - 2.32, 0.12, rampFrontZ + 0.68);
+      addOutline(nookCurb);
+      porchGroup.add(nookCurb);
+
+      addConiferTree(porchGroup, cx - 2.32, 0.24, rampFrontZ + 0.68, 1.05);
+
+      [cx - 6.8, cx - 5.6, cx - 4.4].forEach((sx, idx) => {
+        const shrub = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(0.45 + (idx % 2) * 0.08, 1),
+          new THREE.MeshStandardMaterial({ color: '#3F6212', roughness: 0.9 })
+        );
+        shrub.position.set(sx, 0.85 + idx * 0.12, rampBackZ - 0.25);
+        shrub.castShadow = true;
+        porchGroup.add(shrub);
+      });
+
+      aptGroup.add(porchGroup);
+    }
+
+    function addConiferTree(parent, x, y, z, scale = 1.0) {
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.09 * scale, 0.14 * scale, 1.4 * scale, 8),
+        new THREE.MeshStandardMaterial({ color: '#4A3728', roughness: 0.9 })
+      );
+      trunk.position.y = 0.7 * scale;
+      trunk.castShadow = true;
+      tree.add(trunk);
+
+      const needleMat = new THREE.MeshStandardMaterial({ color: '#1E3F20', roughness: 0.88 });
+      const tiers = [
+        [1.55, 1.18, 1.35],
+        [2.25, 0.96, 1.25],
+        [2.90, 0.74, 1.15],
+        [3.48, 0.50, 1.05],
+        [3.95, 0.26, 0.85]
+      ];
+      tiers.forEach(([ty, tr, th]) => {
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(tr * scale, th * scale, 9), needleMat);
+        cone.position.y = ty * scale;
+        cone.castShadow = true;
+        tree.add(cone);
+      });
+
+      tree.position.set(x, y, z);
+      parent.add(tree);
+    }
+
+    // ---------------------------------------------------------
+    // E) 후면(동남쪽 -Z): 각 집을 [ 3칸창 / 4칸창 | (회색벽) | 4칸창 / 3칸창 ] × 3회 반복
+    //    + 창문 높이의 절반(하단 50%) 밝은 은색 울타리
+    // ---------------------------------------------------------
+    const rearWinH = 1.66;
+    const win3W = 3.45;
+    const win4W = 4.55;
+    const grayWallW = 1.20;
+
+    coreCentersX.forEach((pairCenterX, pairIdx) => {
+      const lowerGrayStrip = new THREE.Mesh(
+        new THREE.BoxGeometry(grayWallW, lowerFloorsH, 0.08),
+        lowerGrayStripMat
+      );
+      lowerGrayStrip.position.set(pairCenterX, lowerFloorsH / 2, backBaseZ - 0.02);
+      aptGroup.add(lowerGrayStrip);
+
+      const upperGrayStrip = new THREE.Mesh(
+        new THREE.BoxGeometry(grayWallW, upperFloorsH, 0.08),
+        upperGrayStripMat
+      );
+      upperGrayStrip.position.set(pairCenterX, lowerFloorsH + upperFloorsH / 2, backBaseZ - 0.02);
+      aptGroup.add(upperGrayStrip);
+
+      const pairWindows = [
+        { x: pairCenterX - 7.625, w: win3W, panes: 3, acSide: -1 },
+        { x: pairCenterX - 3.075, w: win4W, panes: 4, acSide: +1 },
+        { x: pairCenterX + 3.075, w: win4W, panes: 4, acSide: -1 },
+        { x: pairCenterX + 7.625, w: win3W, panes: 3, acSide: +1 }
+      ];
+
+      pairWindows.forEach((winSpec, wIdx) => {
+        for (let f = 0; f < floors; f++) {
+          const wy = f * floorH + 1.50;
+          addMultiPaneWindow(winSpec.x, wy, backBaseZ, winSpec.w, rearWinH, winSpec.panes, 'back', true);
+
+          if ((pairIdx * 3 + wIdx * 2 + f) % 4 === 1 && f >= 1) {
+            const acOff = winSpec.acSide * (winSpec.w * 0.30);
+            pushBox(acMatrices, winSpec.x + acOff, wy - 0.42, backBaseZ - 0.18, 0.68, 0.52, 0.32, 0);
+          }
+        }
+      });
+    });
+
+    // ---------------------------------------------------------
+    // F) 수집된 창틀·유리·은색 울타리·실외기를 InstancedMesh로 일괄 렌더링
+    // ---------------------------------------------------------
+    function buildInstanced(matrices, geo, mat) {
+      const mesh = new THREE.InstancedMesh(geo, mat, matrices.length);
+      matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
+      mesh.instanceMatrix.needsUpdate = true;
+      aptGroup.add(mesh);
+      return mesh;
+    }
+
+    const unitBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+    buildInstanced(frameMatrices, unitBoxGeo, sashFrameMat);
+    buildInstanced(glassMatrices, unitBoxGeo, windowGlassMat);
+    buildInstanced(railMatrices,  unitBoxGeo, silverRailingMat);
+    buildInstanced(acMatrices,    unitBoxGeo, acUnitMat);
+
+    // ---------------------------------------------------------
+    // G) 주변 화단, 생울타리 및 조경수 (지면 y = 0 정렬)
+    // ---------------------------------------------------------
+    const hedgeMat = new THREE.MeshStandardMaterial({ color: '#3F6212', roughness: 0.9 });
+    [
+      [-13.8, 9.2],
+      [6.2,   9.2],
+      [25.8,  7.6]
+    ].forEach(([hx, hw]) => {
+      const hedge = new THREE.Mesh(new THREE.BoxGeometry(hw, 0.88, 1.05), hedgeMat);
+      hedge.position.set(hx, 0.44, frontBaseZ + 1.45);
+      hedge.castShadow = true;
+      aptGroup.add(hedge);
+    });
+
+    function addTree(x, z, scale = 1.0, isPine = false) {
+      const g = new THREE.Group();
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14 * scale, 0.22 * scale, 2.2 * scale, 8),
+        new THREE.MeshStandardMaterial({ color: '#4A3728', roughness: 0.9 })
+      );
+      trunk.position.y = 1.1 * scale;
+      trunk.castShadow = true;
+      g.add(trunk);
+
+      const leafMat = new THREE.MeshStandardMaterial({
+        color: isPine ? '#1E4620' : '#3B6E35',
+        roughness: 0.85
+      });
+
+      const blobs = isPine
+        ? [[0, 2.8, 0, 1.3], [-0.7, 2.3, 0.3, 0.9], [0.7, 2.5, -0.2, 0.95], [0, 3.6, 0, 0.85]]
+        : [[0, 3.2, 0, 1.65], [-0.9, 2.7, 0.5, 1.2], [0.9, 2.8, -0.4, 1.25], [0.2, 4.1, 0.2, 1.15]];
+
+      blobs.forEach(([bx, by, bz, r]) => {
+        const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(r * scale, 1), leafMat);
+        crown.position.set(bx * scale, by * scale, bz * scale);
+        crown.castShadow = true;
+        g.add(crown);
+      });
+
+      g.position.set(x, 0.0, z);
+      aptGroup.add(g);
+    }
+
+    // 전면 조경수
+    [
+      [-29.4, frontBaseZ + 1.3],
+      [-15.6, frontBaseZ + 2.2],
+      [-10.4, frontBaseZ + 1.4],
+      [4.4,   frontBaseZ + 2.2],
+      [9.6,   frontBaseZ + 1.4],
+      [24.2,  frontBaseZ + 2.2],
+      [28.5,  frontBaseZ + 1.8]
+    ].forEach(([tx, tz], i) => {
+      addTree(tx, tz, 1.08 + (i % 3) * 0.14, i % 3 === 0);
+    });
+
+    for (let tx = -28; tx <= 28; tx += 4.6) {
+      addTree(tx, backBaseZ - 2.5, 1.22, true);
+    }
+
+    // 남서측 사이드벽(+X) 단지 안내판 및 수목
+    const signBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 2.2, 1.8),
+      new THREE.MeshStandardMaterial({ color: '#1E3A8A', roughness: 0.4 })
+    );
+    signBoard.position.set(aptW / 2 + 1.8, 1.1, 2.2);
+    signBoard.castShadow = true;
+    aptGroup.add(signBoard);
+    addTree(aptW / 2 + 2.6, 4.8, 1.45, false);
+    addTree(aptW / 2 + 2.4, -3.5, 1.35, false);
+
+    // 4. GLB 3D 파일 추출 기능
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        aptGroup,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'Haengdang_Daelim_116_Detailed.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (err) => console.error('GLB 추출 오류:', err),
+        { binary: true }
+      );
+    };
+
+    // 5. 렌더링 루프
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

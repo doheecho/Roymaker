@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>지하철역 출입구 3D 모델링 (신금호역 4번출구 · 5호선)</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #262a30; }
+    #info {
+      position: absolute; top: 14px; left: 16px; color: #fff;
+      font-family: 'Malgun Gothic', sans-serif; font-size: 13px;
+      background: rgba(18, 21, 26, 0.88); padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.18);
+      pointer-events: none; line-height: 1.55;
+    }
+    #controls-ui {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+      background: rgba(18, 21, 26, 0.90); padding: 10px 14px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      max-width: 96vw;
+    }
+    button {
+      background: #374151; color: #fff; border: 1px solid #4b5563;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+      font-family: 'Malgun Gothic', sans-serif; transition: 0.15s;
+    }
+    button:hover { background: #7c3aed; border-color: #a78bfa; }
+    button.sign-btn { background: #5b21b6; border-color: #8b5cf6; font-weight: bold; }
+    button.export-btn { background: #b45309; border-color: #f59e0b; font-weight: bold; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="info"></div>
+
+  <div id="controls-ui">
+    <button class="sign-btn" onclick="setView('inner_frame')">입구 상단 2중 프레임 (12780 구도)</button>
+    <button onclick="setView('sign_close')">지주 역명 알림판 근접</button>
+    <button onclick="setView('front_angle')">정면 사선 (12770 구도)</button>
+    <button onclick="setView('side')">측면 전체 (12768 구도)</button>
+    <button onclick="setView('rear_roof')">후면 유리 지붕 (12774 구도)</button>
+    <button onclick="setView('top')">상면 (Top)</button>
+    <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    // =========================================================================
+    // [사용자 설정 영역] 역명, 출구, 노선, 노선색상을 이곳에서 직접 수정하세요!
+    // =========================================================================
+    const STATION_CONFIG = {
+      stationName:  '신금호',      // 역명 (예: '신금호', '암사', '행당')
+      exitNumber:   '4',           // 출구 번호 (예: '4', '2')
+      lineNumber:   '5호선',       // 노선명 (예: '5호선', '8호선')
+      lineColor:    '#996CAC',     // 노선 색상 (5호선 보라: '#996CAC', 8호선 분홍: '#E6186C')
+
+      // (선택 사항) 보조 표기 - 비워두면('') 자동으로 숨겨집니다
+      stationCode:  '540',         // 역 번호 (예: '540', '810')
+      englishName:  'Singeumho',   // 영문 역명 (예: 'Singeumho', 'Amsa')
+      hanjaName:    '新金湖',      // 한자 역명 (예: '新金湖', '岩寺')
+      katakanaName: 'シングムホ'    // 일어 표기 (예: 'シングムホ', 'アムサ')
+    };
+    // =========================================================================
+
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+    document.getElementById('info').innerHTML = `
+      <strong>${STATION_CONFIG.stationName}역 ${STATION_CONFIG.exitNumber}번출구 (${STATION_CONFIG.lineNumber}) 3D 모델링</strong><br/>
+      마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소
+    `;
+
+    // 1. 기본 씬, 카메라, 렌더러 설정
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#8BA8C7');
+
+    const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.position.set(6.4, 2.55, 1.35);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(-0.2, 1.45, 0.0);
+    controls.enableDamping = true;
+    controls.update();
+
+    window.setView = (mode) => {
+      const presets = {
+        inner_frame: { pos: [6.4, 2.55, 1.35],  target: [-0.2, 1.45, 0.0] },
+        sign_close:  { pos: [6.4, 2.3, 4.4],    target: [2.8, 2.0, 1.4] },
+        front_angle: { pos: [11.5, 3.8, 10.5],  target: [-1.8, 1.8, 0.0] },
+        side:        { pos: [-3.5, 2.4, 15.5],  target: [-3.8, 1.7, 0.0] },
+        rear_roof:   { pos: [-16.5, 4.6, 4.2],  target: [-4.5, 1.7, 0.0] },
+        top:         { pos: [-3.5, 22.0, 0.01], target: [-3.5, 1.0, 0.0] }
+      };
+      const v = presets[mode];
+      if (!v) return;
+      camera.position.set(...v.pos);
+      controls.target.set(...v.target);
+      controls.update();
+    };
+
+    // 2. 조명 설정
+    scene.add(new THREE.AmbientLight(0xffffff, 0.95));
+
+    const dirLight = new THREE.DirectionalLight(0xfffdf9, 1.15);
+    dirLight.position.set(25, 45, 28);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    dirLight.shadow.camera.left = -25;
+    dirLight.shadow.camera.right = 25;
+    dirLight.shadow.camera.top = 25;
+    dirLight.shadow.camera.bottom = -25;
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0xdbeafe, 0.55);
+    fillLight.position.set(-25, 20, -20);
+    scene.add(fillLight);
+
+    // =========================================================
+    // 유틸리티 & 프로시저럴 텍스처
+    // =========================================================
+    function makeTex(canvas, rx = 1, ry = 1) {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      if (rx !== 1 || ry !== 1) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(rx, ry);
+      }
+      return tex;
+    }
+
+    function addOutline(mesh, color = 0x2a2e35) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 25);
+      mesh.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color })));
+    }
+
+    // A. 하부 회색 화강석 돌벽 텍스처
+    function createGrayStoneWallTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 256;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#C6C8CA';
+      ctx.fillRect(0, 0, 512, 256);
+
+      for (let i = 0; i < 4500; i++) {
+        const x = (i * 73) % 512;
+        const y = (i * 137 + Math.floor(i / 256) * 29) % 256;
+        ctx.fillStyle = i % 3 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(40,45,52,0.08)';
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      ctx.fillStyle = '#B5B8BC';
+      ctx.fillRect(0, 0, 512, 26);
+      ctx.strokeStyle = 'rgba(55, 60, 68, 0.45)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(0, 26); ctx.lineTo(512, 26); ctx.stroke();
+
+      for (let x = 0; x <= 512; x += 128) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 256); ctx.stroke();
+      }
+      return makeTex(c, 3, 1);
+    }
+
+    // B. 수평 루버 환기창 띠 텍스처
+    function createLouverBandTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 128;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#3B424B';
+      ctx.fillRect(0, 0, 256, 128);
+
+      for (let y = 10; y < 120; y += 16) {
+        ctx.fillStyle = '#CBD5E1';
+        ctx.fillRect(6, y, 244, 7);
+        ctx.fillStyle = '#64748B';
+        ctx.fillRect(6, y + 7, 244, 3);
+      }
+      return makeTex(c);
+    }
+
+    // C. 검정 지주 역명 알림판 텍스처 세트
+    function createTotemTopTrainTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 256;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#1E2024';
+      ctx.fillRect(0, 0, 256, 256);
+      ctx.fillStyle = '#FACC15';
+      ctx.fillRect(14, 14, 228, 228);
+
+      ctx.strokeStyle = '#18181B';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(24, 24, 208, 208);
+
+      ctx.strokeStyle = '#18181B';
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.roundRect(76, 48, 104, 126, 20);
+      ctx.stroke();
+
+      ctx.fillStyle = '#18181B';
+      ctx.fillRect(96, 62, 64, 14);
+      ctx.fillRect(90, 86, 76, 42);
+
+      ctx.fillStyle = '#FACC15';
+      ctx.font = 'bold 30px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('M', 128, 108);
+
+      ctx.fillStyle = '#18181B';
+      ctx.beginPath(); ctx.arc(98, 152, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(158, 152, 8, 0, Math.PI * 2); ctx.fill();
+
+      ctx.strokeStyle = '#18181B';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(96, 174); ctx.lineTo(74, 212);
+      ctx.moveTo(160, 174); ctx.lineTo(182, 212);
+      ctx.moveTo(86, 192); ctx.lineTo(170, 192);
+      ctx.moveTo(78, 206); ctx.lineTo(178, 206);
+      ctx.stroke();
+
+      return makeTex(c);
+    }
+
+    function createTotemExitBoxTexture(cfg) {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 320;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#202328';
+      ctx.fillRect(0, 0, 256, 320);
+
+      ctx.strokeStyle = '#333840';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(6, 6, 244, 308);
+
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = 'bold 34px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('출입구', 128, 52);
+
+      ctx.fillStyle = '#FACC15';
+      const exitStr = String(cfg.exitNumber || '4');
+      const numSize = exitStr.length >= 2 ? 124 : 156;
+      ctx.font = `bold ${numSize}px Arial, "Malgun Gothic", sans-serif`;
+      ctx.fillText(exitStr, 128, 168);
+
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = 'bold 36px Arial, sans-serif';
+      ctx.fillText('EXIT', 128, 272);
+
+      return makeTex(c);
+    }
+
+    function createTotemMainColumnTexture(cfg) {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 1280;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#202328';
+      ctx.fillRect(0, 0, 256, 1280);
+
+      ctx.strokeStyle = '#343942';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(6, 6, 244, 1268);
+
+      const chars = Array.from((cfg.stationName || '신금호').replace(/역$/, ''));
+      ctx.fillStyle = '#F8FAFC';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const charFontSize = chars.length <= 2 ? 96 : (chars.length === 3 ? 82 : 66);
+      const startY = chars.length <= 2 ? 150 : 125;
+      const stepY = chars.length <= 2 ? 165 : (chars.length === 3 ? 132 : 104);
+
+      ctx.font = `bold ${charFontSize}px "Malgun Gothic", sans-serif`;
+      chars.forEach((ch, idx) => {
+        ctx.fillText(ch, 128, startY + idx * stepY);
+      });
+
+      let subY = 545;
+      if (cfg.englishName) {
+        ctx.fillStyle = '#E2E8F0';
+        ctx.font = 'bold 28px Arial, sans-serif';
+        ctx.fillText(cfg.englishName, 128, subY);
+        subY += 38;
+      }
+      if (cfg.hanjaName) {
+        ctx.fillStyle = '#CBD5E1';
+        ctx.font = '26px "Malgun Gothic", serif';
+        ctx.fillText(cfg.hanjaName, 128, subY);
+        subY += 34;
+      }
+      if (cfg.katakanaName) {
+        ctx.fillStyle = '#CBD5E1';
+        ctx.font = '23px "Malgun Gothic", sans-serif';
+        ctx.fillText(cfg.katakanaName, 128, subY);
+      }
+
+      const badgeY = 748;
+      const badgeR = 66;
+      ctx.beginPath();
+      ctx.arc(128, badgeY, badgeR, 0, Math.PI * 2);
+      ctx.fillStyle = cfg.lineColor || '#996CAC';
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      if (cfg.stationCode) {
+        ctx.font = 'bold 28px Arial, sans-serif';
+        ctx.fillText(cfg.stationCode, 128, badgeY - 18);
+        ctx.font = 'bold 30px "Malgun Gothic", sans-serif';
+        ctx.fillText(cfg.lineNumber || '5호선', 128, badgeY + 20);
+      } else {
+        ctx.font = 'bold 34px "Malgun Gothic", sans-serif';
+        ctx.fillText(cfg.lineNumber || '5호선', 128, badgeY + 2);
+      }
+
+      const iconBoxY = 865;
+      ctx.fillStyle = '#F1F5F9';
+      ctx.beginPath();
+      ctx.roundRect(62, iconBoxY, 132, 112, 8);
+      ctx.fill();
+
+      ctx.strokeStyle = '#1E293B';
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(98, iconBoxY + 74, 18, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(158, iconBoxY + 74, 18, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(98, iconBoxY + 74);
+      ctx.lineTo(124, iconBoxY + 46);
+      ctx.lineTo(148, iconBoxY + 46);
+      ctx.lineTo(158, iconBoxY + 74);
+      ctx.moveTo(124, iconBoxY + 46);
+      ctx.lineTo(132, iconBoxY + 74);
+      ctx.stroke();
+
+      ctx.fillStyle = '#141619';
+      ctx.fillRect(42, 1035, 172, 185);
+      ctx.fillStyle = '#333842';
+      for (let lx = 52; lx <= 198; lx += 14) {
+        ctx.fillRect(lx, 1045, 6, 165);
+      }
+
+      return makeTex(c);
+    }
+
+    // D. 안쪽 2번째 프레임 상단 가로 역명·출입구 표지판 텍스처
+    function createInnerFrameHeaderSignTexture(cfg) {
+      const c = document.createElement('canvas');
+      c.width = 1280; c.height = 176;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#202328';
+      ctx.fillRect(0, 0, 1280, 176);
+
+      ctx.strokeStyle = '#4B5563';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(3, 3, 1274, 170);
+
+      ctx.fillStyle = cfg.lineColor || '#996CAC';
+      ctx.fillRect(26, 62, 34, 34);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 22px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const lineDigit = String(cfg.lineNumber || '5호선').replace(/[^0-9]/g, '') || '5';
+      ctx.fillText(lineDigit, 43, 80);
+
+      const cleanName = (cfg.stationName || '신금호').replace(/역$/, '');
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = 'bold 64px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(cleanName, 175, 84);
+
+      const nameWidth = ctx.measureText(cleanName).width;
+      const subStartX = 175 + nameWidth + 24;
+
+      if (cfg.englishName) {
+        ctx.fillStyle = '#E2E8F0';
+        ctx.font = 'bold 26px Arial, sans-serif';
+        ctx.fillText(cfg.englishName, subStartX, 66);
+      }
+      const hanjaKana = [cfg.hanjaName, cfg.katakanaName].filter(Boolean).join('  ');
+      if (hanjaKana) {
+        ctx.fillStyle = '#CBD5E1';
+        ctx.font = '23px "Malgun Gothic", sans-serif';
+        ctx.fillText(hanjaKana, subStartX, 104);
+      }
+
+      ctx.fillStyle = '#CBD5E1';
+      ctx.font = 'bold 22px "Malgun Gothic", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('출입구', 1118, 70);
+      ctx.font = 'bold 20px Arial, sans-serif';
+      ctx.fillText('EXIT', 1118, 102);
+
+      ctx.fillStyle = '#FACC15';
+      const exitStr = String(cfg.exitNumber || '4');
+      const exitFont = exitStr.length >= 2 ? 78 : 96;
+      ctx.font = `bold ${exitFont}px Arial, "Malgun Gothic", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(exitStr, 1185, 88);
+
+      return makeTex(c);
+    }
+
+    // E. 보도블록 & 계단 앞 노란 점자판 텍스처
+    function createSidewalkTexture() {
+      const c = document.createElement('canvas');
+      c.width = 1024; c.height = 512;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#C9CDD2';
+      ctx.fillRect(0, 0, 1024, 512);
+
+      const cols = 24, rows = 8;
+      const bw = 1024 / cols, bh = 512 / rows;
+      for (let r = 0; r < rows; r++) {
+        const off = (r % 2) * (bw * 0.5);
+        for (let col = -1; col <= cols; col++) {
+          const hash = (r * 19 + col * 29) % 13;
+          ctx.fillStyle = hash === 0 ? '#AEB3BA' : (hash % 3 === 0 ? '#D4D8DD' : '#C4C8CE');
+          ctx.fillRect(col * bw + off + 1.5, r * bh + 1.5, bw - 3, bh - 3);
+        }
+      }
+
+      // 계단 바로 앞 노란색 점자판만 배치
+      const padX = 932, padY = 54, padW = 62, padH = 342;
+      ctx.fillStyle = '#EAB308';
+      ctx.fillRect(padX, padY, padW, padH);
+      ctx.strokeStyle = '#CA8A04';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(padX, padY, padW, padH);
+
+      ctx.beginPath();
+      ctx.moveTo(padX + padW / 2, padY);
+      ctx.lineTo(padX + padW / 2, padY + padH);
+      for (let ty = padY + 34; ty < padY + padH; ty += 34) {
+        ctx.moveTo(padX, ty);
+        ctx.lineTo(padX + padW, ty);
+      }
+      ctx.stroke();
+
+      return makeTex(c);
+    }
+
+    // =========================================================
+    // 3. 지하철역 출입구 3D 조립
+    // =========================================================
+    const entranceGroup = new THREE.Group();
+    entranceGroup.name = `SubwayEntrance_${STATION_CONFIG.stationName}_Exit${STATION_CONFIG.exitNumber}`;
+    scene.add(entranceGroup);
+
+    // 공통 재질
+    const stoneMat = new THREE.MeshStandardMaterial({
+      map: createGrayStoneWallTexture(),
+      roughness: 0.76
+    });
+    const stoneCapMat = new THREE.MeshStandardMaterial({ color: '#B4B8BE', roughness: 0.72 });
+    const metalFrameMat = new THREE.MeshStandardMaterial({
+      color: '#9AA0A8',
+      metalness: 0.58,
+      roughness: 0.34
+    });
+    const silverRailMat = new THREE.MeshStandardMaterial({
+      color: '#DCE1E7',
+      metalness: 0.85,
+      roughness: 0.18
+    });
+    const louverMat = new THREE.MeshStandardMaterial({
+      map: createLouverBandTexture(),
+      roughness: 0.5
+    });
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: '#D7ECE8',
+      transparent: true,
+      opacity: 0.32,
+      roughness: 0.10,
+      metalness: 0.10,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    // 주요 치수 (단위: m)
+    const xTail = -10.8;        // 좌측 끝(낮은 경사 끝단)
+    const xBend = -3.4;         // 경사지붕 -> 평지붕 꺾임점
+    const xInnerPortal = 0.65;  // [2번째 프레임] 하부 돌벽·측면 유리벽이 끝나고 안쪽 역명판이 걸리는 위치
+    const xOuterBot = 1.65;     // [1번째 최외곽 프레임] 사선 철제 샤시 기둥 하단 X
+    const xOuterTop = 2.60;     // [1번째 최외곽 프레임] 사선 철제 샤시 기둥 상단 X
+
+    const wTotal = 3.60;        // 전체 폭 (Z: -1.80 ~ +1.80)
+    const zHalf = wTotal / 2;
+    const wallT = 0.24;         // 하부 돌벽 두께
+    const innerZHalf = zHalf - wallT;
+
+    const hStoneMain = 1.15;    // 하부 회색 돌벽 높이
+    const hRoofFlat = 3.52;     // 평지붕 구간 최고 높이
+    const hTailStone = 0.82;    // 좌측 끝단 돌벽 높이
+    const hTailRoof = 1.18;     // 좌측 끝단 유리 지붕 높이
+
+    // ---------------------------------------------------------
+    // A) 보도블록 (지하 구조물 없이 평평한 지면 기준 바닥판만 구현)
+    // ---------------------------------------------------------
+    const sidewalk = new THREE.Mesh(
+      new THREE.BoxGeometry(14.50, 0.16, 4.55),
+      new THREE.MeshStandardMaterial({ map: createSidewalkTexture(), roughness: 0.86 })
+    );
+    sidewalk.position.set(-3.75, -0.08, 0.275);
+    sidewalk.receiveShadow = true;
+    entranceGroup.add(sidewalk);
+
+    // ---------------------------------------------------------
+    // B) 하부 연회색 화강석 돌벽 (xTail ~ xInnerPortal 까지, y >= 0)
+    // ---------------------------------------------------------
+    const stoneSideShape = new THREE.Shape();
+    stoneSideShape.moveTo(xTail, 0);
+    stoneSideShape.lineTo(xInnerPortal, 0);
+    stoneSideShape.lineTo(xInnerPortal, hStoneMain);
+    stoneSideShape.lineTo(-8.2, hStoneMain);
+    stoneSideShape.lineTo(xTail, hTailStone);
+    stoneSideShape.closePath();
+
+    const stoneWallGeo = new THREE.ExtrudeGeometry(stoneSideShape, {
+      depth: wallT,
+      bevelEnabled: false
+    });
+
+    [-zHalf, zHalf - wallT].forEach(zPos => {
+      const sideStone = new THREE.Mesh(stoneWallGeo, stoneMat);
+      sideStone.position.set(0, 0, zPos);
+      sideStone.castShadow = true;
+      sideStone.receiveShadow = true;
+      addOutline(sideStone, 0x525862);
+      entranceGroup.add(sideStone);
+
+      const flatCap = new THREE.Mesh(
+        new THREE.BoxGeometry(xInnerPortal - (-8.2) + 0.04, 0.07, wallT + 0.05),
+        stoneCapMat
+      );
+      flatCap.position.set((-8.2 + xInnerPortal) / 2, hStoneMain + 0.035, zPos + wallT / 2);
+      addOutline(flatCap, 0x525862);
+      entranceGroup.add(flatCap);
+    });
+
+    const backStoneWall = new THREE.Mesh(
+      new THREE.BoxGeometry(wallT, hTailStone, wTotal),
+      stoneMat
+    );
+    backStoneWall.position.set(xTail + wallT / 2, hTailStone / 2, 0);
+    backStoneWall.castShadow = true;
+    backStoneWall.receiveShadow = true;
+    addOutline(backStoneWall, 0x525862);
+    entranceGroup.add(backStoneWall);
+
+    // ---------------------------------------------------------
+    // C) 2중 입구 프레임 구조
+    // ---------------------------------------------------------
+    const zFrameCenter = zHalf - wallT / 2;
+
+    const glassSideShape = new THREE.Shape();
+    glassSideShape.moveTo(xTail + 0.08, hTailStone + 0.04);
+    glassSideShape.lineTo(-8.2, hStoneMain + 0.06);
+    glassSideShape.lineTo(xInnerPortal, hStoneMain + 0.06);
+    glassSideShape.lineTo(xInnerPortal, hRoofFlat - 0.06);
+    glassSideShape.lineTo(xBend, hRoofFlat - 0.06);
+    glassSideShape.lineTo(xTail + 0.08, hTailRoof - 0.04);
+    glassSideShape.closePath();
+
+    const glassSideGeo = new THREE.ShapeGeometry(glassSideShape);
+    [-zFrameCenter, zFrameCenter].forEach(zPos => {
+      const gPane = new THREE.Mesh(glassSideGeo, glassMat);
+      gPane.position.set(0, 0, zPos);
+      entranceGroup.add(gPane);
+    });
+
+    const slopeXs = [-10.72, -9.25, -7.80, -6.35, -4.90, xBend];
+    const getSlopeRoofY = (x) => {
+      const t = (x - xTail) / (xBend - xTail);
+      return hTailRoof + t * (hRoofFlat - hTailRoof);
+    };
+    const getStoneTopY = (x) => {
+      if (x >= -8.2) return hStoneMain + 0.06;
+      const t = (x - xTail) / (-8.2 - xTail);
+      return hTailStone + t * (hStoneMain + 0.06 - hTailStone);
+    };
+
+    [-zFrameCenter, zFrameCenter].forEach(zPos => {
+      slopeXs.forEach(sx => {
+        const yBot = getStoneTopY(sx);
+        const yTop = getSlopeRoofY(sx);
+        const h = yTop - yBot;
+        if (h > 0.1) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.11, h, 0.14), metalFrameMat);
+          post.position.set(sx, yBot + h / 2, zPos);
+          post.castShadow = true;
+          addOutline(post, 0x475569);
+          entranceGroup.add(post);
+        }
+      });
+
+      [-2.05, -0.70].forEach(fx => {
+        const yBot = hStoneMain + 0.06;
+        const h = hRoofFlat - yBot;
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.11, h, 0.14), metalFrameMat);
+        post.position.set(fx, yBot + h / 2, zPos);
+        post.castShadow = true;
+        addOutline(post, 0x475569);
+        entranceGroup.add(post);
+      });
+
+      const innerPostBot = hStoneMain + 0.06;
+      const innerPostH = hRoofFlat - innerPostBot;
+      const innerVerticalPost = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, innerPostH, 0.16),
+        metalFrameMat
+      );
+      innerVerticalPost.position.set(xInnerPortal, innerPostBot + innerPostH / 2, zPos);
+      innerVerticalPost.castShadow = true;
+      addOutline(innerVerticalPost, 0x334155);
+      entranceGroup.add(innerVerticalPost);
+
+      const dxPortal = xOuterTop - xOuterBot;
+      const dyPortal = hRoofFlat - 0.16;
+      const portalLen = Math.hypot(dxPortal, dyPortal);
+      const portalAngle = -Math.atan2(dxPortal, dyPortal);
+
+      const outerSlantedSash = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, portalLen, 0.16),
+        metalFrameMat
+      );
+      outerSlantedSash.position.set(
+        (xOuterBot + xOuterTop) / 2,
+        0.16 + dyPortal / 2,
+        zPos
+      );
+      outerSlantedSash.rotation.z = portalAngle;
+      outerSlantedSash.castShadow = true;
+      addOutline(outerSlantedSash, 0x334155);
+      entranceGroup.add(outerSlantedSash);
+
+      const louverW = xInnerPortal - xBend - 0.12;
+      const louverH = 0.52;
+      const transomBar = new THREE.Mesh(
+        new THREE.BoxGeometry(louverW, 0.09, 0.14),
+        metalFrameMat
+      );
+      transomBar.position.set((xBend + xInnerPortal) / 2, hRoofFlat - louverH - 0.05, zPos);
+      entranceGroup.add(transomBar);
+
+      const louverPanel = new THREE.Mesh(
+        new THREE.BoxGeometry(louverW - 0.08, louverH - 0.06, 0.08),
+        louverMat
+      );
+      louverPanel.position.set((xBend + xInnerPortal) / 2, hRoofFlat - louverH / 2 - 0.02, zPos);
+      entranceGroup.add(louverPanel);
+
+      const sDx = xBend - xTail;
+      const sDy = hRoofFlat - hTailRoof;
+      const sLen = Math.hypot(sDx, sDy);
+      const sAng = Math.atan2(sDy, sDx);
+
+      const slopeTopBeam = new THREE.Mesh(
+        new THREE.BoxGeometry(sLen + 0.1, 0.13, 0.16),
+        metalFrameMat
+      );
+      slopeTopBeam.position.set((xTail + xBend) / 2, (hTailRoof + hRoofFlat) / 2, zPos);
+      slopeTopBeam.rotation.z = sAng;
+      addOutline(slopeTopBeam, 0x475569);
+      entranceGroup.add(slopeTopBeam);
+
+      const flatTopBeam = new THREE.Mesh(
+        new THREE.BoxGeometry(xOuterTop - xBend + 0.14, 0.14, 0.16),
+        metalFrameMat
+      );
+      flatTopBeam.position.set((xBend + xOuterTop) / 2, hRoofFlat, zPos);
+      addOutline(flatTopBeam, 0x475569);
+      entranceGroup.add(flatTopBeam);
+    });
+
+    const sDx = xBend - xTail;
+    const sDy = hRoofFlat - hTailRoof;
+    const slopeRoofLen = Math.hypot(sDx, sDy);
+    const slopeRoofAngle = Math.atan2(sDy, sDx);
+
+    const slopeGlassRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(slopeRoofLen, 0.04, wTotal - 0.12),
+      glassMat
+    );
+    slopeGlassRoof.position.set((xTail + xBend) / 2, (hTailRoof + hRoofFlat) / 2, 0);
+    slopeGlassRoof.rotation.z = slopeRoofAngle;
+    entranceGroup.add(slopeGlassRoof);
+
+    slopeXs.forEach(sx => {
+      const rafter = new THREE.Mesh(
+        new THREE.BoxGeometry(0.09, 0.11, wTotal - 0.08),
+        metalFrameMat
+      );
+      rafter.position.set(sx, getSlopeRoofY(sx), 0);
+      rafter.rotation.z = slopeRoofAngle;
+      entranceGroup.add(rafter);
+    });
+
+    const flatRoofLen = xOuterTop - xBend;
+    const flatGlassRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(flatRoofLen, 0.04, wTotal - 0.12),
+      glassMat
+    );
+    flatGlassRoof.position.set((xBend + xOuterTop) / 2, hRoofFlat, 0);
+    entranceGroup.add(flatGlassRoof);
+
+    [-2.05, -0.70, xInnerPortal, (xInnerPortal + xOuterTop) / 2, xOuterTop].forEach((fx, idx) => {
+      const isOuterMost = (idx === 4);
+      const rafter = new THREE.Mesh(
+        new THREE.BoxGeometry(isOuterMost ? 0.15 : 0.11, isOuterMost ? 0.15 : 0.13, wTotal - 0.04),
+        metalFrameMat
+      );
+      rafter.position.set(fx, hRoofFlat, 0);
+      rafter.castShadow = true;
+      addOutline(rafter, 0x334155);
+      entranceGroup.add(rafter);
+    });
+
+    const tailGlass = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, hTailRoof - hTailStone, wTotal - 0.24),
+      glassMat
+    );
+    tailGlass.position.set(xTail + 0.12, (hTailStone + hTailRoof) / 2, 0);
+    entranceGroup.add(tailGlass);
+
+    const innerSignTex = createInnerFrameHeaderSignTexture(STATION_CONFIG);
+    const innerSignMat = new THREE.MeshStandardMaterial({ map: innerSignTex, roughness: 0.42 });
+    const darkMetalMat = new THREE.MeshStandardMaterial({ color: '#202328', roughness: 0.55 });
+
+    const innerFrameSignBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(0.11, 0.42, wTotal - wallT * 2 - 0.02),
+      [
+        innerSignMat,
+        innerSignMat,
+        darkMetalMat,
+        darkMetalMat,
+        darkMetalMat,
+        darkMetalMat
+      ]
+    );
+    innerFrameSignBoard.position.set(xInnerPortal, hRoofFlat - 0.28, 0);
+    innerFrameSignBoard.castShadow = true;
+    addOutline(innerFrameSignBoard, 0x111317);
+    entranceGroup.add(innerFrameSignBoard);
+
+    const cctvGroup = new THREE.Group();
+    const cctvBase = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.10, 0.07, 16),
+      new THREE.MeshStandardMaterial({ color: '#E5E7EB', roughness: 0.4 })
+    );
+    const cctvDome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.075, 16, 12, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5),
+      new THREE.MeshStandardMaterial({ color: '#111827', roughness: 0.15 })
+    );
+    cctvDome.position.y = -0.03;
+    cctvGroup.add(cctvBase, cctvDome);
+    cctvGroup.position.set((xInnerPortal + xOuterTop) / 2, hRoofFlat - 0.10, 1.12);
+    entranceGroup.add(cctvGroup);
+
+    // ---------------------------------------------------------
+    // D) 바닥 레벨(y = 0) 기준 내부 계단 & 중앙 손잡이 기둥 & 천장 조명
+    // ---------------------------------------------------------
+    const stairGroup = new THREE.Group();
+    const treadMat = new THREE.MeshStandardMaterial({ color: '#9CA3AF', roughness: 0.75 });
+    const nosingMat = new THREE.MeshStandardMaterial({ color: '#EAB308', roughness: 0.5 });
+
+    const stairWidth = innerZHalf * 2 - 0.02;
+    const handrailHeight = 0.85;
+
+    // 입구 참(y = 0.32, x = 0.15)에서 보도블록 바닥(y = 0.0)으로 내려가는 1단 계단 (y >= 0 유지)
+    const innerStep = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.16, stairWidth),
+      treadMat
+    );
+    innerStep.position.set(-0.02, 0.08, 0);
+    innerStep.castShadow = true;
+    innerStep.receiveShadow = true;
+    addOutline(innerStep, 0x64748b);
+    stairGroup.add(innerStep);
+
+    // 계단 모서리 미끄럼방지 노란 논슬립 띠 (상단 참 y=0.32 & 하단 계단 y=0.16)
+    [
+      { x: 0.17, y: 0.325 },
+      { x: -0.18, y: 0.165 }
+    ].forEach(n => {
+      const nosing = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.015, stairWidth - 0.04),
+        nosingMat
+      );
+      nosing.position.set(n.x, n.y, 0);
+      stairGroup.add(nosing);
+    });
+
+    // 중앙 은색 핸드레일 + 계단별 수직 기둥 (y = 0.32, 0.16, 0.00 위치)
+    const postGeo = new THREE.CylinderGeometry(0.018, 0.018, handrailHeight, 10);
+    const flangeGeo = new THREE.CylinderGeometry(0.042, 0.042, 0.014, 12);
+
+    const railPosts = [
+      { x:  0.22, yBase: 0.32 },
+      { x: -0.02, yBase: 0.16 },
+      { x: -0.26, yBase: 0.00 }
+    ];
+
+    railPosts.forEach(pt => {
+      const post = new THREE.Mesh(postGeo, silverRailMat);
+      post.position.set(pt.x, pt.yBase + handrailHeight / 2, 0);
+      post.castShadow = true;
+      stairGroup.add(post);
+
+      const flange = new THREE.Mesh(flangeGeo, silverRailMat);
+      flange.position.set(pt.x, pt.yBase + 0.007, 0);
+      stairGroup.add(flange);
+    });
+
+    const pStart = railPosts[0];
+    const pEnd = railPosts[railPosts.length - 1];
+    const railDx = pStart.x - pEnd.x;
+    const railDy = pStart.yBase - pEnd.yBase;
+    const railLen = Math.hypot(railDx, railDy);
+    const railAng = Math.atan2(railDy, railDx);
+    const railMidX = (pStart.x + pEnd.x) / 2;
+    const railMidY = (pStart.yBase + pEnd.yBase) / 2 + handrailHeight;
+
+    const centerHandrail = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025, 0.025, railLen, 12),
+      silverRailMat
+    );
+    centerHandrail.rotation.z = Math.PI / 2 + railAng;
+    centerHandrail.position.set(railMidX, railMidY, 0);
+    centerHandrail.castShadow = true;
+    stairGroup.add(centerHandrail);
+
+    const endCapGeo = new THREE.SphereGeometry(0.025, 12, 10);
+    [
+      [pStart.x, pStart.yBase + handrailHeight],
+      [pEnd.x, pEnd.yBase + handrailHeight]
+    ].forEach(([cx, cy]) => {
+      const cap = new THREE.Mesh(endCapGeo, silverRailMat);
+      cap.position.set(cx, cy, 0);
+      stairGroup.add(cap);
+    });
+
+    // 2번째 프레임 안쪽 기둥 보조 손잡이
+    [-zFrameCenter + 0.14, zFrameCenter - 0.14].forEach((hz, idx) => {
+      const dir = idx === 0 ? 1 : -1;
+      const loopBar = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.035, 0.14), silverRailMat);
+      loopBar.position.set(xInnerPortal + 0.12, 1.18, hz + dir * 0.05);
+      stairGroup.add(loopBar);
+    });
+
+    // 천장 LED 라인 조명 2열
+    const ledMat = new THREE.MeshBasicMaterial({ color: '#FFFBEB' });
+    [-0.75, 0.75].forEach(lz => {
+      const flatLed = new THREE.Mesh(new THREE.BoxGeometry(xInnerPortal - xBend - 0.6, 0.04, 0.14), ledMat);
+      flatLed.position.set((xBend + xInnerPortal) / 2, hRoofFlat - 0.08, lz);
+      stairGroup.add(flatLed);
+    });
+
+    entranceGroup.add(stairGroup);
+
+    // ---------------------------------------------------------
+    // E) 역 앞의 계단 2단 & 양측 짧은 은색 울타리
+    // ---------------------------------------------------------
+    const stepGraniteMat = new THREE.MeshStandardMaterial({ color: '#D1D5DB', roughness: 0.78 });
+    const tactileYellowMat = new THREE.MeshStandardMaterial({ color: '#EAB308', roughness: 0.75 });
+
+    const extStep1 = new THREE.Mesh(
+      new THREE.BoxGeometry(1.45, 0.16, wTotal + 0.04),
+      stepGraniteMat
+    );
+    extStep1.position.set(xInnerPortal + 0.725, 0.08, 0);
+    extStep1.castShadow = true;
+    extStep1.receiveShadow = true;
+    addOutline(extStep1, 0x64748b);
+    entranceGroup.add(extStep1);
+
+    const extStep2 = new THREE.Mesh(
+      new THREE.BoxGeometry(1.50, 0.32, wTotal - 0.02),
+      stepGraniteMat
+    );
+    extStep2.position.set(0.90, 0.16, 0);
+    extStep2.castShadow = true;
+    extStep2.receiveShadow = true;
+    addOutline(extStep2, 0x64748b);
+    entranceGroup.add(extStep2);
+
+    const stepTactile = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.015, wTotal - 0.56),
+      tactileYellowMat
+    );
+    stepTactile.position.set(1.42, 0.325, 0);
+    entranceGroup.add(stepTactile);
+
+    function createShortSilverRailing() {
+      const rg = new THREE.Group();
+      const len = 0.92;
+      const h = 0.88;
+      const rPipe = 0.024;
+
+      const topBar = new THREE.Mesh(new THREE.CylinderGeometry(rPipe, rPipe, len, 12), silverRailMat);
+      topBar.rotation.z = Math.PI / 2;
+      topBar.position.set(0, h, 0);
+
+      const midBar = new THREE.Mesh(new THREE.CylinderGeometry(rPipe * 0.8, rPipe * 0.8, len, 12), silverRailMat);
+      midBar.rotation.z = Math.PI / 2;
+      midBar.position.set(0, 0.14, 0);
+
+      rg.add(topBar, midBar);
+
+      [-len / 2, -len / 6, len / 6, len / 2].forEach((px, idx) => {
+        const rad = (idx === 0 || idx === 3) ? rPipe : rPipe * 0.65;
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, h, 10), silverRailMat);
+        post.position.set(px, h / 2, 0);
+        post.castShadow = true;
+        rg.add(post);
+      });
+
+      return rg;
+    }
+
+    [-zHalf + 0.14, zHalf - 0.14].forEach(rz => {
+      const rail = createShortSilverRailing();
+      rail.position.set(xInnerPortal + 0.48, 0.16, rz);
+      entranceGroup.add(rail);
+    });
+
+    // ---------------------------------------------------------
+    // F) 검정색 지하철역 역명 · 출구 · 노선 지주 알림판
+    // ---------------------------------------------------------
+    function createSubwayTotemSign(cfg) {
+      const totem = new THREE.Group();
+      totem.name = 'Station_Totem_Sign';
+
+      const w = 0.46;
+      const d = 0.46;
+      const blackMetalMat = new THREE.MeshStandardMaterial({ color: '#1E2025', roughness: 0.55, metalness: 0.25 });
+
+      const baseFoot = new THREE.Mesh(
+        new THREE.BoxGeometry(w + 0.06, 0.10, d + 0.06),
+        blackMetalMat
+      );
+      baseFoot.position.y = 0.05;
+      baseFoot.castShadow = true;
+      totem.add(baseFoot);
+
+      const mainH = 2.45;
+      const mainTex = createTotemMainColumnTexture(cfg);
+      const mainFaceMat = new THREE.MeshStandardMaterial({ map: mainTex, roughness: 0.48 });
+      const mainCol = new THREE.Mesh(
+        new THREE.BoxGeometry(w, mainH, d),
+        [mainFaceMat, mainFaceMat, blackMetalMat, blackMetalMat, mainFaceMat, mainFaceMat]
+      );
+      mainCol.position.y = 0.10 + mainH / 2;
+      mainCol.castShadow = true;
+      addOutline(mainCol, 0x111317);
+      totem.add(mainCol);
+
+      const collar1 = new THREE.Mesh(new THREE.BoxGeometry(w - 0.04, 0.04, d - 0.04), blackMetalMat);
+      collar1.position.y = 0.10 + mainH + 0.02;
+      totem.add(collar1);
+
+      const exitH = 0.60;
+      const exitTex = createTotemExitBoxTexture(cfg);
+      const exitFaceMat = new THREE.MeshStandardMaterial({ map: exitTex, roughness: 0.45 });
+      const exitBox = new THREE.Mesh(
+        new THREE.BoxGeometry(w, exitH, d),
+        [exitFaceMat, exitFaceMat, blackMetalMat, blackMetalMat, exitFaceMat, exitFaceMat]
+      );
+      exitBox.position.y = 0.10 + mainH + 0.04 + exitH / 2;
+      exitBox.castShadow = true;
+      addOutline(exitBox, 0x111317);
+      totem.add(exitBox);
+
+      const collar2 = new THREE.Mesh(new THREE.BoxGeometry(w - 0.04, 0.04, d - 0.04), blackMetalMat);
+      collar2.position.y = 0.10 + mainH + 0.04 + exitH + 0.02;
+      totem.add(collar2);
+
+      const topH = 0.46;
+      const topTex = createTotemTopTrainTexture();
+      const topFaceMat = new THREE.MeshStandardMaterial({ map: topTex, roughness: 0.40 });
+      const topCube = new THREE.Mesh(
+        new THREE.BoxGeometry(w, topH, d),
+        [topFaceMat, topFaceMat, blackMetalMat, blackMetalMat, topFaceMat, topFaceMat]
+      );
+      topCube.position.y = 0.10 + mainH + 0.04 + exitH + 0.04 + topH / 2;
+      topCube.castShadow = true;
+      addOutline(topCube, 0x111317);
+      totem.add(topCube);
+
+      return totem;
+    }
+
+    const stationTotem = createSubwayTotemSign(STATION_CONFIG);
+    stationTotem.position.set(xOuterTop + 0.42, 0, zHalf + 0.34);
+    entranceGroup.add(stationTotem);
+
+    // =========================================================
+    // 4. GLB 3D 파일 추출 & 렌더링 루프
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        entranceGroup,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${STATION_CONFIG.stationName}_exit${STATION_CONFIG.exitNumber}.glb`;
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (err) => console.error('GLB 추출 오류:', err),
+        { binary: true }
+      );
+    };
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
