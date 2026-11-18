@@ -90,6 +90,108 @@ const PLACES = [
   { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 51, z: -229, diagonal: true, model: "models/3D_place_megacoffee.glb", rotationDeg: 0 },
   { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -104, z: -229 },
   { id: 30, name: "분식집", floors: 4, type: "식당", x: -56, z: -229 },
+
+  // ── 2026-11-18 추가: 3dmodeling_place.csv의 31행 이후(신금호두산위브·금호1가동주민센터·행당한진타운·
+  // 금북초등학교·대현산배수지공원·극동미라주·신금호공원·행당대림상가·행현초등학교·금호동벽산아파트·
+  // 행당대림아파트)에 자리를 미리 잡아 둔다. 아직 모델링 전이라 model 경로는 앞으로 만들 파일 이름을
+  // 미리 정해 둔 것뿐이다 — 같은 이름으로 models/ 폴더에 glb를 넣으면 코드를 더 안 고쳐도 바로 적용된다.
+  // (예외: 금북초등학교는 seoul_geumbuk_elementary_v8.html로 이미 만들어 둔 3D_place_keumbuk.glb가
+  // models/에 있는데 지금까지 아무 데도 연결돼 있지 않았다 — 그 기존 파일을 그대로 연결했다.)
+  // 좌표는 금호파크힐스 동들처럼 위성사진을 눈대중으로 잰 게 아니라, place.csv/실제 주소의 위도·경도를
+  // 집(0,0) 기준 상대 거리(m)로 환산해서 잡았다 — 집 기준 실제 방향·거리는 맞지만, 기존 좌표와 축척이
+  // 완전히 같다는 보장은 없다. 특히 행당동 쪽(행당한진타운·행당대림아파트·행당대림상가·행현초등학교)은
+  // 정확한 지번을 못 찾아 인근 도로 기준 추정치다. 각 단지 안에서 동별 배치는 실제 항공사진이 없어서
+  // 격자로 임의 배치했다 — 실제 단지 모양과 다를 수 있으니, 모델을 넣어 보고 지도에서 눈으로 확인한
+  // 뒤 x/z를 다시 조정할 것.
+  { id: 31, name: "신금호두산위브 101동", floors: 15, type: "아파트", x: -315, z: -172, model: "models/3D_place_dusan101.glb", rotationDeg: 0 },
+  { id: 32, name: "신금호두산위브 102동", floors: 15, type: "아파트", x: -270, z: -172, model: "models/3D_place_dusan102.glb", rotationDeg: 0 },
+  { id: 33, name: "신금호두산위브 103동", floors: 15, type: "아파트", x: -225, z: -172, model: "models/3D_place_dusan103.glb", rotationDeg: 0 },
+  { id: 34, name: "신금호두산위브 104동", floors: 15, type: "아파트", x: -292, z: -128, model: "models/3D_place_dusan104.glb", rotationDeg: 0 },
+  { id: 35, name: "신금호두산위브 105동", floors: 15, type: "아파트", x: -248, z: -128, model: "models/3D_place_dusan105.glb", rotationDeg: 0 },
+  { id: 36, name: "금호1가동주민센터", floors: 4, type: "기타", x: -270, z: -115, model: "models/3D_place_geumho1dong.glb", rotationDeg: 0 },
+
+  { id: 41, name: "행당한진타운 101동", floors: 15, type: "아파트", x: 795, z: -835, model: "models/3D_place_hj101.glb", rotationDeg: 0 },
+  { id: 42, name: "행당한진타운 102동", floors: 15, type: "아파트", x: 830, z: -835, model: "models/3D_place_hj102.glb", rotationDeg: 0 },
+  { id: 43, name: "행당한진타운 103동", floors: 15, type: "아파트", x: 865, z: -835, model: "models/3D_place_hj103.glb", rotationDeg: 0 },
+  { id: 44, name: "행당한진타운 104동", floors: 15, type: "아파트", x: 900, z: -835, model: "models/3D_place_hj104.glb", rotationDeg: 0 },
+  { id: 45, name: "행당한진타운 105동", floors: 15, type: "아파트", x: 935, z: -835, model: "models/3D_place_hj105.glb", rotationDeg: 0 },
+  { id: 46, name: "행당한진타운 106동", floors: 15, type: "아파트", x: 970, z: -835, model: "models/3D_place_hj106.glb", rotationDeg: 0 },
+  { id: 47, name: "행당한진타운 107동", floors: 15, type: "아파트", x: 1005, z: -835, model: "models/3D_place_hj107.glb", rotationDeg: 0 },
+  { id: 48, name: "행당한진타운 108동", floors: 15, type: "아파트", x: 795, z: -800, model: "models/3D_place_hj108.glb", rotationDeg: 0 },
+  { id: 49, name: "행당한진타운 109동", floors: 15, type: "아파트", x: 830, z: -800, model: "models/3D_place_hj109.glb", rotationDeg: 0 },
+  { id: 50, name: "행당한진타운 110동", floors: 15, type: "아파트", x: 865, z: -800, model: "models/3D_place_hj110.glb", rotationDeg: 0 },
+  { id: 51, name: "행당한진타운 111동", floors: 15, type: "아파트", x: 900, z: -800, model: "models/3D_place_hj111.glb", rotationDeg: 0 },
+  { id: 52, name: "행당한진타운 112동", floors: 15, type: "아파트", x: 935, z: -800, model: "models/3D_place_hj112.glb", rotationDeg: 0 },
+  { id: 53, name: "행당한진타운 113동", floors: 15, type: "아파트", x: 970, z: -800, model: "models/3D_place_hj113.glb", rotationDeg: 0 },
+  { id: 54, name: "행당한진타운 114동", floors: 15, type: "아파트", x: 1005, z: -800, model: "models/3D_place_hj114.glb", rotationDeg: 0 },
+  { id: 55, name: "행당한진타운 115동", floors: 15, type: "아파트", x: 795, z: -765, model: "models/3D_place_hj115.glb", rotationDeg: 0 },
+  { id: 56, name: "행당한진타운 116동", floors: 15, type: "아파트", x: 830, z: -765, model: "models/3D_place_hj116.glb", rotationDeg: 0 },
+  { id: 57, name: "행당한진타운 117동", floors: 15, type: "아파트", x: 865, z: -765, model: "models/3D_place_hj117.glb", rotationDeg: 0 },
+  { id: 58, name: "행당한진타운 118동", floors: 15, type: "아파트", x: 900, z: -765, model: "models/3D_place_hj118.glb", rotationDeg: 0 },
+  { id: 59, name: "행당한진타운 119동", floors: 15, type: "아파트", x: 935, z: -765, model: "models/3D_place_hj119.glb", rotationDeg: 0 },
+  { id: 60, name: "행당한진타운 120동", floors: 15, type: "아파트", x: 970, z: -765, model: "models/3D_place_hj120.glb", rotationDeg: 0 },
+  { id: 61, name: "행당한진타운 121동", floors: 15, type: "아파트", x: 1005, z: -765, model: "models/3D_place_hj121.glb", rotationDeg: 0 },
+  // 201~204동은 3dmodeling_place.csv에 이미 모델 이름(3D_place_hj201~204)이 등록돼 있던 것을 그대로 썼다.
+  // 다만 modeling_code/3D_place_hd203.html에서 실제로 내보내는 파일명은 "hangdang_hanjin_203_final.glb"라
+  // CSV가 기대하는 "3D_place_hj203.glb"와 다르다 — 그 파일을 쓸 거면 내보낸 뒤 이 이름으로 바꿔서 넣어야 한다.
+  { id: 62, name: "행당한진타운 201동", floors: 15, type: "아파트", x: 1085, z: -820, model: "models/3D_place_hj201.glb", rotationDeg: 0 },
+  { id: 63, name: "행당한진타운 202동", floors: 15, type: "아파트", x: 1125, z: -820, model: "models/3D_place_hj202.glb", rotationDeg: 0 },
+  { id: 64, name: "행당한진타운 203동", floors: 15, type: "아파트", x: 1085, z: -780, model: "models/3D_place_hj203.glb", rotationDeg: 0 },
+  { id: 65, name: "행당한진타운 204동", floors: 15, type: "아파트", x: 1125, z: -780, model: "models/3D_place_hj204.glb", rotationDeg: 0 },
+
+  { id: 66, name: "금북초등학교", floors: 5, type: "학교", x: -110, z: -510, model: "models/3D_place_keumbuk.glb", rotationDeg: 0 },
+  { id: 67, name: "대현산배수지공원", floors: 1, type: "공원", x: -300, z: -485, model: "models/3D_place_daehyeonsan.glb", rotationDeg: 0 },
+
+  { id: 68, name: "극동미라주 101동", floors: 15, type: "아파트", x: -173, z: -738, model: "models/3D_place_mirage101.glb", rotationDeg: 0 },
+  { id: 69, name: "극동미라주 102동", floors: 15, type: "아파트", x: -128, z: -738, model: "models/3D_place_mirage102.glb", rotationDeg: 0 },
+  { id: 70, name: "극동미라주 103동", floors: 15, type: "아파트", x: -173, z: -693, model: "models/3D_place_mirage103.glb", rotationDeg: 0 },
+  { id: 71, name: "극동미라주 104동", floors: 15, type: "아파트", x: -128, z: -693, model: "models/3D_place_mirage104.glb", rotationDeg: 0 },
+
+  { id: 72, name: "신금호공원", floors: 1, type: "공원", x: -415, z: 205, model: "models/3D_place_singeumho_park.glb", rotationDeg: 0 },
+  { id: 73, name: "행당대림상가", floors: 7, type: "마트", x: 650, z: -660, model: "models/3D_place_daerim_mall.glb", rotationDeg: 0 },
+  { id: 74, name: "행현초등학교", floors: 5, type: "학교", x: 955, z: -800, model: "models/3D_place_haenghyeon.glb", rotationDeg: 0 },
+
+  // 금호동벽산아파트는 CSV에 501~503·505동만 있고 504동이 없다(원본 그대로 비웠다).
+  { id: 75, name: "금호동벽산아파트 501동", floors: 15, type: "아파트", x: 238, z: 738, model: "models/3D_place_byeoksan501.glb", rotationDeg: 0 },
+  { id: 76, name: "금호동벽산아파트 502동", floors: 15, type: "아파트", x: 283, z: 738, model: "models/3D_place_byeoksan502.glb", rotationDeg: 0 },
+  { id: 77, name: "금호동벽산아파트 503동", floors: 15, type: "아파트", x: 238, z: 783, model: "models/3D_place_byeoksan503.glb", rotationDeg: 0 },
+  { id: 78, name: "금호동벽산아파트 505동", floors: 15, type: "아파트", x: 283, z: 783, model: "models/3D_place_byeoksan505.glb", rotationDeg: 0 },
+
+  { id: 81, name: "행당대림아파트 101동", floors: 15, type: "아파트", x: 610, z: -780, model: "models/3D_place_daerim101.glb", rotationDeg: 0 },
+  { id: 82, name: "행당대림아파트 102동", floors: 15, type: "아파트", x: 645, z: -780, model: "models/3D_place_daerim102.glb", rotationDeg: 0 },
+  { id: 83, name: "행당대림아파트 103동", floors: 15, type: "아파트", x: 680, z: -780, model: "models/3D_place_daerim103.glb", rotationDeg: 0 },
+  { id: 84, name: "행당대림아파트 104동", floors: 15, type: "아파트", x: 715, z: -780, model: "models/3D_place_daerim104.glb", rotationDeg: 0 },
+  { id: 85, name: "행당대림아파트 105동", floors: 15, type: "아파트", x: 750, z: -780, model: "models/3D_place_daerim105.glb", rotationDeg: 0 },
+  { id: 86, name: "행당대림아파트 106동", floors: 15, type: "아파트", x: 785, z: -780, model: "models/3D_place_daerim106.glb", rotationDeg: 0 },
+  { id: 87, name: "행당대림아파트 107동", floors: 15, type: "아파트", x: 820, z: -780, model: "models/3D_place_daerim107.glb", rotationDeg: 0 },
+  { id: 88, name: "행당대림아파트 108동", floors: 15, type: "아파트", x: 610, z: -745, model: "models/3D_place_daerim108.glb", rotationDeg: 0 },
+  { id: 89, name: "행당대림아파트 109동", floors: 15, type: "아파트", x: 645, z: -745, model: "models/3D_place_daerim109.glb", rotationDeg: 0 },
+  { id: 90, name: "행당대림아파트 110동", floors: 15, type: "아파트", x: 680, z: -745, model: "models/3D_place_daerim110.glb", rotationDeg: 0 },
+  { id: 91, name: "행당대림아파트 111동", floors: 15, type: "아파트", x: 715, z: -745, model: "models/3D_place_daerim111.glb", rotationDeg: 0 },
+  { id: 92, name: "행당대림아파트 112동", floors: 15, type: "아파트", x: 750, z: -745, model: "models/3D_place_daerim112.glb", rotationDeg: 0 },
+  { id: 93, name: "행당대림아파트 113동", floors: 15, type: "아파트", x: 785, z: -745, model: "models/3D_place_daerim113.glb", rotationDeg: 0 },
+  { id: 94, name: "행당대림아파트 114동", floors: 15, type: "아파트", x: 820, z: -745, model: "models/3D_place_daerim114.glb", rotationDeg: 0 },
+  { id: 95, name: "행당대림아파트 115동", floors: 15, type: "아파트", x: 610, z: -710, model: "models/3D_place_daerim115.glb", rotationDeg: 0 },
+  { id: 96, name: "행당대림아파트 116동", floors: 15, type: "아파트", x: 645, z: -710, model: "models/3D_place_daerim116.glb", rotationDeg: 0 },
+  { id: 97, name: "행당대림아파트 117동", floors: 15, type: "아파트", x: 680, z: -710, model: "models/3D_place_daerim117.glb", rotationDeg: 0 },
+  { id: 98, name: "행당대림아파트 118동", floors: 15, type: "아파트", x: 715, z: -710, model: "models/3D_place_daerim118.glb", rotationDeg: 0 },
+  { id: 99, name: "행당대림아파트 119동", floors: 15, type: "아파트", x: 750, z: -710, model: "models/3D_place_daerim119.glb", rotationDeg: 0 },
+  { id: 100, name: "행당대림아파트 120동", floors: 15, type: "아파트", x: 785, z: -710, model: "models/3D_place_daerim120.glb", rotationDeg: 0 },
+  { id: 101, name: "행당대림아파트 121동", floors: 15, type: "아파트", x: 820, z: -710, model: "models/3D_place_daerim121.glb", rotationDeg: 0 },
+  { id: 102, name: "행당대림아파트 122동", floors: 15, type: "아파트", x: 610, z: -675, model: "models/3D_place_daerim122.glb", rotationDeg: 0 },
+  { id: 103, name: "행당대림아파트 123동", floors: 15, type: "아파트", x: 645, z: -675, model: "models/3D_place_daerim123.glb", rotationDeg: 0 },
+  { id: 104, name: "행당대림아파트 124동", floors: 15, type: "아파트", x: 680, z: -675, model: "models/3D_place_daerim124.glb", rotationDeg: 0 },
+  { id: 105, name: "행당대림아파트 125동", floors: 15, type: "아파트", x: 715, z: -675, model: "models/3D_place_daerim125.glb", rotationDeg: 0 },
+  { id: 106, name: "행당대림아파트 126동", floors: 15, type: "아파트", x: 750, z: -675, model: "models/3D_place_daerim126.glb", rotationDeg: 0 },
+  { id: 107, name: "행당대림아파트 127동", floors: 15, type: "아파트", x: 785, z: -675, model: "models/3D_place_daerim127.glb", rotationDeg: 0 },
+  { id: 108, name: "행당대림아파트 128동", floors: 15, type: "아파트", x: 820, z: -675, model: "models/3D_place_daerim128.glb", rotationDeg: 0 },
+  { id: 109, name: "행당대림아파트 129동", floors: 15, type: "아파트", x: 610, z: -640, model: "models/3D_place_daerim129.glb", rotationDeg: 0 },
+  { id: 110, name: "행당대림아파트 130동", floors: 15, type: "아파트", x: 645, z: -640, model: "models/3D_place_daerim130.glb", rotationDeg: 0 },
+  { id: 111, name: "행당대림아파트 131동", floors: 15, type: "아파트", x: 680, z: -640, model: "models/3D_place_daerim131.glb", rotationDeg: 0 },
+  { id: 112, name: "행당대림아파트 132동", floors: 15, type: "아파트", x: 715, z: -640, model: "models/3D_place_daerim132.glb", rotationDeg: 0 },
+  { id: 113, name: "행당대림아파트 133동", floors: 15, type: "아파트", x: 750, z: -640, model: "models/3D_place_daerim133.glb", rotationDeg: 0 },
+  { id: 114, name: "행당대림아파트 134동", floors: 15, type: "아파트", x: 785, z: -640, model: "models/3D_place_daerim134.glb", rotationDeg: 0 },
+  { id: 115, name: "행당대림아파트 135동", floors: 15, type: "아파트", x: 820, z: -640, model: "models/3D_place_daerim135.glb", rotationDeg: 0 },
 ];
 
 // 금호파크힐스 단지 내부(동 사이 공터)에 심을 나무 자리 — 위성사진에서 건물·도로가 아닌 어두운
