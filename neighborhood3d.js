@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261120a";
+const ASSET_VERSION = "20261120b";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -422,8 +422,11 @@ let enemies = [];
 let camYaw = 0;
 let camPitch = 0.4;
 let camDistance = 6;
-const CAM_PITCH_MIN = 0.1;
-const CAM_PITCH_MAX = 1.35;
+// 위아래 시선: 아래(-)부터 위(+)까지 거의 전 범위(±83°). 정확히 ±90°는 카메라가 뒤집혀서 피한다
+const CAM_PITCH_MIN = -1.45;
+const CAM_PITCH_MAX = 1.45;
+const CAM_LOOK_Y = 0.6; // 시선 높이(캐릭터 머리 쪽)
+const CHAR_SCALE = 0.5; // 이로이·엄마는 원래의 절반 크기 — 건물이 상대적으로 크게 보이도록
 const CAM_DIST_MIN = 1.5;
 const CAM_DIST_MAX = 40;
 let dragging = false;
@@ -1171,6 +1174,7 @@ function loadCharacter() {
       `models/walk.glb?v=${ASSET_VERSION}`,
       (gltf) => {
         character = gltf.scene;
+        character.scale.setScalar(CHAR_SCALE);
         character.traverse((o) => {
           if (o.isMesh) o.castShadow = true;
         });
@@ -1304,7 +1308,7 @@ function placeMomBesideCharacter() {
   const rotY = character.rotation.y;
   const rightX = Math.cos(rotY);
   const rightZ = -Math.sin(rotY);
-  mom.position.set(character.position.x + rightX * 1.3, character.position.y, character.position.z + rightZ * 1.3);
+  mom.position.set(character.position.x + rightX * 0.9, character.position.y, character.position.z + rightZ * 0.9);
   mom.rotation.y = rotY;
   mom.visible = true;
 }
@@ -1346,6 +1350,7 @@ function ensureMomLoaded(onReady) {
     `models/mom.glb?v=${ASSET_VERSION}`,
     (gltf) => {
       mom = gltf.scene;
+      mom.scale.setScalar(CHAR_SCALE);
       mom.traverse((o) => {
         if (o.isMesh) o.castShadow = true;
       });
@@ -1505,10 +1510,11 @@ function wireDpad() {
 function updateCamera() {
   if (!character) return;
   const x = character.position.x + camDistance * Math.cos(camPitch) * Math.sin(camYaw);
-  const y = character.position.y + camDistance * Math.sin(camPitch) + 1.2;
+  // 아래를 볼 때(pitch < 0)는 카메라가 땅 밑으로 내려가지 않게 바닥 위에 머문다
+  const y = Math.max(0.25, character.position.y + camDistance * Math.sin(camPitch) + CAM_LOOK_Y);
   const z = character.position.z + camDistance * Math.cos(camPitch) * Math.cos(camYaw);
   camera.position.set(x, y, z);
-  camera.lookAt(character.position.x, character.position.y + 1.2, character.position.z);
+  camera.lookAt(character.position.x, character.position.y + CAM_LOOK_Y, character.position.z);
 }
 
 function animate() {
