@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ASSET_VERSION = "20261118a";
+const ASSET_VERSION = "20261120a";
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -594,7 +594,10 @@ function buildStaticScene() {
   bg.receiveShadow = true;
   scene.add(bg);
 
-  // 각 건물 사이에 깔린 회색 보행로(정밀한 실제 도로는 아니고, 건물들이 서 있는 자리를 넓게 덮는 정도)
+  // 네이버 지도 이미지를 실제 좌표에 맞춰 바닥에 깐다(없으면 위의 초록 바닥이 그대로 보임)
+  buildMapGround(scene);
+
+  // 각 건물 사이에 깔린 회색 보행로 — 지도 이미지가 보이도록 숨긴다
   const plaza = new THREE.Mesh(
     new THREE.PlaneGeometry(groundW * 0.6, groundD * 0.6),
     new THREE.MeshStandardMaterial({ color: 0xc7c7c2 })
@@ -602,11 +605,47 @@ function buildStaticScene() {
   plaza.rotation.x = -Math.PI / 2;
   plaza.position.set((AREA_MIN_X + AREA_MAX_X) / 2, -0.02, (AREA_MIN_Z + AREA_MAX_Z) / 2);
   plaza.receiveShadow = true;
+  plaza.visible = false;
   scene.add(plaza);
 
   buildRoads();
   buildPlaces();
   buildTrees();
+}
+
+// ── 지도 바닥: img/navermap_ground.jpg를 실제 위치에 맞춰 깐다 ──
+// 네 모서리(3D 좌표, 카카오 실측 좌표 기준으로 계산)에 이미지의 왼쪽위·오른쪽위·왼쪽아래·오른쪽아래를 붙인다.
+// 이미지 파일을 바꾸면 모서리 좌표도 같이 다시 계산해야 한다.
+const MAP_GROUND = {
+  file: "img/navermap_ground.jpg",
+  corners: {
+    TL: [11.63, 302.51],
+    TR: [313.64, -165.14],
+    BL: [-237.03, 142.03],
+    BR: [64.99, -325.62],
+  },
+};
+function buildMapGround(scene) {
+  new THREE.TextureLoader().load(
+    `${MAP_GROUND.file}?v=${ASSET_VERSION}`,
+    (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      const c = MAP_GROUND.corners;
+      const y = -0.025;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute([c.TL[0], y, c.TL[1], c.TR[0], y, c.TR[1], c.BL[0], y, c.BL[1], c.BR[0], y, c.BR[1]], 3));
+      // 이미지 위쪽이 v=1: TL=(0,1) TR=(1,1) BL=(0,0) BR=(1,0)
+      geo.setAttribute("uv", new THREE.Float32BufferAttribute([0, 1, 1, 1, 0, 0, 1, 0], 2));
+      geo.setIndex([0, 2, 1, 2, 3, 1]);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 1 }));
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+    },
+    undefined,
+    () => console.warn("지도 바닥 이미지를 불러오지 못했다")
+  );
 }
 
 // 금호파크힐스 단지 내부 공터에 나무를 심는다 — 나무가 많아서(170여 그루) 개별 메시로 만들면
