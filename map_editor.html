@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>지도 에디터</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  body { display: flex; flex-direction: column; background: #20232a; color: #e8eaf0; }
+  #toolbar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: #2b2f38; border-bottom: 1px solid #3a3f4b; flex: none;
+  }
+  #toolbar button, #toolbar input {
+    font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 6px; border: 1px solid #4a4f5b;
+    background: #3a3f4b; color: #e8eaf0; cursor: pointer;
+  }
+  #toolbar input[type="text"] { cursor: text; width: 180px; }
+  #toolbar button:hover { background: #4a4f5b; }
+  #toolbar .hint { color: #9aa0ad; font-size: 12px; margin-left: auto; }
+  #main { flex: 1; display: flex; min-height: 0; }
+  #stageWrap { flex: 1; overflow: auto; background: #14161a; position: relative; }
+  #stage { position: relative; transform-origin: 0 0; }
+  #stage img { display: block; user-select: none; -webkit-user-drag: none; }
+  #overlay { position: absolute; left: 0; top: 0; }
+  .marker-dot { cursor: grab; }
+  .marker-dot:active { cursor: grabbing; }
+  .marker-dot.selected { stroke: #fff; stroke-width: 3; }
+  .marker-hit { fill: transparent; cursor: grab; pointer-events: all; }
+  .marker-hit:active { cursor: grabbing; }
+  .rot-handle { cursor: grab; fill: #ffd34d; stroke: #8a6b00; stroke-width: 1.5; }
+  .rot-hit { fill: transparent; cursor: grab; pointer-events: all; }
+  .rot-hit:active { cursor: grabbing; }
+  .rot-handle:active { cursor: grabbing; }
+  .rot-line { stroke: #ffd34d; stroke-width: 2; pointer-events: none; }
+  .marker-label {
+    font-size: 22px; fill: #202225; paint-order: stroke; stroke: #fff; stroke-width: 4px;
+    pointer-events: none; font-weight: 600;
+  }
+  .road-line { stroke: #4a4a4e; stroke-linecap: round; cursor: pointer; }
+  .road-hit { stroke: transparent; stroke-width: 26; cursor: pointer; pointer-events: all; }
+  .road-line.selected { stroke: #e3482b; }
+  .road-handle { fill: #e3482b; stroke: #fff; stroke-width: 2; cursor: grab; }
+  .road-handle:active { cursor: grabbing; }
+  #sidePanel {
+    width: 300px; flex: none; background: #262a33; border-left: 1px solid #3a3f4b;
+    padding: 14px; overflow-y: auto;
+  }
+  #sidePanel h2 { font-size: 15px; margin: 0 0 10px; }
+  #sidePanel .empty { color: #9aa0ad; font-size: 13px; line-height: 1.6; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 12px; color: #aab0bd; margin-bottom: 3px; }
+  .field input[type="number"], .field input[type="text"] {
+    width: 100%; padding: 6px 8px; border-radius: 5px; border: 1px solid #4a4f5b;
+    background: #1d2027; color: #e8eaf0; font: inherit; font-size: 13px;
+  }
+  .field .row { display: flex; gap: 6px; }
+  .field .row input { flex: 1; min-width: 0; }
+  .field.disabled { opacity: 0.45; }
+  .field .note { font-size: 11px; color: #8d93a0; margin-top: 3px; }
+  #sidePanel button.full { width: 100%; padding: 8px; margin-top: 6px; border-radius: 6px; border: 1px solid #4a4f5b; background: #3a3f4b; color: #e8eaf0; cursor: pointer; font: inherit; }
+  #sidePanel button.full:hover { background: #4a4f5b; }
+  #sidePanel button.danger { border-color: #7a3030; background: #4a2a2a; }
+  #sidePanel button.danger:hover { background: #5a3434; }
+  #exportModal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex;
+    align-items: center; justify-content: center; z-index: 50;
+  }
+  #exportModal.hidden { display: none; }
+  #exportBox { width: min(900px, 90vw); max-height: 85vh; background: #1d2027; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  #exportBox h3 { margin: 0; font-size: 15px; }
+  #exportBox p { margin: 0; font-size: 12px; color: #aab0bd; line-height: 1.5; }
+  #exportText { flex: 1; min-height: 50vh; background: #121419; color: #d8ecff; font: 12px/1.5 ui-monospace, monospace; border: 1px solid #3a3f4b; border-radius: 6px; padding: 10px; white-space: pre; }
+  #exportBox .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  #toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: #2f3640; color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button id="zoomOutBtn">🔍-</button>
+  <span id="zoomLabel" style="min-width:48px; text-align:center;">40%</span>
+  <button id="zoomInBtn">🔍+</button>
+  <input id="searchInput" type="text" placeholder="건물 이름 검색 후 Enter" />
+  <span class="hint" id="statusText">neighborhood3d.js 불러오는 중…</span>
+  <button id="exportBtn">📋 내보내기</button>
+</div>
+<div id="main">
+  <div id="stageWrap">
+    <div id="stage">
+      <img id="mapImg" alt="지도" />
+      <svg id="overlay"></svg>
+    </div>
+  </div>
+  <div id="sidePanel">
+    <div id="panelBody"><p class="empty">건물(원)이나 도로(선)를 클릭해서 선택하세요.<br><br>· 원을 드래그하면 위치가 바뀝니다.<br>· 노란 점(방향 손잡이)을 드래그하면 회전이 바뀝니다 — 모델이 있는 건물만 적용됩니다.<br>· 도로는 빨간 사각형 손잡이로 양끝을 옮기고, 폭은 옆 칸에 숫자로 넣습니다.<br>· 다 고치면 위의 "내보내기"로 코드를 복사해서 neighborhood3d.js에 붙여넣으세요.</p></div>
+  </div>
+</div>
+<div id="exportModal" class="hidden">
+  <div id="exportBox">
+    <h3>neighborhood3d.js에 붙여넣을 코드</h3>
+    <p>아래 두 블록을 복사해서 neighborhood3d.js의 <code>const PLACES = [ … ];</code>와 <code>const ROAD_SEGMENTS = [ … ];</code> 안쪽 내용을 통째로 바꿔치기하세요(바깥 <code>const ... = [</code> / <code>];</code> 줄은 그대로 두고 안쪽 줄들만 교체).</p>
+    <textarea id="exportText" readonly></textarea>
+    <div class="actions">
+      <button id="copyExportBtn">복사하기</button>
+      <button id="closeExportBtn">닫기</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+(async function () {
+  const JS_URL = "neighborhood3d.js";
+  const statusText = document.getElementById("statusText");
+  const toastEl = document.getElementById("toast");
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove("show"), 1800);
+  }
+
+  // ── neighborhood3d.js 원본 텍스트를 받아서 MAP_IMAGE / ROAD_* 상수 / PLACES / ROAD_SEGMENTS를 파싱 ──
+  let srcText;
+  try {
+    srcText = await (await fetch(JS_URL)).text();
+  } catch (err) {
+    statusText.textContent = "neighborhood3d.js를 불러오지 못했습니다 — 로컬 서버로(파일로 직접 열지 말고) 열어주세요.";
+    return;
+  }
+
+  function parseMapImage(src) {
+    const m = src.match(/const MAP_IMAGE = \{([\s\S]*?)\};/);
+    const block = m[1];
+    const file = block.match(/file:\s*"([^"]*)"/)[1];
+    const width = parseFloat(block.match(/width:\s*([\d.]+)/)[1]);
+    const height = parseFloat(block.match(/height:\s*([\d.]+)/)[1]);
+    const scale = parseFloat(block.match(/scale:\s*([\d.]+)/)[1]);
+    const ax = parseFloat(block.match(/anchorPx:\s*\{\s*x:\s*([\d.-]+)/)[1]);
+    const ay = block.match(/anchorPx:\s*\{[^}]*y:\s*([\d.-]+)/)[1];
+    return { file, width, height, scale, anchorPx: { x: ax, y: parseFloat(ay) } };
+  }
+
+  function parseRoadConstants(src) {
+    const out = {};
+    ["ROAD_MAJOR", "ROAD_WIDE", "ROAD_MEDIUM", "ROAD_NARROW"].forEach((name) => {
+      const m = src.match(new RegExp(`const ${name}\\s*=\\s*([\\d.]+)`));
+      if (m) out[name] = parseFloat(m[1]);
+    });
+    return out;
+  }
+
+  function grab(line, re, cast) {
+    const m = line.match(re);
+    return m ? cast(m[1]) : undefined;
+  }
+
+  function parsePlaces(src) {
+    const m = src.match(/const PLACES = \[([\s\S]*?)\n\];/);
+    const lines = m[1].split("\n");
+    const places = [];
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line.startsWith("{")) continue;
+      const p = {
+        id: grab(line, /id:\s*(-?\d+)/, Number),
+        name: grab(line, /name:\s*"([^"]*)"/, String),
+        floors: grab(line, /floors:\s*(-?\d+)/, Number),
+        type: grab(line, /type:\s*"([^"]*)"/, String),
+        x: grab(line, /\bx:\s*(-?[\d.]+)/, Number),
+        z: grab(line, /\bz:\s*(-?[\d.]+)/, Number),
+        model: grab(line, /model:\s*"([^"]*)"/, String),
+        rotationDeg: grab(line, /rotationDeg:\s*(-?[\d.]+)/, Number),
+        scaleRatio: grab(line, /scaleRatio:\s*(-?[\d.]+)/, Number),
+      };
+      if (/\bhome:\s*true/.test(line)) p.home = true;
+      if (/\bdiagonal:\s*true/.test(line)) p.diagonal = true;
+      if (/\bchurch:\s*true/.test(line)) p.church = true;
+      places.push(p);
+    }
+    return places;
+  }
+
+  function parseRoads(src, roadConsts) {
+    const m = src.match(/const ROAD_SEGMENTS = \[([\s\S]*?)\n\];/);
+    const lines = m[1].split("\n");
+    const roads = [];
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line.startsWith("{")) continue;
+      const mm = line.match(/a:\s*\[([^\]]+)\],\s*b:\s*\[([^\]]+)\],\s*width:\s*([\w.]+)/);
+      if (!mm) continue;
+      const a = mm[1].split(",").map((v) => parseFloat(v));
+      const b = mm[2].split(",").map((v) => parseFloat(v));
+      let width = parseFloat(mm[3]);
+      if (Number.isNaN(width)) width = roadConsts[mm[3]] ?? 6;
+      roads.push({ a, b, width });
+    }
+    return roads;
+  }
+
+  const mapImage = parseMapImage(srcText);
+  const roadConsts = parseRoadConstants(srcText);
+  const PLACES = parsePlaces(srcText);
+  const ROADS = parseRoads(srcText, roadConsts);
+  statusText.textContent = `건물 ${PLACES.length}개 · 도로 ${ROADS.length}개 불러옴`;
+
+  const SCALE = mapImage.scale;
+  const ANCHOR = mapImage.anchorPx;
+  function rawToPx(x, z) { return [ANCHOR.x + x / SCALE, ANCHOR.y + z / SCALE]; }
+  function pxToRaw(px, py) { return [(px - ANCHOR.x) * SCALE, (py - ANCHOR.y) * SCALE]; }
+
+  // ── 화면 구성 ──
+  const mapImg = document.getElementById("mapImg");
+  mapImg.src = mapImage.file;
+  mapImg.width = mapImage.width;
+  mapImg.height = mapImage.height;
+  const stage = document.getElementById("stage");
+  const stageWrap = document.getElementById("stageWrap");
+  const svg = document.getElementById("overlay");
+  svg.setAttribute("width", mapImage.width);
+  svg.setAttribute("height", mapImage.height);
+  svg.setAttribute("viewBox", `0 0 ${mapImage.width} ${mapImage.height}`);
+
+  let zoom = 0.4;
+  function applyZoom() {
+    stage.style.transform = `scale(${zoom})`;
+    stage.style.width = mapImage.width + "px";
+    stage.style.height = mapImage.height + "px";
+    document.getElementById("zoomLabel").textContent = Math.round(zoom * 100) + "%";
+  }
+  document.getElementById("zoomInBtn").addEventListener("click", () => { zoom = Math.min(2, zoom * 1.3); applyZoom(); });
+  document.getElementById("zoomOutBtn").addEventListener("click", () => { zoom = Math.max(0.08, zoom / 1.3); applyZoom(); });
+  applyZoom();
+
+  function svgPoint(evt) {
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    const node = document.createElementNS(NS, tag);
+    for (const k in attrs) node.setAttribute(k, attrs[k]);
+    return node;
+  }
+
+  // ── glb 바운딩박스로 "기본 긴 변이 x축인지 z축인지" 캐싱(회전 손잡이 변환용) ──
+  const axisCache = {};
+  async function getDefaultAxis(place) {
+    if (!place.model) return "x";
+    if (axisCache[place.model]) return axisCache[place.model];
+    try {
+      const buf = await (await fetch(place.model)).arrayBuffer();
+      const dv = new DataView(buf);
+      const jsonLen = dv.getUint32(12, true);
+      const jsonBytes = new Uint8Array(buf, 20, jsonLen);
+      const gltf = JSON.parse(new TextDecoder("utf-8").decode(jsonBytes));
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      (gltf.accessors || []).forEach((acc) => {
+        if (acc.type === "VEC3" && acc.min && acc.max) {
+          minX = Math.min(minX, acc.min[0]); maxX = Math.max(maxX, acc.max[0]);
+          minZ = Math.min(minZ, acc.min[2]); maxZ = Math.max(maxZ, acc.max[2]);
+        }
+      });
+      const axis = (maxX - minX) >= (maxZ - minZ) ? "x" : "z";
+      axisCache[place.model] = axis;
+      return axis;
+    } catch (err) {
+      axisCache[place.model] = "x";
+      return "x";
+    }
+  }
+  // world_angle: world +X축 기준 반시계(= px 오른쪽, py 아래쪽 평면에서의 atan2(dz,dx))로 잰 각도(도)
+  function rotationDegToWorldAngle(rotationDeg, axis) {
+    return axis === "x" ? -rotationDeg : 90 - rotationDeg;
+  }
+  function worldAngleToRotationDeg(worldAngle, axis) {
+    let r = axis === "x" ? -worldAngle : 90 - worldAngle;
+    while (r <= -180) r += 360;
+    while (r > 180) r -= 360;
+    return r;
+  }
+
+  const TYPE_COLOR = {
+    "아파트": "#d9a36a", "카페": "#2f6fae", "학교": "#d7b86a", "도서관": "#6fa3c2",
+    "보건소": "#7fb0c8", "학원": "#4a7fd0", "중형마트": "#ff8c3c", "대형마트": "#d13a4a",
+    "편의점": "#8a4fc2", "식당": "#e0a040", "기타": "#9fb0c0",
+  };
+
+  // ── 마커/도로 렌더링 ──
+  const placeLayer = el("g", {});
+  const roadLayer = el("g", {});
+  svg.appendChild(roadLayer);
+  svg.appendChild(placeLayer);
+
+  const placeNodes = {}; // id -> { place, dot, label, handle, rotLine, axis }
+  const roadNodes = []; // { seg, line, hit, handleA, handleB }
+
+  let selected = null; // { kind: 'place'|'road', ref }
+
+  function placeMarkerRadius() { return 8; }
+
+  PLACES.forEach((place) => {
+    const [px, py] = rawToPx(place.x, place.z);
+    const g = el("g", { "data-place-id": place.id });
+    const color = place.home ? "#ff4d6d" : TYPE_COLOR[place.type] || "#9fb0c0";
+    const dot = el("circle", { cx: px, cy: py, r: placeMarkerRadius(), fill: color, class: "marker-dot" });
+    const dotHit = el("circle", { cx: px, cy: py, r: 16, class: "marker-hit" });
+    const label = el("text", { x: px + 10, y: py + 4, class: "marker-label" });
+    label.textContent = place.name;
+    const rotLine = el("line", { class: "rot-line", visibility: "hidden" });
+    const handle = el("circle", { r: 7, class: "rot-handle", visibility: "hidden" });
+    const handleHit = el("circle", { r: 16, class: "rot-hit", visibility: "hidden" });
+    g.appendChild(rotLine);
+    g.appendChild(dot);
+    g.appendChild(dotHit);
+    g.appendChild(label);
+    g.appendChild(handle);
+    g.appendChild(handleHit);
+    placeLayer.appendChild(g);
+    placeNodes[place.id] = { place, g, dot, dotHit, label, rotLine, handle, handleHit, axis: null, px, py };
+
+    dotHit.addEventListener("pointerdown", (ev) => startPlaceDrag(ev, place.id));
+    handleHit.addEventListener("pointerdown", (ev) => startRotateDrag(ev, place.id));
+  });
+
+  ROADS.forEach((seg, i) => {
+    const [ax, ay] = rawToPx(seg.a[0], seg.a[1]);
+    const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
+    const hit = el("line", { x1: ax, y1: ay, x2: bx, y2: by, class: "road-hit" });
+    const line = el("line", { x1: ax, y1: ay, x2: bx, y2: by, class: "road-line", "stroke-width": Math.max(2, seg.width / SCALE * 0.5) });
+    const handleA = el("rect", { x: ax - 5, y: ay - 5, width: 10, height: 10, class: "road-handle", visibility: "hidden" });
+    const handleB = el("rect", { x: bx - 5, y: by - 5, width: 10, height: 10, class: "road-handle", visibility: "hidden" });
+    roadLayer.appendChild(hit);
+    roadLayer.appendChild(line);
+    roadLayer.appendChild(handleA);
+    roadLayer.appendChild(handleB);
+    const node = { seg, index: i, line, hit, handleA, handleB };
+    roadNodes.push(node);
+    hit.addEventListener("pointerdown", (ev) => selectRoad(ev, node));
+    handleA.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "a"));
+    handleB.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "b"));
+  });
+
+  function updatePlaceVisual(id) {
+    const n = placeNodes[id];
+    const [px, py] = rawToPx(n.place.x, n.place.z);
+    n.px = px; n.py = py;
+    n.dot.setAttribute("cx", px);
+    n.dot.setAttribute("cy", py);
+    n.dotHit.setAttribute("cx", px);
+    n.dotHit.setAttribute("cy", py);
+    n.label.setAttribute("x", px + 10);
+    n.label.setAttribute("y", py + 4);
+    updateRotHandle(id);
+  }
+
+  function updateRotHandle(id) {
+    const n = placeNodes[id];
+    const hasModel = !!n.place.model;
+    n.handle.setAttribute("visibility", hasModel ? "visible" : "hidden");
+    n.handleHit.setAttribute("visibility", hasModel ? "visible" : "hidden");
+    n.rotLine.setAttribute("visibility", hasModel ? "visible" : "hidden");
+    if (!hasModel || n.axis == null) return;
+    const worldAngle = rotationDegToWorldAngle(n.place.rotationDeg || 0, n.axis);
+    const rad = (worldAngle * Math.PI) / 180;
+    const R = 34;
+    const hx = n.px + R * Math.cos(rad);
+    const hy = n.py + R * Math.sin(rad);
+    n.handle.setAttribute("cx", hx);
+    n.handle.setAttribute("cy", hy);
+    n.handleHit.setAttribute("cx", hx);
+    n.handleHit.setAttribute("cy", hy);
+    n.rotLine.setAttribute("x1", n.px);
+    n.rotLine.setAttribute("y1", n.py);
+    n.rotLine.setAttribute("x2", hx);
+    n.rotLine.setAttribute("y2", hy);
+  }
+
+  function updateRoadVisual(node) {
+    const [ax, ay] = rawToPx(node.seg.a[0], node.seg.a[1]);
+    const [bx, by] = rawToPx(node.seg.b[0], node.seg.b[1]);
+    node.line.setAttribute("x1", ax); node.line.setAttribute("y1", ay);
+    node.line.setAttribute("x2", bx); node.line.setAttribute("y2", by);
+    node.line.setAttribute("stroke-width", Math.max(2, node.seg.width / SCALE * 0.5));
+    node.hit.setAttribute("x1", ax); node.hit.setAttribute("y1", ay);
+    node.hit.setAttribute("x2", bx); node.hit.setAttribute("y2", by);
+    node.handleA.setAttribute("x", ax - 5); node.handleA.setAttribute("y", ay - 5);
+    node.handleB.setAttribute("x", bx - 5); node.handleB.setAttribute("y", by - 5);
+  }
+
+  // ── 선택 & 사이드 패널 ──
+  const panelBody = document.getElementById("panelBody");
+
+  function clearSelectionVisual() {
+    if (!selected) return;
+    if (selected.kind === "place") placeNodes[selected.ref.id].dot.classList.remove("selected");
+    if (selected.kind === "road") {
+      selected.ref.line.classList.remove("selected");
+      selected.ref.handleA.setAttribute("visibility", "hidden");
+      selected.ref.handleB.setAttribute("visibility", "hidden");
+    }
+  }
+
+  async function selectPlace(id) {
+    clearSelectionVisual();
+    selected = { kind: "place", ref: PLACES.find((p) => p.id === id) };
+    const n = placeNodes[id];
+    n.dot.classList.add("selected");
+    if (n.place.model && n.axis == null) {
+      n.axis = await getDefaultAxis(n.place);
+      updateRotHandle(id);
+    }
+    renderPanel();
+  }
+
+  function selectRoad(ev, node) {
+    ev.stopPropagation();
+    clearSelectionVisual();
+    selected = { kind: "road", ref: node };
+    node.line.classList.add("selected");
+    node.handleA.setAttribute("visibility", "visible");
+    node.handleB.setAttribute("visibility", "visible");
+    renderPanel();
+  }
+
+  function fieldNum(label, value, onInput, opts) {
+    const wrap = document.createElement("div");
+    wrap.className = "field" + (opts && opts.disabled ? " disabled" : "");
+    const lab = document.createElement("label");
+    lab.textContent = label;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = (opts && opts.step) || "0.1";
+    input.value = value;
+    input.disabled = !!(opts && opts.disabled);
+    input.addEventListener("input", () => onInput(parseFloat(input.value)));
+    wrap.appendChild(lab);
+    wrap.appendChild(input);
+    if (opts && opts.note) {
+      const note = document.createElement("div");
+      note.className = "note";
+      note.textContent = opts.note;
+      wrap.appendChild(note);
+    }
+    return wrap;
+  }
+
+  function renderPanel() {
+    panelBody.innerHTML = "";
+    if (!selected) {
+      panelBody.innerHTML = '<p class="empty">건물(원)이나 도로(선)를 클릭해서 선택하세요.</p>';
+      return;
+    }
+    if (selected.kind === "place") {
+      const place = selected.ref;
+      const h2 = document.createElement("h2");
+      h2.textContent = place.name + (place.home ? " (우리집)" : "");
+      panelBody.appendChild(h2);
+      panelBody.appendChild(fieldNum("x (raw)", place.x, (v) => { place.x = v; updatePlaceVisual(place.id); }));
+      panelBody.appendChild(fieldNum("z (raw)", place.z, (v) => { place.z = v; updatePlaceVisual(place.id); }));
+      panelBody.appendChild(fieldNum("rotationDeg", place.rotationDeg ?? 0, (v) => { place.rotationDeg = v; updateRotHandle(place.id); }, {
+        step: "1", disabled: !place.model, note: place.model ? "노란 손잡이를 드래그해도 바뀝니다." : "이 건물은 모델이 없어 회전이 게임에 적용되지 않습니다.",
+      }));
+      panelBody.appendChild(fieldNum("scaleRatio", place.scaleRatio ?? 1, (v) => { place.scaleRatio = v; }, {
+        step: "0.05", disabled: !place.model, note: place.model ? "모델이 실제보다 작게/크게 만들어졌을 때 전체 크기를 보정합니다(기본 1)." : "모델이 없는 건물에는 적용되지 않습니다.",
+      }));
+    } else {
+      const node = selected.ref;
+      const h2 = document.createElement("h2");
+      h2.textContent = `도로 구간 #${node.index}`;
+      panelBody.appendChild(h2);
+      panelBody.appendChild(fieldNum("a.x (raw)", node.seg.a[0], (v) => { node.seg.a[0] = v; updateRoadVisual(node); }));
+      panelBody.appendChild(fieldNum("a.z (raw)", node.seg.a[1], (v) => { node.seg.a[1] = v; updateRoadVisual(node); }));
+      panelBody.appendChild(fieldNum("b.x (raw)", node.seg.b[0], (v) => { node.seg.b[0] = v; updateRoadVisual(node); }));
+      panelBody.appendChild(fieldNum("b.z (raw)", node.seg.b[1], (v) => { node.seg.b[1] = v; updateRoadVisual(node); }));
+      panelBody.appendChild(fieldNum("width (raw)", node.seg.width, (v) => { node.seg.width = v; updateRoadVisual(node); }, { step: "0.5" }));
+    }
+  }
+
+  svg.addEventListener("pointerdown", (ev) => {
+    if (ev.target === svg) {
+      clearSelectionVisual();
+      selected = null;
+      renderPanel();
+    }
+  });
+  placeLayer.addEventListener("pointerdown", (ev) => {
+    const g = ev.target.closest("g[data-place-id]");
+    if (g && ev.target.tagName.toLowerCase() === "text") {
+      selectPlace(Number(g.dataset.placeId));
+    }
+  });
+
+  // ── 드래그 ──
+  function startPlaceDrag(ev, id) {
+    ev.stopPropagation();
+    selectPlace(id);
+    const n = placeNodes[id];
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const [rx, rz] = pxToRaw(pt.x, pt.y);
+      n.place.x = Math.round(rx * 10) / 10;
+      n.place.z = Math.round(rz * 10) / 10;
+      updatePlaceVisual(id);
+      if (selected && selected.kind === "place" && selected.ref.id === id) renderPanel();
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function startRotateDrag(ev, id) {
+    ev.stopPropagation();
+    selectPlace(id);
+    const n = placeNodes[id];
+    const move = async (mev) => {
+      if (n.axis == null) return;
+      const pt = svgPoint(mev);
+      const worldAngle = (Math.atan2(pt.y - n.py, pt.x - n.px) * 180) / Math.PI;
+      n.place.rotationDeg = Math.round(worldAngleToRotationDeg(worldAngle, n.axis) * 10) / 10;
+      updateRotHandle(id);
+      if (selected && selected.kind === "place" && selected.ref.id === id) renderPanel();
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function startRoadEndpointDrag(ev, node, which) {
+    ev.stopPropagation();
+    selectRoad(ev, node);
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const [rx, rz] = pxToRaw(pt.x, pt.y);
+      node.seg[which][0] = Math.round(rx * 10) / 10;
+      node.seg[which][1] = Math.round(rz * 10) / 10;
+      updateRoadVisual(node);
+      if (selected && selected.kind === "road" && selected.ref === node) renderPanel();
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  // ── 검색 ──
+  document.getElementById("searchInput").addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    const q = ev.target.value.trim();
+    if (!q) return;
+    const match = PLACES.find((p) => p.name.includes(q));
+    if (!match) { toast("못 찾았어요: " + q); return; }
+    selectPlace(match.id);
+    const n = placeNodes[match.id];
+    stageWrap.scrollLeft = n.px * zoom - stageWrap.clientWidth / 2;
+    stageWrap.scrollTop = n.py * zoom - stageWrap.clientHeight / 2;
+  });
+
+  // ── 내보내기 ──
+  function fmtNum(v) {
+    if (v == null) return "0";
+    const r = Math.round(v * 10) / 10;
+    return Number.isInteger(r) ? String(r) : String(r);
+  }
+  function serializePlace(p) {
+    const parts = [`id: ${p.id}`, `name: ${JSON.stringify(p.name)}`];
+    if (p.floors != null) parts.push(`floors: ${p.floors}`);
+    if (p.type != null) parts.push(`type: ${JSON.stringify(p.type)}`);
+    parts.push(`x: ${fmtNum(p.x)}`, `z: ${fmtNum(p.z)}`);
+    if (p.home) parts.push("home: true");
+    if (p.diagonal) parts.push("diagonal: true");
+    if (p.church) parts.push("church: true");
+    if (p.model) parts.push(`model: ${JSON.stringify(p.model)}`);
+    if (p.rotationDeg != null) parts.push(`rotationDeg: ${fmtNum(p.rotationDeg)}`);
+    if (p.scaleRatio != null && p.scaleRatio !== 1) parts.push(`scaleRatio: ${fmtNum(p.scaleRatio)}`);
+    return `  { ${parts.join(", ")} },`;
+  }
+  function serializeRoad(r) {
+    return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)} },`;
+  }
+
+  const exportModal = document.getElementById("exportModal");
+  const exportText = document.getElementById("exportText");
+  document.getElementById("exportBtn").addEventListener("click", () => {
+    const placesBlock = PLACES.map(serializePlace).join("\n");
+    const roadsBlock = ROADS.map(serializeRoad).join("\n");
+    exportText.value =
+      "// ===== PLACES 안쪽에 통째로 붙여넣기 =====\n" + placesBlock +
+      "\n\n// ===== ROAD_SEGMENTS 안쪽에 통째로 붙여넣기 =====\n" + roadsBlock;
+    exportModal.classList.remove("hidden");
+  });
+  document.getElementById("closeExportBtn").addEventListener("click", () => exportModal.classList.add("hidden"));
+  document.getElementById("copyExportBtn").addEventListener("click", async () => {
+    exportText.select();
+    try {
+      await navigator.clipboard.writeText(exportText.value);
+      toast("복사했어요!");
+    } catch (err) {
+      toast("자동 복사가 막혀 있어요 — 직접 Ctrl+C로 복사하세요.");
+    }
+  });
+})();
+</script>
+</body>
+</html>
