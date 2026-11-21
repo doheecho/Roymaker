@@ -6,9 +6,9 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261121c";
+import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261122a";
 
-const ASSET_VERSION = "20261121b";
+const ASSET_VERSION = "20261122c";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -696,8 +696,8 @@ const groundPlatforms = [];
 // 덩어리만 대충 감싸는 값(160×90)을 따로 어림잡아 넣었다 — 공용 마당까지 다 막으면 오히려
 // 지나다닐 수 있어야 할 자리까지 막힌다.
 const BUILDING_FOOTPRINT_OVERRIDE = {
-  0: [18, 29], 1: [18.3, 29], 3: [42, 49], 4: [49.7, 43.7], 5: [64.25, 42.15],
-  7: [160, 90], 9: [12.6, 11.15], 10: [16.6, 11.15], 11: [16, 11.6], 12: [18.3, 29],
+  0: [18, 29], 1: [18.3, 29], 3: [42, 49], 4: [136, 113], 5: [64.25, 42.15],
+  7: [254, 158], 9: [12.6, 11.15], 10: [16.6, 11.15], 11: [16, 11.6], 12: [18.3, 29],
   14: [14.9, 23.8], 15: [15.2, 11], 16: [10.2, 8.3],
 };
 function worldToLocalXZ(x, z, cx, cz, cos, sin) {

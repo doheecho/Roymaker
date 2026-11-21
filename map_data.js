@@ -20,26 +20,30 @@
 // 2026-11-21 밤 갱신: 101~116동(+우리집)의 .glb를 전부 새로 만든 모델(place_금파힐NNN.glb)로
 // 바꾸면서, 모델 자체의 가로·세로가 많이 달라져 rotationDeg의 기준(모델 기본 긴 변이 x축인지
 // z축인지)이 104·112·116동에서 뒤집혀 그 세 동만 rotationDeg를 다시 구했다(나머지는 기준이
-// 그대로라 값도 그대로 둠). 102·106·107·108동 건물은 하나의 모델(커뮤니티 시설 위에 4개 동이
-// 올라간 구조, place_커뮤니티+102,106,107,108.glb)로 합쳐져서 107 자리에만 그 모델을 붙였다.
-// 102·106·108동은 건물 모델은 없어졌지만(model 필드 없음) 라벨은 그대로 남겨 각자 원래
-// 위치(지도에서 처음 잰 좌표)에 이름표만 떠 있게 했다 — 3dmodeling_place.csv에서도 이 세 동은
-// 모델링이미지 칸을 비워 같은 규칙(모델 없으면 건물은 안 띄우고 라벨만 유지)을 따르기로
-// 했던 것과 맞춘 것이다. 107동 라벨은 실제 합쳐진 건물(아래 model) 위치 기준으로 뜬다 — 그
-// 모델 안에서 102·106·107·108 각 동(위쪽 타워만, "UpperOnly")이 자기 자리에서 떨어진 정도
-// (로컬 좌표)가 실제 106→107→108 사이의 방향(약 140도)과 거의 일치해서(world 기준, x축에서
-// 반시계로 잰 각도) 회전은 그대로(0도)두고, 위치만 106·107·108 세 동의 "실제 좌표 - 모델 안
-// 로컬 좌표" 평균으로 잡았다(102는 떨어진 정도가 다른 셋과 안 맞아 평균에서 뺐다 — 애초에
-// 102가 나머지 셋과 꽤 떨어진 자리였어서 그럴 수 있다).
+// 그대로라 값도 그대로 둠). 102·106·107·108동과 103·104·105동은 각각 하나의 모델로 합쳐져서
+// (Community_south.glb → 107 자리, Community_north.glb → 104 자리) 그 자리에만 모델을 붙였다.
+// 102·103·105·106·108동은 건물 모델은 없어졌지만(model 필드 없음) 라벨은 그대로 남겨 각자
+// 원래 위치(지도에서 처음 잰 좌표)에 이름표만 떠 있게 했다.
+//
+// 2026-11-22 갱신: Community_south·north.glb의 자리(x,z)와 각도(rotationDeg)는 이렇게 구했다 —
+// three.js로 모델을 불러와 그 안의 이름 붙은 노드(KumhoParkHills_NNN_UpperOnly/GroundUp)마다
+// 바운딩박스 중심을 재서 "모델 안에서 그 동이 어디 있는지"(로컬 좌표)를 얻고, 이 동들이 각자
+// 단독 모델이었을 때 실측해 뒀던 원래 좌표(위 102~108 라인의 역사적인 x,z — 지금 라벨만 남은
+// 102·103·105·106·108동 값과 같다)를 "실제 좌표"로 놓고, 여러 동 쌍의 로컬↔실제 벡터 사이
+// 각도 차이를 평균해 rotationDeg를, 각 동의 "실제 좌표 - 회전시킨 로컬 좌표" 평균을 내서
+// 모델이 들어갈 x,z를 구했다(Community_south는 102·106·107·108 네 동, Community_north는
+// 103·104·105 세 동 평균 — 둘 다 세 쌍 안팎의 추정치가 서로 ±10° 안쪽으로 맞아떨어져서
+// 믿을 만했다). 높이(세로 치수)가 15층 건물의 실제 높이(약 45~58m)와 맞아떨어지는 걸로 봐서
+// scaleRatio 보정은 필요 없었다(기본 1).
 export const PLACES = [
   { id: 0, name: "우리집", floors: 15, type: "아파트", x: 2.9, z: 4.4, home: true, model: "models/place_금파힐113.glb", rotationDeg: 67.4 },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -386, z: 81.4, model: "models/place_금파힐101.glb", rotationDeg: 0 },
   { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -313.8, z: 41.4 },
   { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -246.5, z: -21.7, rotationDeg: 0 },
-  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -184.6, z: -75.1, model: "models/Community_north.glb", rotationDeg: -75.9 },
+  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -185.4, z: -78.5, model: "models/Community_north.glb", rotationDeg: -8.9 },
   { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -121.1, z: -124.9, rotationDeg: 0 },
   { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -58.3, z: -61.9 },
-  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -122.3, z: 8.8, model: "models/Community_south.glb", rotationDeg: 0 },
+  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -371.2, z: -141.9, model: "models/Community_south.glb", rotationDeg: 0 },
   { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -266.8, z: 16.6 },
   { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -313.6, z: 134.1, model: "models/place_금파힐109.glb", rotationDeg: 0 },
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -253.3, z: 115.9, model: "models/place_금파힐110.glb", rotationDeg: 0 },
