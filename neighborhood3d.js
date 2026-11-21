@@ -616,33 +616,37 @@ function buildStaticScene() {
   buildTrees();
 }
 
-// ── 지도 바닥: img/navermap_ground.jpg를 실제 위치에 맞춰 깐다 ──
-// 네 모서리(3D 좌표, 카카오 실측 좌표 기준으로 계산)에 이미지의 왼쪽위·오른쪽위·왼쪽아래·오른쪽아래를 붙인다.
-// 이미지 파일을 바꾸면 모서리 좌표도 같이 다시 계산해야 한다.
-const MAP_GROUND = {
-  file: "img/navermap_ground.jpg",
-  corners: {
-    TL: [11.63, 302.51],
-    TR: [313.64, -165.14],
-    BL: [-237.03, 142.03],
-    BR: [64.99, -325.62],
-  },
+// ── 지도 바닥: img/base_naver_map.png(3288×2134)를 실제 위치에 맞춰 깐다 ──
+// 이미지 우하단의 50m 축척자(149px)로 구한 실측 축척(약 0.336m/px)은 PLACES/ROAD_SEGMENTS가 쓰는
+// raw 좌표계와는 맞지 않는다 — 그 좌표들도 결국 다른(예전) 지도 스크린샷을 "눈대중"으로 환산한 값이라
+// 실제 축척과는 어긋나 있기 때문. 그래서 raw 좌표를 이미 알고 있는 두 지점(113동=우리집 raw(0,0),
+// 금호119안전센터 raw(16,83))과 멀리 떨어진 롯데마트행당점 raw(654,-352)을 이 이미지에서 직접 찾아
+// 픽셀 좌표를 읽고, 그 세 점으로 축척·회전을 역산했다(회전은 약 1.75도로 무시할 수준이라 0으로 둠).
+// 이렇게 구한 축척으로 금호고등학교 위치를 역산해 봤더니 이미지 속 실제 학교 자리와 정확히 들어맞아
+// 검증됐다. 이미지 파일을 바꾸면 anchorPx(113동이 찍힌 픽셀 좌표)와 scale도 다시 구해야 한다.
+const MAP_IMAGE = {
+  file: "img/base_naver_map.png",
+  width: 3288,
+  height: 2134,
+  scale: 0.728, // raw 단위 / 이미지 px
+  anchorPx: { x: 1339.4, y: 1381.5 }, // 주황색으로 칠해진 113동(우리집, raw 0,0)의 이미지 픽셀 좌표
 };
 function buildMapGround(scene) {
   new THREE.TextureLoader().load(
-    `${MAP_GROUND.file}?v=${ASSET_VERSION}`,
+    `${MAP_IMAGE.file}?v=${ASSET_VERSION}`,
     (tex) => {
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 8;
-      const c = MAP_GROUND.corners;
-      const y = -0.025;
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.Float32BufferAttribute([c.TL[0], y, c.TL[1], c.TR[0], y, c.TR[1], c.BL[0], y, c.BL[1], c.BR[0], y, c.BR[1]], 3));
-      // 이미지 위쪽이 v=1: TL=(0,1) TR=(1,1) BL=(0,0) BR=(1,0)
-      geo.setAttribute("uv", new THREE.Float32BufferAttribute([0, 1, 1, 1, 0, 0, 1, 0], 2));
-      geo.setIndex([0, 2, 1, 2, 3, 1]);
-      geo.computeVertexNormals();
-      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 1 }));
+      const { width, height, scale, anchorPx } = MAP_IMAGE;
+      const w = width * scale * WORLD_SCALE;
+      const h = height * scale * WORLD_SCALE;
+      // 이미지 중심이 anchorPx(113동)에서 얼마나 떨어져 있는지로 바닥 메시의 중심 위치를 정한다
+      const cx = (width / 2 - anchorPx.x) * scale * WORLD_SCALE;
+      const cz = (height / 2 - anchorPx.y) * scale * WORLD_SCALE;
+      const geo = new THREE.PlaneGeometry(w, h);
+      geo.rotateX(-Math.PI / 2);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
+      mesh.position.set(cx, -0.025, cz);
       mesh.receiveShadow = true;
       scene.add(mesh);
     },
