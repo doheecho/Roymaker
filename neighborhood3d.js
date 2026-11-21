@@ -5,9 +5,16 @@
 // dance.glb(춤 동작들)는 그대로 쓴다.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { PLACES, ROAD_SEGMENTS } from "./map_data.js?v=20261121a";
 
-const ASSET_VERSION = "20261120b";
+const ASSET_VERSION = "20261121b";
+
+// 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
+// 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
+// 읽으려면 디코더를 미리 등록해 둬야 한다.
+const gltfLoader = new GLTFLoader();
+gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 
 const KEY_DIR = {
   ArrowUp: "up",
@@ -661,7 +668,7 @@ function disposeObject3D(obj) {
 // 통째로 키우거나 줄이는 보정값이다 — WORLD_SCALE과 곱해져서 적용된다.
 function loadPlaceModelInto(entry) {
   entry.loading = true;
-  new GLTFLoader().load(
+  gltfLoader.load(
     `${entry.place.model}?v=${ASSET_VERSION}`,
     (gltf) => {
       entry.loading = false;
@@ -996,7 +1003,7 @@ function updateErrandHighlights() {
 
 function loadCharacter() {
   return new Promise((resolve, reject) => {
-    new GLTFLoader().load(
+    gltfLoader.load(
       `models/walk.glb?v=${ASSET_VERSION}`,
       (gltf) => {
         character = gltf.scene;
@@ -1108,7 +1115,7 @@ function onDanceClick() {
     return;
   }
   danceBtnEl.disabled = true;
-  new GLTFLoader().load(
+  gltfLoader.load(
     `models/dance.glb?v=${ASSET_VERSION}`,
     (gltf) => {
       gltf.animations.forEach((clip) => {
@@ -1172,7 +1179,7 @@ function ensureMomLoaded(onReady) {
   if (momLoading) return;
   momLoading = true;
   if (momBtnEl) momBtnEl.disabled = true;
-  new GLTFLoader().load(
+  gltfLoader.load(
     `models/mom.glb?v=${ASSET_VERSION}`,
     (gltf) => {
       mom = gltf.scene;
