@@ -562,14 +562,20 @@ function updateLabelScales() {
   });
 }
 
-// 장소 라벨은 캐릭터와 LABEL_VISIBLE_RANGE(약 300m) 안에 있거나, 지금 심부름 목적지로 지정된
-// 곳(updateErrandHighlights의 파란 점멸과 같은 기준)일 때만 보인다 — placeId가 없는 라벨(불량배
-// 이름표 등)은 건드리지 않는다.
-function updateLabelVisibility() {
-  if (!character) return;
+// 지금 심부름 목적지로 지정된 장소 id 목록 — 이 목록에 있으면 라벨도, 건물(아래
+// updatePlaceVisibility)도 거리와 상관없이 항상 보인다.
+function missionActiveIds() {
   const activeIds = new Set();
   if (currentErrand?.phase === "toStore") currentErrand.storeIds.forEach((id) => activeIds.add(id));
   else if (currentErrand?.phase === "toHome") activeIds.add(0);
+  return activeIds;
+}
+
+// 장소 라벨은 캐릭터와 LABEL_VISIBLE_RANGE(약 300m) 안에 있거나, 지금 심부름 목적지로 지정된
+// 곳일 때만 보인다 — placeId가 없는 라벨(불량배 이름표 등)은 건드리지 않는다.
+function updateLabelVisibility() {
+  if (!character) return;
+  const activeIds = missionActiveIds();
   const cp = character.position;
   allLabelSprites.forEach((sprite) => {
     const placeId = sprite.userData.placeId;
@@ -581,6 +587,22 @@ function updateLabelVisibility() {
     const dx = cp.x - sprite.position.x;
     const dz = cp.z - sprite.position.z;
     sprite.visible = Math.hypot(dx, dz) <= LABEL_VISIBLE_RANGE;
+  });
+}
+
+// 건물 자체(플레이스홀더/실제 glb/교회 첨탑 등을 담은 group)도 라벨과 같은 기준으로
+// 보이기/숨기기를 한다 — 심부름 목적지는 멀어도 건물과 이름이 계속 보여야 길을 찾을 수 있다.
+function updatePlaceVisibility() {
+  if (!character) return;
+  const activeIds = missionActiveIds();
+  const cp = character.position;
+  const inRange = (px, pz, id) => activeIds.has(id) || Math.hypot(cp.x - px, cp.z - pz) <= LABEL_VISIBLE_RANGE;
+  placeVisibilityEntries.forEach((e) => {
+    e.group.visible = inRange(e.px, e.pz, e.place.id);
+  });
+  modelStreamEntries.forEach((entry) => {
+    entry.inRange = inRange(entry.px, entry.pz, entry.place.id);
+    entry.group.visible = entry.inRange;
   });
 }
 
@@ -865,6 +887,7 @@ const MODEL_LOAD_RANGE = LABEL_VISIBLE_RANGE;
 const MODEL_UNLOAD_RANGE = MODEL_LOAD_RANGE * 1.3;
 const MODEL_STREAM_CHECK_INTERVAL = 0.4; // 매 프레임 전부 검사하면 낭비라 이 간격으로만 확인한다
 const modelStreamEntries = []; // buildPlaces가 model이 있는 장소마다 하나씩 채운다
+const placeVisibilityEntries = []; // model이 없는 장소(플레이스홀더만 있는 건물)의 group 목록
 let modelStreamTimer = 0;
 
 function disposeObject3D(obj) {
@@ -908,7 +931,7 @@ function loadPlaceModelInto(entry) {
       model.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
       model.position.y -= box.min.y;
-      scene.add(model);
+      entry.group.add(model);
       entry.loadedModel = model;
       if (entry.placeholder) entry.placeholder.visible = false;
     },
@@ -931,7 +954,7 @@ function updateModelStreaming(dt) {
     if (dist <= MODEL_LOAD_RANGE) {
       if (!entry.loadedModel && !entry.loading) loadPlaceModelInto(entry);
     } else if (dist > MODEL_UNLOAD_RANGE && entry.loadedModel) {
-      scene.remove(entry.loadedModel);
+      entry.group.remove(entry.loadedModel);
       disposeObject3D(entry.loadedModel);
       entry.loadedModel = null;
       if (entry.placeholder) entry.placeholder.visible = true;
@@ -951,6 +974,12 @@ function buildPlaces() {
     const color = NAME_COLOR_OVERRIDE[place.name] ?? style.color;
     const rotY = place.diagonal ? Math.PI / 4 : 0;
 
+    // 건물 자체(플레이스홀더·실제 glb·교회 첨탑 등)는 전부 이 group에 담아서, 아래
+    // updatePlaceVisibility()가 group째로 보이기/숨기기만 하면 되게 한다 — 라벨과 똑같이
+    // 캐릭터와 LABEL_VISIBLE_RANGE(약 300m) 안에 있거나 지금 심부름 목적지일 때만 보인다.
+    const group = new THREE.Group();
+    scene.add(group);
+
     if (place.model) {
       // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동 등)은 캐릭터가 가까워지면 불러와 쓴다
       // (updateModelStreaming) — 그전엔 모델 없는 동과 같은 임시 매싱을 세워 둔다.
@@ -965,17 +994,17 @@ function buildPlaces() {
         mesh.receiveShadow = true;
         placeholder.add(mesh);
       }
-      scene.add(placeholder);
-      modelStreamEntries.push({ place, px, pz, rotY, placeholder, loadedModel: null, loading: false });
+      group.add(placeholder);
+      modelStreamEntries.push({ place, px, pz, rotY, placeholder, group, loadedModel: null, loading: false, inRange: true });
     } else if (place.type === "아파트") {
-      height = buildApartmentCluster(place, px, pz, floors);
+      height = buildApartmentCluster(place, px, pz, floors, group);
     } else {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), new THREE.MeshStandardMaterial({ color }));
       mesh.position.set(px, height / 2, pz);
       mesh.rotation.y = rotY;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      scene.add(mesh);
+      group.add(mesh);
     }
 
     // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
@@ -986,14 +1015,16 @@ function buildPlaces() {
       );
       spire.position.set(px, height + 2 * WORLD_SCALE, pz);
       spire.rotation.y = Math.PI / 4;
-      scene.add(spire);
+      group.add(spire);
       const crossMat = new THREE.MeshStandardMaterial({ color: 0xb8291f });
       const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.25 * WORLD_SCALE, 1.6 * WORLD_SCALE, 0.25 * WORLD_SCALE), crossMat);
       crossV.position.set(px, height + 4.6 * WORLD_SCALE, pz);
       const crossH = new THREE.Mesh(new THREE.BoxGeometry(1 * WORLD_SCALE, 0.25 * WORLD_SCALE, 0.25 * WORLD_SCALE), crossMat);
       crossH.position.set(px, height + 4.9 * WORLD_SCALE, pz);
-      scene.add(crossV, crossH);
+      group.add(crossV, crossH);
     }
+
+    if (!place.model) placeVisibilityEntries.push({ place, px, pz, group });
 
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
@@ -1549,6 +1580,7 @@ function animate() {
   updateCamera();
   updateLabelScales();
   updateLabelVisibility();
+  updatePlaceVisibility();
   updateModelStreaming(dt);
   renderer.render(scene, camera);
 }
