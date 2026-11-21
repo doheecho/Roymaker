@@ -98,13 +98,13 @@
     </div>
   </div>
   <div id="sidePanel">
-    <div id="panelBody"><p class="empty">건물(원)이나 도로(선)를 클릭해서 선택하세요.<br><br>· 원을 드래그하면 위치가 바뀝니다.<br>· 노란 점(방향 손잡이)을 드래그하면 회전이 바뀝니다 — 모델이 있는 건물만 적용됩니다.<br>· 도로는 빨간 사각형 손잡이로 양끝을 옮기고, 폭은 옆 칸에 숫자로 넣습니다.<br>· 다 고치면 위의 "내보내기"로 코드를 복사해서 neighborhood3d.js에 붙여넣으세요.</p></div>
+    <div id="panelBody"><p class="empty">건물(원)이나 도로(선)를 클릭해서 선택하세요.<br><br>· 원을 드래그하면 위치가 바뀝니다.<br>· 노란 점(방향 손잡이)을 드래그하면 회전이 바뀝니다 — 모델이 있는 건물만 적용됩니다.<br>· 도로는 빨간 사각형 손잡이로 양끝을 옮기고, 폭은 옆 칸에 숫자로 넣습니다.<br>· 다 고치면 위의 "내보내기"를 눌러 <code>map_data.js</code> 파일 전체를 통째로 바꿔치기하세요.</p></div>
   </div>
 </div>
 <div id="exportModal" class="hidden">
   <div id="exportBox">
-    <h3>neighborhood3d.js에 붙여넣을 코드</h3>
-    <p>아래 두 블록을 복사해서 neighborhood3d.js의 <code>const PLACES = [ … ];</code>와 <code>const ROAD_SEGMENTS = [ … ];</code> 안쪽 내용을 통째로 바꿔치기하세요(바깥 <code>const ... = [</code> / <code>];</code> 줄은 그대로 두고 안쪽 줄들만 교체).</p>
+    <h3>map_data.js 전체 내용</h3>
+    <p>아래 내용이 <code>map_data.js</code> 파일 하나의 전체 내용이에요. GitHub에서 <code>map_data.js</code> 파일을 열고 <b>Ctrl+A(전체 선택) → 붙여넣기</b>로 통째로 바꿔치기하면 끝 — <code>neighborhood3d.js</code>는 건드릴 필요 없어요. "복사하기"를 누르면 이 상자 안 내용이 그대로 복사됩니다(안내 문구는 복사되지 않아요).</p>
     <textarea id="exportText" readonly></textarea>
     <div class="actions">
       <button id="copyExportBtn">복사하기</button>
@@ -116,6 +116,7 @@
 <script>
 (async function () {
   const JS_URL = "neighborhood3d.js";
+  const DATA_URL = "map_data.js";
   const statusText = document.getElementById("statusText");
   const toastEl = document.getElementById("toast");
   function toast(msg) {
@@ -125,12 +126,16 @@
     toast._t = setTimeout(() => toastEl.classList.remove("show"), 1800);
   }
 
-  // ── neighborhood3d.js 원본 텍스트를 받아서 MAP_IMAGE / ROAD_* 상수 / PLACES / ROAD_SEGMENTS를 파싱 ──
-  let srcText;
+  // ── neighborhood3d.js에서는 MAP_IMAGE/ROAD_* 상수만, 건물·도로 데이터는 map_data.js에서 따로 받는다 ──
+  // (PLACES/ROAD_SEGMENTS가 map_data.js로 옮겨진 건 이 에디터로 고친 걸 "내보내기"할 때 그 파일
+  // 하나만 통째로 바꿔치기하면 되게 하려는 것 — neighborhood3d.js 안의 긴 코드 중 일부만 정확히
+  // 골라 바꿔치기해야 하는 예전 방식은 경계를 잘못 잡으면 코드가 깨지기 쉬웠다.)
+  let srcText, dataText;
   try {
     srcText = await (await fetch(JS_URL)).text();
+    dataText = await (await fetch(DATA_URL)).text();
   } catch (err) {
-    statusText.textContent = "neighborhood3d.js를 불러오지 못했습니다 — 로컬 서버로(파일로 직접 열지 말고) 열어주세요.";
+    statusText.textContent = "neighborhood3d.js/map_data.js를 불러오지 못했습니다 — 로컬 서버로(파일로 직접 열지 말고) 열어주세요.";
     return;
   }
 
@@ -161,7 +166,7 @@
   }
 
   function parsePlaces(src) {
-    const m = src.match(/const PLACES = \[([\s\S]*?)\n\];/);
+    const m = src.match(/(?:export )?const PLACES = \[([\s\S]*?)\n\];/);
     const lines = m[1].split("\n");
     const places = [];
     for (const raw of lines) {
@@ -188,7 +193,7 @@
   }
 
   function parseRoads(src, roadConsts) {
-    const m = src.match(/const ROAD_SEGMENTS = \[([\s\S]*?)\n\];/);
+    const m = src.match(/(?:export )?const ROAD_SEGMENTS = \[([\s\S]*?)\n\];/);
     const lines = m[1].split("\n");
     const roads = [];
     for (const raw of lines) {
@@ -207,8 +212,8 @@
 
   const mapImage = parseMapImage(srcText);
   const roadConsts = parseRoadConstants(srcText);
-  const PLACES = parsePlaces(srcText);
-  const ROADS = parseRoads(srcText, roadConsts);
+  const PLACES = parsePlaces(dataText);
+  const ROADS = parseRoads(dataText, roadConsts);
   statusText.textContent = `건물 ${PLACES.length}개 · 도로 ${ROADS.length}개 불러옴`;
 
   const SCALE = mapImage.scale;
@@ -592,14 +597,31 @@
     return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)} },`;
   }
 
+  // map_data.js를 "통째로" 다시 만들어낸다 — 앞부분 안내 주석, PLACES 설명 주석, 사이에 낀
+  // ROAD_SEGMENTS 설명 주석은 지금 fetch해 온 실제 파일에서 그대로 가져오고(나중에 그 주석을
+  // 고쳐도 다음 내보내기에 반영됨), 배열 내용만 지금 에디터 상태로 새로 채운다. 이렇게 하면
+  // "내보내기" 결과를 map_data.js에 그대로 덮어써도 되고, 안내 문구가 코드 사이에 섞여 들어가
+  // const 선언을 깨뜨릴 일도 없다(예전엔 그래서 무한로딩 버그가 났었다).
+  function buildMapDataFile() {
+    const placesStart = dataText.indexOf("export const PLACES = [");
+    const placesEndMarker = dataText.indexOf("\n];", placesStart) + "\n];".length;
+    const roadsStart = dataText.indexOf("export const ROAD_SEGMENTS = [");
+    const preamble = dataText.slice(0, placesStart);
+    const betweenArrays = dataText.slice(placesEndMarker, roadsStart);
+    const placesBlock = PLACES.map(serializePlace).join("\n");
+    const roadsBlock = ROADS.map(serializeRoad).join("\n");
+    return (
+      preamble + "export const PLACES = [\n" + placesBlock + "\n];" +
+      betweenArrays + "export const ROAD_SEGMENTS = [\n" + roadsBlock + "\n];\n"
+    );
+  }
+
   const exportModal = document.getElementById("exportModal");
   const exportText = document.getElementById("exportText");
   document.getElementById("exportBtn").addEventListener("click", () => {
-    const placesBlock = PLACES.map(serializePlace).join("\n");
-    const roadsBlock = ROADS.map(serializeRoad).join("\n");
-    exportText.value =
-      "// ===== PLACES 안쪽에 통째로 붙여넣기 =====\n" + placesBlock +
-      "\n\n// ===== ROAD_SEGMENTS 안쪽에 통째로 붙여넣기 =====\n" + roadsBlock;
+    // textarea.value는 어떤 줄바꿈을 넣어도 읽을 때 LF로만 돌려주므로(브라우저 표준 동작),
+    // 굳이 CRLF로 맞추려 하지 않는다 — LF만 있는 파일도 완전히 정상적인 자바스크립트다.
+    exportText.value = buildMapDataFile();
     exportModal.classList.remove("hidden");
   });
   document.getElementById("closeExportBtn").addEventListener("click", () => exportModal.classList.add("hidden"));
