@@ -67,7 +67,7 @@ const MOM_DANCE_POOL = [
 // 바운딩박스) 방향과 비교해 rotationDeg까지 새로 구했다 — 건물 간 미세한 측정 오차는 있을 수 있다.
 // 신금호두산위브·행당한진타운·행당대림아파트·극동미라주·금호동벽산아파트는 이 지도 사진 범위 밖이거나
 // 이름표를 찾지 못해 좌표를 그대로 뒀다(다른/더 넓은 지도 사진이 있으면 같은 방식으로 다시 맞출 수 있다).
-// ===== PLACES 안쪽에 통째로 붙여넣기 =====
+const PLACES = [
   { id: 0, name: "우리집", floors: 15, type: "아파트", x: 2.9, z: 4.4, home: true, model: "models/3D_place_113.glb", rotationDeg: 67.4 },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -386, z: 81.4, model: "models/3D_place_101.glb", rotationDeg: 6.3 },
   { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -313.8, z: 41.4, model: "models/3D_place_102.glb", rotationDeg: 4.9 },
@@ -223,7 +223,7 @@ const ROAD_NARROW = 3.5; // 가늘게 칠해진 좁은 길(차선 없음)
 // 그 자리의 실제 폭을 재서 width에 숫자로 직접 박아 넣었다 — 그래서 이 구간 segment들은
 // ROAD_MAJOR 같은 상수 대신 raw 숫자를 쓴다. 범위 밖(행당한진타운·행당대림아파트 등 이
 // 지도 사진에 없는 구역)은 기존 값 그대로 뒀다.
-// ===== ROAD_SEGMENTS 안쪽에 통째로 붙여넣기 =====
+const ROAD_SEGMENTS = [
   { a: [646.4, -430.4], b: [566.4, -379.2], width: 16 },
   { a: [-52.8, -428.8], b: [-67.2, -348.8], width: 6 },
   { a: [-49.6, -428.8], b: [-30.4, -420.8], width: 6 },
