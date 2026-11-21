@@ -32,14 +32,14 @@
 // 로컬 좌표" 평균으로 잡았다(102는 떨어진 정도가 다른 셋과 안 맞아 평균에서 뺐다 — 애초에
 // 102가 나머지 셋과 꽤 떨어진 자리였어서 그럴 수 있다).
 export const PLACES = [
-  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 2.9, z: 4.4, home: true, model: "models/place_금파힐113.glb", rotationDeg: 0 },
+  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 2.9, z: 4.4, home: true, model: "models/place_금파힐113.glb", rotationDeg: 67.4 },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -386, z: 81.4, model: "models/place_금파힐101.glb", rotationDeg: 0 },
   { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -313.8, z: 41.4 },
   { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -246.5, z: -21.7, model: "models/place_금파힐103.glb", rotationDeg: 0 },
   { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -184.6, z: -75.1, model: "models/place_금파힐104.glb", rotationDeg: -75.9 },
   { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -121.1, z: -124.9, model: "models/place_금파힐105.glb", rotationDeg: 0 },
   { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -58.3, z: -61.9 },
-  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -122.3, z: 8.8, model: "models/place_커뮤니티+102,106,107,108.glb", rotationDeg: 0 },
+  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -122.3, z: 8.8, model: "models/community_south.glb", rotationDeg: 0 },
   { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -266.8, z: 16.6 },
   { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -313.6, z: 134.1, model: "models/place_금파힐109.glb", rotationDeg: 0 },
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -253.3, z: 115.9, model: "models/place_금파힐110.glb", rotationDeg: 0 },
@@ -53,7 +53,7 @@ export const PLACES = [
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -60.2, z: 177.3 },
   { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 55.6, z: 267.1, rotationDeg: 29 },
   { id: 21, name: "금호119안전센터", floors: 2, type: "기타", x: 17.2, z: 79, model: "models/3D_place_keumho119.glb", rotationDeg: 0 },
-  { id: 22, name: "성동구립금호도서관", floors: 4, type: "도서관", x: 91, z: 83, model: "models/place_library.glb", rotationDeg: 0 },
+  { id: 22, name: "성동구립금호도서관", floors: 4, type: "도서관", x: 91, z: 83, model: "models/place_성동구립금호도서관.glb", rotationDeg: 0 },
   { id: 23, name: "성동구보건소금호분소", floors: 4, type: "보건소", x: 104, z: 152 },
   { id: 24, name: "성동아이사랑복합문화센터", floors: 4, type: "기타", x: 140, z: 329.9 },
   { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 115, z: -88, model: "models/3D_place_taekwondo.glb", rotationDeg: 0 },
