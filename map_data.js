@@ -53,7 +53,7 @@ export const PLACES = [
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -60.2, z: 177.3 },
   { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 55.6, z: 267.1, rotationDeg: 29 },
   { id: 21, name: "금호119안전센터", floors: 2, type: "기타", x: 17.2, z: 79, model: "models/3D_place_keumho119.glb", rotationDeg: 0 },
-  { id: 22, name: "성동구립금호도서관", floors: 4, type: "도서관", x: 91, z: 83, model: "models/place_성동구립금호도서관.glb", rotationDeg: 0 },
+  { id: 22, name: "성동구립금호도서관", floors: 4, type: "도서관", x: 91, z: 83, model: "models/place_library.glb", rotationDeg: 0 },
   { id: 23, name: "성동구보건소금호분소", floors: 4, type: "보건소", x: 104, z: 152 },
   { id: 24, name: "성동아이사랑복합문화센터", floors: 4, type: "기타", x: 140, z: 329.9 },
   { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 115, z: -88, model: "models/3D_place_taekwondo.glb", rotationDeg: 0 },
