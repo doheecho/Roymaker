@@ -95,12 +95,13 @@ const WORLD_SCALE = 0.15;
 // 좌표를 구할 때 썼던 것과 같은 축척·기준점으로 도로 모양을 그대로 옮길 수 있었다 — 빨간색 영역을
 // 이미지 처리(색상 추출→스켈레톤화→그래프 추출)로 따서 중심선과 각 구간의 실제 두께를 함께 구했고,
 // 두께 분포(3~5m / 13m 안팎 / 19~29m / 30m 이상)를 그대로 골목·보통길·큰길·난계로급 4단계 폭으로
-// 옮겼다. 난계로와 거기 교차하는 큰길(가장 두껍게 칠해진 구간)은 ROAD_MAJOR로 따로 빼서 더 넓게,
-// 차선도 2줄이 아니라 3줄로 그린다.
+// 옮겼다. map_data.js의 각 구간은 이 상수 대신 실측한 raw 숫자를 그대로 쓰지만(map_editor.html이
+// 혹시 몰라 이 이름들도 폭으로 해석할 수 있게 남겨 둔다), 차선 몇 줄을 그릴지는 폭 숫자 자체로
+// 구간마다 정한다(laneOffsetsForWidth: 20m 미만 1줄, 40m 미만 2줄, 그 이상 3줄).
 const ROAD_MAJOR = 16; // 난계로·사거리 교차로 등 가장 두껍게 칠해진 간선도로
 const ROAD_WIDE = 10; // 그다음으로 두꺼운 큰길
 const ROAD_MEDIUM = 6; // 단지 안 보통 도로
-const ROAD_NARROW = 3.5; // 가늘게 칠해진 좁은 길(차선 없음)
+const ROAD_NARROW = 3.5; // 가늘게 칠해진 좁은 길(차선 없음) — 이 폭 이하는 차선을 아예 안 그린다
 // PLACES·ROAD_SEGMENTS는 map_data.js로 옮겼다(map_editor.html에서 그 파일 전체를 통째로 바꿔 쓸 수 있게).
 
 const AREA_MARGIN = 8;
@@ -458,48 +459,105 @@ function buildParks() {
 // 그래서 위치만 모아 뒀다가 InstancedMesh 하나로 한 번에 그린다(드로우콜 1개).
 let dashTransforms = [];
 
-function buildRoadSegment({ a, b, width }) {
-  const x1 = a[0] * WORLD_SCALE;
-  const z1 = a[1] * WORLD_SCALE;
-  const x2 = b[0] * WORLD_SCALE;
-  const z2 = b[1] * WORLD_SCALE;
-  const dx = x2 - x1;
-  const dz = z2 - z1;
-  const len = Math.hypot(dx, dz);
-  const yaw = Math.atan2(dx, dz);
-  const midX = (x1 + x2) / 2;
-  const midZ = (z1 + z2) / 2;
-  const roadW = width * WORLD_SCALE;
+// map_editor.html에서 a→curve(제어점)→b로 그린 2차 베지어 곡선을 따라 점을 여러 개 뽑는다 —
+// curve가 없으면(직선) 그냥 양 끝점 2개뿐이라 아래 리본 그리기가 그대로 직선 사각형이 된다.
+const ROAD_CURVE_STEPS = 20;
+function quadBezierPoint(p0, p1, p2, t) {
+  const mt = 1 - t;
+  return [mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0], mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1]];
+}
+function roadPolyline(seg) {
+  if (!seg.curve) return [seg.a, seg.b];
+  const pts = [];
+  for (let i = 0; i <= ROAD_CURVE_STEPS; i++) pts.push(quadBezierPoint(seg.a, seg.curve, seg.b, i / ROAD_CURVE_STEPS));
+  return pts;
+}
 
-  const geo = new THREE.PlaneGeometry(roadW, len);
-  geo.rotateX(-Math.PI / 2); // 바닥에 눕히는 회전을 지오메트리 자체에 구워 둬서, 메시 회전은 방향(Y축)만 다루면 되게 한다
-  const road = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e }));
-  road.rotation.y = yaw;
-  road.position.set(midX, 0.005, midZ);
+// 도로 폭에 따라 차선 몇 줄을 그릴지 정한다 — 너무 좁은 골목(ROAD_NARROW 이하)은 차선 없이,
+// 20m 미만은 중앙 1줄, 40m 미만은 좌우 2줄, 그 이상(간선도로급)은 중앙까지 3줄.
+function laneOffsetsForWidth(width, roadW) {
+  if (width <= ROAD_NARROW) return [];
+  if (width < 20) return [0];
+  if (width < 40) return [-roadW * 0.15, roadW * 0.15];
+  return [-roadW * 0.22, 0, roadW * 0.22];
+}
+
+// 도로 하나(직선이든 곡선이든)를 폭이 있는 띠(리본) 메시 하나로 통째로 그린다 — 예전엔 곡선을
+// 짧은 직선 조각으로 쪼갠 뒤 조각마다 따로 회전된 네모를 깔고 꺾이는 자리마다 둥근 판으로
+// 메웠는데, 샘플 간격이 좁으면 그 둥근 판들이 다닥다닥 겹쳐서 도로 전체가 구슬을 꿴 것처럼
+// 울퉁불퉁해 보였다. 지금은 점들을 한 번에 이어 리본 하나로 그려서, 안쪽 꺾임은 양옆 방향의
+// 평균(미터) 방향으로 폭을 내밀어 틈도 겹침도 없이 매끈하게 이어진다.
+function buildRoadRibbon(seg) {
+  const rawPts = roadPolyline(seg);
+  const pts = rawPts.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+  const n = pts.length;
+  const roadW = seg.width * WORLD_SCALE;
+  const tangents = pts.map((p, i) => {
+    let dx, dz;
+    if (i === 0) {
+      dx = pts[1][0] - pts[0][0];
+      dz = pts[1][1] - pts[0][1];
+    } else if (i === n - 1) {
+      dx = pts[n - 1][0] - pts[n - 2][0];
+      dz = pts[n - 1][1] - pts[n - 2][1];
+    } else {
+      const l1x = pts[i][0] - pts[i - 1][0], l1z = pts[i][1] - pts[i - 1][1];
+      const l2x = pts[i + 1][0] - pts[i][0], l2z = pts[i + 1][1] - pts[i][1];
+      const len1 = Math.hypot(l1x, l1z) || 1, len2 = Math.hypot(l2x, l2z) || 1;
+      dx = l1x / len1 + l2x / len2;
+      dz = l1z / len1 + l2z / len2;
+    }
+    const len = Math.hypot(dx, dz) || 1;
+    return [dx / len, dz / len];
+  });
+
+  const positions = [];
+  for (let i = 0; i < n; i++) {
+    const [tx, tz] = tangents[i];
+    const px = -tz, pz = tx; // 진행 방향에 수직인 단위벡터
+    const [x, z] = pts[i];
+    positions.push(x + (px * roadW) / 2, 0, z + (pz * roadW) / 2);
+    positions.push(x - (px * roadW) / 2, 0, z - (pz * roadW) / 2);
+  }
+  const indices = [];
+  for (let i = 0; i < n - 1; i++) {
+    const a0 = i * 2, a1 = i * 2 + 1, b0 = (i + 1) * 2, b1 = (i + 1) * 2 + 1;
+    indices.push(a0, b0, a1, a1, b0, b1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const road = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e, side: THREE.DoubleSide }));
+  road.position.y = 0.005;
   road.receiveShadow = true;
   scene.add(road);
 
-  // 골목(ROAD_NARROW)은 차선이 없고, 보통길은 중앙에 점선 차선 1줄, 큰길은 2줄, 난계로·사거리의
-  // 간선도로(ROAD_MAJOR, 가장 두껍게 칠해져 있던 구간)는 왕복 차로가 가장 넓은 도로라는 걸 보여주려고
-  // 차선을 3줄(중앙 + 양쪽)로 그려 넣는다
-  if (width === ROAD_NARROW) return;
+  // 차선 점선은 전체 폴리라인을 따라 누적 거리로 간격을 재서 찍는다 — 직선/곡선 구분 없이
+  // 같은 방식이라 곡선 구간에서도 점선 간격이 고르게 이어진다.
+  const offsets = laneOffsetsForWidth(seg.width, roadW);
+  if (!offsets.length) return;
   const dashLen = 3 * WORLD_SCALE;
   const gapLen = 3 * WORLD_SCALE;
   const step = dashLen + gapLen;
-  const ux = dx / len;
-  const uz = dz / len;
-  const perpX = -uz;
-  const perpZ = ux;
-  let lineOffsets = [0];
-  if (width === ROAD_WIDE) lineOffsets = [-roadW * 0.15, roadW * 0.15];
-  else if (width === ROAD_MAJOR) lineOffsets = [-roadW * 0.22, 0, roadW * 0.22];
-  lineOffsets.forEach((offset) => {
-    for (let d = step / 2; d < len; d += step) {
-      dashTransforms.push({
-        x: x1 + (dx * d) / len + perpX * offset,
-        z: z1 + (dz * d) / len + perpZ * offset,
-        yaw,
-      });
+  offsets.forEach((offset) => {
+    let dist = 0;
+    let nextDashAt = step / 2;
+    for (let i = 0; i < n - 1; i++) {
+      const [x1, z1] = pts[i];
+      const [x2, z2] = pts[i + 1];
+      const dx = x2 - x1, dz = z2 - z1;
+      const segLen = Math.hypot(dx, dz);
+      if (segLen > 1e-6) {
+        const yaw = Math.atan2(dx, dz);
+        const perpX = -dz / segLen, perpZ = dx / segLen;
+        while (nextDashAt < dist + segLen) {
+          const t = (nextDashAt - dist) / segLen;
+          dashTransforms.push({ x: x1 + dx * t + perpX * offset, z: z1 + dz * t + perpZ * offset, yaw });
+          nextDashAt += step;
+        }
+        dist += segLen;
+      }
     }
   });
 }
@@ -522,31 +580,14 @@ function buildLaneDashes() {
   scene.add(inst);
 }
 
-// 곡선 도로(seg.curve가 있는 구간)를 짧은 직선 구간 여러 개로 잘게 쪼갠다 — map_editor.html에서
-// a→curve(제어점)→b로 그린 2차 베지어 곡선을 그대로 따라가는 점들을 뽑아 바로 옆 점끼리 이은
-// 직선 구간으로 바꾸면, 기존의 직선 전용 도로 그리기(buildRoadSegment)·차선 점선·이음매 메우기
-// (buildJunctionFillers, 꺾이는 각 점마다 둥근 판을 깔아 자연스럽게 이어 준다)를 그대로 재사용해서
-// 곡선처럼 보이게 할 수 있다 — 곡선 전용 렌더링 코드를 따로 만들 필요가 없다.
-const ROAD_CURVE_STEPS = 12;
-function quadBezierPoint(p0, p1, p2, t) {
-  const mt = 1 - t;
-  return [mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0], mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1]];
-}
-function flattenRoadSegment(seg) {
-  if (!seg.curve) return [seg];
-  const pts = [];
-  for (let i = 0; i <= ROAD_CURVE_STEPS; i++) pts.push(quadBezierPoint(seg.a, seg.curve, seg.b, i / ROAD_CURVE_STEPS));
-  const out = [];
-  for (let i = 0; i < pts.length - 1; i++) out.push({ a: pts[i], b: pts[i + 1], width: seg.width });
-  return out;
-}
-const FLAT_ROAD_SEGMENTS = ROAD_SEGMENTS.flatMap(flattenRoadSegment);
-
 // 구간을 따로따로 그리면 꺾이는 지점마다 바깥쪽에 틈이 생겨서 끊겨 보인다 — 같은 지점에서
-// 만나는 구간들 중 제일 넓은 폭으로 둥근 판을 하나 더 깔아서 이음매를 자연스럽게 메운다
+// 만나는 구간들 중 제일 넓은 폭으로 둥근 판을 하나 더 깔아서 이음매를 자연스럽게 메운다.
+// (곡선 내부는 이미 리본 하나로 매끈하게 이어지니, 여기서는 map_editor에서 실제로 서로 다른
+// 구간으로 그린 것들의 진짜 끝점만 본다 — 곡선을 잘게 쪼갠 속 이음매까지 메우면 둥근 판이
+// 다닥다닥 겹쳐 도로가 구슬을 꿴 것처럼 보이던 문제가 있었다.)
 function buildJunctionFillers() {
   const endpoints = [];
-  FLAT_ROAD_SEGMENTS.forEach((seg) => {
+  ROAD_SEGMENTS.forEach((seg) => {
     endpoints.push({ x: seg.a[0], z: seg.a[1], width: seg.width });
     endpoints.push({ x: seg.b[0], z: seg.b[1], width: seg.width });
   });
@@ -581,7 +622,7 @@ function buildJunctionFillers() {
 
 function buildRoads() {
   dashTransforms = [];
-  FLAT_ROAD_SEGMENTS.forEach(buildRoadSegment);
+  ROAD_SEGMENTS.forEach(buildRoadRibbon);
   buildLaneDashes();
   buildJunctionFillers();
 }
