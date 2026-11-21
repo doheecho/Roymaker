@@ -977,8 +977,23 @@ function buildPlaces() {
     // 건물 자체(플레이스홀더·실제 glb·교회 첨탑 등)는 전부 이 group에 담아서, 아래
     // updatePlaceVisibility()가 group째로 보이기/숨기기만 하면 되게 한다 — 라벨과 똑같이
     // 캐릭터와 LABEL_VISIBLE_RANGE(약 300m) 안에 있거나 지금 심부름 목적지일 때만 보인다.
+    // place.y(기본 0, raw 미터)는 금호동처럼 단지 안에 단차가 있는 동네에서 건물마다 실제
+    // 지면 높이가 다른 걸 표현하는 값 — group 자체를 그만큼 올리고/내리고, 바닥(y=0)까지
+    // 이어지는 벽(스커트)을 세워서 "여기만 지대가 높다/낮다"는 느낌을 준다.
+    const groundY = (place.y || 0) * WORLD_SCALE;
     const group = new THREE.Group();
+    group.position.y = groundY;
     scene.add(group);
+    if (groundY !== 0) {
+      const skirt = new THREE.Mesh(
+        new THREE.BoxGeometry(w * 1.4, Math.abs(groundY), d * 1.4),
+        new THREE.MeshStandardMaterial({ color: 0x9a9488 })
+      );
+      skirt.position.set(0, -groundY / 2, 0); // group 기준 로컬 좌표 — group.position.y와 합쳐지면 실제 지면(y=0)까지 이어진다
+      skirt.castShadow = true;
+      skirt.receiveShadow = true;
+      group.add(skirt);
+    }
 
     if (place.model) {
       // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동 등)은 캐릭터가 가까워지면 불러와 쓴다
@@ -1028,7 +1043,7 @@ function buildPlaces() {
 
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
-    label.position.set(px, height + 1.1, pz);
+    label.position.set(px, groundY + height + 1.1, pz);
     label.userData.placeId = place.id; // updateLabelVisibility에서 거리·목적지 판정에 쓴다
     scene.add(label);
 
@@ -1037,7 +1052,7 @@ function buildPlaces() {
       new THREE.SpriteMaterial({ map: highlightTexture(), color: 0x3fa9ff, transparent: true, opacity: 0, depthTest: false })
     );
     highlight.scale.set(5, 5, 1);
-    highlight.position.set(px, height + 1.1, pz);
+    highlight.position.set(px, groundY + height + 1.1, pz);
     highlight.renderOrder = 998;
     highlight.visible = false;
     scene.add(highlight);
