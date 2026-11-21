@@ -106,8 +106,8 @@ const ROAD_NARROW = 3.5; // 가늘게 칠해진 좁은 길(차선 없음)
 const AREA_MARGIN = 8;
 // 도로가 건물보다 더 넓게 뻗어 있는 구간(예: 롯데마트 너머)도 있어서, 바닥·이동범위는 건물과
 // 도로 좌표를 모두 합쳐서 계산한다
-const ALL_COORD_XS = [...PLACES.map((p) => p.x), ...ROAD_SEGMENTS.flatMap((s) => [s.a[0], s.b[0]])];
-const ALL_COORD_ZS = [...PLACES.map((p) => p.z), ...ROAD_SEGMENTS.flatMap((s) => [s.a[1], s.b[1]])];
+const ALL_COORD_XS = [...PLACES.map((p) => p.x), ...ROAD_SEGMENTS.flatMap((s) => [s.a[0], s.b[0], ...(s.curve ? [s.curve[0]] : [])])];
+const ALL_COORD_ZS = [...PLACES.map((p) => p.z), ...ROAD_SEGMENTS.flatMap((s) => [s.a[1], s.b[1], ...(s.curve ? [s.curve[1]] : [])])];
 const AREA_MIN_X = Math.min(...ALL_COORD_XS) * WORLD_SCALE - AREA_MARGIN;
 const AREA_MAX_X = Math.max(...ALL_COORD_XS) * WORLD_SCALE + AREA_MARGIN;
 const AREA_MIN_Z = Math.min(...ALL_COORD_ZS) * WORLD_SCALE - AREA_MARGIN;
@@ -519,11 +519,31 @@ function buildLaneDashes() {
   scene.add(inst);
 }
 
+// 곡선 도로(seg.curve가 있는 구간)를 짧은 직선 구간 여러 개로 잘게 쪼갠다 — map_editor.html에서
+// a→curve(제어점)→b로 그린 2차 베지어 곡선을 그대로 따라가는 점들을 뽑아 바로 옆 점끼리 이은
+// 직선 구간으로 바꾸면, 기존의 직선 전용 도로 그리기(buildRoadSegment)·차선 점선·이음매 메우기
+// (buildJunctionFillers, 꺾이는 각 점마다 둥근 판을 깔아 자연스럽게 이어 준다)를 그대로 재사용해서
+// 곡선처럼 보이게 할 수 있다 — 곡선 전용 렌더링 코드를 따로 만들 필요가 없다.
+const ROAD_CURVE_STEPS = 12;
+function quadBezierPoint(p0, p1, p2, t) {
+  const mt = 1 - t;
+  return [mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0], mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1]];
+}
+function flattenRoadSegment(seg) {
+  if (!seg.curve) return [seg];
+  const pts = [];
+  for (let i = 0; i <= ROAD_CURVE_STEPS; i++) pts.push(quadBezierPoint(seg.a, seg.curve, seg.b, i / ROAD_CURVE_STEPS));
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++) out.push({ a: pts[i], b: pts[i + 1], width: seg.width });
+  return out;
+}
+const FLAT_ROAD_SEGMENTS = ROAD_SEGMENTS.flatMap(flattenRoadSegment);
+
 // 구간을 따로따로 그리면 꺾이는 지점마다 바깥쪽에 틈이 생겨서 끊겨 보인다 — 같은 지점에서
 // 만나는 구간들 중 제일 넓은 폭으로 둥근 판을 하나 더 깔아서 이음매를 자연스럽게 메운다
 function buildJunctionFillers() {
   const endpoints = [];
-  ROAD_SEGMENTS.forEach((seg) => {
+  FLAT_ROAD_SEGMENTS.forEach((seg) => {
     endpoints.push({ x: seg.a[0], z: seg.a[1], width: seg.width });
     endpoints.push({ x: seg.b[0], z: seg.b[1], width: seg.width });
   });
@@ -558,7 +578,7 @@ function buildJunctionFillers() {
 
 function buildRoads() {
   dashTransforms = [];
-  ROAD_SEGMENTS.forEach(buildRoadSegment);
+  FLAT_ROAD_SEGMENTS.forEach(buildRoadSegment);
   buildLaneDashes();
   buildJunctionFillers();
 }

@@ -46,6 +46,10 @@
   .road-line.selected { stroke: #e3482b; }
   .road-handle { fill: #e3482b; stroke: #fff; stroke-width: 2; cursor: grab; }
   .road-handle:active { cursor: grabbing; }
+  .curve-handle { fill: #ffa63f; stroke: #7a4600; stroke-width: 1.5; cursor: grab; }
+  .curve-handle:active { cursor: grabbing; }
+  .curve-hit { fill: transparent; cursor: grab; pointer-events: all; }
+  .curve-hit:active { cursor: grabbing; }
   .pending-point { fill: #ffd34d; stroke: #202225; stroke-width: 2; pointer-events: none; }
   .park-rect { fill: #4fae3f; fill-opacity: 0.45; stroke: #2f7a2a; stroke-width: 2; cursor: grab; pointer-events: all; }
   .park-rect:active { cursor: grabbing; }
@@ -224,7 +228,10 @@
       const b = mm[2].split(",").map((v) => parseFloat(v));
       let width = parseFloat(mm[3]);
       if (Number.isNaN(width)) width = roadConsts[mm[3]] ?? 6;
-      roads.push({ a, b, width });
+      const seg = { a, b, width };
+      const cm = line.match(/curve:\s*\[([^\]]+)\]/);
+      if (cm) seg.curve = cm[1].split(",").map((v) => parseFloat(v));
+      roads.push(seg);
     }
     return roads;
   }
@@ -395,22 +402,58 @@
   }
   PLACES.forEach(addPlaceNode);
 
+  // 도로는 a→(곡선 제어점)→b로 가는 2차 베지어로 그린다 — curve가 없으면 제어점이 그냥 a,b의
+  // 중점이라 결과는 완전한 직선이 된다(그림판 곡선 도구처럼: 처음엔 직선, 가운데 손잡이를
+  // 당기면 그만큼 휜다). 손잡이는 "제어점"이 아니라 "곡선이 실제로 지나가는 중간 지점"을
+  // 드래그하는 느낌을 주려고, t=0.5에서의 곡선 위 점으로 두고 거꾸로 제어점을 계산한다.
+  function roadControl(seg) {
+    return seg.curve || [(seg.a[0] + seg.b[0]) / 2, (seg.a[1] + seg.b[1]) / 2];
+  }
+  function roadMidpoint(seg) {
+    const c = roadControl(seg);
+    return [0.25 * seg.a[0] + 0.5 * c[0] + 0.25 * seg.b[0], 0.25 * seg.a[1] + 0.5 * c[1] + 0.25 * seg.b[1]];
+  }
+  function setRoadMidpoint(seg, mx, mz) {
+    const naturalMidX = (seg.a[0] + seg.b[0]) / 2;
+    const naturalMidZ = (seg.a[1] + seg.b[1]) / 2;
+    const cx = 2 * mx - naturalMidX;
+    const cz = 2 * mz - naturalMidZ;
+    if (Math.hypot(cx - naturalMidX, cz - naturalMidZ) < 0.5) {
+      delete seg.curve; // 거의 직선으로 돌아오면 깨끗하게 지운다(내보낼 때 curve 필드 자체가 안 남게)
+    } else {
+      seg.curve = [Math.round(cx * 10) / 10, Math.round(cz * 10) / 10];
+    }
+  }
+  function roadPathD(seg) {
+    const [ax, ay] = rawToPx(seg.a[0], seg.a[1]);
+    const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
+    const [cx, cy] = rawToPx(...roadControl(seg));
+    return `M ${ax} ${ay} Q ${cx} ${cy} ${bx} ${by}`;
+  }
+
   function addRoadNode(seg) {
     const [ax, ay] = rawToPx(seg.a[0], seg.a[1]);
     const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
-    const hit = el("line", { x1: ax, y1: ay, x2: bx, y2: by, class: "road-hit" });
-    const line = el("line", { x1: ax, y1: ay, x2: bx, y2: by, class: "road-line", "stroke-width": Math.max(2, seg.width / SCALE * 0.5) });
+    const d = roadPathD(seg);
+    const hit = el("path", { d, class: "road-hit" });
+    const line = el("path", { d, class: "road-line", fill: "none", "stroke-width": Math.max(2, seg.width / SCALE * 0.5) });
     const handleA = el("rect", { x: ax - 5, y: ay - 5, width: 10, height: 10, class: "road-handle", visibility: "hidden" });
     const handleB = el("rect", { x: bx - 5, y: by - 5, width: 10, height: 10, class: "road-handle", visibility: "hidden" });
+    const curveHit = el("circle", { r: 14, class: "curve-hit", visibility: "hidden" });
+    const curveHandle = el("circle", { r: 7, class: "curve-handle", visibility: "hidden" });
     roadLayer.appendChild(hit);
     roadLayer.appendChild(line);
     roadLayer.appendChild(handleA);
     roadLayer.appendChild(handleB);
-    const node = { seg, index: roadNodes.length, line, hit, handleA, handleB };
+    roadLayer.appendChild(curveHit);
+    roadLayer.appendChild(curveHandle);
+    const node = { seg, index: roadNodes.length, line, hit, handleA, handleB, curveHit, curveHandle };
     roadNodes.push(node);
     hit.addEventListener("pointerdown", (ev) => selectRoad(ev, node));
     handleA.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "a"));
     handleB.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "b"));
+    curveHit.addEventListener("pointerdown", (ev) => startRoadCurveDrag(ev, node));
+    updateRoadVisual(node);
     return node;
   }
   ROADS.forEach(addRoadNode);
@@ -495,13 +538,15 @@
   function updateRoadVisual(node) {
     const [ax, ay] = rawToPx(node.seg.a[0], node.seg.a[1]);
     const [bx, by] = rawToPx(node.seg.b[0], node.seg.b[1]);
-    node.line.setAttribute("x1", ax); node.line.setAttribute("y1", ay);
-    node.line.setAttribute("x2", bx); node.line.setAttribute("y2", by);
+    const d = roadPathD(node.seg);
+    node.line.setAttribute("d", d);
     node.line.setAttribute("stroke-width", Math.max(2, node.seg.width / SCALE * 0.5));
-    node.hit.setAttribute("x1", ax); node.hit.setAttribute("y1", ay);
-    node.hit.setAttribute("x2", bx); node.hit.setAttribute("y2", by);
+    node.hit.setAttribute("d", d);
     node.handleA.setAttribute("x", ax - 5); node.handleA.setAttribute("y", ay - 5);
     node.handleB.setAttribute("x", bx - 5); node.handleB.setAttribute("y", by - 5);
+    const [mx, my] = rawToPx(...roadMidpoint(node.seg));
+    node.curveHandle.setAttribute("cx", mx); node.curveHandle.setAttribute("cy", my);
+    node.curveHit.setAttribute("cx", mx); node.curveHit.setAttribute("cy", my);
   }
 
   function updateParkVisual(node) {
@@ -548,6 +593,8 @@
       selected.ref.line.classList.remove("selected");
       selected.ref.handleA.setAttribute("visibility", "hidden");
       selected.ref.handleB.setAttribute("visibility", "hidden");
+      selected.ref.curveHandle.setAttribute("visibility", "hidden");
+      selected.ref.curveHit.setAttribute("visibility", "hidden");
     }
     if (selected.kind === "park") selected.ref.rect.classList.remove("selected");
     if (selected.kind === "tree") selected.ref.dot.classList.remove("selected");
@@ -573,6 +620,8 @@
     node.line.classList.add("selected");
     node.handleA.setAttribute("visibility", "visible");
     node.handleB.setAttribute("visibility", "visible");
+    node.curveHandle.setAttribute("visibility", "visible");
+    node.curveHit.setAttribute("visibility", "visible");
     renderPanel();
   }
 
@@ -690,6 +739,24 @@
       panelBody.appendChild(fieldNum("b.x (raw)", node.seg.b[0], (v) => { node.seg.b[0] = v; updateRoadVisual(node); }));
       panelBody.appendChild(fieldNum("b.z (raw)", node.seg.b[1], (v) => { node.seg.b[1] = v; updateRoadVisual(node); }));
       panelBody.appendChild(fieldNum("width (raw)", node.seg.width, (v) => { node.seg.width = v; updateRoadVisual(node); }, { step: "0.5" }));
+      const curveNote = document.createElement("p");
+      curveNote.className = "note";
+      curveNote.style.marginBottom = "10px";
+      curveNote.textContent = node.seg.curve
+        ? "곡선이에요 — 가운데 주황 점을 드래그해서 모양을 바꾸거나, 아래 버튼으로 직선으로 되돌릴 수 있습니다."
+        : "직선이에요 — 가운데 주황 점을 드래그하면 곡선이 됩니다.";
+      panelBody.appendChild(curveNote);
+      if (node.seg.curve) {
+        const straightenBtn = document.createElement("button");
+        straightenBtn.className = "full";
+        straightenBtn.textContent = "📏 직선으로 되돌리기";
+        straightenBtn.addEventListener("click", () => {
+          delete node.seg.curve;
+          updateRoadVisual(node);
+          renderPanel();
+        });
+        panelBody.appendChild(straightenBtn);
+      }
       panelBody.appendChild(deleteButton(() => deleteRoad(node), "🗑 이 도로 삭제"));
     } else if (selected.kind === "park") {
       const node = selected.ref;
@@ -842,8 +909,10 @@
         node.line.classList.add("selected");
         node.handleA.setAttribute("visibility", "visible");
         node.handleB.setAttribute("visibility", "visible");
+        node.curveHandle.setAttribute("visibility", "visible");
+        node.curveHit.setAttribute("visibility", "visible");
         renderPanel();
-        toast("도로를 추가했어요.");
+        toast("도로를 추가했어요 — 가운데 주황 점을 당기면 곡선이 됩니다.");
       }
       return;
     }
@@ -906,6 +975,23 @@
       const [rx, rz] = pxToRaw(pt.x, pt.y);
       node.seg[which][0] = Math.round(rx * 10) / 10;
       node.seg[which][1] = Math.round(rz * 10) / 10;
+      updateRoadVisual(node);
+      if (selected && selected.kind === "road" && selected.ref === node) renderPanel();
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  // 그림판 곡선 도구처럼: 가운데 손잡이를 당기면 그 지점을 곡선이 지나가도록 휘어진다
+  function startRoadCurveDrag(ev, node) {
+    ev.stopPropagation();
+    if (mode !== "select") return;
+    selectRoad(ev, node);
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const [rx, rz] = pxToRaw(pt.x, pt.y);
+      setRoadMidpoint(node.seg, rx, rz);
       updateRoadVisual(node);
       if (selected && selected.kind === "road" && selected.ref === node) renderPanel();
     };
@@ -998,7 +1084,8 @@
     return `  { ${parts.join(", ")} },`;
   }
   function serializeRoad(r) {
-    return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)} },`;
+    const curvePart = r.curve ? `, curve: [${fmtNum(r.curve[0])}, ${fmtNum(r.curve[1])}]` : "";
+    return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)}${curvePart} },`;
   }
   function serializeTree(t) {
     return `[${fmtNum(t.x)}, ${fmtNum(t.z)}]`;
