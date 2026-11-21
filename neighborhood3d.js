@@ -605,14 +605,11 @@ const MODEL_STREAM_CHECK_INTERVAL = 0.4; // 매 프레임 전부 검사하면 �
 const modelStreamEntries = []; // buildPlaces가 model이 있는 장소마다 하나씩 채운다
 const placeVisibilityEntries = []; // model이 없는 장소(플레이스홀더만 있는 건물)의 group 목록
 
-// ── 캐릭터 충돌·지면 높이 ──
-// buildPlaces가 장소마다 하나씩 채운다. 건물은 그 자리(회전된 사각형)를 캐릭터가 뚫고
-// 지나가지 못하게 막는 벽으로 쓰고(buildingColliders), 단차가 있는 곳(place.y가 있는 곳)은
-// 그 건물을 둘러싼 더 넓은 발판(스커트 영역, 실제로 그려지는 벽 크기와 맞춤)을 캐릭터가
-// 올라서서 걸어 다닐 수 있는 높은 지면으로 쓴다(groundPlatforms) — 그래서 건물 자체는 막혀
-// 있어도 그 둘레의 높아진 마당은 밟고 지나다닐 수 있다. 도로는 전부 평평(y=0)해서 따로
-// 다룰 게 없다 — 가파른 경사라는 개념 자체가 아직 없으니 모든 길은 항상 걸어갈 수 있다.
-const buildingColliders = [];
+// ── 캐릭터 지면 높이(단차) ──
+// buildPlaces가 장소마다 하나씩 채운다. 건물은 캐릭터가 그냥 뚫고 지나다닐 수 있고,
+// 단차가 있는 곳(place.y가 있는 곳)만 그 건물을 둘러싼 더 넓은 발판(스커트 영역, 실제로
+// 그려지는 벽 크기와 맞춤)을 캐릭터가 올라서서 걸어 다닐 수 있는 높은 지면으로 쓴다
+// (groundPlatforms). 도로는 전부 평평(y=0)해서 따로 다룰 게 없다.
 const groundPlatforms = [];
 // 금호파크힐스 101~116동(+우리집)은 실제 .glb 모델의 바운딩박스를 재서 얻은 진짜 가로·세로
 // (raw 미터, PLACES의 x·z와 같은 단위)를 알고 있어서, 충돌 판정은 TYPE_STYLE의 뭉뚱그린
@@ -634,9 +631,6 @@ function worldToLocalXZ(x, z, cx, cz, cos, sin) {
 function insideRect(x, z, cx, cz, cos, sin, halfW, halfD) {
   const [lx, lz] = worldToLocalXZ(x, z, cx, cz, cos, sin);
   return Math.abs(lx) <= halfW && Math.abs(lz) <= halfD;
-}
-function collidesWithBuilding(x, z) {
-  return buildingColliders.some((c) => insideRect(x, z, c.cx, c.cz, c.cos, c.sin, c.halfW, c.halfD));
 }
 // 캐릭터가 서 있는 자리의 지면 높이 — 단차가 있는 건물의 발판 위면 그 높이, 아니면 기본(0)
 function groundHeightAt(x, z) {
@@ -761,12 +755,11 @@ function buildPlaces() {
     // 않고 그냥 빈 땅으로 둔다 — 라벨(이름표)은 아래에서 그대로 띄운다. 모델이 생기면 그때
     // 자동으로 건물이 나타난다.
     if (place.model) {
-      // 충돌·지면 높이 등록 — 실제로 뜨는 모델의 회전(rotationDeg, 없으면 대각선 배치 rotY)을
-      // 그대로 써서, 눈에 보이는 건물 자리와 막히는 자리가 어긋나지 않게 한다.
+      // 지면 높이(단차) 등록 — 실제로 뜨는 모델의 회전(rotationDeg, 없으면 대각선 배치 rotY)을
+      // 그대로 써서, 눈에 보이는 건물 자리와 발판 자리가 어긋나지 않게 한다.
       const colRot = place.rotationDeg != null ? THREE.MathUtils.degToRad(place.rotationDeg) : rotY;
       const cos = Math.cos(colRot);
       const sin = Math.sin(colRot);
-      buildingColliders.push({ cx: px, cz: pz, cos, sin, halfW: colW / 2, halfD: colD / 2 });
       if (groundY !== 0) {
         groundPlatforms.push({ cx: px, cz: pz, cos, sin, halfW: (colW * 1.4) / 2, halfD: (colD * 1.4) / 2, y: groundY });
       }
@@ -1245,19 +1238,9 @@ function updateMovement(dt) {
     const speed = moveMode === "run" ? RUN_SPEED : WALK_SPEED;
     const curX = character.position.x;
     const curZ = character.position.z;
+    // 건물을 막는 벽으로 쓰지 않아서, 건물 자리든 어디든 그냥 뚫고 지나다닐 수 있다.
     let nx = curX + dir.x * speed * dt;
     let nz = curZ + dir.z * speed * dt;
-    // 건물(buildingColliders)에 막히면 한쪽 축만이라도 열려 있는지 봐서 벽을 타고 미끄러지듯
-    // 움직인다 — 둘 다 막혀 있으면(건물 정면으로 부딪힌 경우) 제자리에 멈춘다. 도로는 충돌
-    // 목록에 없어서 경사든 아니든 항상 지나다닐 수 있다.
-    if (collidesWithBuilding(nx, nz)) {
-      if (!collidesWithBuilding(nx, curZ)) nz = curZ;
-      else if (!collidesWithBuilding(curX, nz)) nx = curX;
-      else {
-        nx = curX;
-        nz = curZ;
-      }
-    }
     nx = Math.max(AREA_MIN_X + 1, Math.min(AREA_MAX_X - 1, nx));
     nz = Math.max(AREA_MIN_Z + 1, Math.min(AREA_MAX_Z - 1, nz));
     character.position.x = nx;
@@ -1419,7 +1402,11 @@ async function initNeighborhood3D() {
     clock = new THREE.Clock();
     buildStaticScene();
     await loadCharacter();
-    character.position.set(0, 0, 2.5); // 우리집(0,0) 바로 앞 — 건물 안에 스폰되지 않게 앞마당만큼 띄운다
+    // 113동 중 북서쪽으로 뻗은 날개(WingA)가 건물 중심 쪽(동)·북쪽 모서리에서 북동쪽을 보고
+    // 있는 1-2호 출입구 앞 — 실제 모델(place_금파힐113.glb)을 rotationDeg(67.4°) 그대로 적용해
+    // 불러온 뒤 그 날개의 월드 좌표 바운딩박스 모서리를 구해서(2026-11-21), 거기서 북동쪽으로
+    // 3m 더 나가 선 자리다.
+    character.position.set(1.3, 0, -1.31);
     playAction("Idle_02");
     wireOrbitControls();
     wireDpad();
