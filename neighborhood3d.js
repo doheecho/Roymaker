@@ -597,6 +597,43 @@ const MODEL_UNLOAD_RANGE = MODEL_LOAD_RANGE * 1.3;
 const MODEL_STREAM_CHECK_INTERVAL = 0.4; // 매 프레임 전부 검사하면 낭비라 이 간격으로만 확인한다
 const modelStreamEntries = []; // buildPlaces가 model이 있는 장소마다 하나씩 채운다
 const placeVisibilityEntries = []; // model이 없는 장소(플레이스홀더만 있는 건물)의 group 목록
+
+// ── 캐릭터 충돌·지면 높이 ──
+// buildPlaces가 장소마다 하나씩 채운다. 건물은 그 자리(회전된 사각형)를 캐릭터가 뚫고
+// 지나가지 못하게 막는 벽으로 쓰고(buildingColliders), 단차가 있는 곳(place.y가 있는 곳)은
+// 그 건물을 둘러싼 더 넓은 발판(스커트 영역, 실제로 그려지는 벽 크기와 맞춤)을 캐릭터가
+// 올라서서 걸어 다닐 수 있는 높은 지면으로 쓴다(groundPlatforms) — 그래서 건물 자체는 막혀
+// 있어도 그 둘레의 높아진 마당은 밟고 지나다닐 수 있다. 도로는 전부 평평(y=0)해서 따로
+// 다룰 게 없다 — 가파른 경사라는 개념 자체가 아직 없으니 모든 길은 항상 걸어갈 수 있다.
+const buildingColliders = [];
+const groundPlatforms = [];
+// 금호파크힐스 101~116동(+우리집)은 실제 .glb 모델의 바운딩박스를 재서 얻은 진짜 가로·세로
+// (raw 미터, PLACES의 x·z와 같은 단위)를 알고 있어서, 충돌 판정은 TYPE_STYLE의 뭉뚱그린
+// 22×13 대신 이 실측값을 쓴다 — 다른 건물은 아직 실측이 없어 TYPE_STYLE 크기로 대신한다.
+const BUILDING_FOOTPRINT_OVERRIDE = {
+  0: [17.9, 23.3], 1: [17.9, 23.3], 2: [21.1, 23.5], 3: [21.1, 23.5], 4: [17.9, 23.3],
+  6: [17.9, 23.3], 7: [17.9, 23.3], 8: [17.9, 23.3], 9: [34, 13.6], 10: [27.85, 13.45],
+  11: [35.85, 12.45], 12: [24.8, 12.9], 14: [12.85, 33.85], 15: [28.7, 12.9], 16: [12.4, 26.8],
+};
+function worldToLocalXZ(x, z, cx, cz, cos, sin) {
+  const dx = x - cx;
+  const dz = z - cz;
+  return [dx * cos - dz * sin, dx * sin + dz * cos];
+}
+function insideRect(x, z, cx, cz, cos, sin, halfW, halfD) {
+  const [lx, lz] = worldToLocalXZ(x, z, cx, cz, cos, sin);
+  return Math.abs(lx) <= halfW && Math.abs(lz) <= halfD;
+}
+function collidesWithBuilding(x, z) {
+  return buildingColliders.some((c) => insideRect(x, z, c.cx, c.cz, c.cos, c.sin, c.halfW, c.halfD));
+}
+// 캐릭터가 서 있는 자리의 지면 높이 — 단차가 있는 건물의 발판 위면 그 높이, 아니면 기본(0)
+function groundHeightAt(x, z) {
+  for (const p of groundPlatforms) {
+    if (insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return p.y;
+  }
+  return 0;
+}
 let modelStreamTimer = 0;
 
 function disposeObject3D(obj) {
@@ -678,6 +715,11 @@ function buildPlaces() {
     const pz = place.z * WORLD_SCALE;
     const w = style.w * WORLD_SCALE;
     const d = style.d * WORLD_SCALE;
+    // 충돌·단차 발판·스커트 크기에 쓸 "진짜" 가로·세로 — 실측값이 있으면 그걸, 없으면 위의
+    // 뭉뚱그린 TYPE_STYLE 크기를 그대로 쓴다(플레이스홀더 박스 크기는 건드리지 않는다).
+    const footprintOverride = BUILDING_FOOTPRINT_OVERRIDE[place.id];
+    const colW = footprintOverride ? footprintOverride[0] * WORLD_SCALE : w;
+    const colD = footprintOverride ? footprintOverride[1] * WORLD_SCALE : d;
     const floors = place.floors || 15;
     let height = Math.max(0.6, floors * 3 * WORLD_SCALE);
     const color = NAME_COLOR_OVERRIDE[place.name] ?? style.color;
@@ -695,13 +737,25 @@ function buildPlaces() {
     scene.add(group);
     if (groundY !== 0) {
       const skirt = new THREE.Mesh(
-        new THREE.BoxGeometry(w * 1.4, Math.abs(groundY), d * 1.4),
+        new THREE.BoxGeometry(colW * 1.4, Math.abs(groundY), colD * 1.4),
         new THREE.MeshStandardMaterial({ color: 0x9a9488 })
       );
       skirt.position.set(0, -groundY / 2, 0); // group 기준 로컬 좌표 — group.position.y와 합쳐지면 실제 지면(y=0)까지 이어진다
       skirt.castShadow = true;
       skirt.receiveShadow = true;
       group.add(skirt);
+    }
+
+    // 충돌·지면 높이 등록 — 실제로 뜨는 모델의 회전(rotationDeg, 없으면 대각선 배치 rotY)을
+    // 그대로 써서, 눈에 보이는 건물 자리와 막히는 자리가 어긋나지 않게 한다.
+    {
+      const colRot = place.rotationDeg != null ? THREE.MathUtils.degToRad(place.rotationDeg) : rotY;
+      const cos = Math.cos(colRot);
+      const sin = Math.sin(colRot);
+      buildingColliders.push({ cx: px, cz: pz, cos, sin, halfW: colW / 2, halfD: colD / 2 });
+      if (groundY !== 0) {
+        groundPlatforms.push({ cx: px, cz: pz, cos, sin, halfW: (colW * 1.4) / 2, halfD: (colD * 1.4) / 2, y: groundY });
+      }
     }
 
     if (place.model) {
@@ -1185,13 +1239,31 @@ function updateMovement(dt) {
     const dir = new THREE.Vector3(fx * inputForward + rx * inputRight, 0, fz * inputForward + rz * inputRight);
     dir.normalize();
     const speed = moveMode === "run" ? RUN_SPEED : WALK_SPEED;
-    const next = character.position.clone().addScaledVector(dir, speed * dt);
-    next.x = Math.max(AREA_MIN_X + 1, Math.min(AREA_MAX_X - 1, next.x));
-    next.z = Math.max(AREA_MIN_Z + 1, Math.min(AREA_MAX_Z - 1, next.z));
-    character.position.x = next.x;
-    character.position.z = next.z;
+    const curX = character.position.x;
+    const curZ = character.position.z;
+    let nx = curX + dir.x * speed * dt;
+    let nz = curZ + dir.z * speed * dt;
+    // 건물(buildingColliders)에 막히면 한쪽 축만이라도 열려 있는지 봐서 벽을 타고 미끄러지듯
+    // 움직인다 — 둘 다 막혀 있으면(건물 정면으로 부딪힌 경우) 제자리에 멈춘다. 도로는 충돌
+    // 목록에 없어서 경사든 아니든 항상 지나다닐 수 있다.
+    if (collidesWithBuilding(nx, nz)) {
+      if (!collidesWithBuilding(nx, curZ)) nz = curZ;
+      else if (!collidesWithBuilding(curX, nz)) nx = curX;
+      else {
+        nx = curX;
+        nz = curZ;
+      }
+    }
+    nx = Math.max(AREA_MIN_X + 1, Math.min(AREA_MAX_X - 1, nx));
+    nz = Math.max(AREA_MIN_Z + 1, Math.min(AREA_MAX_Z - 1, nz));
+    character.position.x = nx;
+    character.position.z = nz;
     character.rotation.y = Math.atan2(dir.x, dir.z);
   }
+  // 서 있는 자리의 지면 높이(단차 있는 건물의 발판 위인지)에 맞춰 매 프레임 조금씩 따라가게
+  // 해서, 뚝 끊기지 않고 비탈을 오르내리듯 자연스럽게 높이가 바뀌게 한다.
+  const targetGroundY = groundHeightAt(character.position.x, character.position.z);
+  character.position.y += (targetGroundY - character.position.y) * Math.min(1, dt * 6);
   // 점프 중엔 애니메이션은 점프 동작을 그대로 유지하고, 이동/방향 전환만 반영한다
   // (방향키+점프를 같이 누르면 그 방향으로 가며 점프하게)
   if (jumping) return;
