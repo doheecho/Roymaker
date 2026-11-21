@@ -9,7 +9,7 @@
   html, body { margin: 0; height: 100%; font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
   body { display: flex; flex-direction: column; background: #20232a; color: #e8eaf0; }
   #toolbar {
-    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex-wrap: wrap;
     background: #2b2f38; border-bottom: 1px solid #3a3f4b; flex: none;
   }
   #toolbar button, #toolbar input {
@@ -18,12 +18,15 @@
   }
   #toolbar input[type="text"] { cursor: text; width: 180px; }
   #toolbar button:hover { background: #4a4f5b; }
+  #toolbar button.active { background: #2f7a3f; border-color: #3f9a52; }
+  #toolbar .sep { width: 1px; align-self: stretch; background: #3a3f4b; margin: 0 2px; }
   #toolbar .hint { color: #9aa0ad; font-size: 12px; margin-left: auto; }
   #main { flex: 1; display: flex; min-height: 0; }
   #stageWrap { flex: 1; overflow: auto; background: #14161a; position: relative; }
   #stage { position: relative; transform-origin: 0 0; }
   #stage img { display: block; user-select: none; -webkit-user-drag: none; }
   #overlay { position: absolute; left: 0; top: 0; }
+  #overlay.mode-add { cursor: crosshair; }
   .marker-dot { cursor: grab; }
   .marker-dot:active { cursor: grabbing; }
   .marker-dot.selected { stroke: #fff; stroke-width: 3; }
@@ -43,8 +46,16 @@
   .road-line.selected { stroke: #e3482b; }
   .road-handle { fill: #e3482b; stroke: #fff; stroke-width: 2; cursor: grab; }
   .road-handle:active { cursor: grabbing; }
+  .pending-point { fill: #ffd34d; stroke: #202225; stroke-width: 2; pointer-events: none; }
+  .park-rect { fill: #4fae3f; fill-opacity: 0.45; stroke: #2f7a2a; stroke-width: 2; cursor: grab; pointer-events: all; }
+  .park-rect:active { cursor: grabbing; }
+  .park-rect.selected { stroke: #fff; stroke-width: 3; }
+  .tree-dot { fill: #2f7a2a; stroke: #1c4a1a; stroke-width: 1.5; cursor: grab; }
+  .tree-dot:active { cursor: grabbing; }
+  .tree-dot.selected { stroke: #fff; stroke-width: 3; }
+  .tree-hit { fill: transparent; cursor: grab; pointer-events: all; }
   #sidePanel {
-    width: 300px; flex: none; background: #262a33; border-left: 1px solid #3a3f4b;
+    width: 320px; flex: none; background: #262a33; border-left: 1px solid #3a3f4b;
     padding: 14px; overflow-y: auto;
   }
   #sidePanel h2 { font-size: 15px; margin: 0 0 10px; }
@@ -87,6 +98,11 @@
   <span id="zoomLabel" style="min-width:48px; text-align:center;">40%</span>
   <button id="zoomInBtn">🔍+</button>
   <input id="searchInput" type="text" placeholder="건물 이름 검색 후 Enter" />
+  <span class="sep"></span>
+  <button id="addPlaceBtn">🏢 건물 추가</button>
+  <button id="addRoadBtn">🛣️ 도로 추가</button>
+  <button id="addParkBtn">🌳 공원 추가</button>
+  <button id="addTreeBtn">🌲 나무 추가</button>
   <span class="hint" id="statusText">neighborhood3d.js 불러오는 중…</span>
   <button id="exportBtn">📋 내보내기</button>
 </div>
@@ -98,7 +114,7 @@
     </div>
   </div>
   <div id="sidePanel">
-    <div id="panelBody"><p class="empty">건물(원)이나 도로(선)를 클릭해서 선택하세요.<br><br>· 원을 드래그하면 위치가 바뀝니다.<br>· 노란 점(방향 손잡이)을 드래그하면 회전이 바뀝니다 — 모델이 있는 건물만 적용됩니다.<br>· 도로는 빨간 사각형 손잡이로 양끝을 옮기고, 폭은 옆 칸에 숫자로 넣습니다.<br>· 다 고치면 위의 "내보내기"를 눌러 <code>map_data.js</code> 파일 전체를 통째로 바꿔치기하세요.</p></div>
+    <div id="panelBody"><p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)를 클릭해서 선택하세요.<br><br>· 마커를 드래그하면 위치가 바뀝니다.<br>· 노란 점(방향 손잡이)을 드래그하면 회전이 바뀝니다 — 건물은 모델이 있을 때만, 공원은 항상 적용됩니다.<br>· 도로는 빨간 사각형 손잡이로 양끝을 옮기고, 폭은 옆 칸에 숫자로 넣습니다.<br>· 위 툴바의 "추가" 버튼을 누른 뒤 지도를 클릭하면 새로 만들어집니다(도로는 두 번 클릭 — 시작점, 끝점).<br>· 다 고치면 위의 "내보내기"를 눌러 <code>map_data.js</code> 파일 전체를 통째로 바꿔치기하세요.</p></div>
   </div>
 </div>
 <div id="exportModal" class="hidden">
@@ -126,10 +142,10 @@
     toast._t = setTimeout(() => toastEl.classList.remove("show"), 1800);
   }
 
-  // ── neighborhood3d.js에서는 MAP_IMAGE/ROAD_* 상수만, 건물·도로 데이터는 map_data.js에서 따로 받는다 ──
-  // (PLACES/ROAD_SEGMENTS가 map_data.js로 옮겨진 건 이 에디터로 고친 걸 "내보내기"할 때 그 파일
-  // 하나만 통째로 바꿔치기하면 되게 하려는 것 — neighborhood3d.js 안의 긴 코드 중 일부만 정확히
-  // 골라 바꿔치기해야 하는 예전 방식은 경계를 잘못 잡으면 코드가 깨지기 쉬웠다.)
+  // ── neighborhood3d.js에서는 MAP_IMAGE/ROAD_* 상수만, 건물·도로·나무·공원 데이터는 map_data.js에서
+  // 따로 받는다(이 에디터로 고친 걸 "내보내기"할 때 그 파일 하나만 통째로 바꿔치기하면 되게 하려는 것
+  // — neighborhood3d.js 안의 긴 코드 중 일부만 정확히 골라 바꿔치기해야 하는 예전 방식은 경계를 잘못
+  // 잡으면 코드가 깨지기 쉬웠다).
   let srcText, dataText;
   try {
     srcText = await (await fetch(JS_URL)).text();
@@ -165,9 +181,13 @@
     return m ? cast(m[1]) : undefined;
   }
 
+  function arrayBlock(src, name) {
+    const m = src.match(new RegExp(`(?:export )?const ${name} = \\[([\\s\\S]*?)\\];`));
+    return m ? m[1] : "";
+  }
+
   function parsePlaces(src) {
-    const m = src.match(/(?:export )?const PLACES = \[([\s\S]*?)\n\];/);
-    const lines = m[1].split("\n");
+    const lines = arrayBlock(src, "PLACES").split("\n");
     const places = [];
     for (const raw of lines) {
       const line = raw.trim();
@@ -193,8 +213,7 @@
   }
 
   function parseRoads(src, roadConsts) {
-    const m = src.match(/(?:export )?const ROAD_SEGMENTS = \[([\s\S]*?)\n\];/);
-    const lines = m[1].split("\n");
+    const lines = arrayBlock(src, "ROAD_SEGMENTS").split("\n");
     const roads = [];
     for (const raw of lines) {
       const line = raw.trim();
@@ -210,11 +229,39 @@
     return roads;
   }
 
+  function parseTrees(src) {
+    const lines = arrayBlock(src, "TREES").match(/\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/g) || [];
+    return lines.map((s) => {
+      const mm = s.match(/\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/);
+      return { x: parseFloat(mm[1]), z: parseFloat(mm[2]) };
+    });
+  }
+
+  function parseParks(src) {
+    const lines = arrayBlock(src, "PARKS").split("\n");
+    const parks = [];
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line.startsWith("{")) continue;
+      parks.push({
+        id: grab(line, /id:\s*(-?\d+)/, Number),
+        x: grab(line, /\bx:\s*(-?[\d.]+)/, Number),
+        z: grab(line, /\bz:\s*(-?[\d.]+)/, Number),
+        w: grab(line, /\bw:\s*(-?[\d.]+)/, Number),
+        d: grab(line, /\bd:\s*(-?[\d.]+)/, Number),
+        rotationDeg: grab(line, /rotationDeg:\s*(-?[\d.]+)/, Number) ?? 0,
+      });
+    }
+    return parks;
+  }
+
   const mapImage = parseMapImage(srcText);
   const roadConsts = parseRoadConstants(srcText);
   const PLACES = parsePlaces(dataText);
   const ROADS = parseRoads(dataText, roadConsts);
-  statusText.textContent = `건물 ${PLACES.length}개 · 도로 ${ROADS.length}개 불러옴`;
+  const TREES = parseTrees(dataText);
+  const PARKS = parseParks(dataText);
+  statusText.textContent = `건물 ${PLACES.length}개 · 도로 ${ROADS.length}개 · 나무 ${TREES.length}그루 · 공원 ${PARKS.length}개 불러옴`;
 
   const SCALE = mapImage.scale;
   const ANCHOR = mapImage.anchorPx;
@@ -301,20 +348,30 @@
     "편의점": "#8a4fc2", "식당": "#e0a040", "기타": "#9fb0c0",
   };
 
-  // ── 마커/도로 렌더링 ──
-  const placeLayer = el("g", {});
+  // ── 마커/도로/공원/나무 렌더링(이 순서로 쌓아서 공원이 제일 아래, 건물 라벨이 제일 위에 오게 한다) ──
+  const parkLayer = el("g", {});
   const roadLayer = el("g", {});
+  const treeLayer = el("g", {});
+  const placeLayer = el("g", {});
+  const pendingLayer = el("g", {});
+  svg.appendChild(parkLayer);
   svg.appendChild(roadLayer);
+  svg.appendChild(treeLayer);
   svg.appendChild(placeLayer);
+  svg.appendChild(pendingLayer);
 
   const placeNodes = {}; // id -> { place, dot, label, handle, rotLine, axis }
-  const roadNodes = []; // { seg, line, hit, handleA, handleB }
+  const roadNodes = []; // { seg, index, line, hit, handleA, handleB }
+  const parkNodes = []; // { park, rect, handle, handleHit, rotLine }
+  const treeNodes = []; // { tree, dot, hit }
 
-  let selected = null; // { kind: 'place'|'road', ref }
+  let selected = null; // { kind: 'place'|'road'|'park'|'tree', ref }
+  let mode = "select"; // 'select' | 'add-place' | 'add-road' | 'add-park' | 'add-tree'
+  let pendingRoadStart = null; // add-road 모드에서 첫 번째 클릭 지점(raw [x,z])
 
   function placeMarkerRadius() { return 8; }
 
-  PLACES.forEach((place) => {
+  function addPlaceNode(place) {
     const [px, py] = rawToPx(place.x, place.z);
     const g = el("g", { "data-place-id": place.id });
     const color = place.home ? "#ff4d6d" : TYPE_COLOR[place.type] || "#9fb0c0";
@@ -333,12 +390,12 @@
     g.appendChild(handleHit);
     placeLayer.appendChild(g);
     placeNodes[place.id] = { place, g, dot, dotHit, label, rotLine, handle, handleHit, axis: null, px, py };
-
     dotHit.addEventListener("pointerdown", (ev) => startPlaceDrag(ev, place.id));
     handleHit.addEventListener("pointerdown", (ev) => startRotateDrag(ev, place.id));
-  });
+  }
+  PLACES.forEach(addPlaceNode);
 
-  ROADS.forEach((seg, i) => {
+  function addRoadNode(seg) {
     const [ax, ay] = rawToPx(seg.a[0], seg.a[1]);
     const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
     const hit = el("line", { x1: ax, y1: ay, x2: bx, y2: by, class: "road-hit" });
@@ -349,12 +406,54 @@
     roadLayer.appendChild(line);
     roadLayer.appendChild(handleA);
     roadLayer.appendChild(handleB);
-    const node = { seg, index: i, line, hit, handleA, handleB };
+    const node = { seg, index: roadNodes.length, line, hit, handleA, handleB };
     roadNodes.push(node);
     hit.addEventListener("pointerdown", (ev) => selectRoad(ev, node));
     handleA.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "a"));
     handleB.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "b"));
-  });
+    return node;
+  }
+  ROADS.forEach(addRoadNode);
+
+  // 공원의 rotationDeg는 모델 축 구분이 필요 없는 "axis=x" 고정 케이스와 똑같다 — 그대로 재사용한다
+  function parkWorldAngle(rotationDeg) { return rotationDegToWorldAngle(rotationDeg || 0, "x"); }
+  function parkRotationFromWorldAngle(worldAngle) { return worldAngleToRotationDeg(worldAngle, "x"); }
+
+  function addParkNode(park) {
+    const [px, py] = rawToPx(park.x, park.z);
+    const w = park.w / SCALE;
+    const d = park.d / SCALE;
+    const g = el("g", {});
+    const rect = el("rect", { x: px - w / 2, y: py - d / 2, width: w, height: d, class: "park-rect" });
+    const rotLine = el("line", { class: "rot-line" });
+    const handle = el("circle", { r: 7, class: "rot-handle" });
+    const handleHit = el("circle", { r: 16, class: "rot-hit" });
+    g.appendChild(rect);
+    g.appendChild(rotLine);
+    g.appendChild(handle);
+    g.appendChild(handleHit);
+    parkLayer.appendChild(g);
+    const node = { park, g, rect, rotLine, handle, handleHit, px, py };
+    parkNodes.push(node);
+    rect.addEventListener("pointerdown", (ev) => startParkDrag(ev, node));
+    handleHit.addEventListener("pointerdown", (ev) => startParkRotateDrag(ev, node));
+    updateParkVisual(node);
+    return node;
+  }
+  PARKS.forEach(addParkNode);
+
+  function addTreeNode(tree) {
+    const [px, py] = rawToPx(tree.x, tree.z);
+    const dot = el("circle", { cx: px, cy: py, r: 5, class: "tree-dot" });
+    const hit = el("circle", { cx: px, cy: py, r: 12, class: "tree-hit" });
+    treeLayer.appendChild(dot);
+    treeLayer.appendChild(hit);
+    const node = { tree, dot, hit, px, py };
+    treeNodes.push(node);
+    hit.addEventListener("pointerdown", (ev) => startTreeDrag(ev, node));
+    return node;
+  }
+  TREES.forEach(addTreeNode);
 
   function updatePlaceVisual(id) {
     const n = placeNodes[id];
@@ -366,6 +465,8 @@
     n.dotHit.setAttribute("cy", py);
     n.label.setAttribute("x", px + 10);
     n.label.setAttribute("y", py + 4);
+    n.label.textContent = n.place.name;
+    n.dot.setAttribute("fill", n.place.home ? "#ff4d6d" : (TYPE_COLOR[n.place.type] || "#9fb0c0"));
     updateRotHandle(id);
   }
 
@@ -403,6 +504,40 @@
     node.handleB.setAttribute("x", bx - 5); node.handleB.setAttribute("y", by - 5);
   }
 
+  function updateParkVisual(node) {
+    const [px, py] = rawToPx(node.park.x, node.park.z);
+    node.px = px; node.py = py;
+    const w = node.park.w / SCALE;
+    const d = node.park.d / SCALE;
+    node.rect.setAttribute("x", px - w / 2);
+    node.rect.setAttribute("y", py - d / 2);
+    node.rect.setAttribute("width", w);
+    node.rect.setAttribute("height", d);
+    const worldAngle = parkWorldAngle(node.park.rotationDeg);
+    node.rect.setAttribute("transform", `rotate(${worldAngle}, ${px}, ${py})`);
+    const rad = (worldAngle * Math.PI) / 180;
+    const R = Math.max(w, d) / 2 + 26;
+    const hx = px + R * Math.cos(rad);
+    const hy = py + R * Math.sin(rad);
+    node.handle.setAttribute("cx", hx);
+    node.handle.setAttribute("cy", hy);
+    node.handleHit.setAttribute("cx", hx);
+    node.handleHit.setAttribute("cy", hy);
+    node.rotLine.setAttribute("x1", px);
+    node.rotLine.setAttribute("y1", py);
+    node.rotLine.setAttribute("x2", hx);
+    node.rotLine.setAttribute("y2", hy);
+  }
+
+  function updateTreeVisual(node) {
+    const [px, py] = rawToPx(node.tree.x, node.tree.z);
+    node.px = px; node.py = py;
+    node.dot.setAttribute("cx", px);
+    node.dot.setAttribute("cy", py);
+    node.hit.setAttribute("cx", px);
+    node.hit.setAttribute("cy", py);
+  }
+
   // ── 선택 & 사이드 패널 ──
   const panelBody = document.getElementById("panelBody");
 
@@ -414,6 +549,8 @@
       selected.ref.handleA.setAttribute("visibility", "hidden");
       selected.ref.handleB.setAttribute("visibility", "hidden");
     }
+    if (selected.kind === "park") selected.ref.rect.classList.remove("selected");
+    if (selected.kind === "tree") selected.ref.dot.classList.remove("selected");
   }
 
   async function selectPlace(id) {
@@ -430,11 +567,26 @@
 
   function selectRoad(ev, node) {
     ev.stopPropagation();
+    if (mode !== "select") return;
     clearSelectionVisual();
     selected = { kind: "road", ref: node };
     node.line.classList.add("selected");
     node.handleA.setAttribute("visibility", "visible");
     node.handleB.setAttribute("visibility", "visible");
+    renderPanel();
+  }
+
+  function selectParkNode(node) {
+    clearSelectionVisual();
+    selected = { kind: "park", ref: node };
+    node.rect.classList.add("selected");
+    renderPanel();
+  }
+
+  function selectTreeNode(node) {
+    clearSelectionVisual();
+    selected = { kind: "tree", ref: node };
+    node.dot.classList.add("selected");
     renderPanel();
   }
 
@@ -460,10 +612,41 @@
     return wrap;
   }
 
+  function fieldText(label, value, onInput, opts) {
+    const wrap = document.createElement("div");
+    wrap.className = "field";
+    const lab = document.createElement("label");
+    lab.textContent = label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = value ?? "";
+    if (opts && opts.list) {
+      input.setAttribute("list", opts.list);
+    }
+    input.addEventListener("input", () => onInput(input.value));
+    wrap.appendChild(lab);
+    wrap.appendChild(input);
+    if (opts && opts.note) {
+      const note = document.createElement("div");
+      note.className = "note";
+      note.textContent = opts.note;
+      wrap.appendChild(note);
+    }
+    return wrap;
+  }
+
+  function deleteButton(onClick, label) {
+    const btn = document.createElement("button");
+    btn.className = "full danger";
+    btn.textContent = label || "🗑 삭제";
+    btn.addEventListener("click", onClick);
+    return btn;
+  }
+
   function renderPanel() {
     panelBody.innerHTML = "";
     if (!selected) {
-      panelBody.innerHTML = '<p class="empty">건물(원)이나 도로(선)를 클릭해서 선택하세요.</p>';
+      panelBody.innerHTML = '<p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)를 클릭해서 선택하세요.</p>';
       return;
     }
     if (selected.kind === "place") {
@@ -471,10 +654,24 @@
       const h2 = document.createElement("h2");
       h2.textContent = place.name + (place.home ? " (우리집)" : "");
       panelBody.appendChild(h2);
+      panelBody.appendChild(fieldText("이름", place.name, (v) => { place.name = v; updatePlaceVisual(place.id); }));
+      panelBody.appendChild(fieldText("유형", place.type, (v) => { place.type = v; updatePlaceVisual(place.id); }, {
+        list: "typeList", note: "아파트·카페·학교·도서관·보건소·학원·중형마트·대형마트·편의점·식당·기타 중에서 고르거나 새로 입력하세요.",
+      }));
+      panelBody.appendChild(fieldNum("층수", place.floors ?? 15, (v) => { place.floors = Math.round(v); }, { step: "1" }));
       panelBody.appendChild(fieldNum("x (raw)", place.x, (v) => { place.x = v; updatePlaceVisual(place.id); }));
       panelBody.appendChild(fieldNum("z (raw)", place.z, (v) => { place.z = v; updatePlaceVisual(place.id); }));
       panelBody.appendChild(fieldNum("y · 단차 (raw, m)", place.y ?? 0, (v) => { place.y = v; }, {
         step: "0.5", note: "0이면 기준 지면과 같은 높이. 양수면 그만큼 높게, 음수면 낮게 — 게임에서 그 높이까지 이어지는 벽이 자동으로 생깁니다.",
+      }));
+      panelBody.appendChild(fieldText("model (glb 경로)", place.model, async (v) => {
+        place.model = v.trim() || undefined;
+        const n = placeNodes[place.id];
+        n.axis = place.model ? await getDefaultAxis(place) : null;
+        updatePlaceVisual(place.id);
+        if (selected && selected.kind === "place" && selected.ref.id === place.id) renderPanel();
+      }, {
+        note: "비워 두면 이름표만 뜨고 건물은 보이지 않습니다(예: models/place_새건물.glb).",
       }));
       panelBody.appendChild(fieldNum("rotationDeg", place.rotationDeg ?? 0, (v) => { place.rotationDeg = v; updateRotHandle(place.id); }, {
         step: "1", disabled: !place.model, note: place.model ? "노란 손잡이를 드래그해도 바뀝니다." : "이 건물은 모델이 없어 회전이 게임에 적용되지 않습니다.",
@@ -482,7 +679,8 @@
       panelBody.appendChild(fieldNum("scaleRatio", place.scaleRatio ?? 1, (v) => { place.scaleRatio = v; }, {
         step: "0.05", disabled: !place.model, note: place.model ? "모델이 실제보다 작게/크게 만들어졌을 때 전체 크기를 보정합니다(기본 1)." : "모델이 없는 건물에는 적용되지 않습니다.",
       }));
-    } else {
+      panelBody.appendChild(deleteButton(() => deletePlace(place.id), "🗑 이 건물 삭제"));
+    } else if (selected.kind === "road") {
       const node = selected.ref;
       const h2 = document.createElement("h2");
       h2.textContent = `도로 구간 #${node.index}`;
@@ -492,17 +690,170 @@
       panelBody.appendChild(fieldNum("b.x (raw)", node.seg.b[0], (v) => { node.seg.b[0] = v; updateRoadVisual(node); }));
       panelBody.appendChild(fieldNum("b.z (raw)", node.seg.b[1], (v) => { node.seg.b[1] = v; updateRoadVisual(node); }));
       panelBody.appendChild(fieldNum("width (raw)", node.seg.width, (v) => { node.seg.width = v; updateRoadVisual(node); }, { step: "0.5" }));
+      panelBody.appendChild(deleteButton(() => deleteRoad(node), "🗑 이 도로 삭제"));
+    } else if (selected.kind === "park") {
+      const node = selected.ref;
+      const h2 = document.createElement("h2");
+      h2.textContent = `공원 #${node.park.id}`;
+      panelBody.appendChild(h2);
+      panelBody.appendChild(fieldNum("x (raw)", node.park.x, (v) => { node.park.x = v; updateParkVisual(node); }));
+      panelBody.appendChild(fieldNum("z (raw)", node.park.z, (v) => { node.park.z = v; updateParkVisual(node); }));
+      panelBody.appendChild(fieldNum("가로 w (raw, m)", node.park.w, (v) => { node.park.w = Math.max(1, v); updateParkVisual(node); }, { step: "1" }));
+      panelBody.appendChild(fieldNum("세로 d (raw, m)", node.park.d, (v) => { node.park.d = Math.max(1, v); updateParkVisual(node); }, { step: "1" }));
+      panelBody.appendChild(fieldNum("rotationDeg", node.park.rotationDeg ?? 0, (v) => { node.park.rotationDeg = v; updateParkVisual(node); }, {
+        step: "1", note: "노란 손잡이를 드래그해도 바뀝니다.",
+      }));
+      panelBody.appendChild(deleteButton(() => deletePark(node), "🗑 이 공원 삭제"));
+    } else if (selected.kind === "tree") {
+      const node = selected.ref;
+      const h2 = document.createElement("h2");
+      h2.textContent = "나무";
+      panelBody.appendChild(h2);
+      panelBody.appendChild(fieldNum("x (raw)", node.tree.x, (v) => { node.tree.x = v; updateTreeVisual(node); }));
+      panelBody.appendChild(fieldNum("z (raw)", node.tree.z, (v) => { node.tree.z = v; updateTreeVisual(node); }));
+      panelBody.appendChild(deleteButton(() => deleteTree(node), "🗑 이 나무 삭제"));
     }
   }
 
-  svg.addEventListener("pointerdown", (ev) => {
-    if (ev.target === svg) {
+  // ── 삭제 ──
+  function deletePlace(id) {
+    const idx = PLACES.findIndex((p) => p.id === id);
+    if (idx === -1) return;
+    PLACES.splice(idx, 1);
+    placeNodes[id].g.remove();
+    delete placeNodes[id];
+    selected = null;
+    renderPanel();
+    toast("건물을 지웠어요.");
+  }
+  function deleteRoad(node) {
+    const idx = ROADS.indexOf(node.seg);
+    if (idx !== -1) ROADS.splice(idx, 1);
+    node.line.remove(); node.hit.remove(); node.handleA.remove(); node.handleB.remove();
+    const ni = roadNodes.indexOf(node);
+    if (ni !== -1) roadNodes.splice(ni, 1);
+    selected = null;
+    renderPanel();
+    toast("도로를 지웠어요.");
+  }
+  function deletePark(node) {
+    const idx = PARKS.indexOf(node.park);
+    if (idx !== -1) PARKS.splice(idx, 1);
+    node.g.remove();
+    const ni = parkNodes.indexOf(node);
+    if (ni !== -1) parkNodes.splice(ni, 1);
+    selected = null;
+    renderPanel();
+    toast("공원을 지웠어요.");
+  }
+  function deleteTree(node) {
+    const idx = TREES.indexOf(node.tree);
+    if (idx !== -1) TREES.splice(idx, 1);
+    node.dot.remove(); node.hit.remove();
+    const ni = treeNodes.indexOf(node);
+    if (ni !== -1) treeNodes.splice(ni, 1);
+    selected = null;
+    renderPanel();
+    toast("나무를 지웠어요.");
+  }
+
+  // ── 추가 모드 ──
+  const addButtons = {
+    "add-place": document.getElementById("addPlaceBtn"),
+    "add-road": document.getElementById("addRoadBtn"),
+    "add-park": document.getElementById("addParkBtn"),
+    "add-tree": document.getElementById("addTreeBtn"),
+  };
+  const MODE_HINT = {
+    "select": "",
+    "add-place": "지도를 클릭하면 그 자리에 새 건물이 생깁니다(다시 누르면 꺼집니다).",
+    "add-road": "지도를 두 번 클릭해서 도로의 시작점 → 끝점을 찍으세요(다시 누르면 꺼집니다).",
+    "add-park": "지도를 클릭하면 그 자리에 20×20m 공원이 생깁니다 — 크기는 옆 칸에서 조절하세요(다시 누르면 꺼집니다).",
+    "add-tree": "지도를 클릭할 때마다 나무가 하나씩 심어집니다(다시 누르면 꺼집니다).",
+  };
+  function setMode(next) {
+    if (pendingLayer.firstChild) pendingLayer.innerHTML = "";
+    pendingRoadStart = null;
+    mode = mode === next ? "select" : next;
+    Object.entries(addButtons).forEach(([key, btn]) => btn.classList.toggle("active", key === mode));
+    svg.classList.toggle("mode-add", mode !== "select");
+    statusText.textContent = MODE_HINT[mode] || "";
+    if (mode !== "select") {
       clearSelectionVisual();
       selected = null;
       renderPanel();
     }
+  }
+  addButtons["add-place"].addEventListener("click", () => setMode("add-place"));
+  addButtons["add-road"].addEventListener("click", () => setMode("add-road"));
+  addButtons["add-park"].addEventListener("click", () => setMode("add-park"));
+  addButtons["add-tree"].addEventListener("click", () => setMode("add-tree"));
+  window.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && mode !== "select") setMode(mode); });
+
+  function nextId(list) {
+    return list.reduce((m, p) => Math.max(m, p.id), 0) + 1;
+  }
+
+  svg.addEventListener("pointerdown", (ev) => {
+    if (ev.target !== svg) return; // 마커 위 클릭은 각자의 pointerdown 핸들러가 처리한다
+    const pt = svgPoint(ev);
+    const [rx, rz] = pxToRaw(pt.x, pt.y);
+    if (mode === "add-place") {
+      const id = nextId(PLACES);
+      const place = { id, name: "새 건물", floors: 15, type: "아파트", x: Math.round(rx * 10) / 10, z: Math.round(rz * 10) / 10 };
+      PLACES.push(place);
+      addPlaceNode(place);
+      setMode("add-place"); // 토글 꺼서 select 모드로
+      selectPlace(id);
+      toast("건물을 추가했어요 — 오른쪽에서 이름·유형·모델을 채워주세요.");
+      return;
+    }
+    if (mode === "add-park") {
+      const id = nextId(PARKS);
+      const park = { id, x: Math.round(rx * 10) / 10, z: Math.round(rz * 10) / 10, w: 20, d: 20, rotationDeg: 0 };
+      PARKS.push(park);
+      const node = addParkNode(park);
+      setMode("add-park");
+      selectParkNode(node);
+      toast("공원을 추가했어요.");
+      return;
+    }
+    if (mode === "add-tree") {
+      const tree = { x: Math.round(rx * 10) / 10, z: Math.round(rz * 10) / 10 };
+      TREES.push(tree);
+      addTreeNode(tree);
+      toast(`나무 ${TREES.length}그루`);
+      return; // add-tree는 계속 켜 둔다(여러 그루 연달아 심기)
+    }
+    if (mode === "add-road") {
+      if (!pendingRoadStart) {
+        pendingRoadStart = [Math.round(rx * 10) / 10, Math.round(rz * 10) / 10];
+        const [px, py] = rawToPx(pendingRoadStart[0], pendingRoadStart[1]);
+        pendingLayer.appendChild(el("circle", { cx: px, cy: py, r: 7, class: "pending-point" }));
+        statusText.textContent = "이제 끝점을 클릭하세요.";
+      } else {
+        const seg = { a: pendingRoadStart, b: [Math.round(rx * 10) / 10, Math.round(rz * 10) / 10], width: 6 };
+        ROADS.push(seg);
+        const node = addRoadNode(seg);
+        pendingLayer.innerHTML = "";
+        pendingRoadStart = null;
+        setMode("add-road");
+        selected = { kind: "road", ref: node };
+        node.line.classList.add("selected");
+        node.handleA.setAttribute("visibility", "visible");
+        node.handleB.setAttribute("visibility", "visible");
+        renderPanel();
+        toast("도로를 추가했어요.");
+      }
+      return;
+    }
+    // select 모드에서 빈 곳 클릭 = 선택 해제
+    clearSelectionVisual();
+    selected = null;
+    renderPanel();
   });
   placeLayer.addEventListener("pointerdown", (ev) => {
+    if (mode !== "select") return;
     const g = ev.target.closest("g[data-place-id]");
     if (g && ev.target.tagName.toLowerCase() === "text") {
       selectPlace(Number(g.dataset.placeId));
@@ -512,6 +863,7 @@
   // ── 드래그 ──
   function startPlaceDrag(ev, id) {
     ev.stopPropagation();
+    if (mode !== "select") return;
     selectPlace(id);
     const n = placeNodes[id];
     const move = (mev) => {
@@ -529,6 +881,7 @@
 
   function startRotateDrag(ev, id) {
     ev.stopPropagation();
+    if (mode !== "select") return;
     selectPlace(id);
     const n = placeNodes[id];
     const move = async (mev) => {
@@ -546,6 +899,7 @@
 
   function startRoadEndpointDrag(ev, node, which) {
     ev.stopPropagation();
+    if (mode !== "select") return;
     selectRoad(ev, node);
     const move = (mev) => {
       const pt = svgPoint(mev);
@@ -554,6 +908,56 @@
       node.seg[which][1] = Math.round(rz * 10) / 10;
       updateRoadVisual(node);
       if (selected && selected.kind === "road" && selected.ref === node) renderPanel();
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function startParkDrag(ev, node) {
+    ev.stopPropagation();
+    if (mode !== "select") { return; }
+    selectParkNode(node);
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const [rx, rz] = pxToRaw(pt.x, pt.y);
+      node.park.x = Math.round(rx * 10) / 10;
+      node.park.z = Math.round(rz * 10) / 10;
+      updateParkVisual(node);
+      if (selected && selected.kind === "park" && selected.ref === node) renderPanel();
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function startParkRotateDrag(ev, node) {
+    ev.stopPropagation();
+    if (mode !== "select") return;
+    selectParkNode(node);
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const worldAngle = (Math.atan2(pt.y - node.py, pt.x - node.px) * 180) / Math.PI;
+      node.park.rotationDeg = Math.round(parkRotationFromWorldAngle(worldAngle) * 10) / 10;
+      updateParkVisual(node);
+      if (selected && selected.kind === "park" && selected.ref === node) renderPanel();
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function startTreeDrag(ev, node) {
+    ev.stopPropagation();
+    if (mode !== "select") return;
+    selectTreeNode(node);
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const [rx, rz] = pxToRaw(pt.x, pt.y);
+      node.tree.x = Math.round(rx * 10) / 10;
+      node.tree.z = Math.round(rz * 10) / 10;
+      updateTreeVisual(node);
+      if (selected && selected.kind === "tree" && selected.ref === node) renderPanel();
     };
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move);
@@ -596,24 +1000,38 @@
   function serializeRoad(r) {
     return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)} },`;
   }
+  function serializeTree(t) {
+    return `[${fmtNum(t.x)}, ${fmtNum(t.z)}]`;
+  }
+  function serializePark(p) {
+    return `  { id: ${p.id}, x: ${fmtNum(p.x)}, z: ${fmtNum(p.z)}, w: ${fmtNum(p.w)}, d: ${fmtNum(p.d)}, rotationDeg: ${fmtNum(p.rotationDeg || 0)} },`;
+  }
 
-  // map_data.js를 "통째로" 다시 만들어낸다 — 앞부분 안내 주석, PLACES 설명 주석, 사이에 낀
-  // ROAD_SEGMENTS 설명 주석은 지금 fetch해 온 실제 파일에서 그대로 가져오고(나중에 그 주석을
-  // 고쳐도 다음 내보내기에 반영됨), 배열 내용만 지금 에디터 상태로 새로 채운다. 이렇게 하면
-  // "내보내기" 결과를 map_data.js에 그대로 덮어써도 되고, 안내 문구가 코드 사이에 섞여 들어가
-  // const 선언을 깨뜨릴 일도 없다(예전엔 그래서 무한로딩 버그가 났었다).
+  // map_data.js를 "통째로" 다시 만들어낸다 — 안내 주석들은 지금 fetch해 온 실제 파일에서 그대로
+  // 가져오고(나중에 그 주석을 고쳐도 다음 내보내기에 반영됨), 네 배열(PLACES/ROAD_SEGMENTS/
+  // TREES/PARKS) 내용만 지금 에디터 상태로 새로 채운다. 이렇게 하면 "내보내기" 결과를
+  // map_data.js에 그대로 덮어써도 되고, 안내 문구가 코드 사이에 섞여 들어가 const 선언을
+  // 깨뜨릴 일도 없다(예전엔 그래서 무한로딩 버그가 났었다).
+  function sliceArraySection(name) {
+    const start = dataText.indexOf(`export const ${name} = [`);
+    const end = dataText.indexOf("];", start) + "];".length;
+    return { start, end };
+  }
   function buildMapDataFile() {
-    const placesStart = dataText.indexOf("export const PLACES = [");
-    const placesEndMarker = dataText.indexOf("\n];", placesStart) + "\n];".length;
-    const roadsStart = dataText.indexOf("export const ROAD_SEGMENTS = [");
-    const preamble = dataText.slice(0, placesStart);
-    const betweenArrays = dataText.slice(placesEndMarker, roadsStart);
-    const placesBlock = PLACES.map(serializePlace).join("\n");
-    const roadsBlock = ROADS.map(serializeRoad).join("\n");
-    return (
-      preamble + "export const PLACES = [\n" + placesBlock + "\n];" +
-      betweenArrays + "export const ROAD_SEGMENTS = [\n" + roadsBlock + "\n];\n"
-    );
+    const sections = ["PLACES", "ROAD_SEGMENTS", "TREES", "PARKS"].map((name) => ({ name, ...sliceArraySection(name) }));
+    let out = dataText.slice(0, sections[0].start);
+    const blocks = {
+      PLACES: "export const PLACES = [\n" + PLACES.map(serializePlace).join("\n") + "\n];",
+      ROAD_SEGMENTS: "export const ROAD_SEGMENTS = [\n" + ROADS.map(serializeRoad).join("\n") + "\n];",
+      TREES: "export const TREES = [" + TREES.map(serializeTree).join(", ") + "];",
+      PARKS: "export const PARKS = [\n" + PARKS.map(serializePark).join("\n") + (PARKS.length ? "\n" : "") + "];",
+    };
+    for (let i = 0; i < sections.length; i++) {
+      out += blocks[sections[i].name];
+      const nextStart = i + 1 < sections.length ? sections[i + 1].start : dataText.length;
+      out += dataText.slice(sections[i].end, nextStart);
+    }
+    return out;
   }
 
   const exportModal = document.getElementById("exportModal");
@@ -634,6 +1052,16 @@
       toast("자동 복사가 막혀 있어요 — 직접 Ctrl+C로 복사하세요.");
     }
   });
+
+  // 유형 입력칸의 자동완성 목록(이름/유형처럼 자유 텍스트라도 기존 유형을 고르기 쉽게)
+  const datalist = document.createElement("datalist");
+  datalist.id = "typeList";
+  Object.keys(TYPE_COLOR).forEach((t) => {
+    const opt = document.createElement("option");
+    opt.value = t;
+    datalist.appendChild(opt);
+  });
+  document.body.appendChild(datalist);
 })();
 </script>
 </body>

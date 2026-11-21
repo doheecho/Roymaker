@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { PLACES, ROAD_SEGMENTS } from "./map_data.js?v=20261121a";
+import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261121c";
 
 const ASSET_VERSION = "20261121b";
 
@@ -63,13 +63,10 @@ const MOM_DANCE_POOL = [
   "ymca_dance",
 ];
 
-// ── 동네 생김새: 건물(PLACES)과 도로(ROAD_SEGMENTS)는 map_data.js에 있다 ──
-// map_editor.html에서 지도 위 건물/도로를 드래그해 고친 뒤 "내보내기"를 누르면 map_data.js
-// 전체를 바꿔치기할 수 있는 코드가 나온다 — neighborhood3d.js는 건드릴 필요가 없다.
-
-// 금호파크힐스 단지 내부(동 사이 공터)에 심을 나무 자리 — 위성사진에서 건물·도로가 아닌 어두운
-// 녹지로 보이는 자리를 건물 중심/도로 중심선에서 충분히 떨어뜨려 골라낸 좌표들(raw 단위, PLACES와 동일 기준)
-const TREE_SPOTS = [[-428.9, -212.3], [-429.2, -186.8], [-421.4, -169.9], [-421.6, -128.2], [-429.4, -49.5], [-427.4, -38.9], [-417.1, 18.3], [-429.1, 37.8], [-416.2, 71.5], [-425.3, 152.5], [-412.2, 181.8], [-410.0, 195.1], [-414.7, 221.8], [-392.5, -205.2], [-394.5, -131.6], [-387.3, -87.5], [-390.5, -66.9], [-400.9, -39.0], [-388.4, -12.7], [-396.3, 28.7], [-387.4, 80.6], [-386.0, 134.5], [-400.7, 145.4], [-394.3, 178.9], [-404.3, 201.3], [-360.2, -180.8], [-377.1, -144.0], [-375.0, -112.3], [-378.4, -90.3], [-365.6, -38.3], [-371.2, -7.8], [-360.7, 31.3], [-368.3, 38.4], [-367.4, 117.6], [-360.4, 181.1], [-367.3, 234.8], [-337.0, -192.7], [-345.0, -170.8], [-331.8, -73.5], [-347.8, -62.7], [-336.8, 72.5], [-335.7, 134.8], [-348.9, 169.2], [-333.6, 209.4], [-319.1, -238.0], [-315.4, -178.0], [-308.3, -154.2], [-321.2, -139.3], [-316.0, 21.7], [-311.3, 126.2], [-291.0, -186.3], [-280.8, -75.9], [-297.9, -58.2], [-284.1, 3.3], [-285.5, 24.3], [-282.0, 56.7], [-280.6, 70.9], [-297.0, 123.6], [-293.3, 144.7], [-291.2, 193.0], [-287.4, 229.3], [-259.8, -65.5], [-260.1, -32.6], [-273.0, 54.5], [-268.8, 91.3], [-269.4, 116.9], [-268.4, 203.0], [-267.2, 219.0], [-236.9, -219.5], [-231.0, -137.2], [-234.1, -99.0], [-240.0, -60.2], [-243.1, -12.0], [-242.5, 41.6], [-238.8, 65.9], [-228.2, 126.0], [-228.3, 147.0], [-248.4, 174.5], [-237.9, 196.8], [-248.3, 224.1], [-221.9, -217.1], [-204.1, -137.3], [-207.1, -24.5], [-221.8, 91.4], [-206.8, 203.1], [-191.2, -247.9], [-194.8, -116.3], [-182.3, -9.4], [-186.7, 20.3], [-176.9, 63.0], [-187.1, 120.2], [-184.3, 169.5], [-165.6, -230.7], [-169.9, -223.3], [-167.5, -164.2], [-155.6, -74.6], [-158.1, -33.9], [-164.7, -14.4], [-165.2, 42.1], [-169.4, 181.8], [-154.7, 206.0], [-169.4, 237.9], [-134.6, -242.3], [-129.0, -203.1], [-132.8, -163.2], [-125.6, -109.1], [-125.5, -72.7], [-141.5, -63.4], [-137.3, -39.5], [-125.9, 26.2], [-135.8, 47.5], [-137.4, 63.9], [-124.3, 91.2], [-131.3, 132.5], [-138.8, 145.8], [-126.2, 193.1], [-129.6, 237.2], [-106.2, -249.4], [-116.1, -168.2], [-104.9, -103.5], [-112.1, -38.7], [-105.2, -0.9], [-105.9, 62.8], [-100.0, 124.5], [-112.0, 167.1], [-104.4, 201.3], [-104.5, 237.8], [-91.7, -242.4], [-88.1, -151.2], [-87.8, -103.6], [-88.5, -62.8], [-78.6, -21.7], [-71.7, 108.0], [-91.7, 154.4], [-84.6, 173.5], [-92.3, 198.4], [-49.3, -214.4], [-47.3, -167.4], [-47.7, -144.8], [-49.5, -103.5], [-60.9, 25.5], [-65.9, 93.5], [-27.8, -242.6], [-32.9, -207.1], [-35.3, -170.1], [-37.9, 54.1], [-36.3, 93.7], [-28.4, 147.4], [-19.8, 177.2], [3.1, -230.4], [-8.3, -220.9], [-6.7, -64.5], [-10.2, -15.2], [-3.0, 63.9], [-5.9, 146.5], [6.3, 226.2], [26.7, -245.2], [20.0, -179.0], [24.9, -126.5], [24.5, -111.7], [22.4, -48.1], [31.9, 20.6], [24.5, 79.8], [27.9, 93.2], [29.2, 131.8], [16.1, 148.9], [19.6, 169.2], [26.7, 211.3], [23.3, 234.4], [49.0, -210.4], [46.5, -157.7], [39.8, -38.7], [39.5, -6.2], [38.4, 23.8], [41.6, 213.0]];
+// ── 동네 생김새: 건물(PLACES)·도로(ROAD_SEGMENTS)·가로수(TREES)·공원(PARKS)은 map_data.js에 있다 ──
+// map_editor.html에서 지도 위 건물/도로/나무/공원을 추가·삭제·드래그해 고친 뒤 "내보내기"를
+// 누르면 map_data.js 전체를 바꿔치기할 수 있는 코드가 나온다 — neighborhood3d.js는 건드릴
+// 필요가 없다.
 
 // 유형별 기본 크기·색(사진 참고 — 금호파크힐스는 흰색/베이지 바탕에 주황 포인트, 각 상점은 실제 브랜드 색을 흉내)
 const TYPE_STYLE = {
@@ -363,6 +360,7 @@ function buildStaticScene() {
   plaza.visible = false;
   scene.add(plaza);
 
+  buildParks();
   buildRoads();
   buildPlaces();
   buildTrees();
@@ -410,15 +408,15 @@ function buildMapGround(scene) {
 // 금호파크힐스 단지 내부 공터에 나무를 심는다 — 나무가 많아서(170여 그루) 개별 메시로 만들면
 // 도로 차선처럼 드로우콜이 급격히 늘어나니, 줄기·수관을 각각 InstancedMesh 하나씩으로 그린다.
 function buildTrees() {
-  if (!TREE_SPOTS.length) return;
+  if (!TREES.length) return;
   const trunkGeo = new THREE.CylinderGeometry(0.35 * WORLD_SCALE, 0.45 * WORLD_SCALE, 3 * WORLD_SCALE, 6);
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a30 });
-  const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, TREE_SPOTS.length);
+  const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, TREES.length);
   const foliageGeo = new THREE.ConeGeometry(2.4 * WORLD_SCALE, 4.6 * WORLD_SCALE, 7);
   const foliageMat = new THREE.MeshStandardMaterial({ color: 0x3f7a3f });
-  const foliageInst = new THREE.InstancedMesh(foliageGeo, foliageMat, TREE_SPOTS.length);
+  const foliageInst = new THREE.InstancedMesh(foliageGeo, foliageMat, TREES.length);
   const dummy = new THREE.Object3D();
-  TREE_SPOTS.forEach(([rawX, rawZ], i) => {
+  TREES.forEach(([rawX, rawZ], i) => {
     const x = rawX * WORLD_SCALE;
     const z = rawZ * WORLD_SCALE;
     const scale = 0.85 + ((i * 37) % 30) / 100; // 170여 그루가 전부 같은 크기면 부자연스러워서 자리마다 살짝 다르게
@@ -436,6 +434,21 @@ function buildTrees() {
   trunkInst.castShadow = true;
   foliageInst.castShadow = true;
   scene.add(trunkInst, foliageInst);
+}
+
+// 공원(PARKS): 바닥을 초록 잔디로 칠한 네모난 구역 — 지도 이미지(y=-0.025)보다는 위, 도로
+// (y≈0.005~0.006)보다는 아래에 깔아서 도로가 공원 위를 지나가도 도로가 보이게 한다.
+function buildParks() {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x6fae4a });
+  PARKS.forEach((park) => {
+    const geo = new THREE.PlaneGeometry(park.w * WORLD_SCALE, park.d * WORLD_SCALE);
+    geo.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(park.x * WORLD_SCALE, -0.01, park.z * WORLD_SCALE);
+    mesh.rotation.y = park.rotationDeg ? THREE.MathUtils.degToRad(park.rotationDeg) : 0;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+  });
 }
 
 // 차선 점선은 도로가 많아지니 개별 메시로 그리면 수백 개가 생겨서(실측 500개+) 프레임이 뚝 떨어진다.
