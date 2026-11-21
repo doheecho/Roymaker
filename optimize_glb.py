@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""GLB 파일 용량 최적화 스크립트.
+
+Blender 등에서 새로 뽑은 .glb를 models/ 폴더에 넣은 뒤 이 스크립트를 돌리면
+텍스처를 WebP로 바꾸고 줄이고, 중복 데이터를 지우고, 지오메트리를 압축해서
+파일 용량을 크게 줄여 준다(이 프로젝트 건물 모델 기준 보통 5~8배 정도 줄었다).
+
+사용법:
+  python optimize_glb.py models/place_새건물.glb        # 파일 하나
+  python optimize_glb.py models/a.glb models/b.glb      # 여러 개
+  python optimize_glb.py --all                          # models/ 안의 전부(제외 목록 빼고)
+  python optimize_glb.py --all --dir other_models       # 다른 폴더 전체
+  python optimize_glb.py models/mom.glb --force         # 기본 제외 목록에 있는 파일도 강제로
+
+필요한 것: Node.js(npx)가 설치돼 있어야 한다 — 설치돼 있으면 처음 실행할 때
+@gltf-transform/cli를 자동으로 내려받아 쓴다(인터넷 필요).
+
+주의(왜 --join/--palette/--simplify를 안 쓰는지): gltf-transform의 "optimize"
+명령은 기본으로 메시를 합치고(join) 재질을 팔레트 텍스처로 합치는(palette)
+옵션까지 켜져 있는데, 2026-11-21에 이 프로젝트 건물 모델들로 실제 테스트해보니
+이 옵션들이 가끔 지오메트리 크기(바운딩박스)를 완전히 틀어지게 만들었다(세로가
+1.5배로 늘어나는 등). 그래서 이 스크립트는 텍스처 압축 + 중복 제거 +
+meshopt 지오메트리 압축만 쓰고 join/palette/simplify는 끈 "검증된 안전 조합"만
+쓴다. 이 조합을 바꾸고 싶으면 반드시 최적화 전후 바운딩박스가 같은지
+(three.js로 불러와서 Box3로 재보는 식으로) 직접 확인한 뒤 바꿀 것.
+"""
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+# Windows 콘솔이 한글 코드페이지(cp949 등)일 때 npx(Node.js)가 내놓는 UTF-8 출력을
+# 잘못 디코딩해서 죽는 걸 막는다 — 항상 UTF-8로 읽고 깨진 바이트는 버린다.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+SUBPROCESS_TEXT_KWARGS = {"encoding": "utf-8", "errors": "replace"}
+
+SAFE_OPTIMIZE_FLAGS = [
+    "--texture-compress", "webp",
+    "--join", "false",
+    "--simplify", "false",
+    "--palette", "false",
+]
+
+# 애니메이션이 들어 있는 캐릭터 모델은 건물 모델과 성격이 달라서(뼈대·스킨 등)
+# 기본적으로는 건드리지 않는다 — 필요하면 --force로 명시해서 처리할 수 있다.
+DEFAULT_SKIP = {"mom.glb", "walk.glb", "dance.glb"}
+
+
+def run_npx(args, **kwargs):
+    npx = "npx.cmd" if os.name == "nt" else "npx"
+    return subprocess.run([npx, "--yes", "@gltf-transform/cli", *args],
+                           shell=(os.name == "nt"), **kwargs)
+
+
+def check_gltf_transform_available():
+    try:
+        result = run_npx(["--version"], capture_output=True, timeout=120, **SUBPROCESS_TEXT_KWARGS)
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def optimize_one(path, texture_size):
+    size_before = os.path.getsize(path)
+    with tempfile.TemporaryDirectory() as tmp:
+        out_path = os.path.join(tmp, os.path.basename(path))
+        result = run_npx(
+            ["optimize", path, out_path, "--texture-size", str(texture_size), *SAFE_OPTIMIZE_FLAGS],
+            capture_output=True, **SUBPROCESS_TEXT_KWARGS,
+        )
+        if result.returncode != 0 or not os.path.exists(out_path):
+            print(f"  실패: {result.stderr.strip()[-500:]}")
+            return False
+        size_after = os.path.getsize(out_path)
+        if size_after >= size_before:
+            print(f"  건너뜀(최적화해도 안 줄어듦): {size_before:,} -> {size_after:,} bytes")
+            return False
+        shutil.copyfile(out_path, path)
+    pct = 100 * (1 - size_after / size_before)
+    print(f"  {size_before:,} -> {size_after:,} bytes ({pct:.0f}% 감소)")
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("files", nargs="*", help="최적화할 .glb 파일 경로(들)")
+    parser.add_argument("--all", action="store_true", help="--dir 안의 .glb 파일을 전부 처리")
+    parser.add_argument("--dir", default="models", help="--all일 때 뒤질 폴더 (기본: models)")
+    parser.add_argument("--texture-size", type=int, default=1024, help="텍스처 최대 한 변 픽셀 (기본: 1024)")
+    parser.add_argument("--force", action="store_true", help="기본 제외 목록(mom.glb 등)도 처리")
+    args = parser.parse_args()
+
+    if not check_gltf_transform_available():
+        print("npx로 @gltf-transform/cli를 실행할 수 없다 — Node.js가 설치돼 있는지,")
+        print("인터넷에 연결돼 있는지 확인해줘.")
+        sys.exit(1)
+
+    targets = list(args.files)
+    if args.all:
+        for name in sorted(os.listdir(args.dir)):
+            if name.endswith(".glb"):
+                targets.append(os.path.join(args.dir, name))
+
+    if not targets:
+        parser.print_help()
+        sys.exit(1)
+
+    ok, skipped, failed = 0, 0, 0
+    for path in targets:
+        base = os.path.basename(path)
+        if not args.force and base in DEFAULT_SKIP:
+            print(f"{path}: 기본 제외 목록이라 건너뜀 (--force로 강제 가능)")
+            skipped += 1
+            continue
+        if not os.path.exists(path):
+            print(f"{path}: 파일이 없다")
+            failed += 1
+            continue
+        print(f"{path}")
+        if optimize_one(path, args.texture_size):
+            ok += 1
+        else:
+            failed += 1
+
+    print(f"\n완료: {ok}개 최적화, {skipped}개 건너뜀, {failed}개 실패/변화없음")
+
+
+if __name__ == "__main__":
+    main()
