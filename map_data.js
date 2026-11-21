@@ -39,7 +39,7 @@ export const PLACES = [
   { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -184.6, z: -75.1, model: "models/place_금파힐104.glb", rotationDeg: -75.9 },
   { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -121.1, z: -124.9, model: "models/place_금파힐105.glb", rotationDeg: 0 },
   { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -58.3, z: -61.9 },
-  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -122.3, z: 8.8, model: "models/community_south.glb", rotationDeg: 0 },
+  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -122.3, z: 8.8, model: "models/Community_south.glb", rotationDeg: 0 },
   { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -266.8, z: 16.6 },
   { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -313.6, z: 134.1, model: "models/place_금파힐109.glb", rotationDeg: 0 },
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -253.3, z: 115.9, model: "models/place_금파힐110.glb", rotationDeg: 0 },
