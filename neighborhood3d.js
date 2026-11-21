@@ -746,9 +746,12 @@ function buildPlaces() {
       group.add(skirt);
     }
 
-    // 충돌·지면 높이 등록 — 실제로 뜨는 모델의 회전(rotationDeg, 없으면 대각선 배치 rotY)을
-    // 그대로 써서, 눈에 보이는 건물 자리와 막히는 자리가 어긋나지 않게 한다.
-    {
+    // 좌표(place.x/z)는 있어도 아직 모델(place.model)이 없는 자리는 가짜 박스를 세워 두지
+    // 않고 그냥 빈 땅으로 둔다 — 라벨(이름표)은 아래에서 그대로 띄운다. 모델이 생기면 그때
+    // 자동으로 건물이 나타난다.
+    if (place.model) {
+      // 충돌·지면 높이 등록 — 실제로 뜨는 모델의 회전(rotationDeg, 없으면 대각선 배치 rotY)을
+      // 그대로 써서, 눈에 보이는 건물 자리와 막히는 자리가 어긋나지 않게 한다.
       const colRot = place.rotationDeg != null ? THREE.MathUtils.degToRad(place.rotationDeg) : rotY;
       const cos = Math.cos(colRot);
       const sin = Math.sin(colRot);
@@ -756,9 +759,7 @@ function buildPlaces() {
       if (groundY !== 0) {
         groundPlatforms.push({ cx: px, cz: pz, cos, sin, halfW: (colW * 1.4) / 2, halfD: (colD * 1.4) / 2, y: groundY });
       }
-    }
 
-    if (place.model) {
       // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동 등)은 캐릭터가 가까워지면 불러와 쓴다
       // (updateModelStreaming) — 그전엔 모델 없는 동과 같은 임시 매싱을 세워 둔다.
       const placeholder = new THREE.Group();
@@ -774,35 +775,27 @@ function buildPlaces() {
       }
       group.add(placeholder);
       modelStreamEntries.push({ place, px, pz, rotY, placeholder, group, loadedModel: null, loading: false, inRange: true });
-    } else if (place.type === "아파트") {
-      height = buildApartmentCluster(place, px, pz, floors, group);
+
+      // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
+      if (place.church) {
+        const spire = new THREE.Mesh(
+          new THREE.ConeGeometry(1.6 * WORLD_SCALE, 4 * WORLD_SCALE, 4),
+          new THREE.MeshStandardMaterial({ color: 0xffffff })
+        );
+        spire.position.set(px, height + 2 * WORLD_SCALE, pz);
+        spire.rotation.y = Math.PI / 4;
+        group.add(spire);
+        const crossMat = new THREE.MeshStandardMaterial({ color: 0xb8291f });
+        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.25 * WORLD_SCALE, 1.6 * WORLD_SCALE, 0.25 * WORLD_SCALE), crossMat);
+        crossV.position.set(px, height + 4.6 * WORLD_SCALE, pz);
+        const crossH = new THREE.Mesh(new THREE.BoxGeometry(1 * WORLD_SCALE, 0.25 * WORLD_SCALE, 0.25 * WORLD_SCALE), crossMat);
+        crossH.position.set(px, height + 4.9 * WORLD_SCALE, pz);
+        group.add(crossV, crossH);
+      }
     } else {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), new THREE.MeshStandardMaterial({ color }));
-      mesh.position.set(px, height / 2, pz);
-      mesh.rotation.y = rotY;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      group.add(mesh);
+      // 모델이 없어도 group(스커트 포함)은 거리 기준으로 보이기/숨기기 대상에 그대로 올린다.
+      placeVisibilityEntries.push({ place, px, pz, group });
     }
-
-    // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
-    if (place.church) {
-      const spire = new THREE.Mesh(
-        new THREE.ConeGeometry(1.6 * WORLD_SCALE, 4 * WORLD_SCALE, 4),
-        new THREE.MeshStandardMaterial({ color: 0xffffff })
-      );
-      spire.position.set(px, height + 2 * WORLD_SCALE, pz);
-      spire.rotation.y = Math.PI / 4;
-      group.add(spire);
-      const crossMat = new THREE.MeshStandardMaterial({ color: 0xb8291f });
-      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.25 * WORLD_SCALE, 1.6 * WORLD_SCALE, 0.25 * WORLD_SCALE), crossMat);
-      crossV.position.set(px, height + 4.6 * WORLD_SCALE, pz);
-      const crossH = new THREE.Mesh(new THREE.BoxGeometry(1 * WORLD_SCALE, 0.25 * WORLD_SCALE, 0.25 * WORLD_SCALE), crossMat);
-      crossH.position.set(px, height + 4.9 * WORLD_SCALE, pz);
-      group.add(crossV, crossH);
-    }
-
-    if (!place.model) placeVisibilityEntries.push({ place, px, pz, group });
 
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
