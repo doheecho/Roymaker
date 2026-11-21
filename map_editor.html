@@ -42,7 +42,7 @@
     pointer-events: none; font-weight: 600;
   }
   .road-line { stroke: #4a4a4e; stroke-linecap: round; cursor: pointer; }
-  .road-hit { stroke: transparent; stroke-width: 26; cursor: pointer; pointer-events: all; }
+  .road-hit { fill: none; stroke: transparent; stroke-width: 26; cursor: pointer; pointer-events: all; }
   .road-line.selected { stroke: #e3482b; }
   .road-handle { fill: #e3482b; stroke: #fff; stroke-width: 2; cursor: grab; }
   .road-handle:active { cursor: grabbing; }
@@ -94,6 +94,14 @@
     opacity: 0; pointer-events: none; transition: opacity 0.25s;
   }
   #toast.show { opacity: 1; }
+  #labelToggleWrap { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; color: #e8eaf0; user-select: none; }
+  #labelToggleWrap input { cursor: pointer; }
+  #overlay.labels-hidden .marker-label { display: none; }
+  #hoverTip {
+    position: fixed; display: none; z-index: 60; pointer-events: none;
+    background: #1d2027; color: #e8eaf0; border: 1px solid #4a4f5b; border-radius: 6px;
+    padding: 5px 10px; font-size: 13px; white-space: nowrap;
+  }
 </style>
 </head>
 <body>
@@ -102,6 +110,8 @@
   <span id="zoomLabel" style="min-width:48px; text-align:center;">40%</span>
   <button id="zoomInBtn">🔍+</button>
   <input id="searchInput" type="text" placeholder="건물 이름 검색 후 Enter" />
+  <span class="sep"></span>
+  <label id="labelToggleWrap"><input type="checkbox" id="labelToggle" checked /> 라벨 표시</label>
   <span class="sep"></span>
   <button id="addPlaceBtn">🏢 건물 추가</button>
   <button id="addRoadBtn">🛣️ 도로 추가</button>
@@ -133,6 +143,7 @@
   </div>
 </div>
 <div id="toast"></div>
+<div id="hoverTip"></div>
 <script>
 (async function () {
   const JS_URL = "neighborhood3d.js";
@@ -298,6 +309,32 @@
   document.getElementById("zoomOutBtn").addEventListener("click", () => { zoom = Math.max(0.08, zoom / 1.3); applyZoom(); });
   applyZoom();
 
+  // ── 라벨 표시/숨김 + 숨겼을 때 마우스오버로 정보 보기 ──
+  const labelToggle = document.getElementById("labelToggle");
+  labelToggle.addEventListener("change", () => {
+    svg.classList.toggle("labels-hidden", !labelToggle.checked);
+  });
+  const hoverTip = document.getElementById("hoverTip");
+  function showTip(text, ev) {
+    hoverTip.textContent = text;
+    hoverTip.style.left = ev.clientX + 14 + "px";
+    hoverTip.style.top = ev.clientY + 14 + "px";
+    hoverTip.style.display = "block";
+  }
+  function moveTip(ev) {
+    hoverTip.style.left = ev.clientX + 14 + "px";
+    hoverTip.style.top = ev.clientY + 14 + "px";
+  }
+  function hideTip() {
+    hoverTip.style.display = "none";
+  }
+  // 마커에 hover 이벤트를 걸어 준다 — 라벨을 꺼 놔도 지금 가리키고 있는 게 뭔지 바로 알 수 있게.
+  function wireHoverTip(el, textFn) {
+    el.addEventListener("pointerenter", (ev) => showTip(textFn(), ev));
+    el.addEventListener("pointermove", moveTip);
+    el.addEventListener("pointerleave", hideTip);
+  }
+
   function svgPoint(evt) {
     const pt = svg.createSVGPoint();
     pt.x = evt.clientX;
@@ -361,11 +398,16 @@
   const treeLayer = el("g", {});
   const placeLayer = el("g", {});
   const pendingLayer = el("g", {});
+  // 회전/곡선/양끝 손잡이는 전부 이 맨 위 레이어에 둔다 — 그래야 건물(placeLayer)이 도로보다
+  // 위에 그려져도, 건물 마커의 커다란 투명 클릭 영역이 바로 밑 도로의 곡선 손잡이를 가리는
+  // 일이 없다(건물 근처 도로를 곡선으로 만들려다 건물이 대신 끌려가던 문제).
+  const handleLayer = el("g", {});
   svg.appendChild(parkLayer);
   svg.appendChild(roadLayer);
   svg.appendChild(treeLayer);
   svg.appendChild(placeLayer);
   svg.appendChild(pendingLayer);
+  svg.appendChild(handleLayer);
 
   const placeNodes = {}; // id -> { place, dot, label, handle, rotLine, axis }
   const roadNodes = []; // { seg, index, line, hit, handleA, handleB }
@@ -389,16 +431,21 @@
     const rotLine = el("line", { class: "rot-line", visibility: "hidden" });
     const handle = el("circle", { r: 7, class: "rot-handle", visibility: "hidden" });
     const handleHit = el("circle", { r: 16, class: "rot-hit", visibility: "hidden" });
-    g.appendChild(rotLine);
     g.appendChild(dot);
     g.appendChild(dotHit);
     g.appendChild(label);
-    g.appendChild(handle);
-    g.appendChild(handleHit);
     placeLayer.appendChild(g);
+    handleLayer.appendChild(rotLine);
+    handleLayer.appendChild(handle);
+    handleLayer.appendChild(handleHit);
     placeNodes[place.id] = { place, g, dot, dotHit, label, rotLine, handle, handleHit, axis: null, px, py };
     dotHit.addEventListener("pointerdown", (ev) => startPlaceDrag(ev, place.id));
     handleHit.addEventListener("pointerdown", (ev) => startRotateDrag(ev, place.id));
+    wireHoverTip(dotHit, () => {
+      const p = placeNodes[place.id].place;
+      const modelPart = p.model ? "" : " · 모델 없음(라벨만 표시)";
+      return `${p.name} · ${p.type ?? "?"} · ${p.floors ?? "?"}층${modelPart}`;
+    });
   }
   PLACES.forEach(addPlaceNode);
 
@@ -443,16 +490,17 @@
     const curveHandle = el("circle", { r: 7, class: "curve-handle", visibility: "hidden" });
     roadLayer.appendChild(hit);
     roadLayer.appendChild(line);
-    roadLayer.appendChild(handleA);
-    roadLayer.appendChild(handleB);
-    roadLayer.appendChild(curveHit);
-    roadLayer.appendChild(curveHandle);
+    handleLayer.appendChild(handleA);
+    handleLayer.appendChild(handleB);
+    handleLayer.appendChild(curveHit);
+    handleLayer.appendChild(curveHandle);
     const node = { seg, index: roadNodes.length, line, hit, handleA, handleB, curveHit, curveHandle };
     roadNodes.push(node);
     hit.addEventListener("pointerdown", (ev) => selectRoad(ev, node));
     handleA.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "a"));
     handleB.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "b"));
     curveHit.addEventListener("pointerdown", (ev) => startRoadCurveDrag(ev, node));
+    wireHoverTip(hit, () => `도로 #${node.index} · 폭 ${node.seg.width}m${node.seg.curve ? " · 곡선" : ""}`);
     updateRoadVisual(node);
     return node;
   }
@@ -472,14 +520,15 @@
     const handle = el("circle", { r: 7, class: "rot-handle" });
     const handleHit = el("circle", { r: 16, class: "rot-hit" });
     g.appendChild(rect);
-    g.appendChild(rotLine);
-    g.appendChild(handle);
-    g.appendChild(handleHit);
     parkLayer.appendChild(g);
+    handleLayer.appendChild(rotLine);
+    handleLayer.appendChild(handle);
+    handleLayer.appendChild(handleHit);
     const node = { park, g, rect, rotLine, handle, handleHit, px, py };
     parkNodes.push(node);
     rect.addEventListener("pointerdown", (ev) => startParkDrag(ev, node));
     handleHit.addEventListener("pointerdown", (ev) => startParkRotateDrag(ev, node));
+    wireHoverTip(rect, () => `공원 #${node.park.id} · ${node.park.w}×${node.park.d}m`);
     updateParkVisual(node);
     return node;
   }
@@ -494,6 +543,7 @@
     const node = { tree, dot, hit, px, py };
     treeNodes.push(node);
     hit.addEventListener("pointerdown", (ev) => startTreeDrag(ev, node));
+    wireHoverTip(hit, () => "나무");
     return node;
   }
   TREES.forEach(addTreeNode);
@@ -787,7 +837,9 @@
     const idx = PLACES.findIndex((p) => p.id === id);
     if (idx === -1) return;
     PLACES.splice(idx, 1);
-    placeNodes[id].g.remove();
+    const n = placeNodes[id];
+    n.g.remove();
+    n.rotLine.remove(); n.handle.remove(); n.handleHit.remove();
     delete placeNodes[id];
     selected = null;
     renderPanel();
@@ -797,6 +849,7 @@
     const idx = ROADS.indexOf(node.seg);
     if (idx !== -1) ROADS.splice(idx, 1);
     node.line.remove(); node.hit.remove(); node.handleA.remove(); node.handleB.remove();
+    node.curveHit.remove(); node.curveHandle.remove();
     const ni = roadNodes.indexOf(node);
     if (ni !== -1) roadNodes.splice(ni, 1);
     selected = null;
@@ -807,6 +860,7 @@
     const idx = PARKS.indexOf(node.park);
     if (idx !== -1) PARKS.splice(idx, 1);
     node.g.remove();
+    node.rotLine.remove(); node.handle.remove(); node.handleHit.remove();
     const ni = parkNodes.indexOf(node);
     if (ni !== -1) parkNodes.splice(ni, 1);
     selected = null;
