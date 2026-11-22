@@ -96,8 +96,9 @@ const WORLD_SCALE = 0.15;
 // 이미지 처리(색상 추출→스켈레톤화→그래프 추출)로 따서 중심선과 각 구간의 실제 두께를 함께 구했고,
 // 두께 분포(3~5m / 13m 안팎 / 19~29m / 30m 이상)를 그대로 골목·보통길·큰길·난계로급 4단계 폭으로
 // 옮겼다. map_data.js의 각 구간은 이 상수 대신 실측한 raw 숫자를 그대로 쓰지만(map_editor.html이
-// 혹시 몰라 이 이름들도 폭으로 해석할 수 있게 남겨 둔다), 차선 몇 줄을 그릴지는 폭 숫자 자체로
-// 구간마다 정한다(laneOffsetsForWidth: 20m 미만 1줄, 40m 미만 2줄, 그 이상 3줄).
+// 혹시 몰라 이 이름들도 폭으로 해석할 수 있게 남겨 둔다), 표면 색·중앙선·차선은 폭 숫자 자체로
+// 구간마다 정한다(roadStyleFor: 8m 미만 골목길, 11m 미만 10m급, 13m 미만 단지내도로,
+// 22m 미만 15~20m급, 그 이상 30m급).
 const ROAD_MAJOR = 16; // 난계로·사거리 교차로 등 가장 두껍게 칠해진 간선도로
 const ROAD_WIDE = 10; // 그다음으로 두꺼운 큰길
 const ROAD_MEDIUM = 6; // 단지 안 보통 도로
@@ -464,8 +465,9 @@ function buildParks() {
 }
 
 // 차선 점선은 도로가 많아지니 개별 메시로 그리면 수백 개가 생겨서(실측 500개+) 프레임이 뚝 떨어진다.
-// 그래서 위치만 모아 뒀다가 InstancedMesh 하나로 한 번에 그린다(드로우콜 1개).
-let dashTransforms = [];
+// 그래서 위치만 모아 뒀다가 색깔별로 InstancedMesh 하나씩(노란 점선 1개, 흰 점선 1개)으로 그린다.
+let yellowDashTransforms = [];
+let whiteDashTransforms = [];
 
 // map_editor.html에서 a→curve(제어점)→b로 그린 2차 베지어 곡선을 따라 점을 여러 개 뽑는다 —
 // curve가 없으면(직선) 그냥 양 끝점 2개뿐이라 아래 리본 그리기가 그대로 직선 사각형이 된다.
@@ -481,13 +483,51 @@ function roadPolyline(seg) {
   return pts;
 }
 
-// 도로 폭에 따라 차선 몇 줄을 그릴지 정한다 — 너무 좁은 골목(ROAD_NARROW 이하)은 차선 없이,
-// 20m 미만은 중앙 1줄, 40m 미만은 좌우 2줄, 그 이상(간선도로급)은 중앙까지 3줄.
-function laneOffsetsForWidth(width, roadW) {
-  if (width <= ROAD_NARROW) return [];
-  if (width < 20) return [0];
-  if (width < 40) return [-roadW * 0.15, roadW * 0.15];
-  return [-roadW * 0.22, 0, roadW * 0.22];
+// 도로 폭(실측 m)에 따라 표면 색과 중앙선·차선을 다르게 그린다. 폭 하나하나를 보고 정하는
+// 거라, 같은 길이라도 구간마다 실측 오차로 폭이 살짝씩 다르면 그 경계에서 스타일이 바뀔 수
+// 있다(예: 10.7→10.3→12.1처럼 변하는 구간) — 길 단위로 통일하려면 손이 많이 가서, 우선은
+// 구간(segment)별 실측 폭을 그대로 기준으로 쓰는 단순한 규칙을 쓴다.
+//   8m 미만          : 골목길 — 옅은 회색, 선 없음
+//   8m 이상 11m 미만 : 작은도로(10m급) — 기본 아스팔트색, 노란 점선 중앙선
+//   11m 이상 13m 미만: 단지내도로(12m급) — 베이지(보도 느낌), 선 없음
+//   13m 이상 22m 미만: 15~20m급 — 기본 아스팔트색, 노란 실선 중앙선
+//   22m 이상         : 30m급 — 기본 아스팔트색, 노란 실선 중앙선 + 양옆 흰 점선 차선
+const ROAD_SURFACE = 0x4a4a4e;
+const ROAD_SURFACE_ALLEY = 0x7a7a7e;
+const ROAD_SURFACE_COMPLEX = 0xd8c9a3;
+const LANE_YELLOW = 0xf2c438;
+const LANE_WHITE = 0xf2f2f2;
+function roadStyleFor(width) {
+  if (width < 8) return { surface: ROAD_SURFACE_ALLEY, center: null, sides: false };
+  if (width < 11) return { surface: ROAD_SURFACE, center: "dashed", sides: false };
+  if (width < 13) return { surface: ROAD_SURFACE_COMPLEX, center: null, sides: false };
+  if (width < 22) return { surface: ROAD_SURFACE, center: "solid", sides: false };
+  return { surface: ROAD_SURFACE, center: "solid", sides: true };
+}
+
+// 폭이 있는 띠(리본) 지오메트리를 하나 만든다 — 도로 표면뿐 아니라 중앙 실선도 같은 함수로
+// (실선은 그냥 아주 얇은 리본) 만들어서 곡선 구간에서도 똑같이 매끈하게 휘어지게 한다.
+function buildRibbonGeometry(pts, tangents, width, offset = 0) {
+  const n = pts.length;
+  const positions = [];
+  for (let i = 0; i < n; i++) {
+    const [tx, tz] = tangents[i];
+    const px = -tz, pz = tx; // 진행 방향에 수직인 단위벡터
+    const [x, z] = pts[i];
+    const cx = x + px * offset, cz = z + pz * offset;
+    positions.push(cx + (px * width) / 2, 0, cz + (pz * width) / 2);
+    positions.push(cx - (px * width) / 2, 0, cz - (pz * width) / 2);
+  }
+  const indices = [];
+  for (let i = 0; i < n - 1; i++) {
+    const a0 = i * 2, a1 = i * 2 + 1, b0 = (i + 1) * 2, b1 = (i + 1) * 2 + 1;
+    indices.push(a0, b0, a1, a1, b0, b1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
 }
 
 // 도로 하나(직선이든 곡선이든)를 폭이 있는 띠(리본) 메시 하나로 통째로 그린다 — 예전엔 곡선을
@@ -519,36 +559,32 @@ function buildRoadRibbon(seg) {
     return [dx / len, dz / len];
   });
 
-  const positions = [];
-  for (let i = 0; i < n; i++) {
-    const [tx, tz] = tangents[i];
-    const px = -tz, pz = tx; // 진행 방향에 수직인 단위벡터
-    const [x, z] = pts[i];
-    positions.push(x + (px * roadW) / 2, 0, z + (pz * roadW) / 2);
-    positions.push(x - (px * roadW) / 2, 0, z - (pz * roadW) / 2);
-  }
-  const indices = [];
-  for (let i = 0; i < n - 1; i++) {
-    const a0 = i * 2, a1 = i * 2 + 1, b0 = (i + 1) * 2, b1 = (i + 1) * 2 + 1;
-    indices.push(a0, b0, a1, a1, b0, b1);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-  const road = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e, side: THREE.DoubleSide }));
+  const style = roadStyleFor(seg.width);
+  const road = new THREE.Mesh(
+    buildRibbonGeometry(pts, tangents, roadW, 0),
+    new THREE.MeshStandardMaterial({ color: style.surface, side: THREE.DoubleSide })
+  );
   road.position.y = 0.005;
   road.receiveShadow = true;
   scene.add(road);
 
-  // 차선 점선은 전체 폴리라인을 따라 누적 거리로 간격을 재서 찍는다 — 직선/곡선 구분 없이
-  // 같은 방식이라 곡선 구간에서도 점선 간격이 고르게 이어진다.
-  const offsets = laneOffsetsForWidth(seg.width, roadW);
-  if (!offsets.length) return;
+  if (style.center === "solid") {
+    const lineW = Math.max(0.25 * WORLD_SCALE, roadW * 0.015);
+    const line = new THREE.Mesh(
+      buildRibbonGeometry(pts, tangents, lineW, 0),
+      new THREE.MeshBasicMaterial({ color: LANE_YELLOW })
+    );
+    line.position.y = 0.008;
+    scene.add(line);
+  }
+  if (!style.center && !style.sides) return; // 골목길·단지내도로는 점선도 없다
+
+  // 점선은 전체 폴리라인을 따라 누적 거리로 간격을 재서 찍는다 — 직선/곡선 구분 없이 같은
+  // 방식이라 곡선 구간에서도 점선 간격이 고르게 이어진다.
   const dashLen = 3 * WORLD_SCALE;
   const gapLen = 3 * WORLD_SCALE;
   const step = dashLen + gapLen;
-  offsets.forEach((offset) => {
+  function pushDashes(offset, list) {
     let dist = 0;
     let nextDashAt = step / 2;
     for (let i = 0; i < n - 1; i++) {
@@ -561,24 +597,30 @@ function buildRoadRibbon(seg) {
         const perpX = -dz / segLen, perpZ = dx / segLen;
         while (nextDashAt < dist + segLen) {
           const t = (nextDashAt - dist) / segLen;
-          dashTransforms.push({ x: x1 + dx * t + perpX * offset, z: z1 + dz * t + perpZ * offset, yaw });
+          list.push({ x: x1 + dx * t + perpX * offset, z: z1 + dz * t + perpZ * offset, yaw });
           nextDashAt += step;
         }
         dist += segLen;
       }
     }
-  });
+  }
+  if (style.center === "dashed") pushDashes(0, yellowDashTransforms);
+  if (style.sides) {
+    const sideOffset = roadW * 0.25;
+    pushDashes(-sideOffset, whiteDashTransforms);
+    pushDashes(sideOffset, whiteDashTransforms);
+  }
 }
 
-function buildLaneDashes() {
-  if (!dashTransforms.length) return;
+function buildDashInstances(transforms, color) {
+  if (!transforms.length) return;
   const dashLen = 3 * WORLD_SCALE;
   const dashGeo = new THREE.PlaneGeometry(0.18 * WORLD_SCALE, dashLen);
   dashGeo.rotateX(-Math.PI / 2);
-  const laneMat = new THREE.MeshBasicMaterial({ color: 0xf5e8b0 });
-  const inst = new THREE.InstancedMesh(dashGeo, laneMat, dashTransforms.length);
+  const laneMat = new THREE.MeshBasicMaterial({ color });
+  const inst = new THREE.InstancedMesh(dashGeo, laneMat, transforms.length);
   const dummy = new THREE.Object3D();
-  dashTransforms.forEach((t, i) => {
+  transforms.forEach((t, i) => {
     dummy.position.set(t.x, 0.01, t.z);
     dummy.rotation.set(0, t.yaw, 0);
     dummy.updateMatrix();
@@ -586,6 +628,11 @@ function buildLaneDashes() {
   });
   inst.instanceMatrix.needsUpdate = true;
   scene.add(inst);
+}
+
+function buildLaneDashes() {
+  buildDashInstances(yellowDashTransforms, LANE_YELLOW);
+  buildDashInstances(whiteDashTransforms, LANE_WHITE);
 }
 
 // 구간을 따로따로 그리면 꺾이는 지점마다 바깥쪽에 틈이 생겨서 끊겨 보인다 — 같은 지점에서
@@ -670,7 +717,8 @@ function buildJunctionFillers() {
 }
 
 function buildRoads() {
-  dashTransforms = [];
+  yellowDashTransforms = [];
+  whiteDashTransforms = [];
   ROAD_SEGMENTS.forEach(buildRoadRibbon);
   buildLaneDashes();
   buildJunctionFillers();
