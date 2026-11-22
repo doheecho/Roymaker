@@ -498,12 +498,20 @@ const ROAD_SURFACE_ALLEY = 0x7a7a7e;
 const ROAD_SURFACE_COMPLEX = 0xd8c9a3;
 const LANE_YELLOW = 0xf2c438;
 const LANE_WHITE = 0xf2f2f2;
+// rank는 도로끼리 겹칠 때(또는 교차로에서) 어느 쪽이 위에 보일지 정하는 우선순위다 — 차선이
+// 많은(=더 중요한) 도로일수록 높고, 단지내도로(베이지)가 가장 낮다(사용자 지정, 2026-11-22).
+// rank가 다른 두 도로가 평면상 겹치면 숫자가 큰 쪽이 항상 위에 그려진다(surfaceYFor).
 function roadStyleFor(width) {
-  if (width < 8) return { surface: ROAD_SURFACE_ALLEY, center: null, sides: false };
-  if (width < 11) return { surface: ROAD_SURFACE, center: "dashed", sides: false };
-  if (width < 13) return { surface: ROAD_SURFACE_COMPLEX, center: null, sides: false };
-  if (width < 22) return { surface: ROAD_SURFACE, center: "solid", sides: false };
-  return { surface: ROAD_SURFACE, center: "solid", sides: true };
+  if (width < 8) return { surface: ROAD_SURFACE_ALLEY, center: null, sides: false, rank: 1 };
+  if (width < 11) return { surface: ROAD_SURFACE, center: "dashed", sides: false, rank: 2 };
+  if (width < 13) return { surface: ROAD_SURFACE_COMPLEX, center: null, sides: false, rank: 0 };
+  if (width < 22) return { surface: ROAD_SURFACE, center: "solid", sides: false, rank: 3 };
+  return { surface: ROAD_SURFACE, center: "solid", sides: true, rank: 4 };
+}
+const ROAD_LAYER_BASE_Y = 0.005;
+const ROAD_LAYER_STEP = 0.0015; // 눈에 띄는 단차는 아니고, 겹칠 때 어느 면이 위인지만 확실히 가르는 정도
+function surfaceYFor(width) {
+  return ROAD_LAYER_BASE_Y + roadStyleFor(width).rank * ROAD_LAYER_STEP;
 }
 
 // 폭이 있는 띠(리본) 지오메트리를 하나 만든다 — 도로 표면뿐 아니라 중앙 실선도 같은 함수로
@@ -561,11 +569,12 @@ function buildRoadRibbon(seg) {
   });
 
   const style = roadStyleFor(seg.width);
+  const surfaceY = surfaceYFor(seg.width);
   const road = new THREE.Mesh(
     buildRibbonGeometry(pts, tangents, roadW, 0),
     new THREE.MeshStandardMaterial({ color: style.surface, side: THREE.DoubleSide })
   );
-  road.position.y = 0.005;
+  road.position.y = surfaceY;
   road.receiveShadow = true;
   scene.add(road);
 
@@ -575,7 +584,7 @@ function buildRoadRibbon(seg) {
       buildRibbonGeometry(pts, tangents, lineW, 0),
       new THREE.MeshBasicMaterial({ color: LANE_YELLOW })
     );
-    line.position.y = 0.008;
+    line.position.y = surfaceY + 0.002;
     scene.add(line);
   }
   if (!style.center && !style.sides) return; // 골목길·단지내도로는 점선도 없다
@@ -585,6 +594,7 @@ function buildRoadRibbon(seg) {
   const dashLen = 3 * WORLD_SCALE;
   const gapLen = 3 * WORLD_SCALE;
   const step = dashLen + gapLen;
+  const dashY = surfaceY + 0.0025;
   function pushDashes(offset, list) {
     let dist = 0;
     let nextDashAt = step / 2;
@@ -598,7 +608,7 @@ function buildRoadRibbon(seg) {
         const perpX = -dz / segLen, perpZ = dx / segLen;
         while (nextDashAt < dist + segLen) {
           const t = (nextDashAt - dist) / segLen;
-          list.push({ x: x1 + dx * t + perpX * offset, z: z1 + dz * t + perpZ * offset, yaw });
+          list.push({ x: x1 + dx * t + perpX * offset, z: z1 + dz * t + perpZ * offset, yaw, y: dashY });
           nextDashAt += step;
         }
         dist += segLen;
@@ -622,7 +632,7 @@ function buildDashInstances(transforms, color) {
   const inst = new THREE.InstancedMesh(dashGeo, laneMat, transforms.length);
   const dummy = new THREE.Object3D();
   transforms.forEach((t, i) => {
-    dummy.position.set(t.x, 0.01, t.z);
+    dummy.position.set(t.x, t.y, t.z);
     dummy.rotation.set(0, t.yaw, 0);
     dummy.updateMatrix();
     inst.setMatrixAt(i, dummy.matrix);
@@ -710,8 +720,10 @@ function buildJunctionFillers() {
     geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geo.setIndex(indices);
     geo.computeVertexNormals();
-    const filler = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e, side: THREE.DoubleSide }));
-    filler.position.y = 0.006;
+    // 메움판 자체도 우선순위를 따른다 — 만나는 도로 중 rank가 가장 높은 쪽의 색·높이를 쓴다.
+    const topSeg = group.reduce((best, p) => (roadStyleFor(p.seg.width).rank > roadStyleFor(best.seg.width).rank ? p : best)).seg;
+    const filler = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: roadStyleFor(topSeg.width).surface, side: THREE.DoubleSide }));
+    filler.position.y = surfaceYFor(topSeg.width) + 0.0005;
     filler.receiveShadow = true;
     scene.add(filler);
   }
