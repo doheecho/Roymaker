@@ -153,12 +153,12 @@ let enemies = [];
 // 확대/축소하면 당연히 바뀐다(2026-11-22).
 let camYaw = 2.8;
 let camPitch = 0.26;
-let camDistance = 4.6;
+let camDistance = 3.6; // 캐릭터가 더 작아진(CHAR_SCALE 0.25) 만큼, 화면에서 너무 작고 멀어 보이지 않게 조금 당김(2026-11-22)
 // 위아래 시선: 아래(-)부터 위(+)까지 거의 전 범위(±83°). 정확히 ±90°는 카메라가 뒤집혀서 피한다
 const CAM_PITCH_MIN = -1.45;
 const CAM_PITCH_MAX = 1.45;
 const CAM_LOOK_Y = 0.6; // 시선 높이(캐릭터 머리 쪽)
-const CHAR_SCALE = 0.5; // 이로이·엄마는 원래의 절반 크기 — 건물이 상대적으로 크게 보이도록
+const CHAR_SCALE = 0.25; // 이로이·엄마는 원래의 1/4 크기 — 15층 건물 대비 실제 사람 키 비율에 더 가깝게(2026-11-22, 기존 1/2에서 한 번 더 줄임)
 const CAM_DIST_MIN = 1.5;
 const CAM_DIST_MAX = 40;
 let dragging = false;
