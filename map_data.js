@@ -147,7 +147,7 @@ export const PLACES = [
   { id: 113, name: "행당대림아파트 133동", floors: 15, type: "아파트", x: 750, z: 16, model: "models/place_행당대림133.glb", rotationDeg: 0 },
   { id: 114, name: "행당대림아파트 134동", floors: 15, type: "아파트", x: 772, z: 16, model: "models/place_행당대림134.glb", rotationDeg: 0 },
   { id: 115, name: "행당대림아파트 135동", floors: 15, type: "아파트", x: 794, z: 16, model: "models/place_행당대림135.glb", rotationDeg: 0 },
-  { id: 200, name: "신금호역", floors: 1, type: "기타", x: -488.7, z: 35, model: "models/place_신금호역5.glb", rotationDeg: -32.4 },
+  { id: 200, name: "신금호역", floors: 1, type: "기타", x: -525.2, z: 5.5, model: "models/place_신금호역5.glb", rotationDeg: -32.4 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
