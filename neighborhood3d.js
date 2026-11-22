@@ -375,6 +375,7 @@ function buildStaticScene() {
 
   buildParks();
   buildRoads();
+  buildRoadsideProps();
   buildPlaces();
   buildTrees();
 }
@@ -722,6 +723,152 @@ function buildRoads() {
   ROAD_SEGMENTS.forEach(buildRoadRibbon);
   buildLaneDashes();
   buildJunctionFillers();
+}
+
+// ── 가로등·주차된 차: 도로를 따라 일정 간격으로 세운다 ──
+// 장식용 인스턴스라(걷기 로직과 무관) 폴리라인을 누적 거리로 훑으며 자리를 찍는 건 차선
+// 점선과 같은 패턴이다. 도로의 어느 쪽(좌/우)에 세울지는 새로고침마다 바뀌면 이상해서,
+// 구간 좌표로 만든 간단한 해시로 도로마다 고정된 쪽을 고른다. 차는 30m급(양옆 차선이 있는
+// 간선도로)엔 세우지 않고, 차 폭+여유보다 좁은 도로에도 세우지 않는다.
+const STREETLIGHT_SPACING = 20 * WORLD_SCALE;
+const STREETLIGHT_MARGIN = 4 * WORLD_SCALE;
+const STREETLIGHT_POLE_HEIGHT = 5 * WORLD_SCALE;
+const STREETLIGHT_OFFSET_GAP = 0.8 * WORLD_SCALE; // 도로 가장자리에서 바깥으로 더 띄우는 여유
+
+const CAR_SPACING = 6.5 * WORLD_SCALE;
+const CAR_MARGIN = 3 * WORLD_SCALE;
+const CAR_WIDTH = 1.8;
+const CAR_LENGTH = 4.2;
+const CAR_BODY_HEIGHT = 0.9;
+const CAR_CABIN_HEIGHT = 0.55;
+const CAR_MIN_ROAD_WIDTH = CAR_WIDTH + 3; // 차 폭 + 주차 공간 여유(raw m)
+const CAR_COLORS = [0xd9d9dc, 0x8b99a6, 0x2e3238, 0x9c2e2e, 0x27486b, 0xdedede];
+
+function hashSeed(...parts) {
+  let h = 0;
+  const s = parts.join(",");
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+function polylineLength(pts) {
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) total += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+  return total;
+}
+
+// 폴리라인(pts, 이미 WORLD_SCALE 적용됨)을 따라 누적 거리 dist만큼 간 지점과 그 자리의
+// 진행방향(단위벡터)을 돌려준다.
+function pointAlongPolyline(pts, dist) {
+  let remain = dist;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x1, z1] = pts[i];
+    const [x2, z2] = pts[i + 1];
+    const dx = x2 - x1, dz = z2 - z1;
+    const len = Math.hypot(dx, dz) || 1e-6;
+    if (remain <= len || i === pts.length - 2) {
+      const t = Math.max(0, Math.min(1, remain / len));
+      return { x: x1 + dx * t, z: z1 + dz * t, dirX: dx / len, dirZ: dz / len };
+    }
+    remain -= len;
+  }
+  const [x, z] = pts[pts.length - 1];
+  return { x, z, dirX: 1, dirZ: 0 };
+}
+
+let streetlightTransforms = []; // { x, z, yaw }
+let carTransforms = []; // { x, z, yaw, colorIndex }
+
+function placeRoadsideProps(seg) {
+  const pts = roadPolyline(seg).map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+  const total = polylineLength(pts);
+  if (total < 1e-3) return;
+  const roadW = seg.width * WORLD_SCALE;
+
+  const lightSide = hashSeed(seg.a[0], seg.a[1], seg.b[0], seg.b[1], "light") % 2 === 0 ? 1 : -1;
+  for (let d = STREETLIGHT_MARGIN; d <= total - STREETLIGHT_MARGIN; d += STREETLIGHT_SPACING) {
+    const { x, z, dirX, dirZ } = pointAlongPolyline(pts, d);
+    const px = -dirZ, pz = dirX;
+    const offset = roadW / 2 + STREETLIGHT_OFFSET_GAP;
+    streetlightTransforms.push({ x: x + px * offset * lightSide, z: z + pz * offset * lightSide, yaw: Math.atan2(dirX, dirZ) });
+  }
+
+  const style = roadStyleFor(seg.width);
+  if (style.sides || seg.width < CAR_MIN_ROAD_WIDTH) return; // 30m급 간선도로·차 폭보다 좁은 도로는 주차 없음
+  const carSide = hashSeed(seg.a[0], seg.a[1], seg.b[0], seg.b[1], "car") % 2 === 0 ? 1 : -1;
+  for (let d = CAR_MARGIN; d <= total - CAR_MARGIN; d += CAR_SPACING) {
+    const { x, z, dirX, dirZ } = pointAlongPolyline(pts, d);
+    const px = -dirZ, pz = dirX;
+    const offset = roadW / 2 - (CAR_WIDTH * WORLD_SCALE) / 2 - 0.3 * WORLD_SCALE;
+    carTransforms.push({
+      x: x + px * offset * carSide,
+      z: z + pz * offset * carSide,
+      yaw: Math.atan2(dirX, dirZ),
+      colorIndex: Math.abs(hashSeed(x.toFixed(1), z.toFixed(1))) % CAR_COLORS.length,
+    });
+  }
+}
+
+function buildStreetlights() {
+  if (!streetlightTransforms.length) return;
+  const poleGeo = new THREE.CylinderGeometry(0.06 * WORLD_SCALE, 0.08 * WORLD_SCALE, STREETLIGHT_POLE_HEIGHT, 6);
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x33363c });
+  const poleInst = new THREE.InstancedMesh(poleGeo, poleMat, streetlightTransforms.length);
+  const headGeo = new THREE.SphereGeometry(0.28 * WORLD_SCALE, 8, 6);
+  const headMat = new THREE.MeshBasicMaterial({ color: 0xfff1c2 }); // 조명 없이도 켜진 것처럼 보이게 unlit 재질
+  const headInst = new THREE.InstancedMesh(headGeo, headMat, streetlightTransforms.length);
+  const dummy = new THREE.Object3D();
+  streetlightTransforms.forEach((t, i) => {
+    dummy.position.set(t.x, STREETLIGHT_POLE_HEIGHT / 2, t.z); // 기둥 밑동이 땅(y=0)에 닿도록
+    dummy.rotation.set(0, t.yaw, 0);
+    dummy.updateMatrix();
+    poleInst.setMatrixAt(i, dummy.matrix);
+    dummy.position.y = STREETLIGHT_POLE_HEIGHT + 0.15 * WORLD_SCALE; // 기둥 꼭대기 위에 등 얹기
+    dummy.updateMatrix();
+    headInst.setMatrixAt(i, dummy.matrix);
+  });
+  poleInst.instanceMatrix.needsUpdate = true;
+  headInst.instanceMatrix.needsUpdate = true;
+  poleInst.castShadow = true;
+  scene.add(poleInst, headInst);
+}
+
+function buildParkedCars() {
+  if (!carTransforms.length) return;
+  const bodyGeo = new THREE.BoxGeometry(CAR_WIDTH * WORLD_SCALE, CAR_BODY_HEIGHT * WORLD_SCALE, CAR_LENGTH * WORLD_SCALE);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const bodyInst = new THREE.InstancedMesh(bodyGeo, bodyMat, carTransforms.length);
+  const cabinGeo = new THREE.BoxGeometry(CAR_WIDTH * 0.72 * WORLD_SCALE, CAR_CABIN_HEIGHT * WORLD_SCALE, CAR_LENGTH * 0.5 * WORLD_SCALE);
+  const cabinMat = new THREE.MeshStandardMaterial({ color: 0x15171a });
+  const cabinInst = new THREE.InstancedMesh(cabinGeo, cabinMat, carTransforms.length);
+  const dummy = new THREE.Object3D();
+  const color = new THREE.Color();
+  carTransforms.forEach((t, i) => {
+    dummy.position.set(t.x, (CAR_BODY_HEIGHT * WORLD_SCALE) / 2, t.z); // 차체 밑면이 땅(y=0)에 닿도록
+    dummy.rotation.set(0, t.yaw, 0);
+    dummy.updateMatrix();
+    bodyInst.setMatrixAt(i, dummy.matrix);
+    color.setHex(CAR_COLORS[t.colorIndex]);
+    bodyInst.setColorAt(i, color);
+
+    dummy.position.y = CAR_BODY_HEIGHT * WORLD_SCALE + (CAR_CABIN_HEIGHT * WORLD_SCALE) / 2; // 차체 위에 캐빈(지붕) 얹기
+    dummy.updateMatrix();
+    cabinInst.setMatrixAt(i, dummy.matrix);
+  });
+  bodyInst.instanceMatrix.needsUpdate = true;
+  cabinInst.instanceMatrix.needsUpdate = true;
+  if (bodyInst.instanceColor) bodyInst.instanceColor.needsUpdate = true;
+  bodyInst.castShadow = true;
+  cabinInst.castShadow = true;
+  scene.add(bodyInst, cabinInst);
+}
+
+function buildRoadsideProps() {
+  streetlightTransforms = [];
+  carTransforms = [];
+  ROAD_SEGMENTS.forEach(placeRoadsideProps);
+  buildStreetlights();
+  buildParkedCars();
 }
 
 // 금호파크힐스 동들은 대부분 실제 3D 모델(loadPlaceModel)을 쓰지만, 모델이 없는 동(예: 117동)은
