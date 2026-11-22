@@ -932,6 +932,10 @@ const BUILDING_FOOTPRINT_OVERRIDE = {
 // 1m 위로 들려 올라갔다 — 캐릭터가 허리까지 파묻혀 보이는 원인이었다(2026-11-22). 이렇게
 // box.min.y가 진짜 바닥이 아닌 모델은 여기 id별로 "진짜 바닥 높이"를 직접 넣어 덮어쓴다.
 const MODEL_FLOOR_OVERRIDE = { 66: 0 };
+// 모델 자체에 바닥 도로 텍스처가 포함된 건물(금파힐정문·후문)은 그 텍스처가 바닥(procedural
+// 도로 — surfaceYFor로 0.005~0.0135 사이에 쌓임) 바로 위에 겹쳐서 깜빡거리는(z-fighting)
+// 일이 없게, 그 범위보다 확실히 위로 살짝 띄운다(건물 자체가 떠 보일 만큼 크진 않은 값).
+const MODEL_Y_LIFT_OVERRIDE = { 201: 0.02, 202: 0.02 };
 function worldToLocalXZ(x, z, cx, cz, cos, sin) {
   const dx = x - cx;
   const dz = z - cz;
@@ -992,6 +996,7 @@ function loadPlaceModelInto(entry) {
       const box = new THREE.Box3().setFromObject(model);
       const floorY = MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
       model.position.y -= floorY;
+      model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? 0;
       entry.group.add(model);
       entry.loadedModel = model;
       if (entry.placeholder) entry.placeholder.visible = false;
