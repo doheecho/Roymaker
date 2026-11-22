@@ -36,11 +36,11 @@
 // 믿을 만했다). 높이(세로 치수)가 15층 건물의 실제 높이(약 45~58m)와 맞아떨어지는 걸로 봐서
 // scaleRatio 보정은 필요 없었다(기본 1).
 export const PLACES = [
-  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 2.9, z: 4.4, home: true, model: "models/place_금파힐113.glb", rotationDeg: 67.4 },
+  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 2.9, z: 4.4, home: true, model: "models/place_금파힐113.glb", rotationDeg: 0 },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -386, z: 81.4, model: "models/place_금파힐101.glb", rotationDeg: 0 },
   { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -313.8, z: 41.4 },
   { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -246.5, z: -21.7, rotationDeg: 0 },
-  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -185.4, z: -78.5, model: "models/Community_north.glb", rotationDeg: -8.9 },
+  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -185.4, z: -78.5, model: "models/Community_north.glb", rotationDeg: 0 },
   { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -121.1, z: -124.9, rotationDeg: 0 },
   { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -58.3, z: -61.9 },
   { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -371.2, z: -141.9, model: "models/Community_south.glb", rotationDeg: 0 },
