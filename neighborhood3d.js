@@ -130,6 +130,7 @@ let rafId = null;
 let ready = false;
 let loading = false;
 let canvasEl, loadingEl, danceBtnEl, walkBtnEl, runBtnEl, jumpBtnEl, momBtnEl, hudEl, toastEl, resetBtnEl, dpadEl;
+let wrapEl, fullscreenBtnEl, exitFullscreenBtnEl, topZoneEl, exitBtnHideTimer = null;
 let mom = null;
 let momMixer = null;
 let momActions = {};
@@ -1669,6 +1670,54 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 
+// ── 전체화면: #neighborhood3d-wrap 자체를 전체화면으로 — 브라우저가 알아서 지금 화면
+// 해상도에 꽉 채워 주고, resize()는 fullscreenchange에서 다시 불러 캔버스를 그 크기에 맞춘다 ──
+function isWrapFullscreen() {
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  return !!fsEl && fsEl === wrapEl;
+}
+function requestWrapFullscreen() {
+  if (isWrapFullscreen()) return;
+  try {
+    const req = wrapEl?.requestFullscreen || wrapEl?.webkitRequestFullscreen;
+    req?.call(wrapEl)?.catch?.(() => {}); // 사용자 제스처가 아니라고 거부되는 등은 조용히 무시
+  } catch (err) {
+    /* 브라우저별로 동기 예외를 던지는 경우도 있다 — 무시 */
+  }
+}
+function exitWrapFullscreen() {
+  if (!isWrapFullscreen()) return; // 이미 전체화면이 아니면 exitFullscreen() 자체가 예외를 던질 수 있다
+  try {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    exit?.call(document)?.catch?.(() => {});
+  } catch (err) {
+    /* 무시 */
+  }
+}
+// 전체화면 들어가자마자는 "축소" 버튼을 보여 주다가, 화면을 가리지 않게 잠시 뒤 스스로 숨긴다.
+// 화면 맨 위(top-zone)를 터치하면 다시 보여 주고 숨김 타이머를 처음부터 다시 잰다.
+function showExitFullscreenBtnTemporarily() {
+  if (!exitFullscreenBtnEl) return;
+  exitFullscreenBtnEl.hidden = false;
+  clearTimeout(exitBtnHideTimer);
+  exitBtnHideTimer = setTimeout(() => {
+    exitFullscreenBtnEl.hidden = true;
+  }, 2500);
+}
+function onFullscreenChange() {
+  const fs = isWrapFullscreen();
+  wrapEl?.classList.toggle("is-fullscreen", fs);
+  if (fs) {
+    showExitFullscreenBtnTemporarily();
+  } else if (exitFullscreenBtnEl) {
+    clearTimeout(exitBtnHideTimer);
+    exitFullscreenBtnEl.hidden = true;
+  }
+  resize();
+}
+document.addEventListener("fullscreenchange", onFullscreenChange);
+document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
 async function initNeighborhood3D() {
   canvasEl = document.getElementById("neighborhood3d-canvas");
   loadingEl = document.getElementById("neighborhood3d-loading");
@@ -1681,6 +1730,10 @@ async function initNeighborhood3D() {
   toastEl = document.getElementById("neighborhood3d-toast");
   resetBtnEl = document.getElementById("neighborhood3d-reset-btn");
   dpadEl = document.getElementById("neighborhood3d-dpad");
+  wrapEl = document.getElementById("neighborhood3d-wrap");
+  fullscreenBtnEl = document.getElementById("neighborhood3d-fullscreen-btn");
+  exitFullscreenBtnEl = document.getElementById("neighborhood3d-exit-fullscreen-btn");
+  topZoneEl = document.getElementById("neighborhood3d-top-zone");
   if (!canvasEl || ready || loading) {
     resize();
     if (ready && !rafId) animate();
@@ -1712,6 +1765,11 @@ async function initNeighborhood3D() {
     jumpBtnEl?.addEventListener("click", triggerJump);
     momBtnEl?.addEventListener("click", onMomClick);
     resetBtnEl?.addEventListener("click", startAdventure);
+    fullscreenBtnEl?.addEventListener("click", requestWrapFullscreen);
+    exitFullscreenBtnEl?.addEventListener("click", exitWrapFullscreen);
+    topZoneEl?.addEventListener("pointerdown", () => {
+      if (isWrapFullscreen()) showExitFullscreenBtnTemporarily();
+    });
     startAdventure();
     [danceBtnEl, walkBtnEl, runBtnEl, jumpBtnEl, momBtnEl, hudEl, dpadEl].forEach((el) => {
       if (el) el.hidden = false;

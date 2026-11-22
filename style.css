@@ -1561,7 +1561,28 @@ li:last-child { border-bottom: none; }
   height: 70vh;
   min-height: 420px;
 }
+#neighborhood3d-wrap.is-fullscreen { border: 0; border-radius: 0; }
 #neighborhood3d-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+/* 전체화면 중 화면 맨 위를 터치하면 "화면 축소" 버튼을 다시 보여 주는 안 보이는 띠 —
+   평소(전체화면이 아닐 때)는 카메라 드래그를 막지 않도록 통과시킨다(pointer-events: none) */
+#neighborhood3d-top-zone { position: absolute; left: 0; right: 0; top: 0; height: 70px; z-index: 5; pointer-events: none; }
+#neighborhood3d-wrap.is-fullscreen #neighborhood3d-top-zone { pointer-events: auto; }
+.neighborhood3d-exit-fullscreen-btn {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.12), 0 6px 14px rgba(0, 0, 0, 0.15);
+}
 #neighborhood3d-canvas:active { cursor: grabbing; }
 #neighborhood3d-loading {
   position: absolute;

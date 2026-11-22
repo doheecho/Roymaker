@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261115g">
+<link rel="stylesheet" href="style.css?v=20261115h">
 </head>
 <body>
   <header>
@@ -218,16 +218,21 @@
       <div id="view-neighborhood" class="view" hidden>
         <div class="view-head">
           <h2>⚔️ 거리 모험</h2>
-          <button type="button" class="help-btn" data-help="neighborhood3d" data-title="⚔️ 거리 모험">❓ 설명보기</button>
+          <span class="view-head-btns">
+            <button type="button" id="neighborhood3d-fullscreen-btn" class="help-btn">⛶ 전체화면</button>
+            <button type="button" class="help-btn" data-help="neighborhood3d" data-title="⚔️ 거리 모험">❓ 설명보기</button>
+          </span>
         </div>
-        <template id="help-neighborhood3d"><p>이로이가 사는 <b>진짜 동네(금호파크힐스 단지 주변)</b>를 본떠 만든 거리를 돌아다니며 <b>동전을 줍고 불량배를 혼내주면 용돈</b>을 번다. 방향키(←↑↓→)·WASD·화면 안 방향 버튼으로 이로이를 움직이고(지금 보고 있는 화면 방향 기준으로 움직인다), <b>스페이스바</b>로 점프한다. 방향키와 스페이스바를 같이 누르면 그 방향으로 이동하며 점프한다. 화면을 마우스로 눌러 돌리거나 휠로(모바일에서는 손가락 두 개로 벌리고 좁혀서) 확대/축소할 수 있다. 걷기/뛰기를 고르고, "엄마 부르기"를 누르면 엄마가 이로이 옆에 와서 선다. 동전과 불량배를 다 치우면 "다시 하기"로 새로 시작할 수 있다.</p></template>
+        <template id="help-neighborhood3d"><p>이로이가 사는 <b>진짜 동네(금호파크힐스 단지 주변)</b>를 본떠 만든 거리를 돌아다니며 <b>동전을 줍고 불량배를 혼내주면 용돈</b>을 번다. 방향키(←↑↓→)·WASD·화면 안 방향 버튼으로 이로이를 움직이고(지금 보고 있는 화면 방향 기준으로 움직인다), <b>스페이스바</b>로 점프한다. 방향키와 스페이스바를 같이 누르면 그 방향으로 이동하며 점프한다. 화면을 마우스로 눌러 돌리거나 휠로(모바일에서는 손가락 두 개로 벌리고 좁혀서) 확대/축소할 수 있다. 걷기/뛰기를 고르고, "엄마 부르기"를 누르면 엄마가 이로이 옆에 와서 선다. 동전과 불량배를 다 치우면 "다시 하기"로 새로 시작할 수 있다. 오른쪽 위 "⛶ 전체화면"을 누르면 화면 해상도에 맞춰 꽉 채워 볼 수 있고, 화면 맨 위쪽을 터치하면 "축소" 버튼이 다시 나타난다.</p></template>
         <div id="neighborhood3d-wrap">
+          <div id="neighborhood3d-top-zone"></div>
           <canvas id="neighborhood3d-canvas"></canvas>
           <p id="neighborhood3d-loading" class="muted">불러오는 중…</p>
           <p id="neighborhood3d-hud" class="neighborhood3d-hud" hidden></p>
           <p id="neighborhood3d-toast" class="neighborhood3d-toast" hidden></p>
           <button type="button" id="neighborhood3d-reset-btn" class="neighborhood3d-reset-btn" hidden>🔄 다시 하기</button>
           <button type="button" id="neighborhood3d-mom-btn" class="neighborhood3d-mom-btn" hidden>👩 엄마 부르기</button>
+          <button type="button" id="neighborhood3d-exit-fullscreen-btn" class="neighborhood3d-exit-fullscreen-btn" hidden>↙ 화면 축소</button>
           <div class="neighborhood3d-move-group">
             <button type="button" id="neighborhood3d-walk-btn" class="neighborhood3d-mode-btn active" hidden>🚶 걷기</button>
             <button type="button" id="neighborhood3d-run-btn" class="neighborhood3d-mode-btn" hidden>🏃 뛰기</button>
@@ -347,7 +352,7 @@
       }
     }
   </script>
-  <script type="module" src="neighborhood3d.js?v=20261122l"></script>
+  <script type="module" src="neighborhood3d.js?v=20261122m"></script>
   <script src="main.js?v=20261116a"></script>
   <script>
     if ("serviceWorker" in navigator) {
