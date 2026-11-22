@@ -150,14 +150,14 @@ export const PLACES = [
   { id: 200, name: "신금호역", floors: 1, type: "기타", x: -525.2, z: 5.5, model: "models/place_신금호역5.glb", rotationDeg: -32.4 },
   { id: 201, name: "금파힐후문", floors: 1, type: "기타", x: -54.9, z: -168.7, model: "models/place_금파힐후문.glb", scaleRatio: 1.5 },
   { id: 202, name: "금파힐정문", floors: 1, type: "기타", x: -361.1, z: 127.2, model: "models/place_금파힐정문.glb", rotationDeg: -53.9, scaleRatio: 1.5 },
-  { id: 203, name: "조형선외과동물병원", floors: 3, type: "기타", x: -450.2, z: 68.2, model: "models/place_조형선외과동물병원.glb", rotationDeg: -42.8, scaleRatio: 1.5 },
-  { id: 204, name: "신금호역 인근 상가", floors: 3, type: "기타", x: -492.6, z: 24.8, model: "models/place_신금호역4번출구앞건물.glb", rotationDeg: -37.4, scaleRatio: 1.5 },
-  { id: 205, name: "설내옥", floors: 3, type: "식당", x: -456.5, z: 140.8, model: "models/place_설내옥.glb", rotationDeg: -48.6, scaleRatio: 1.5 },
-  { id: 206, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -506.5, z: 82.1, model: "models/place_키잉글리시.glb", rotationDeg: -45.1, scaleRatio: 1.5 },
-  { id: 207, name: "KFC", floors: 4, type: "식당", x: -585.4, z: 42.4, model: "models/place_KFC.glb", rotationDeg: -14.3, scaleRatio: 1.5 },
-  { id: 208, name: "GS25", floors: 154, type: "편의점", x: -546.6, z: 47.7, model: "models/place_GS25.glb", scaleRatio: 1.5 },
-  { id: 209, name: "홈플러스익스프레스", floors: 5, type: "중형마트", x: -458.5, z: 5.3, model: "models/place_홈플러스익스프레스.glb", scaleRatio: 1.5 },
-  { id: 210, name: "경찰서,우체국", floors: 5, type: "기타", x: -611.6, z: -68, model: "models/place_경찰서.glb", rotationDeg: -6.3, scaleRatio: 1.5 },
+  { id: 203, name: "조형선외과동물병원", floors: 3, type: "기타", x: -446.2, z: 64.2, model: "models/place_조형선외과동물병원.glb", rotationDeg: -46.8, scaleRatio: 1.5 },
+  { id: 204, name: "신금호역 인근 상가", floors: 3, type: "기타", x: -492.6, z: 24.8, model: "models/place_신금호역4번출구앞건물.glb", rotationDeg: 0, scaleRatio: 1.5 },
+  { id: 205, name: "설내옥", floors: 3, type: "식당", x: -456.2, z: 148.1, model: "models/place_설내옥.glb", rotationDeg: 0, scaleRatio: 1.5 },
+  { id: 206, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -505.9, z: 84.8, model: "models/place_키잉글리시.glb", rotationDeg: 0, scaleRatio: 1.5 },
+  { id: 207, name: "KFC", floors: 4, type: "식당", x: -588.4, z: 53.3, model: "models/place_KFC.glb", rotationDeg: -14.3, scaleRatio: 1.5 },
+  { id: 208, name: "GS25", floors: 154, type: "편의점", x: -544.3, z: 56.6, model: "models/place_GS25.glb", scaleRatio: 1.5 },
+  { id: 209, name: "홈플러스익스프레스", floors: 5, type: "중형마트", x: -456.8, z: 8.2, model: "models/place_홈플러스익스프레스.glb", scaleRatio: 1.5 },
+  { id: 210, name: "경찰서,우체국", floors: 5, type: "기타", x: -618.5, z: -66, model: "models/place_경찰서.glb", rotationDeg: 0, scaleRatio: 1.4 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
