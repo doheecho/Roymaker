@@ -158,6 +158,7 @@ export const PLACES = [
   { id: 208, name: "GS25", floors: 154, type: "편의점", x: -543.7, z: 59.3, model: "models/place_GS25.glb", scaleRatio: 1.5 },
   { id: 209, name: "홈플러스익스프레스", floors: 5, type: "중형마트", x: -449.2, z: 9.6, model: "models/place_홈플러스익스프레스.glb", scaleRatio: 1.5 },
   { id: 210, name: "경찰서,우체국", floors: 5, type: "기타", x: -611.2, z: -66.3, model: "models/place_경찰서.glb", rotationDeg: -2 },
+  { id: 211, name: "메가커피", floors: 3, type: "카페", x: -623.8, z: -0.7, model: "models/place_megacoffee2.glb", scaleRatio: 1.5 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
