@@ -678,52 +678,6 @@ function convexHull2D(points) {
   return lower.concat(upper);
 }
 
-// 횡단보도는 차선 점선과 같은 "장식 텍스처"라 걷기 로직은 안 건드려도 된다 — 교차로로
-// 들어가는 입구마다(막다른 길 제외) 도로 폭만큼 흰 줄무늬를 몇 개 겹쳐 그린다. 골목길·
-// 단지내도로처럼 애초에 차선도 없는 도로(roadStyleFor().center가 없음)는 횡단보도도 안 그린다.
-const CROSSWALK_STRIPE_LEN = 0.5 * WORLD_SCALE;
-const CROSSWALK_STRIPE_GAP = 0.5 * WORLD_SCALE;
-const CROSSWALK_DEPTH_STRIPES = 5;
-let crosswalkTransforms = []; // { x, z, yaw, width }
-function addCrosswalkStripes(seg, which) {
-  const style = roadStyleFor(seg.width);
-  if (!style.center) return;
-  const pts = roadPolyline(seg).map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
-  const n = pts.length;
-  const point = which === "a" ? pts[0] : pts[n - 1];
-  // 교차로에서 멀어지는 방향(그 방향으로 줄무늬를 몇 개 겹쳐서 횡단보도 "깊이"를 만든다)
-  const [dx, dz] = which === "a"
-    ? [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]]
-    : [pts[n - 2][0] - pts[n - 1][0], pts[n - 2][1] - pts[n - 1][1]];
-  const len = Math.hypot(dx, dz) || 1;
-  const awayX = dx / len, awayZ = dz / len;
-  const yaw = Math.atan2(awayX, awayZ);
-  const roadW = seg.width * WORLD_SCALE;
-  const step = CROSSWALK_STRIPE_LEN + CROSSWALK_STRIPE_GAP;
-  for (let i = 0; i < CROSSWALK_DEPTH_STRIPES; i++) {
-    const dist = CROSSWALK_STRIPE_LEN / 2 + i * step;
-    crosswalkTransforms.push({ x: point[0] + awayX * dist, z: point[1] + awayZ * dist, yaw, width: roadW * 0.82 });
-  }
-}
-
-function buildCrosswalks() {
-  if (!crosswalkTransforms.length) return;
-  const stripeGeo = new THREE.PlaneGeometry(1, CROSSWALK_STRIPE_LEN);
-  stripeGeo.rotateX(-Math.PI / 2);
-  const stripeMat = new THREE.MeshBasicMaterial({ color: LANE_WHITE });
-  const inst = new THREE.InstancedMesh(stripeGeo, stripeMat, crosswalkTransforms.length);
-  const dummy = new THREE.Object3D();
-  crosswalkTransforms.forEach((t, i) => {
-    dummy.position.set(t.x, 0.01, t.z);
-    dummy.rotation.set(0, t.yaw, 0);
-    dummy.scale.set(t.width, 1, 1);
-    dummy.updateMatrix();
-    inst.setMatrixAt(i, dummy.matrix);
-  });
-  inst.instanceMatrix.needsUpdate = true;
-  scene.add(inst);
-}
-
 function buildJunctionFillers() {
   const endpoints = [];
   ROAD_SEGMENTS.forEach((seg) => {
@@ -744,7 +698,6 @@ function buildJunctionFillers() {
       }
     }
     if (group.length < 2) continue; // 혼자인 끝점(막다른 길)은 메울 필요 없다
-    group.forEach((p) => addCrosswalkStripes(p.seg, p.which));
     const cornerPts = group.flatMap((p) => roadEndpointCorners(p.seg, p.which));
     const hull = convexHull2D(cornerPts);
     if (hull.length < 3) continue;
@@ -766,11 +719,9 @@ function buildJunctionFillers() {
 function buildRoads() {
   yellowDashTransforms = [];
   whiteDashTransforms = [];
-  crosswalkTransforms = [];
   ROAD_SEGMENTS.forEach(buildRoadRibbon);
   buildLaneDashes();
   buildJunctionFillers();
-  buildCrosswalks();
 }
 
 // 금호파크힐스 동들은 대부분 실제 3D 모델(loadPlaceModel)을 쓰지만, 모델이 없는 동(예: 117동)은
