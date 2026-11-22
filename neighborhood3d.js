@@ -222,6 +222,14 @@ const LABEL_TARGET_FONT_PX = 14; // 화면에 보일 때 글자 높이의 목표
 // 바꿨다. 300m는 실측 미터라 WORLD_SCALE을 곱해 둔다.
 const VISIBLE_RANGE_M = 300;
 const LABEL_VISIBLE_RANGE = VISIBLE_RANGE_M * WORLD_SCALE;
+// 7(102·106·107·108 커뮤니티동)은 glb 하나가 네 동을 다 덮고 있는데, 로딩/가시성 기준점은
+// 그 glb를 올려 둔 107동 자리 하나뿐이다. 가장 먼 모서리인 106동 쪽은 그 기준점에서 약
+// 323m 떨어져 있어서 기본 300m 범위를 살짝 넘어 — 106동 쪽에 서면 주변은 다 보이는데 이
+// 건물(모델+플레이스홀더)만 통째로 사라진다. 이 동만 범위를 여유 있게 늘려서 해결한다.
+const VISIBLE_RANGE_OVERRIDE_M = { 7: 400 };
+function visibleRangeFor(id) {
+  return (VISIBLE_RANGE_OVERRIDE_M[id] ?? VISIBLE_RANGE_M) * WORLD_SCALE;
+}
 function makeLabelSprite(text, scale = 0.05) {
   if (!labelTextureCache[text]) {
     const canvas = document.createElement("canvas");
@@ -313,7 +321,7 @@ function updatePlaceVisibility() {
   if (!character) return;
   const activeIds = missionActiveIds();
   const cp = character.position;
-  const inRange = (px, pz, id) => activeIds.has(id) || Math.hypot(cp.x - px, cp.z - pz) <= LABEL_VISIBLE_RANGE;
+  const inRange = (px, pz, id) => activeIds.has(id) || Math.hypot(cp.x - px, cp.z - pz) <= visibleRangeFor(id);
   placeVisibilityEntries.forEach((e) => {
     e.group.visible = inRange(e.px, e.pz, e.place.id);
   });
@@ -678,6 +686,14 @@ function buildApartmentCluster(place, px, pz, floors, parent = scene) {
 // 어색하니, 모델 없는 동과 같은 임시 매싱(placeholder)을 세워 두고 모델이 뜨면 숨긴다.
 const MODEL_LOAD_RANGE = LABEL_VISIBLE_RANGE;
 const MODEL_UNLOAD_RANGE = MODEL_LOAD_RANGE * 1.3;
+// 가시성(visibleRangeFor)과 같은 이유로, 107동(id 7) glb의 로딩/언로딩 거리도 그 동만 늘려야
+// 한다 — 안 그러면 모델은 영영 안 불려오거나(300m 밖에서 로드 시도) 보이자마자 지워진다.
+function modelLoadRangeFor(id) {
+  return visibleRangeFor(id);
+}
+function modelUnloadRangeFor(id) {
+  return modelLoadRangeFor(id) * 1.3;
+}
 const MODEL_STREAM_CHECK_INTERVAL = 0.4; // 매 프레임 전부 검사하면 낭비라 이 간격으로만 확인한다
 const modelStreamEntries = []; // buildPlaces가 model이 있는 장소마다 하나씩 채운다
 const placeVisibilityEntries = []; // model이 없는 장소(플레이스홀더만 있는 건물)의 group 목록
@@ -745,7 +761,7 @@ function loadPlaceModelInto(entry) {
       entry.loading = false;
       // 로딩하는 동안 캐릭터가 다시 멀어졌으면 받아 둔 모델을 바로 버린다
       const curDist = character ? Math.hypot(character.position.x - entry.px, character.position.z - entry.pz) : Infinity;
-      if (curDist > MODEL_UNLOAD_RANGE) return;
+      if (curDist > modelUnloadRangeFor(entry.place.id)) return;
       const model = gltf.scene;
       model.scale.setScalar(WORLD_SCALE * (entry.place.scaleRatio ?? 1));
       model.position.set(entry.px, 0, entry.pz);
@@ -779,9 +795,9 @@ function updateModelStreaming(dt) {
   const cp = character.position;
   modelStreamEntries.forEach((entry) => {
     const dist = Math.hypot(cp.x - entry.px, cp.z - entry.pz);
-    if (dist <= MODEL_LOAD_RANGE) {
+    if (dist <= modelLoadRangeFor(entry.place.id)) {
       if (!entry.loadedModel && !entry.loading) loadPlaceModelInto(entry);
-    } else if (dist > MODEL_UNLOAD_RANGE && entry.loadedModel) {
+    } else if (dist > modelUnloadRangeFor(entry.place.id) && entry.loadedModel) {
       entry.group.remove(entry.loadedModel);
       disposeObject3D(entry.loadedModel);
       entry.loadedModel = null;
