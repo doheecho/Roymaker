@@ -101,7 +101,7 @@ export const PLACES = [
   { id: 65, name: "행당한진타운 204동", floors: 15, type: "아파트", x: 660, z: -419, model: "models/place_행당한진204.glb", rotationDeg: 0 },
   { id: 66, name: "금북초등학교", floors: 5, type: "학교", x: -123.3, z: -479.4, model: "models/place_금북초.glb", rotationDeg: 0 },
   { id: 67, name: "대현산배수지공원", floors: 1, type: "공원", x: -309.1, z: -475.9 },
-  { id: 68, name: "극동미라주 101동", floors: 15, type: "아파트", x: -96.4, z: -590.8, model: "models/place_극미101.glb", rotationDeg: 0 },
+  { id: 68, name: "극동미라주 101동", floors: 15, type: "아파트", x: -129.9, z: -614.8, model: "models/place_극미101.glb", rotationDeg: 0 },
   { id: 69, name: "극동미라주 102동", floors: 15, type: "아파트", x: -130.6, z: -692.7, model: "models/place_극미102.glb", rotationDeg: 0 },
   { id: 70, name: "극동미라주 103동", floors: 15, type: "아파트", x: -139.5, z: -772.1 },
   { id: 71, name: "극동미라주 104동", floors: 15, type: "아파트", x: -133.7, z: -846.5 },
