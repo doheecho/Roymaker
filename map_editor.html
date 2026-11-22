@@ -51,6 +51,7 @@
   .curve-hit { fill: transparent; cursor: grab; pointer-events: all; }
   .curve-hit:active { cursor: grabbing; }
   .pending-point { fill: #ffd34d; stroke: #202225; stroke-width: 2; pointer-events: none; }
+  .footprint-rect { fill: #6fa3ff; fill-opacity: 0.18; stroke: #6fa3ff; stroke-opacity: 0.6; stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
   .park-rect { fill: #4fae3f; fill-opacity: 0.45; stroke: #2f7a2a; stroke-width: 2; cursor: grab; pointer-events: all; }
   .park-rect:active { cursor: grabbing; }
   .park-rect.selected { stroke: #fff; stroke-width: 3; }
@@ -144,7 +145,18 @@
 </div>
 <div id="toast"></div>
 <div id="hoverTip"></div>
-<script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 (async function () {
   const JS_URL = "neighborhood3d.js";
   const DATA_URL = "map_data.js";
@@ -349,31 +361,39 @@
     return node;
   }
 
-  // ── glb 바운딩박스로 "기본 긴 변이 x축인지 z축인지" 캐싱(회전 손잡이 변환용) ──
-  const axisCache = {};
+  // ── glb 바운딩박스로 "기본 긴 변이 x축인지 z축인지"(회전 손잡이 변환용)와 가로×세로
+  // (스카이뷰 참고용 네모, 대략적인 크기만 필요해서 상세 돌출부는 안 본다) 둘 다 구해서
+  // 모델 경로 하나당 한 번만 캐싱한다. 처음엔 glTF accessor min/max를 직접 읽어서(전체
+  // 파일을 안 받고) 가볍게 구하려 했는데, 이 건물 모델들이 EXT_mesh_gpu_instancing(같은
+  // 조각을 수십~수백 번 재사용, 각 인스턴스마다 자기만의 위치·회전·배율)을 쓰고 있어서
+  // 그 방식으로는(인스턴스별 위치·회전을 다 합성해야 해서) 정확한 전체 바운딩박스를 못
+  // 구한다 — 실제 게임(neighborhood3d.js)이 쓰는 것과 똑같이 three.js GLTFLoader로 모델을
+  // 그대로 불러온 뒤 Box3로 재는 쪽이 느리지만 확실하다(모델들은 이미 최적화돼 있어 가볍다).
+  const modelBoundsCache = {};
+  const boundsGltfLoader = new GLTFLoader();
+  boundsGltfLoader.setMeshoptDecoder(MeshoptDecoder);
+  async function getModelBounds(modelPath) {
+    if (modelBoundsCache[modelPath]) return modelBoundsCache[modelPath];
+    const result = new Promise((resolve) => {
+      boundsGltfLoader.load(
+        modelPath,
+        (gltf) => {
+          const model = gltf.scene;
+          model.updateMatrixWorld(true);
+          const box = new THREE.Box3().setFromObject(model);
+          const w = box.max.x - box.min.x, d = box.max.z - box.min.z;
+          resolve({ axis: w >= d ? "x" : "z", w, d });
+        },
+        undefined,
+        () => resolve({ axis: "x", w: null, d: null })
+      );
+    });
+    modelBoundsCache[modelPath] = result;
+    return result;
+  }
   async function getDefaultAxis(place) {
     if (!place.model) return "x";
-    if (axisCache[place.model]) return axisCache[place.model];
-    try {
-      const buf = await (await fetch(place.model)).arrayBuffer();
-      const dv = new DataView(buf);
-      const jsonLen = dv.getUint32(12, true);
-      const jsonBytes = new Uint8Array(buf, 20, jsonLen);
-      const gltf = JSON.parse(new TextDecoder("utf-8").decode(jsonBytes));
-      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-      (gltf.accessors || []).forEach((acc) => {
-        if (acc.type === "VEC3" && acc.min && acc.max) {
-          minX = Math.min(minX, acc.min[0]); maxX = Math.max(maxX, acc.max[0]);
-          minZ = Math.min(minZ, acc.min[2]); maxZ = Math.max(maxZ, acc.max[2]);
-        }
-      });
-      const axis = (maxX - minX) >= (maxZ - minZ) ? "x" : "z";
-      axisCache[place.model] = axis;
-      return axis;
-    } catch (err) {
-      axisCache[place.model] = "x";
-      return "x";
-    }
+    return (await getModelBounds(place.model)).axis;
   }
   // world_angle: world +X축 기준 반시계(= px 오른쪽, py 아래쪽 평면에서의 atan2(dz,dx))로 잰 각도(도)
   function rotationDegToWorldAngle(rotationDeg, axis) {
@@ -396,6 +416,7 @@
   const parkLayer = el("g", {});
   const roadLayer = el("g", {});
   const treeLayer = el("g", {});
+  const footprintLayer = el("g", {}); // 건물 glb의 대략적인 가로×세로(스카이뷰 네모) 참고용 표시
   const placeLayer = el("g", {});
   const pendingLayer = el("g", {});
   // 회전/곡선/양끝 손잡이는 전부 이 맨 위 레이어에 둔다 — 그래야 건물(placeLayer)이 도로보다
@@ -405,6 +426,7 @@
   svg.appendChild(parkLayer);
   svg.appendChild(roadLayer);
   svg.appendChild(treeLayer);
+  svg.appendChild(footprintLayer);
   svg.appendChild(placeLayer);
   svg.appendChild(pendingLayer);
   svg.appendChild(handleLayer);
@@ -431,6 +453,8 @@
     const rotLine = el("line", { class: "rot-line", visibility: "hidden" });
     const handle = el("circle", { r: 7, class: "rot-handle", visibility: "hidden" });
     const handleHit = el("circle", { r: 16, class: "rot-hit", visibility: "hidden" });
+    const footprintRect = el("rect", { class: "footprint-rect", visibility: "hidden" });
+    footprintLayer.appendChild(footprintRect);
     g.appendChild(dot);
     g.appendChild(dotHit);
     g.appendChild(label);
@@ -438,7 +462,7 @@
     handleLayer.appendChild(rotLine);
     handleLayer.appendChild(handle);
     handleLayer.appendChild(handleHit);
-    placeNodes[place.id] = { place, g, dot, dotHit, label, rotLine, handle, handleHit, axis: null, px, py };
+    placeNodes[place.id] = { place, g, dot, dotHit, label, rotLine, handle, handleHit, footprintRect, axis: null, bounds: null, px, py };
     dotHit.addEventListener("pointerdown", (ev) => startPlaceDrag(ev, place.id));
     handleHit.addEventListener("pointerdown", (ev) => startRotateDrag(ev, place.id));
     wireHoverTip(dotHit, () => {
@@ -446,6 +470,13 @@
       const modelPart = p.model ? "" : " · 모델 없음(라벨만 표시)";
       return `${p.name} · ${p.type ?? "?"} · ${p.floors ?? "?"}층${modelPart}`;
     });
+    if (place.model) {
+      getModelBounds(place.model).then((bounds) => {
+        placeNodes[place.id].bounds = bounds;
+        if (placeNodes[place.id].axis == null) placeNodes[place.id].axis = bounds.axis;
+        updateFootprintRect(place.id);
+      });
+    }
   }
   PLACES.forEach(addPlaceNode);
 
@@ -561,6 +592,7 @@
     n.label.textContent = n.place.name;
     n.dot.setAttribute("fill", n.place.home ? "#ff4d6d" : (TYPE_COLOR[n.place.type] || "#9fb0c0"));
     updateRotHandle(id);
+    updateFootprintRect(id);
   }
 
   function updateRotHandle(id) {
@@ -583,6 +615,28 @@
     n.rotLine.setAttribute("y1", n.py);
     n.rotLine.setAttribute("x2", hx);
     n.rotLine.setAttribute("y2", hy);
+  }
+
+  // 건물 glb의 대략적인 가로×세로(스카이뷰 네모) — 상세 돌출부는 안 보고 전체 바운딩박스
+  // 크기·방향만 참고용으로 보여준다. 회전 손잡이와 똑같은 각도(worldAngle)로 돌려서,
+  // 손잡이가 가리키는 방향과 네모가 항상 같은 방향을 보게 맞춘다.
+  function updateFootprintRect(id) {
+    const n = placeNodes[id];
+    const bounds = n.bounds;
+    if (!n.place.model || !bounds || bounds.w == null || n.axis == null) {
+      n.footprintRect.setAttribute("visibility", "hidden");
+      return;
+    }
+    const scaleRatio = n.place.scaleRatio ?? 1;
+    const w = (bounds.w * scaleRatio) / SCALE;
+    const d = (bounds.d * scaleRatio) / SCALE;
+    const worldAngle = rotationDegToWorldAngle(n.place.rotationDeg || 0, n.axis);
+    n.footprintRect.setAttribute("x", n.px - w / 2);
+    n.footprintRect.setAttribute("y", n.py - d / 2);
+    n.footprintRect.setAttribute("width", w);
+    n.footprintRect.setAttribute("height", d);
+    n.footprintRect.setAttribute("transform", `rotate(${worldAngle}, ${n.px}, ${n.py})`);
+    n.footprintRect.setAttribute("visibility", "visible");
   }
 
   function updateRoadVisual(node) {
@@ -658,6 +712,7 @@
     if (n.place.model && n.axis == null) {
       n.axis = await getDefaultAxis(n.place);
       updateRotHandle(id);
+      updateFootprintRect(id);
     }
     renderPanel();
   }
@@ -766,7 +821,13 @@
       panelBody.appendChild(fieldText("model (glb 경로)", place.model, async (v) => {
         place.model = v.trim() || undefined;
         const n = placeNodes[place.id];
-        n.axis = place.model ? await getDefaultAxis(place) : null;
+        if (place.model) {
+          n.bounds = await getModelBounds(place.model);
+          n.axis = n.bounds.axis;
+        } else {
+          n.bounds = null;
+          n.axis = null;
+        }
         updatePlaceVisual(place.id);
         if (selected && selected.kind === "place" && selected.ref.id === place.id) renderPanel();
       }, {
