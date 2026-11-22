@@ -895,6 +895,12 @@ const BUILDING_FOOTPRINT_OVERRIDE = {
   7: [254, 158], 9: [12.6, 11.15], 10: [16.6, 11.15], 11: [16, 11.6], 12: [18.3, 29],
   14: [14.9, 23.8], 15: [15.2, 11], 16: [10.2, 8.3],
 };
+// loadPlaceModelInto는 기본적으로 모델의 가장 낮은 점(box.min.y)을 "바닥"으로 보고 그만큼
+// 들어올리는데, 66(금북초)은 모델 안에 계단 밑·배수구처럼 본 바닥(y=0, 정점 대부분이 몰린
+// 지점으로 확인함)보다 1m 더 낮은 작은 부분이 있어서 그 점이 최소값으로 잡혀 건물 전체가
+// 1m 위로 들려 올라갔다 — 캐릭터가 허리까지 파묻혀 보이는 원인이었다(2026-11-22). 이렇게
+// box.min.y가 진짜 바닥이 아닌 모델은 여기 id별로 "진짜 바닥 높이"를 직접 넣어 덮어쓴다.
+const MODEL_FLOOR_OVERRIDE = { 66: 0 };
 function worldToLocalXZ(x, z, cx, cz, cos, sin) {
   const dx = x - cx;
   const dz = z - cz;
@@ -953,7 +959,8 @@ function loadPlaceModelInto(entry) {
       });
       model.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
-      model.position.y -= box.min.y;
+      const floorY = MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
+      model.position.y -= floorY;
       entry.group.add(model);
       entry.loadedModel = model;
       if (entry.placeholder) entry.placeholder.visible = false;
