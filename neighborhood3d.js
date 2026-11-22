@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261122a";
+import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261122b";
 
 const ASSET_VERSION = "20261122c";
 
@@ -589,15 +589,53 @@ function buildLaneDashes() {
 }
 
 // 구간을 따로따로 그리면 꺾이는 지점마다 바깥쪽에 틈이 생겨서 끊겨 보인다 — 같은 지점에서
-// 만나는 구간들 중 제일 넓은 폭으로 둥근 판을 하나 더 깔아서 이음매를 자연스럽게 메운다.
-// (곡선 내부는 이미 리본 하나로 매끈하게 이어지니, 여기서는 map_editor에서 실제로 서로 다른
-// 구간으로 그린 것들의 진짜 끝점만 본다 — 곡선을 잘게 쪼갠 속 이음매까지 메우면 둥근 판이
-// 다닥다닥 겹쳐 도로가 구슬을 꿴 것처럼 보이던 문제가 있었다.)
+// 만나는 구간들의 "바깥쪽 모서리"(끝점에서 각 도로 폭의 절반만큼 양옆으로 벌어진 두 점)를
+// 전부 모아 컨벡스헐(convex hull)로 감싸는 각진 폴리곤 하나로 이음매를 메운다. 예전엔 그냥
+// 둥근 판을 깔았는데, 교차로마다 다 동그랗게 보여서(실제 도로 모양과 안 맞아서) 각 도로의
+// 진짜 폭·방향을 따라가는 다각형으로 바꿨다. (곡선 내부는 이미 리본 하나로 매끈하게 이어지니,
+// 여기서는 map_editor에서 실제로 서로 다른 구간으로 그린 것들의 진짜 끝점만 본다.)
+function roadEndpointCorners(seg, which) {
+  const pts = roadPolyline(seg);
+  const n = pts.length;
+  const point = which === "a" ? pts[0] : pts[n - 1];
+  const [tx0, tz0] = which === "a"
+    ? [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]]
+    : [pts[n - 1][0] - pts[n - 2][0], pts[n - 1][1] - pts[n - 2][1]];
+  const len = Math.hypot(tx0, tz0) || 1;
+  const px = -tz0 / len, pz = tx0 / len; // 진행 방향에 수직인 단위벡터
+  const half = seg.width / 2;
+  return [
+    [point[0] + px * half, point[1] + pz * half],
+    [point[0] - px * half, point[1] - pz * half],
+  ];
+}
+
+// Andrew's monotone chain — raw(x,z) 평면에서 컨벡스헐을 구해 점을 둘러싸는 순서로 반환한다.
+function convexHull2D(points) {
+  const pts = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
 function buildJunctionFillers() {
   const endpoints = [];
   ROAD_SEGMENTS.forEach((seg) => {
-    endpoints.push({ x: seg.a[0], z: seg.a[1], width: seg.width });
-    endpoints.push({ x: seg.b[0], z: seg.b[1], width: seg.width });
+    endpoints.push({ x: seg.a[0], z: seg.a[1], seg, which: "a" });
+    endpoints.push({ x: seg.b[0], z: seg.b[1], seg, which: "b" });
   });
   const THRESH = 14; // raw 단위(이미지 추출 과정에서 생기는 좌표 오차를 흡수 — 전보다 넉넉하게)
   const used = new Array(endpoints.length).fill(false);
@@ -613,16 +651,19 @@ function buildJunctionFillers() {
       }
     }
     if (group.length < 2) continue; // 혼자인 끝점(막다른 길)은 메울 필요 없다
-    const rawCx = group.reduce((s, p) => s + p.x, 0) / group.length;
-    const rawCz = group.reduce((s, p) => s + p.z, 0) / group.length;
-    const maxWidth = Math.max(...group.map((p) => p.width));
-    // 묶인 끝점들이 중심에서 떨어진 거리까지 넉넉히 덮도록(각도가 예리한 모서리에서도 안 뚫리게)
-    const maxSpread = Math.max(...group.map((p) => Math.hypot(p.x - rawCx, p.z - rawCz)));
-    const radius = (Math.max(maxWidth / 2, maxSpread) + maxWidth * 0.25) * WORLD_SCALE;
-    const geo = new THREE.CircleGeometry(radius, 20);
-    geo.rotateX(-Math.PI / 2);
-    const filler = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e }));
-    filler.position.set(rawCx * WORLD_SCALE, 0.006, rawCz * WORLD_SCALE);
+    const cornerPts = group.flatMap((p) => roadEndpointCorners(p.seg, p.which));
+    const hull = convexHull2D(cornerPts);
+    if (hull.length < 3) continue;
+    const positions = [];
+    hull.forEach(([x, z]) => positions.push(x * WORLD_SCALE, 0, z * WORLD_SCALE));
+    const indices = [];
+    for (let k = 1; k < hull.length - 1; k++) indices.push(0, k, k + 1);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const filler = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a4a4e, side: THREE.DoubleSide }));
+    filler.position.y = 0.006;
     filler.receiveShadow = true;
     scene.add(filler);
   }

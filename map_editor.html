@@ -948,12 +948,13 @@
     }
     if (mode === "add-road") {
       if (!pendingRoadStart) {
-        pendingRoadStart = [Math.round(rx * 10) / 10, Math.round(rz * 10) / 10];
+        pendingRoadStart = snapRoadPoint(Math.round(rx * 10) / 10, Math.round(rz * 10) / 10, null, null);
         const [px, py] = rawToPx(pendingRoadStart[0], pendingRoadStart[1]);
         pendingLayer.appendChild(el("circle", { cx: px, cy: py, r: 7, class: "pending-point" }));
         statusText.textContent = "이제 끝점을 클릭하세요.";
       } else {
-        const seg = { a: pendingRoadStart, b: [Math.round(rx * 10) / 10, Math.round(rz * 10) / 10], width: 6 };
+        const endPt = snapRoadPoint(Math.round(rx * 10) / 10, Math.round(rz * 10) / 10, null, null);
+        const seg = { a: pendingRoadStart, b: endPt, width: 6 };
         ROADS.push(seg);
         const node = addRoadNode(seg);
         pendingLayer.innerHTML = "";
@@ -1020,15 +1021,32 @@
     window.addEventListener("pointerup", up);
   }
 
+  // neighborhood3d.js가 도로 교차로를 메울 때 "같은 지점"으로 보는 거리(14, raw 단위)와 맞춰서,
+  // 그 안에 다른 도로 끝점이 있으면 손으로 좌표를 맞추지 않아도 자동으로 그 끝점에 딱 붙인다.
+  const ROAD_SNAP_THRESHOLD_RAW = 14;
+  function snapRoadPoint(rx, rz, excludeSeg, excludeWhich) {
+    let best = null;
+    let bestDist = ROAD_SNAP_THRESHOLD_RAW;
+    ROADS.forEach((seg) => {
+      [["a", seg.a], ["b", seg.b]].forEach(([which, pt]) => {
+        if (seg === excludeSeg && which === excludeWhich) return;
+        const d = Math.hypot(pt[0] - rx, pt[1] - rz);
+        if (d < bestDist) { bestDist = d; best = pt; }
+      });
+    });
+    return best ? [best[0], best[1]] : [rx, rz];
+  }
+
   function startRoadEndpointDrag(ev, node, which) {
     ev.stopPropagation();
     if (mode !== "select") return;
     selectRoad(ev, node);
     const move = (mev) => {
       const pt = svgPoint(mev);
-      const [rx, rz] = pxToRaw(pt.x, pt.y);
-      node.seg[which][0] = Math.round(rx * 10) / 10;
-      node.seg[which][1] = Math.round(rz * 10) / 10;
+      const [rx0, rz0] = pxToRaw(pt.x, pt.y);
+      const [rx, rz] = snapRoadPoint(Math.round(rx0 * 10) / 10, Math.round(rz0 * 10) / 10, node.seg, which);
+      node.seg[which][0] = rx;
+      node.seg[which][1] = rz;
       updateRoadVisual(node);
       if (selected && selected.kind === "road" && selected.ref === node) renderPanel();
     };
