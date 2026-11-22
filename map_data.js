@@ -121,7 +121,7 @@ export const PLACES = [
   { id: 87, name: "행당대림아파트 107동", floors: 15, type: "아파트", x: 794, z: -72, model: "models/place_행당대림107.glb", rotationDeg: 0 },
   { id: 88, name: "행당대림아파트 108동", floors: 15, type: "아파트", x: 662, z: -50, model: "models/place_행당대림108.glb", rotationDeg: 0 },
   { id: 89, name: "행당대림아파트 109동", floors: 15, type: "아파트", x: 684, z: -50, model: "models/place_행당대림109.glb", rotationDeg: 0 },
-  { id: 90, name: "행당대림아파트 110동", floors: 15, type: "아파트", x: 361.5, z: -316.3, model: "models/place_행당대림110.glb", rotationDeg: 0 },
+  { id: 90, name: "행당대림아파트 110동", floors: 15, type: "아파트", x: 361.5, z: -316.3, model: "models/place_행당대림110.glb", rotationDeg: -30 },
   { id: 91, name: "행당대림아파트 111동", floors: 15, type: "아파트", x: 728, z: -50, model: "models/place_행당대림111.glb", rotationDeg: 0 },
   { id: 92, name: "행당대림아파트 112동", floors: 15, type: "아파트", x: 750, z: -50, model: "models/place_행당대림112.glb", rotationDeg: 0 },
   { id: 93, name: "행당대림아파트 113동", floors: 15, type: "아파트", x: 772, z: -50, model: "models/place_행당대림113.glb", rotationDeg: 0 },
