@@ -163,8 +163,10 @@
   // 잡으면 코드가 깨지기 쉬웠다).
   let srcText, dataText;
   try {
-    srcText = await (await fetch(JS_URL)).text();
-    dataText = await (await fetch(DATA_URL)).text();
+    // map_data.js는 GitHub에서 수시로 바로바로 고치는 파일이라, 브라우저가 예전 버전을 캐시해
+    // 두고 있으면 방금 늘어난 건물들이 안 보이는 식으로 혼란스럽다 — 매번 새로 받아온다.
+    srcText = await (await fetch(JS_URL, { cache: "no-store" })).text();
+    dataText = await (await fetch(DATA_URL, { cache: "no-store" })).text();
   } catch (err) {
     statusText.textContent = "neighborhood3d.js/map_data.js를 불러오지 못했습니다 — 로컬 서버로(파일로 직접 열지 말고) 열어주세요.";
     return;
