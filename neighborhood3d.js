@@ -122,6 +122,18 @@ const ITEM_REWARD_MIN = 500;
 const ITEM_REWARD_MAX = 1500;
 const ENEMY_REWARD_MIN = 1000;
 const ENEMY_REWARD_MAX = 3000;
+// 거리 모험을 본편 능력치와 연결한다 — 스트레스·비행화가 높을수록 불량배가 늘고, 인싸력이
+// 충분하면 친구가 동네에 나와 있어서 만나 놀 수 있다(main.js의 getAdventureStatContext로 읽어온다).
+const ENEMY_COUNT_MAX = 10;
+const ENEMY_STRESS_THRESHOLD = 50; // 이 값을 넘는 스트레스 10점마다 불량배 +1
+const ENEMY_STRESS_STEP = 10;
+const ENEMY_DELINQUENCY_STEP = 15; // 비행화 15점마다 불량배 +1
+const FRIEND_INSA_THRESHOLD = 30; // 인싸력이 이 이상이면 친구가 등장한다
+function enemyCountForStats(ctx) {
+  const stressBonus = Math.max(0, Math.floor((ctx.stress - ENEMY_STRESS_THRESHOLD) / ENEMY_STRESS_STEP));
+  const delinquencyBonus = Math.floor(ctx.delinquency / ENEMY_DELINQUENCY_STEP);
+  return Math.min(ENEMY_COUNT_MAX, ENEMY_COUNT + stressBonus + delinquencyBonus);
+}
 
 let renderer, scene, camera, clock, mixer, character;
 let actions = {};
@@ -147,6 +159,7 @@ let toastTimer = null;
 
 let items = [];
 let enemies = [];
+let friend = null; // { mesh, met } — 인싸력이 충분할 때만 한 명 등장(없으면 null)
 
 // ── 카메라: 캐릭터를 중심으로 도는 궤도(드래그로 회전, 휠로 확대/축소) ──
 // 게임을 열자마자 113동 1-2호 출입구 앞(캐릭터 바로 뒤에서 나무·두 출입구·금호119안전센터/
@@ -1150,6 +1163,25 @@ function makeThug() {
   return group;
 }
 
+// 불량배와 같은 뼈대(원기둥 몸+공 머리)를 쓰되, 밝은 색으로 구분해서 "반가운 존재"처럼 보이게 한다.
+function makeFriend() {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 0.45, 1.3, 10),
+    new THREE.MeshStandardMaterial({ color: 0xf2a63e })
+  );
+  body.position.y = 0.85;
+  body.castShadow = true;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.33, 12, 12), new THREE.MeshStandardMaterial({ color: 0xe0b088 }));
+  head.position.y = 1.65;
+  head.castShadow = true;
+  group.add(body, head);
+  const label = makeLabelSprite("친구");
+  label.position.y = 2.5;
+  group.add(label);
+  return group;
+}
+
 function spawnItems() {
   items.forEach((it) => scene.remove(it.mesh));
   items = [];
@@ -1162,10 +1194,10 @@ function spawnItems() {
   }
 }
 
-function spawnEnemies() {
+function spawnEnemies(count) {
   enemies.forEach((en) => scene.remove(en.mesh));
   enemies = [];
-  for (let i = 0; i < ENEMY_COUNT; i++) {
+  for (let i = 0; i < count; i++) {
     const [x, z] = randomStreetSpot();
     const mesh = makeThug();
     mesh.position.set(x, 0, z);
@@ -1174,15 +1206,32 @@ function spawnEnemies() {
   }
 }
 
+function spawnFriend(ctx) {
+  if (friend) {
+    scene.remove(friend.mesh);
+    friend = null;
+  }
+  if (ctx.insa < FRIEND_INSA_THRESHOLD) return;
+  const [x, z] = randomStreetSpot();
+  const mesh = makeFriend();
+  mesh.position.set(x, 0, z);
+  scene.add(mesh);
+  friend = { mesh, met: false };
+}
+
 function startAdventure() {
+  const statCtx = window.getAdventureStatContext?.() ?? { insa: 0, social: 0, stress: 0, delinquency: 0 };
   if (currentErrand) {
     items.forEach((it) => scene.remove(it.mesh));
     enemies.forEach((en) => scene.remove(en.mesh));
+    if (friend) scene.remove(friend.mesh);
     items = [];
     enemies = [];
+    friend = null;
   } else {
     spawnItems();
-    spawnEnemies();
+    spawnEnemies(enemyCountForStats(statCtx));
+    spawnFriend(statCtx);
   }
   if (resetBtnEl) resetBtnEl.hidden = true;
   updateHud();
@@ -1211,7 +1260,8 @@ function updateHud() {
     return;
   }
   const { itemsLeft, enemiesLeft } = remainingCounts();
-  hudEl.textContent = `🪙 동전 ${itemsLeft} · 👊 불량배 ${enemiesLeft}`;
+  const friendPart = friend && !friend.met ? " · 👫 친구" : "";
+  hudEl.textContent = `🪙 동전 ${itemsLeft} · 👊 불량배 ${enemiesLeft}${friendPart}`;
   if (itemsLeft === 0 && enemiesLeft === 0 && resetBtnEl) {
     resetBtnEl.hidden = false;
     showToast("🎉 거리를 다 정리했다! 다시 하기를 눌러 보자");
@@ -1221,6 +1271,11 @@ function updateHud() {
 function grantReward(amount, label) {
   if (typeof window.grantAdventureReward === "function") window.grantAdventureReward(amount);
   showToast(`${label} · 용돈 +${amount}원`);
+}
+
+function grantFriendHangout() {
+  if (typeof window.grantFriendHangout === "function") window.grantFriendHangout();
+  showToast("👫 친구와 신나게 놀았다 · 스트레스 감소");
 }
 
 function updatePickups(dt) {
@@ -1247,6 +1302,12 @@ function updatePickups(dt) {
       grantReward(randStep100(ENEMY_REWARD_MIN, ENEMY_REWARD_MAX), "👊 불량배를 혼내줬다");
     }
   });
+  if (friend && !friend.met && cp.distanceTo(friend.mesh.position) < PICKUP_RADIUS) {
+    friend.met = true;
+    scene.remove(friend.mesh);
+    changed = true;
+    grantFriendHangout();
+  }
   if (changed) updateHud();
 }
 

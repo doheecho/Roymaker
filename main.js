@@ -5304,6 +5304,29 @@ function grantAdventureReward(amount) {
 }
 window.grantAdventureReward = grantAdventureReward;
 
+// 거리 모험이 능력치에 따라 동네 모습을 다르게 보여주려고(인싸력 높으면 친구 등장, 스트레스·
+// 비행화 높으면 불량배가 늘어나는 식) 읽어가는 값들
+function getAdventureStatContext() {
+  const c = state.character;
+  return {
+    insa: c.stats.insa ?? 0,
+    social: c.stats.social ?? 0,
+    stress: c.condition.stress ?? 0,
+    delinquency: c.stats.delinquency ?? 0,
+  };
+}
+window.getAdventureStatContext = getAdventureStatContext;
+
+// 거리 모험에서 친구를 만나 놀았을 때 반영 — 스트레스가 풀리고 사회성·인싸력이 조금 오른다.
+// 사회성·인싸력은 다른 활동과 똑같이 기본 성장 배율(허기·기력에 따라 깎이는)을 그대로 적용한다.
+function grantFriendHangout() {
+  const applied = applyEffect({ stress: -15, social: 2, insa: 1 });
+  renderStats(state.character);
+  saveGame();
+  return applied;
+}
+window.grantFriendHangout = grantFriendHangout;
+
 // 화면 설명 팝업 — 각 화면 제목 옆 "설명보기" 버튼
 function wireHelp() {
   const modal = document.getElementById("help-modal");
