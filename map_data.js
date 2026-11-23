@@ -166,7 +166,7 @@ export const PLACES = [
   { id: 217, name: "금호1가동 주민센터", floors: 5, type: "아파트", x: -339.8, z: -58.8, model: "models/place_금호1가동주민센터.glb", rotationDeg: 28.9, scaleRatio: 1.3 },
   { id: 218, name: "GS25", floors: 15, type: "아파트", x: -25.9, z: -573.4, model: "models/place_gs25극미점.glb", scaleRatio: 1.5 },
   { id: 219, name: "상가", floors: 15, type: "기타", x: -2.5, z: -514, model: "models/place_산마을돈타운2.glb", scaleRatio: 1.3 },
-  { id: 220, name: "주택가", floors: 4, type: "기타", x: 3.8, z: -359.9, model: "models/place_금북남전체구역.glb", rotationDeg: 7.8, scaleRatio: 1.3 },
+  { id: 220, name: "주택가", floors: 4, type: "기타", x: 0.9, z: -363.5, model: "models/place_금북남전체구역.glb", rotationDeg: 0.1, scaleRatio: 1.3 },
   { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -592.7, z: 100.4, model: "models/place_골드축산.glb", rotationDeg: -4.5 },
   { id: 223, name: "행복한교회", floors: 5, type: "기타", x: 109.9, z: -503.8, model: "models/place_행복한교회.glb", scaleRatio: 1.3 },
   { id: 224, name: "대림상가", floors: 5, type: "기타", x: 53.4, z: -562.6, model: "models/place_대림독서실.glb", rotationDeg: -15.6, scaleRatio: 1.3 },
