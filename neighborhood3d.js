@@ -6,9 +6,9 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261122b";
+import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261123b";
 
-const ASSET_VERSION = "20261122c";
+const ASSET_VERSION = "20261123b";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
