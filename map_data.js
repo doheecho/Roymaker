@@ -112,7 +112,7 @@ export const PLACES = [
   { id: 76, name: "금호동벽산아파트 502동", floors: 15, type: "아파트", x: 262.5, z: 0.6 },
   { id: 77, name: "금호동벽산아파트 503동", floors: 15, type: "아파트", x: 171.5, z: 59.3 },
   { id: 78, name: "금호동벽산아파트 505동", floors: 15, type: "아파트", x: 303.1, z: 95.7 },
-  { id: 81, name: "행당대림아파트 101동", floors: 15, type: "아파트", x: 111.4, z: -549.5, model: "models/place_행당대림101.glb", rotationDeg: 0 },
+  { id: 81, name: "행당대림아파트 101동", floors: 15, type: "아파트", x: 117.4, z: -549, model: "models/place_행당대림101.glb", rotationDeg: -2.3, scaleRatio: 1.5 },
   { id: 82, name: "행당대림아파트 102동", floors: 15, type: "아파트", x: 221, z: -594.1, model: "models/place_행당대림102.glb", rotationDeg: 0 },
   { id: 83, name: "행당대림아파트 103동", floors: 15, type: "아파트", x: 214, z: -473.6, model: "models/place_행당대림103.glb", rotationDeg: 0, scaleRatio: 1.5 },
   { id: 84, name: "행당대림아파트 104동", floors: 15, type: "아파트", x: 293.6, z: -508.7, model: "models/place_행당대림104.glb", rotationDeg: 0, scaleRatio: 1.5 },
@@ -166,10 +166,12 @@ export const PLACES = [
   { id: 216, name: "주택가", floors: 3, type: "기타", x: -79.5, z: -301.3, model: "models/place_금북주택가2.glb", rotationDeg: -3.9, scaleRatio: 1.3 },
   { id: 217, name: "금호1가동 주민센터", floors: 5, type: "아파트", x: -339.8, z: -58.8, model: "models/place_금호1가동주민센터.glb", rotationDeg: 28.9, scaleRatio: 1.3 },
   { id: 218, name: "GS25", floors: 15, type: "아파트", x: -24.9, z: -570, model: "models/place_gs25극미점.glb", scaleRatio: 1.3 },
-  { id: 219, name: "상가", floors: 15, type: "기타", x: 11.9, z: -508.7, model: "models/place_산마을돈타운.glb", scaleRatio: 1.3 },
-  { id: 220, name: "주택가", floors: 4, type: "기타", x: 20.4, z: -428.1, model: "models/place_제주슈퍼.glb" },
+  { id: 219, name: "상가", floors: 15, type: "기타", x: -2.5, z: -514, model: "models/place_산마을돈타운2.glb", scaleRatio: 1.3 },
+  { id: 220, name: "주택가", floors: 4, type: "기타", x: 15.7, z: -430.6, model: "models/place_제주수퍼.glb", rotationDeg: 7.8, scaleRatio: 1.3 },
   { id: 221, name: "주택가", floors: 3, type: "기타", x: 31.9, z: -320.1, model: "models/place_신기한나라라운지.glb", scaleRatio: 1.4 },
   { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -592.7, z: 100.4, model: "models/place_골드축산.glb", rotationDeg: -4.5 },
+  { id: 223, name: "행복한교회", floors: 5, type: "기타", x: 109.9, z: -503.8, model: "models/place_행복한교회.glb", scaleRatio: 1.3 },
+  { id: 224, name: "대림상가", floors: 5, type: "기타", x: 53.4, z: -562.6, model: "models/place_대림독서실.glb", rotationDeg: -15.6, scaleRatio: 1.3 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
@@ -183,12 +185,10 @@ export const PLACES = [
 // 완전한 직선(map_editor.html에서 그림판 곡선 도구처럼 가운데 손잡이를 당겨서 만든다).
 // neighborhood3d.js는 이 곡선을 짧은 직선 여러 개로 잘게 쪼개 그린다.
 export const ROAD_SEGMENTS = [
-  { a: [-42.5, -428.9], b: [54.9, -482.8], width: 10, curve: [-42, -479.6] },
   { a: [474, -474.9], b: [189.1, -302.2], width: 10 },
   { a: [189.1, -302.2], b: [155.4, -311.1], width: 10, curve: [168.2, -292.4] },
   { a: [155.4, -311.1], b: [159.8, -455.2], width: 10 },
   { a: [147.1, -499.1], b: [159.8, -455.2], width: 10, curve: [161.1, -480.3] },
-  { a: [15.3, -380.3], b: [79.4, -384.6], width: 5 },
   { a: [15.3, -380.3], b: [-0.7, -305.3], width: 5, curve: [14.6, -322.9] },
   { a: [566.4, -379.2], b: [635.2, -272], width: 6 },
   { a: [796.2, -534.5], b: [269.4, -217], width: 30, curve: [302, -224.5] },
@@ -248,7 +248,7 @@ export const ROAD_SEGMENTS = [
   { a: [79.4, -384.6], b: [-17.5, -620.2], width: 30, curve: [71.7, -519.4] },
   { a: [-53.7, -821.8], b: [-17.5, -620.2], width: 30, curve: [-77.8, -689.1] },
   { a: [-54.1, -1005.7], b: [-53.7, -821.8], width: 30, curve: [-47.4, -919.4] },
-  { a: [-42, -430.7], b: [-52.4, -382.8], width: 10 },
+  { a: [-37.5, -460.6], b: [-52.4, -382.8], width: 10 },
   { a: [-649.9, 284.9], b: [-624.4, 58.7], width: 30, curve: [-652.6, 119.6] },
   { a: [-649.9, 284.9], b: [-652.4, 544.2], width: 30 },
   { a: [95.5, -96.5], b: [75.3, -124.6], width: 15, curve: [98.4, -110.1] },
@@ -263,7 +263,6 @@ export const ROAD_SEGMENTS = [
   { a: [-168, 87.8], b: [-112.3, 60.4], width: 12, curve: [-120.5, 93.3] },
   { a: [-112.3, 60.4], b: [-93.3, 13], width: 12, curve: [-109.6, 24.7] },
   { a: [-0.7, -305.3], b: [-15.8, -254.5], width: 5, curve: [-18.1, -288.5] },
-  { a: [15.3, -380.3], b: [-42.5, -428.9], width: 6, curve: [-15.3, -420.5] },
   { a: [-572.3, -216.6], b: [-582, -29], width: 30 },
   { a: [-572.3, -216.6], b: [-641.2, -469], width: 30, curve: [-574.1, -330.7] },
   { a: [-641.2, -469], b: [-727, -833.4], width: 30, curve: [-726.7, -632.3] },
@@ -320,7 +319,7 @@ export const ROAD_SEGMENTS = [
   { a: [241.4, -394.6], b: [331.2, -252.5], width: 10 },
   { a: [138.8, -522.7], b: [147.1, -499.1], width: 10 },
   { a: [138.8, -522.7], b: [50.2, -514.4], width: 10, curve: [77.3, -533.2] },
-  { a: [173.2, -532.3], b: [138.8, -522.7], width: 10, curve: [156, -521.7] },
+  { a: [173.2, -532.3], b: [138.8, -522.7], width: 10 },
   { a: [235, -567.3], b: [173.2, -532.3], width: 10 },
   { a: [235, -567.3], b: [267.5, -603], width: 10, curve: [255.8, -575] },
   { a: [284.1, -641.2], b: [308.9, -669.3], width: 10, curve: [289.5, -661.6] },
@@ -336,6 +335,7 @@ export const ROAD_SEGMENTS = [
   { a: [443.2, -811.3], b: [404.9, -787.5], width: 10 },
   { a: [377, -759.5], b: [404.9, -787.5], width: 10, curve: [385.7, -778.7] },
   { a: [377, -759.5], b: [348.4, -689.7], width: 10 },
+  { a: [62.1, -482.8], b: [-37.5, -460.6], width: 10, curve: [-39, -481.3] },
 ];
 
 // ── 가로수(TREES) ──
