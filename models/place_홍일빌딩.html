@@ -1,0 +1,2429 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>금호동1가 홍일빌딩 (미소드림치과·성모우리이비인후과·온누리약국) 3D 모델링</title>
+  <!-- 한국어 및 영문 간판 가독성 향상을 위한 비차단 Google Fonts 로드 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Montserrat:wght@700;800;900&family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #A8C8E8;
+      font-family: 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', -apple-system, sans-serif;
+      color: #f8fafc;
+      user-select: none;
+    }
+
+    /* 전체 화면 고정 3D 캔버스 컨테이너 */
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #A8C8E8;
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    /* 다크 반투명 글래스모픽 HUD 공통 패널 */
+    .hud-panel {
+      position: fixed;
+      background: rgba(15, 20, 28, 0.86);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
+      z-index: 10;
+    }
+
+    /* 좌상단 정보 HUD 카드 */
+    #info {
+      top: 14px;
+      left: 16px;
+      padding: 12px 16px;
+      max-width: min(560px, calc(100vw - 32px));
+      pointer-events: none;
+    }
+
+    #info h1 {
+      font-size: 13.8px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 5px;
+    }
+
+    #info .badge {
+      font-size: 10.5px;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.24);
+      color: #bae6fd;
+      border: 1px solid rgba(125, 211, 252, 0.62);
+      padding: 1px 8px;
+      border-radius: 999px;
+    }
+
+    #info p {
+      font-size: 11.4px;
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+
+    #info .compass {
+      margin-top: 4px;
+      font-size: 10.9px;
+      color: #93c5fd;
+      font-weight: 600;
+    }
+
+    /* 우상단 접이식 토글 및 GLB 추출 설정 패널 */
+    #options-panel {
+      top: 14px;
+      right: 16px;
+      padding: 11px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      width: 280px;
+      max-height: calc(100vh - 140px);
+      overflow-y: auto;
+    }
+
+    .options-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2px;
+    }
+
+    .options-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 0.04em;
+    }
+
+    .collapse-btn {
+      background: rgba(51, 65, 85, 0.74);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 10.5px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .collapse-btn:hover {
+      background: rgba(71, 85, 105, 0.94);
+      color: #ffffff;
+    }
+
+    #options-body {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    #options-body.collapsed {
+      display: none;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.6px;
+      color: #e2e8f0;
+      cursor: pointer;
+      padding: 2px 0;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: #f59e0b;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .toggle-row .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .panel-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.14);
+      margin: 4px 0;
+    }
+
+    #mesh-stats {
+      font-size: 11px;
+      color: #cbd5e1;
+      line-height: 1.62;
+      font-variant-numeric: tabular-nums;
+      background: rgba(30, 41, 59, 0.62);
+      border: 1px solid rgba(148, 163, 184, 0.20);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
+    #mesh-stats strong {
+      color: #fde68a;
+      font-weight: 700;
+    }
+
+    #mesh-stats .status-pill {
+      display: inline-block;
+      margin-top: 3px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.24);
+      border: 1px solid rgba(52, 211, 153, 0.58);
+      color: #6ee7b7;
+      font-size: 10.4px;
+      font-weight: 700;
+    }
+
+    /* 하단 8개 카메라 프리셋 + 주황 GLB 추출 버튼 바 */
+    #controls-ui {
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      max-width: calc(100vw - 20px);
+    }
+
+    .cam-btn {
+      background: rgba(51, 65, 85, 0.85);
+      color: #f1f5f9;
+      border: 1px solid rgba(148, 163, 184, 0.30);
+      padding: 6px 9px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 11.2px;
+      font-family: inherit;
+      font-weight: 500;
+      transition: all 0.16s ease;
+      white-space: nowrap;
+    }
+
+    .cam-btn:hover {
+      background: rgba(37, 99, 235, 0.88);
+      border-color: rgba(147, 197, 253, 0.82);
+      transform: translateY(-1px);
+    }
+
+    .cam-btn.active {
+      background: #2563eb;
+      border-color: #93c5fd;
+      color: #ffffff;
+      font-weight: 700;
+      box-shadow: 0 2px 10px rgba(37, 99, 235, 0.52);
+    }
+
+    .bar-divider {
+      width: 1px;
+      height: 22px;
+      background: rgba(255, 255, 255, 0.18);
+      margin: 0 3px;
+    }
+
+    .export-btn {
+      background: linear-gradient(135deg, #f59e0b, #ea580c);
+      color: #ffffff;
+      border: 1px solid rgba(254, 240, 138, 0.84);
+      padding: 6px 13px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 11.8px;
+      font-family: inherit;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.16s ease;
+      box-shadow: 0 3px 12px rgba(234, 88, 12, 0.48);
+      white-space: nowrap;
+    }
+
+    .export-btn:hover {
+      background: linear-gradient(135deg, #fbbf24, #f97316);
+      transform: translateY(-1px);
+      box-shadow: 0 5px 16px rgba(245, 158, 11, 0.58);
+    }
+
+    .export-btn:disabled {
+      opacity: 0.65;
+      cursor: wait;
+      transform: none;
+    }
+
+    /* 알림 토스트 */
+    #toast {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-14px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(251, 191, 36, 0.65);
+      color: #fef3c7;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 12.6px;
+      font-weight: 600;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.24s ease, transform 0.24s ease;
+      z-index: 30;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* 초기화 및 추출 오류 발생 시 적색 배너 */
+    #error-banner {
+      position: fixed;
+      top: 68px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: min(640px, calc(100vw - 32px));
+      background: rgba(127, 29, 29, 0.96);
+      border: 1px solid rgba(248, 113, 113, 0.92);
+      color: #fecaca;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 12.6px;
+      font-weight: 600;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48);
+      display: none;
+      z-index: 40;
+      word-break: break-word;
+    }
+
+    #error-banner.visible {
+      display: block;
+    }
+
+    @media (max-width: 960px) {
+      #info {
+        top: 10px;
+        left: 10px;
+        padding: 8px 11px;
+        max-width: calc(100vw - 220px);
+      }
+      #info h1 { font-size: 11.4px; }
+      #info p, #info .compass { font-size: 9.8px; }
+      #options-panel {
+        top: 10px;
+        right: 10px;
+        width: 208px;
+        padding: 8px 10px;
+      }
+      .toggle-row { font-size: 10.4px; }
+      .bar-divider { display: none; }
+      #controls-ui {
+        bottom: 8px;
+        padding: 6px 7px;
+        gap: 4px;
+      }
+      .cam-btn, .export-btn {
+        padding: 5px 7px;
+        font-size: 10px;
+      }
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- 좌상단 타이틀 및 방위 안내 HUD -->
+  <div id="info" class="hud-panel">
+    <h1>
+      금호동1가 홍일빌딩 (미소드림치과·성모우리이비인후과·온누리약국) 3D 모델링
+      <span class="badge">2·3F 투명 통창 · GLB v1</span>
+    </h1>
+    <p>좌클릭 드래그: 회전 &nbsp;|&nbsp; 우클릭 드래그: 이동 &nbsp;|&nbsp; 휠: 확대·축소</p>
+    <div class="compass">북(-Z: 치과 코너) · 남(+Z) · 서(-X: 행당로 전면) · 동(+X) &nbsp;|&nbsp; 평지(Y=0) · 무그림자</div>
+  </div>
+
+  <!-- 우상단 접이식 표시 및 GLB 추출 설정 패널 -->
+  <div id="options-panel" class="hud-panel">
+    <div class="options-header">
+      <div class="options-title">표시 및 추출 설정</div>
+      <button class="collapse-btn" id="btn-collapse">접기</button>
+    </div>
+    <div id="options-body">
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-body" checked />
+        <span class="dot" style="background:#c9c4bb;"></span>
+        <span>외관 본체 (1F·4F·옥상)</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-curtain" checked />
+        <span class="dot" style="background:#8ac4ce;"></span>
+        <span>2·3층 투명 통창 커튼월</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-interior" checked />
+        <span class="dot" style="background:#fde68a;"></span>
+        <span>2·3층 실내 인테리어</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-signage" checked />
+        <span class="dot" style="background:#e05232;"></span>
+        <span>간판 및 세로 돌출 사인</span>
+      </label>
+
+      <div class="panel-divider"></div>
+
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-env" checked />
+        <span>보도·바닥 표시</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-outlines" />
+        <span>건축 윤곽선 (Edges)</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-export-env" />
+        <span>GLB 추출 시 바닥 포함</span>
+      </label>
+
+      <div class="panel-divider"></div>
+      <div id="mesh-stats">메시 집계 중...</div>
+    </div>
+  </div>
+
+  <!-- 상단 알림 토스트 & 적색 에러 배너 -->
+  <div id="toast">알림</div>
+  <div id="error-banner"></div>
+
+  <!-- 하단 8개 카메라 프리셋 + 주황 GLB 추출 버튼 바 -->
+  <div id="controls-ui" class="hud-panel">
+    <button class="cam-btn" data-view="top">1. 스카이뷰</button>
+    <button class="cam-btn active" data-view="sw">2. 남서 (전경)</button>
+    <button class="cam-btn" data-view="west">3. 서 (정면 통창)</button>
+    <button class="cam-btn" data-view="nw">4. 북서 (미소드림 코너)</button>
+    <button class="cam-btn" data-view="north">5. 북 (투명 통창 코너)</button>
+    <button class="cam-btn" data-view="ne">6. 북동 (동측 상부)</button>
+    <button class="cam-btn" data-view="east">7. 동 (치과·이비인후과)</button>
+    <button class="cam-btn" data-view="se">8. 동남 (남동측)</button>
+    <div class="bar-divider"></div>
+    <button class="export-btn" id="btn-export-glb">
+      <span>⬇</span> 3D 추출 (.glb)
+    </button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+    import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+    // =========================================================================
+    // 0. 알림 토스트, 적색 오류 배너 & 안전한 2D 라운드 사각형 헬퍼 (alert/confirm 미사용)
+    // =========================================================================
+    let toastTimer = null;
+    function showToast(msg, duration = 3200) {
+      const el = document.getElementById('toast');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+    }
+
+    function showErrorBanner(err) {
+      const el = document.getElementById('error-banner');
+      const msg = err && err.message ? err.message : String(err);
+      console.error('3D 오류:', err);
+      if (el) {
+        el.textContent = '3D 오류: ' + msg;
+        el.classList.add('visible');
+      }
+    }
+
+    function hideErrorBanner() {
+      const el = document.getElementById('error-banner');
+      if (el) el.classList.remove('visible');
+    }
+
+    function drawRoundRect(ctx, x, y, w, h, r) {
+      const rad = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rad, y);
+      ctx.lineTo(x + w - rad, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+      ctx.lineTo(x + w, y + h - rad);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+      ctx.lineTo(x + rad, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+      ctx.lineTo(x, y + rad);
+      ctx.quadraticCurveTo(x, y, x + rad, y);
+      ctx.closePath();
+    }
+
+    try {
+      // =======================================================================
+      // 1. 씬, 카메라, 표준 WebGLRenderer & 무그림자 5-Point 주간 건축 조명
+      //    - renderer.shadowMap.enabled = false, 표준 깊이 버퍼
+      //    - ACESFilmicToneMapping (exposure 1.06), SRGBColorSpace, Sky #A8C8E8
+      // =======================================================================
+      const container = document.getElementById('canvas-container');
+      const initW = container.clientWidth || window.innerWidth || 1280;
+      const initH = container.clientHeight || window.innerHeight || 720;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color('#A8C8E8');
+      scene.fog = new THREE.Fog('#B6D2EC', 120, 340);
+
+      const camera = new THREE.PerspectiveCamera(44, initW / initH, 0.2, 520);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        powerPreference: 'high-performance'
+      });
+      renderer.setSize(initW, initH);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.shadowMap.enabled = false;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.06;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      container.appendChild(renderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.068;
+      controls.maxPolarAngle = Math.PI * 0.495;
+      controls.minDistance = 4.0;
+      controls.maxDistance = 175;
+
+      // 5-Point 무그림자 균형 주간 건축 조명
+      const hemiLight = new THREE.HemisphereLight(0xf4f9ff, 0x7e858e, 0.92);
+      hemiLight.position.set(0, 80, 0);
+      scene.add(hemiLight);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.48));
+
+      const swDirLight = new THREE.DirectionalLight(0xfffaf0, 1.06);
+      swDirLight.position.set(-46, 54, 42);
+      scene.add(swDirLight);
+
+      const nwDirLight = new THREE.DirectionalLight(0xeef6ff, 0.90);
+      nwDirLight.position.set(-42, 48, -46);
+      scene.add(nwDirLight);
+
+      const neDirLight = new THREE.DirectionalLight(0xfcf4e8, 0.78);
+      neDirLight.position.set(48, 44, -22);
+      scene.add(neDirLight);
+
+      // =======================================================================
+      // 2. 최상위 씬 계층 구조 (North=-Z, South=+Z, West=-X, East=+X, Ground Y=0)
+      //    - buildingRoot: GLB 추출 대상 (5개 토글 그룹 포함)
+      //    - outlineGroup: buildingRoot 외부 형제 -> GLB 추출 시 원천 배제!
+      // =======================================================================
+      const buildingRoot = new THREE.Group();
+      buildingRoot.name = 'Geumho_HongilBuilding_Root';
+      scene.add(buildingRoot);
+
+      const bodyGroup     = new THREE.Group(); bodyGroup.name     = 'Shell_1F_4F_Roof_Core';
+      const curtainGroup  = new THREE.Group(); curtainGroup.name  = 'CurtainWall_2F3F_Transparent';
+      const interiorGroup = new THREE.Group(); interiorGroup.name = 'Interior_2F_ENT_3F_Dental';
+      const signageGroup  = new THREE.Group(); signageGroup.name  = 'Signage_And_ProjectingSigns';
+      const envGroup      = new THREE.Group(); envGroup.name      = 'Env_CompactSidewalk';
+
+      buildingRoot.add(bodyGroup, curtainGroup, interiorGroup, signageGroup, envGroup);
+
+      const outlineGroup = new THREE.Group();
+      outlineGroup.name = 'Architectural_Outlines';
+      outlineGroup.visible = false;
+      scene.add(outlineGroup);
+
+      // =======================================================================
+      // 3. 단일 안전 CanvasTexture 생성기 + GLB 사전 무결성 검증기 (drawImage 오류 0%)
+      // =======================================================================
+      const dynamicSigns = [];
+
+      /**
+       * 모든 텍스처를 반드시 유효한 HTMLCanvasElement(>=64x64)로부터 생성하는 안전 팩토리
+       */
+      function createSafeCanvasTexture(w, h, drawFn, opts = {}) {
+        const cw = Math.max(64, Math.floor(Number(w) || 256));
+        const ch = Math.max(64, Math.floor(Number(h) || 256));
+        const {
+          repeat = false,
+          rx = 1,
+          ry = 1,
+          isLinear = false,
+          isDynamic = false
+        } = opts;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('2D 캔버스 컨텍스트를 생성할 수 없습니다.');
+
+        drawFn(ctx, cw, ch);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = isLinear ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+        tex.anisotropy = 8;
+        if (repeat || rx !== 1 || ry !== 1) {
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(rx, ry);
+        }
+        tex.needsUpdate = true;
+
+        if (!(tex instanceof THREE.CanvasTexture) || !(tex.image instanceof HTMLCanvasElement) || tex.image.width <= 0 || tex.image.height <= 0) {
+          throw new Error('유효하지 않은 CanvasTexture가 감지되었습니다.');
+        }
+
+        if (isDynamic) {
+          dynamicSigns.push({ canvas, tex, drawFn, cw, ch });
+        }
+        return tex;
+      }
+
+      function redrawDynamicSigns() {
+        for (const item of dynamicSigns) {
+          const ctx = item.canvas.getContext('2d');
+          if (!ctx) continue;
+          ctx.clearRect(0, 0, item.cw, item.ch);
+          item.drawFn(ctx, item.cw, item.ch);
+          item.tex.needsUpdate = true;
+        }
+      }
+
+      const TEXTURE_SLOTS = [
+        'map', 'emissiveMap', 'bumpMap', 'roughnessMap',
+        'alphaMap', 'metalnessMap', 'normalMap', 'aoMap', 'lightMap'
+      ];
+
+      function isValidGLBImage(img) {
+        if (!img || typeof img !== 'object') return false;
+        const validType =
+          (typeof HTMLCanvasElement !== 'undefined' && img instanceof HTMLCanvasElement) ||
+          (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement) ||
+          (typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap);
+        if (!validType) return false;
+        const iw = img.naturalWidth || img.width || 0;
+        const ih = img.naturalHeight || img.height || 0;
+        return iw > 0 && ih > 0;
+      }
+
+      function sanitizeSceneForGLB(targetRoot) {
+        const detached = [];
+        targetRoot.traverse((obj) => {
+          if (!obj.visible || !obj.isMesh || !obj.material) return;
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          for (const mat of mats) {
+            if (!mat) continue;
+            for (const slot of TEXTURE_SLOTS) {
+              const tex = mat[slot];
+              if (tex == null) continue;
+              if (!(tex instanceof THREE.Texture) || !isValidGLBImage(tex.image)) {
+                console.warn(`[sanitizeSceneForGLB] 비정상 텍스처 임시 분리: ${obj.name}.${slot}`);
+                detached.push({ mat, slot, tex });
+                mat[slot] = null;
+                mat.needsUpdate = true;
+              }
+            }
+          }
+        });
+        return () => {
+          for (const item of detached) {
+            item.mat[item.slot] = item.tex;
+            item.mat.needsUpdate = true;
+          }
+        };
+      }
+
+      // =======================================================================
+      // 4. 공용 기하 유틸리티 (PRNG, UV, 윤곽선, EdgeFacade, 3DChannelSign, GeometryBatcher)
+      // =======================================================================
+      function mulberry32(seed) {
+        let a = seed >>> 0;
+        return function () {
+          a |= 0;
+          a = (a + 0x6d2b79f5) | 0;
+          let t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function applyWorldPlanarUVs(geometry, scaleU = 0.30, scaleV = 0.30) {
+        geometry.computeVertexNormals();
+        const pos = geometry.attributes.position;
+        const norm = geometry.attributes.normal;
+        const uv = geometry.attributes.uv;
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+          const nx = Math.abs(norm.getX(i)), ny = Math.abs(norm.getY(i)), nz = Math.abs(norm.getZ(i));
+          if (ny >= nx && ny >= nz) uv.setXY(i, x * scaleU, z * scaleV);
+          else if (nx >= nz) uv.setXY(i, z * scaleU, y * scaleV);
+          else uv.setXY(i, x * scaleU, y * scaleV);
+        }
+        uv.needsUpdate = true;
+      }
+
+      function addOutlineForMesh(mesh, parentGrp = null, color = 0x1e293b, threshold = 26, opacity = 0.42) {
+        const edges = new THREE.EdgesGeometry(mesh.geometry, threshold);
+        const line = new THREE.LineSegments(
+          edges,
+          new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity })
+        );
+        mesh.updateMatrix();
+        if (parentGrp) {
+          parentGrp.updateMatrixWorld(true);
+          const m4 = new THREE.Matrix4().multiplyMatrices(parentGrp.matrixWorld, mesh.matrix);
+          line.applyMatrix4(m4);
+        } else {
+          line.applyMatrix4(mesh.matrix);
+        }
+        outlineGroup.add(line);
+        return line;
+      }
+
+      /**
+       * 외부에서 정면으로 볼 때 좌(leftPt) -> 우(rightPt)로 local +X가 진행하고
+       * 벽면 외향 법선이 local +Z가 되는 입면 서브그룹 생성기 (텍스트 좌우 반전 0%)
+       */
+      function createEdgeFacadeGroup(parentGroup, leftPt, rightPt, name) {
+        const dx = rightPt.x - leftPt.x;
+        const dz = rightPt.z - leftPt.z;
+        const len = Math.hypot(dx, dz);
+        const ux = dx / len;
+        const uz = dz / len;
+        const nx = -uz;
+        const nz = ux;
+        const rotY = Math.atan2(nx, nz);
+
+        const grp = new THREE.Group();
+        grp.name = name;
+        grp.position.set(leftPt.x, 0, leftPt.z);
+        grp.rotation.y = rotY;
+        parentGroup.add(grp);
+
+        return { group: grp, len, nx, nz, ux, uz, rotY };
+      }
+
+      /**
+       * 다층 3D 입체 채널 문자 빌더 (InstancedMesh 없이 표준 THREE.Mesh 사용 -> GLB 100% 호환)
+       */
+      function add3DChannelSign(parentGroup, opts) {
+        const {
+          x, y, zStart, depth, width, height,
+          canvasW, canvasH, drawFrontFn, drawSideFn,
+          layers = 4, emissiveColor = '#FFFFFF', emissiveIntensity = 0.14, name = 'ChannelSign'
+        } = opts;
+
+        const sideTex = createSafeCanvasTexture(canvasW, canvasH, drawSideFn, { isDynamic: true });
+        const frontTex = createSafeCanvasTexture(canvasW, canvasH, drawFrontFn, { isDynamic: true });
+
+        const sideMat = new THREE.MeshStandardMaterial({
+          map: sideTex,
+          transparent: true,
+          alphaTest: 0.22,
+          roughness: 0.50,
+          metalness: 0.18
+        });
+
+        for (let i = 0; i < layers; i++) {
+          const zl = zStart + (i / layers) * depth;
+          const m = new THREE.Mesh(new THREE.PlaneGeometry(width, height), sideMat);
+          m.position.set(x, y, zl);
+          parentGroup.add(m);
+        }
+
+        const frontMat = new THREE.MeshStandardMaterial({
+          map: frontTex,
+          transparent: true,
+          alphaTest: 0.18,
+          emissive: new THREE.Color(emissiveColor),
+          emissiveMap: frontTex,
+          emissiveIntensity,
+          roughness: 0.24,
+          metalness: 0.08
+        });
+        const frontMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), frontMat);
+        frontMesh.name = name;
+        frontMesh.position.set(x, y, zStart + depth + 0.006);
+        parentGroup.add(frontMesh);
+      }
+
+      /**
+       * 단일 평면 고대비 간판 / 유리 데칼 배치 헬퍼
+       */
+      function addSignPlane(parentGroup, {
+        x, y, z, w, h, cw, ch, drawFn, transparent = false, rotY = 0, renderOrder = 3, name = 'SignPlane'
+      }) {
+        const tex = createSafeCanvasTexture(cw, ch, drawFn, { isDynamic: true });
+        const cfg = { map: tex, roughness: 0.34 };
+        if (transparent) {
+          cfg.transparent = true;
+          cfg.alphaTest = 0.14;
+        }
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial(cfg));
+        mesh.name = name;
+        mesh.position.set(x, y, z);
+        if (rotY !== 0) mesh.rotation.y = rotY;
+        mesh.renderOrder = renderOrder;
+        parentGroup.add(mesh);
+        return mesh;
+      }
+
+      /**
+       * 100% GLB-Compatible GeometryBatcher (InstancedMesh 절대 미사용)
+       * - 모든 프리미티브를 .toNonIndexed() 변환 후 position/normal/uv만 정규화
+       * - BufferGeometryUtils.mergeGeometries(geoms, false)로 재질별 단일 THREE.Mesh 병합
+       */
+      class GeometryBatcher {
+        constructor() {
+          this.buckets = new Map();
+          this.baseBox = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+          this.baseCyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 12).toNonIndexed();
+          this._mat4 = new THREE.Matrix4();
+          this._pos = new THREE.Vector3();
+          this._quat = new THREE.Quaternion();
+          this._euler = new THREE.Euler();
+          this._scale = new THREE.Vector3();
+        }
+
+        _ensure(key, material) {
+          if (!this.buckets.has(key)) {
+            this.buckets.set(key, { material, geoms: [] });
+          }
+          return this.buckets.get(key);
+        }
+
+        _normalize(src) {
+          const g = src.index ? src.toNonIndexed() : src.clone();
+          if (!g.attributes.normal) g.computeVertexNormals();
+          if (!g.attributes.uv) {
+            const count = g.attributes.position.count;
+            g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(count * 2), 2));
+          }
+          for (const attr of Object.keys(g.attributes)) {
+            if (attr !== 'position' && attr !== 'normal' && attr !== 'uv') {
+              g.deleteAttribute(attr);
+            }
+          }
+          return g;
+        }
+
+        addGeometry(key, material, geometry, matrix = null) {
+          const g = this._normalize(geometry);
+          if (matrix) g.applyMatrix4(matrix);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        addBox(key, material, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, worldUV = 0) {
+          const g = this.baseBox.clone();
+          this._pos.set(x, y, z);
+          this._euler.set(rx, ry, rz);
+          this._quat.setFromEuler(this._euler);
+          this._scale.set(sx, sy, sz);
+          this._mat4.compose(this._pos, this._quat, this._scale);
+          g.applyMatrix4(this._mat4);
+          if (worldUV > 0) applyWorldPlanarUVs(g, worldUV, worldUV);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        addCylinder(key, material, x, y, z, diameter, length, rx = 0, ry = 0, rz = 0) {
+          const g = this.baseCyl.clone();
+          this._pos.set(x, y, z);
+          this._euler.set(rx, ry, rz);
+          this._quat.setFromEuler(this._euler);
+          this._scale.set(diameter, length, diameter);
+          this._mat4.compose(this._pos, this._quat, this._scale);
+          g.applyMatrix4(this._mat4);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        buildAll(parentGroup, renderOrder = 0) {
+          const created = [];
+          for (const [key, { material, geoms }] of this.buckets.entries()) {
+            if (!geoms.length) continue;
+            const merged = BufferGeometryUtils.mergeGeometries(geoms, false);
+            geoms.forEach((g) => g.dispose());
+            geoms.length = 0;
+            if (!merged) {
+              console.warn(`GeometryBatcher merge failed: ${key}`);
+              continue;
+            }
+            const mesh = new THREE.Mesh(merged, material);
+            mesh.name = `Merged_${key}`;
+            if (renderOrder !== 0) mesh.renderOrder = renderOrder;
+            parentGroup.add(mesh);
+            created.push(mesh);
+          }
+          this.buckets.clear();
+          return created;
+        }
+
+        disposeBases() {
+          this.baseBox.dispose();
+          this.baseCyl.dispose();
+        }
+      }
+
+      // =======================================================================
+      // 5. 프로시저럴 텍스처 라이브러리 (외부 이미지 URL 0개)
+      // =======================================================================
+      /**
+       * 밝은 회베이지 노출 콘크리트 / 석재 패널 그리드 (미세 웨더링 & 빗물 얼룩 포함)
+       */
+      function createConcreteStoneTextures() {
+        const rand = mulberry32(15413);
+        const map = createSafeCanvasTexture(512, 512, (ctx, w, h) => {
+          ctx.fillStyle = '#8C8880'; ctx.fillRect(0, 0, w, h);
+          const cols = 4, rows = 4, tw = w / cols, th = h / rows;
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const d = (rand() - 0.5) * 14;
+              ctx.fillStyle = `rgb(${Math.round(196 + d)},${Math.round(191 + d)},${Math.round(183 + d)})`;
+              ctx.fillRect(c * tw + 2, r * th + 2, tw - 4, th - 4);
+            }
+          }
+          // 미세 노출 콘크리트 질감 & 수직 웨더링
+          for (let i = 0; i < 65; i++) {
+            ctx.fillStyle = rand() > 0.5 ? 'rgba(62, 58, 52, 0.055)' : 'rgba(255, 252, 246, 0.035)';
+            ctx.fillRect(rand() * w, 0, 5 + rand() * 14, h);
+          }
+          for (let i = 0; i < 8500; i++) {
+            ctx.fillStyle = rand() > 0.5 ? 'rgba(255,254,250,0.045)' : 'rgba(30,28,25,0.055)';
+            ctx.fillRect(rand() * w, rand() * h, 2, 2);
+          }
+        }, { repeat: true });
+
+        const bumpMap = createSafeCanvasTexture(512, 512, (ctx, w, h) => {
+          ctx.fillStyle = '#262626'; ctx.fillRect(0, 0, w, h);
+          const cols = 4, rows = 4, tw = w / cols, th = h / rows;
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const v = Math.round(208 + (rand() - 0.5) * 20);
+              ctx.fillStyle = `rgb(${v},${v},${v})`;
+              ctx.fillRect(c * tw + 2, r * th + 2, tw - 4, th - 4);
+            }
+          }
+        }, { repeat: true, isLinear: true });
+
+        return { map, bumpMap };
+      }
+
+      function createRoofUrethaneTex(hex, seed = 900) {
+        const rand = mulberry32(seed);
+        return createSafeCanvasTexture(512, 512, (ctx, w, h) => {
+          ctx.fillStyle = hex; ctx.fillRect(0, 0, w, h);
+          for (let i = 0; i < 320; i++) {
+            ctx.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.075)' : 'rgba(12,26,38,0.085)';
+            ctx.beginPath(); ctx.arc(rand() * w, rand() * h, 14 + rand() * 34, 0, Math.PI * 2); ctx.fill();
+          }
+        }, { repeat: true, rx: 2, ry: 2 });
+      }
+
+      function createSidewalkTileTex() {
+        const rand = mulberry32(15415);
+        return createSafeCanvasTexture(512, 512, (ctx, w, h) => {
+          ctx.fillStyle = '#C4C9CE'; ctx.fillRect(0, 0, w, h);
+          const t = 64;
+          for (let y = 0; y < h; y += t) {
+            for (let x = 0; x < w; x += t) {
+              const isCheck = ((x / t + y / t) % 2 === 0);
+              const d = Math.round((rand() - 0.5) * 12);
+              const base = isCheck ? 204 : 186;
+              ctx.fillStyle = `rgb(${base + d},${base + 2 + d},${base + 4 + d})`;
+              ctx.fillRect(x + 2, y + 2, t - 4, t - 4);
+            }
+          }
+        }, { repeat: true });
+      }
+
+      // =======================================================================
+      // 6. 공용 PBR 재질 사전 선언 (ZERO UNDEFINED VARIABLES!)
+      // =======================================================================
+      const concreteTextures = createConcreteStoneTextures();
+      const concreteWallMat = new THREE.MeshStandardMaterial({
+        map: concreteTextures.map,
+        bumpMap: concreteTextures.bumpMap,
+        bumpScale: 0.020,
+        roughness: 0.78,
+        metalness: 0.04
+      });
+
+      const greenRoofMat = new THREE.MeshStandardMaterial({
+        map: createRoofUrethaneTex('#2F7A54', 15429),
+        roughness: 0.84
+      });
+      const blueRoofMat = new THREE.MeshStandardMaterial({
+        map: createRoofUrethaneTex('#2E7CC2', 15430),
+        roughness: 0.82
+      });
+
+      // 핵심: 2·3층 맑은 청록빛 투명 통창 커튼월 유리 재질 (내부 투시!)
+      const curtainTransparentGlassMat = new THREE.MeshStandardMaterial({
+        color: '#8AC4CE',
+        transparent: true,
+        opacity: 0.28,
+        roughness: 0.08,
+        metalness: 0.18,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+
+      // 1층 상가 투명 유리 재질
+      const shopClearGlassMat = new THREE.MeshStandardMaterial({
+        color: '#9CCCD6',
+        transparent: true,
+        opacity: 0.30,
+        roughness: 0.10,
+        metalness: 0.16,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+
+      // 일부 2·3층 창 상단 반투명 롤블라인드
+      const rollBlindMat = new THREE.MeshStandardMaterial({
+        color: '#EFF2F5',
+        transparent: true,
+        opacity: 0.72,
+        roughness: 0.82,
+        side: THREE.DoubleSide
+      });
+
+      // 커튼월 짙은 차콜-브론즈 알루미늄 멀리온 프레임
+      const mullionDarkMat = new THREE.MeshStandardMaterial({
+        color: '#242B30',
+        roughness: 0.42,
+        metalness: 0.56
+      });
+
+      // 2·3층 실내 인테리어 전용 재질
+      const interiorFloor2FMat   = new THREE.MeshStandardMaterial({ color: '#E2D7C5', roughness: 0.72 });
+      const interiorFloor3FMat   = new THREE.MeshStandardMaterial({ color: '#ECEFF2', roughness: 0.64 });
+      const interiorWallMat      = new THREE.MeshStandardMaterial({ color: '#F4F5F7', roughness: 0.78 });
+      const interiorOakMat       = new THREE.MeshStandardMaterial({ color: '#B88E62', roughness: 0.68 });
+      const interiorDentalChairMat = new THREE.MeshStandardMaterial({ color: '#58A6B8', roughness: 0.44, metalness: 0.12 });
+      const interiorEntChairMat  = new THREE.MeshStandardMaterial({ color: '#3B6E8C', roughness: 0.58 });
+      const interiorPartitionGlassMat = new THREE.MeshStandardMaterial({
+        color: '#D4EBF0', transparent: true, opacity: 0.46, roughness: 0.20, depthWrite: false
+      });
+      const ledCeilingMat = new THREE.MeshStandardMaterial({
+        color: '#FFFFFF', emissive: '#FFFDF4', emissiveIntensity: 0.92, roughness: 0.20
+      });
+
+      // 브랜드 & 공용 재질
+      const whiteMat          = new THREE.MeshStandardMaterial({ color: '#F5F7FA', roughness: 0.52 });
+      const copingMat         = new THREE.MeshStandardMaterial({ color: '#9BA2AA', roughness: 0.58, metalness: 0.22 });
+      const darkMetalMat      = new THREE.MeshStandardMaterial({ color: '#1F2329', roughness: 0.44, metalness: 0.50 });
+      const stainlessMat      = new THREE.MeshStandardMaterial({ color: '#CFD6DE', roughness: 0.24, metalness: 0.80 });
+      const darkWindowMat     = new THREE.MeshStandardMaterial({ color: '#243A4E', roughness: 0.16, metalness: 0.52 });
+      const warmShopBackMat   = new THREE.MeshStandardMaterial({ color: '#F5EAD6', emissive: '#FEF3C7', emissiveIntensity: 0.34, roughness: 0.74 });
+      const navySignMat       = new THREE.MeshStandardMaterial({ color: '#183466', roughness: 0.38 });
+      const purpleSignMat     = new THREE.MeshStandardMaterial({ color: '#5B3A8E', roughness: 0.38 });
+      const purplePinkSignMat = new THREE.MeshStandardMaterial({ color: '#A3488C', roughness: 0.40 });
+      const skyBlueSignMat    = new THREE.MeshStandardMaterial({ color: '#3885D6', roughness: 0.38 });
+      const redAccentMat      = new THREE.MeshStandardMaterial({ color: '#C81E2B', roughness: 0.40 });
+      const acUnitMat         = new THREE.MeshStandardMaterial({ color: '#E2E6EB', roughness: 0.50, metalness: 0.16 });
+      const curtainFabric1Mat = new THREE.MeshStandardMaterial({ color: '#E8DFD1', roughness: 0.86 });
+      const curtainFabric2Mat = new THREE.MeshStandardMaterial({ color: '#7D9AB0', roughness: 0.86 });
+      const curtainFabric3Mat = new THREE.MeshStandardMaterial({ color: '#C79B86', roughness: 0.86 });
+
+      const sidewalkMat       = new THREE.MeshStandardMaterial({ map: createSidewalkTileTex(), roughness: 0.86 });
+      const curbMat           = new THREE.MeshStandardMaterial({ color: '#9CA3AC', roughness: 0.78 });
+      const tactileYellowMat  = new THREE.MeshStandardMaterial({ color: '#EAB308', roughness: 0.72 });
+
+      // =======================================================================
+      // 7. 홍일빌딩 6각형 비대칭 평면 좌표 상수 (North=-Z, South=+Z, West=-X, East=+X)
+      // =======================================================================
+      const P_NW = { x: -6.0, z: -10.5 };
+      const P_SW = { x: -6.0, z: +10.5 };
+      const P_SE = { x: +4.0, z: +10.5 };
+      const P_EM = { x: +5.6, z:  +1.2 };
+      const P_NE = { x: +4.8, z:  -7.8 };
+      const P_N  = { x: +1.2, z: -10.5 };
+
+      const FULL_POLY  = [P_NW, P_SW, P_SE, P_EM, P_NE, P_N];
+      const NORTH_POLY = [P_NW, { x: -6.0, z: +1.2 }, P_EM, P_NE, P_N];
+      const SOUTH_POLY = [{ x: -6.0, z: +1.2 }, P_SW, P_SE, P_EM];
+
+      function makePolygonExtrude(pts, depth, yBottom, uvScale = 0.28) {
+        const s = new THREE.Shape();
+        pts.forEach((p, idx) => {
+          if (idx === 0) s.moveTo(p.x, -p.z);
+          else s.lineTo(p.x, -p.z);
+        });
+        s.closePath();
+        const geo = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false });
+        geo.rotateX(-Math.PI / 2);
+        geo.translate(0, yBottom, 0);
+        if (uvScale > 0) applyWorldPlanarUVs(geo, uvScale, uvScale);
+        return geo;
+      }
+
+      /**
+       * 폴리곤 변(A->B) 안쪽으로 벽 두께(thick)만큼 돌출된 솔리드 외벽 생성 헬퍼 (2F·3F 남/동측 불투명 벽체용)
+       */
+      function addPerimeterWallStrip(batcher, key, material, A, B, yBot, yTop, thick, uvScale = 0.28) {
+        const dx = B.x - A.x, dz = B.z - A.z;
+        const len = Math.hypot(dx, dz);
+        const ux = dx / len, uz = dz / len;
+        // Outward normal is (-uz, ux), so inward normal is (+uz, -ux)
+        const inX = uz, inZ = -ux;
+        const mx = (A.x + B.x) * 0.5 + inX * (thick * 0.5);
+        const mz = (A.z + B.z) * 0.5 + inZ * (thick * 0.5);
+        const rotY = Math.atan2(-dz, dx);
+        batcher.addBox(key, material, mx, (yBot + yTop) * 0.5, mz, len + 0.08, yTop - yBot, thick, 0, rotY, 0, uvScale);
+      }
+
+      // =======================================================================
+      // 8. GROUP 1 (`bodyGroup`): 외관 본체 (1F 코어 · 2F/3F 바닥/천장 슬래브 · 남/동 불투명 벽 · 3F 스팬드럴 · 4F 매스 · 옥상 · 옥탑 십자가)
+      // =======================================================================
+      function buildBuildingBody() {
+        const b = new GeometryBatcher();
+
+        // 1) 1F Main Core (`Y = 0.00..3.40m`) — West side recessed slightly (`x = -4.8`) so 1F shopfronts have real depth!
+        const f1BackPoly = [
+          { x: -4.8, z: -10.5 },
+          { x: -4.8, z: +10.5 },
+          P_SE, P_EM, P_NE, P_N
+        ];
+        const f1BackGeo = makePolygonExtrude(f1BackPoly, 3.40, 0.0, 0.28);
+        const f1BackMesh = new THREE.Mesh(f1BackGeo, concreteWallMat);
+        f1BackMesh.name = 'Body_1F_MainCore';
+        bodyGroup.add(f1BackMesh);
+
+        // 1F North & NW concrete corner plinth wrapping `X = -6.0..-4.8` at North corner (`Z = -10.5..-9.8`) & South pier (`Z = +10.0..+10.5`)
+        b.addBox('Body_1F_Piers', concreteWallMat, -5.40, 1.70, -10.15, 1.25, 3.40, 0.72, 0, 0, 0, 0.28);
+        b.addBox('Body_1F_Piers', concreteWallMat, -5.40, 1.70,  10.22, 1.25, 3.40, 0.58, 0, 0, 0, 0.28);
+        // 1F Ceiling soffit above West storefront bays (`X = -6.0..-4.8`, `Y = 3.22..3.40`)
+        b.addBox('Body_1F_Soffit', concreteWallMat, -5.40, 3.31, 0.00, 1.22, 0.18, 21.00, 0, 0, 0, 0.28);
+        // 1F Floor pad for West storefront bays (`Y = 0.0..0.08`)
+        b.addBox('Body_1F_ShopFloor', interiorFloor3FMat, -5.40, 0.04, 0.00, 1.22, 0.08, 20.60);
+
+        // 2) 2F & 3F Structural Floor Slabs (Full 6-Vertex Polygon, leaving West/North/NE completely open for transparent glass!)
+        const slab2Geo = makePolygonExtrude(FULL_POLY, 0.22, 3.36, 0.26);
+        const slab2Mesh = new THREE.Mesh(slab2Geo, [interiorFloor2FMat, concreteWallMat]);
+        slab2Mesh.name = 'Body_2F_FloorSlab';
+
+        const slab3Geo = makePolygonExtrude(FULL_POLY, 0.22, 6.60, 0.26);
+        const slab3Mesh = new THREE.Mesh(slab3Geo, [interiorFloor3FMat, concreteWallMat]);
+        slab3Mesh.name = 'Body_3F_FloorSlab';
+        bodyGroup.add(slab2Mesh, slab3Mesh);
+
+        // 3) 2F & 3F Opaque Perimeter Walls ONLY along South, East-South, and East-North (`Y = 3.40..9.90m`, thick 0.42m)
+        addPerimeterWallStrip(b, 'Body_23F_OpaqueWalls', concreteWallMat, P_SW, P_SE, 3.40, 9.90, 0.44, 0.28); // South
+        addPerimeterWallStrip(b, 'Body_23F_OpaqueWalls', concreteWallMat, P_SE, P_EM, 3.40, 9.90, 0.44, 0.28); // East-South
+        addPerimeterWallStrip(b, 'Body_23F_OpaqueWalls', concreteWallMat, P_EM, P_NE, 3.40, 9.90, 0.44, 0.28); // East-North
+
+        // Solid concrete corner columns framing the ends of the wrap-around curtain wall (`P_SW` & `P_NE`)
+        b.addBox('Body_23F_CornerCols', concreteWallMat, -5.78, 6.65, 10.28, 0.46, 6.50, 0.46, 0, 0, 0, 0.28);
+        b.addBox('Body_23F_CornerCols', concreteWallMat,  4.58, 6.65, -7.65, 0.46, 6.50, 0.46, 0, 0, 0, 0.28);
+
+        // 4) 3F Upper Spandrel Band (`Y = 9.90..11.15m`, Full 6-Vertex Polygon!) + South Green Urethane Roof (`#2F7A54`)!
+        const spandrelGeo = makePolygonExtrude(FULL_POLY, 1.25, 9.90, 0.28);
+        const spandrelMesh = new THREE.Mesh(spandrelGeo, [greenRoofMat, concreteWallMat]);
+        spandrelMesh.name = 'Body_3F_UpperSpandrel_And_GreenRoof';
+        bodyGroup.add(spandrelMesh);
+        addOutlineForMesh(spandrelMesh);
+
+        // South 3F Green Roof Concrete Parapet (`Y = 11.15..11.65m`)
+        addPerimeterWallStrip(b, 'Body_3F_Parapet', concreteWallMat, { x: -6.0, z: 1.2 }, P_SW, 11.15, 11.65, 0.30, 0.28);
+        addPerimeterWallStrip(b, 'Body_3F_Parapet', concreteWallMat, P_SW, P_SE, 11.15, 11.65, 0.30, 0.28);
+        addPerimeterWallStrip(b, 'Body_3F_Parapet', concreteWallMat, P_SE, P_EM, 11.15, 11.65, 0.30, 0.28);
+
+        // 5) 4F North Concrete Mass (`Z = -10.5..+1.2`, `Y = 11.15..13.90m`) with Cobalt-Blue Roof (`#2E7CC2`)!
+        const f4Geo = makePolygonExtrude(NORTH_POLY, 2.75, 11.15, 0.28);
+        const f4Mesh = new THREE.Mesh(f4Geo, [blueRoofMat, concreteWallMat]);
+        f4Mesh.name = 'Body_4F_NorthMass_BlueRoof';
+        bodyGroup.add(f4Mesh);
+        addOutlineForMesh(f4Mesh);
+
+        // 4F Blue Roof Perimeter Parapet (`Y = 13.90..14.38m`)
+        for (let i = 0; i < NORTH_POLY.length; i++) {
+          const A = NORTH_POLY[i], B = NORTH_POLY[(i + 1) % NORTH_POLY.length];
+          addPerimeterWallStrip(b, 'Body_4F_Parapet', concreteWallMat, A, B, 13.90, 14.38, 0.28, 0.28);
+        }
+
+        // 6) Rooftop Stairwell Penthouse (`Y = 13.90..16.40m`) at NE roof area + 3-Sided Green Medical Cross (`+`)!
+        const pentW = 3.20, pentD = 3.40, pentH = 2.50, pentX = 0.65, pentZ = -7.35;
+        const greenCrossTex = createSafeCanvasTexture(256, 256, (ctx, w, h) => {
+          ctx.fillStyle = '#F2F4F7'; ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#CBD5E1'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+          // 선명한 초록 의료 십자가 (+)
+          ctx.fillStyle = '#1E824C';
+          ctx.fillRect(w * 0.38, h * 0.16, w * 0.24, h * 0.68);
+          ctx.fillRect(w * 0.16, h * 0.38, w * 0.68, h * 0.24);
+        });
+        const greenCrossMat = new THREE.MeshStandardMaterial({ map: greenCrossTex, roughness: 0.42 });
+        const pentMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(pentW, pentH, pentD),
+          [greenCrossMat, greenCrossMat, copingMat, whiteMat, whiteMat, greenCrossMat] // +X(East), -X(West), -Z(North) all show '+'!
+        );
+        pentMesh.name = 'Roof_StairwellPenthouse_GreenCross';
+        pentMesh.position.set(pentX, 13.90 + pentH * 0.5, pentZ);
+        bodyGroup.add(pentMesh);
+        addOutlineForMesh(pentMesh);
+
+        // 7) 4F Recessed Dark-Framed Square Windows on West(4), North(2), NE Chamfer(1), East-North(4)
+        // West 4F (`X = -6.0`, `Z = -10.5..+1.2`, len = 11.7m)
+        [-8.8, -6.1, -3.4, -0.7].forEach((wz) => {
+          b.addBox('Body_4F_WinFrame', mullionDarkMat, -6.03, 12.55, wz, 0.12, 1.56, 1.65);
+          b.addBox('Body_4F_WinGlass', darkWindowMat,  -6.07, 12.55, wz, 0.04, 1.40, 1.48);
+        });
+        // North 4F (`Z = -10.5`, `X = -6.0..+1.2`, 2 windows)
+        [-3.8, -0.8].forEach((wx) => {
+          b.addBox('Body_4F_WinFrame', mullionDarkMat, wx, 12.55, -10.53, 1.75, 1.56, 0.12);
+          b.addBox('Body_4F_WinGlass', darkWindowMat,  wx, 12.55, -10.57, 1.58, 1.40, 0.04);
+        });
+        // NE Chamfer 4F (1 window)
+        {
+          const { group: ne4Grp, len } = createEdgeFacadeGroup(bodyGroup, P_NE, P_N, 'Body_NEChamfer_4FWin');
+          const n4b = new GeometryBatcher();
+          n4b.addBox('Body_4F_WinFrame', mullionDarkMat, len * 0.5, 12.55, 0.03, 1.68, 1.56, 0.12);
+          n4b.addBox('Body_4F_WinGlass', darkWindowMat,  len * 0.5, 12.55, 0.07, 1.52, 1.40, 0.04);
+          n4b.buildAll(ne4Grp);
+          n4b.disposeBases();
+        }
+
+        // 8) East-North 4F Edge (`P_EM -> P_NE`, len = 9.035m): 4F 4 windows, 3F & 2F 3 dark-framed windows, 1F clean wall + 2 windows + 2 AC units!
+        {
+          const { group: enGrp } = createEdgeFacadeGroup(bodyGroup, P_EM, P_NE, 'Body_EastNorth_Windows');
+          const enb = new GeometryBatcher();
+          // 4F: 4 recessed square windows
+          [1.35, 3.55, 5.75, 7.80].forEach((wu) => {
+            enb.addBox('EN_WinFrames', mullionDarkMat, wu, 12.55, 0.03, 1.42, 1.48, 0.12);
+            enb.addBox('EN_WinGlass', darkWindowMat,   wu, 12.55, 0.07, 1.26, 1.32, 0.04);
+          });
+          // 3F & 2F: 3 wide dark-framed windows per floor
+          [5.05, 8.15].forEach((wy) => {
+            [1.65, 4.45, 7.25].forEach((wu) => {
+              enb.addBox('EN_WinFrames', mullionDarkMat, wu, wy, 0.03, 1.95, 1.55, 0.12);
+              enb.addBox('EN_WinGlass', darkWindowMat,   wu, wy, 0.07, 1.78, 1.38, 0.04);
+              enb.addBox('EN_WinBlinds', whiteMat,       wu, wy + 0.25, 0.085, 1.72, 0.85, 0.02);
+            });
+          });
+          // 1F: 2 dark windows + 2 compact white AC outdoor units (NO 벽산아파트 wall!)
+          [2.45, 6.25].forEach((wu) => {
+            enb.addBox('EN_WinFrames', mullionDarkMat, wu, 1.75, 0.03, 1.85, 1.42, 0.12);
+            enb.addBox('EN_WinGlass', darkWindowMat,   wu, 1.75, 0.07, 1.68, 1.26, 0.04);
+          });
+          enb.addBox('EN_ACUnits', acUnitMat, 1.10, 0.45, 0.36, 0.86, 0.72, 0.44);
+          enb.addBox('EN_ACUnits', acUnitMat, 4.35, 0.45, 0.36, 0.86, 0.72, 0.44);
+          enb.buildAll(enGrp);
+          enb.disposeBases();
+        }
+
+        // 9) East-South 3F Edge (`P_SE -> P_EM`, len = 9.437m): 2F & 3F crisp white-framed windows + 1F rear door & window
+        {
+          const { group: esGrp } = createEdgeFacadeGroup(bodyGroup, P_SE, P_EM, 'Body_EastSouth_Windows');
+          const esb = new GeometryBatcher();
+          [5.05, 8.15].forEach((wy) => {
+            [2.05, 4.95, 7.65].forEach((wu) => {
+              esb.addBox('ES_WhiteFrames', whiteMat,   wu, wy, 0.04, 2.05, 1.52, 0.12);
+              esb.addBox('ES_WinGlass', darkWindowMat, wu, wy, 0.08, 1.88, 1.36, 0.04);
+              esb.addBox('ES_WhiteFrames', whiteMat,   wu, wy, 0.09, 0.06, 1.38, 0.05);
+            });
+          });
+          esb.addBox('ES_1F_Door', darkMetalMat,  2.60, 1.20, 0.04, 1.20, 2.35, 0.10);
+          esb.addBox('ES_1F_Win', whiteMat,       6.40, 1.75, 0.04, 2.15, 1.38, 0.10);
+          esb.addBox('ES_WinGlass', darkWindowMat, 6.40, 1.75, 0.08, 1.98, 1.22, 0.04);
+          esb.buildAll(esGrp);
+          esb.disposeBases();
+        }
+
+        // 10) South 3F Edge (`P_SW -> P_SE`, len = 10.0m): 3F & 2F 4-pane white-framed horizontal windows + 1F concrete base
+        {
+          const { group: sGrp } = createEdgeFacadeGroup(bodyGroup, P_SW, P_SE, 'Body_South_Windows');
+          const sb = new GeometryBatcher();
+          // 3F 4-pane white-framed window (`Y = 8.40m`, `u = 1.2..8.8`)
+          sb.addBox('S_WhiteFrames', whiteMat,    5.00, 8.40, 0.04, 7.60, 1.82, 0.12);
+          sb.addBox('S_WinGlass', darkWindowMat,  5.00, 8.40, 0.08, 7.40, 1.64, 0.04);
+          [3.10, 5.00, 6.90].forEach((mu) => sb.addBox('S_WhiteFrames', whiteMat, mu, 8.40, 0.09, 0.08, 1.66, 0.06));
+
+          // 2F 4-pane white-framed window (`Y = 5.00m`, `u = 1.2..8.8`)
+          sb.addBox('S_WhiteFrames', whiteMat,    5.00, 5.00, 0.04, 7.60, 1.75, 0.12);
+          sb.addBox('S_WinGlass', darkWindowMat,  5.00, 5.00, 0.08, 7.40, 1.58, 0.04);
+          [3.10, 5.00, 6.90].forEach((mu) => sb.addBox('S_WhiteFrames', whiteMat, mu, 5.00, 0.09, 0.08, 1.60, 0.06));
+          sb.buildAll(sGrp);
+          sb.disposeBases();
+        }
+
+        // 11) 1F West Storefronts Recessed Interior Alcoves (`X = -6.0..-4.8`, `Z = -10.5..+10.5`)
+        {
+          const { group: w1Grp } = createEdgeFacadeGroup(bodyGroup, P_NW, P_SW, 'Body_West_1FStorefronts');
+          const w1b = new GeometryBatcher();
+
+          // Warm lit back walls for the 4 bays (Curtain Shop, Lobby, MeongNyang, Pharmacy)
+          w1b.addBox('W1_WarmBack', warmShopBackMat,  4.40, 1.45, -1.08,  8.10, 2.86, 0.10); // 커튼명가 창
+          w1b.addBox('W1_LobbyBack', interiorWallMat, 10.10, 1.45, -1.08, 2.30, 2.86, 0.10); // 홍일빌딩 로비
+          w1b.addBox('W1_WarmBack', warmShopBackMat, 13.30, 1.45, -1.08,  3.50, 2.86, 0.10); // 멍냥스토어
+          w1b.addBox('W1_WarmBack', warmShopBackMat, 18.00, 1.45, -1.08,  5.00, 2.86, 0.10); // 성동온누리약국
+
+          // Interior 1F shop display details visible through clear 1F shop glass!
+          // 커튼명가 창: hanging fabric curtain swatches inside (`u = 1.6..7.6`)
+          for (let i = 0; i < 6; i++) {
+            const cMat = i % 3 === 0 ? curtainFabric1Mat : (i % 3 === 1 ? curtainFabric2Mat : curtainFabric3Mat);
+            const cKey = `W1_CurtainFab${i % 3}`;
+            w1b.addBox(cKey, cMat, 1.85 + i * 1.15, 1.48, -0.68, 0.72, 2.15, 0.16);
+          }
+          // 멍냥스토어: pet supply shelves inside (`u = 12.2..14.4`)
+          w1b.addBox('W1_PetShelves', interiorOakMat, 13.30, 1.05, -0.78, 2.80, 1.65, 0.34);
+          // 성동온누리약국: pharmacy white shelves & counter (`u = 16.2..19.4`)
+          w1b.addBox('W1_PharmCounter', whiteMat, 17.85, 0.62, -0.72, 3.60, 1.02, 0.45);
+          w1b.addBox('W1_PharmShelf', whiteMat,   17.85, 1.75, -0.96, 3.60, 1.10, 0.24);
+
+          // 1F Storefront Mullion Frames (dark charcoal & navy for MeongNyang)
+          [0.40, 3.85, 6.20, 8.75, 11.45, 15.15, 17.85, 20.55].forEach((mu) => {
+            const isNavy = (mu === 11.45 || mu === 15.15);
+            w1b.addBox(isNavy ? 'W1_NavyFrame' : 'W1_DarkFrame', isNavy ? navySignMat : darkMetalMat, mu, 1.38, 0.04, 0.16, 2.76, 0.14);
+          });
+          w1b.addBox('W1_DarkFrame', darkMetalMat, 10.50, 2.72, 0.04, 20.20, 0.10, 0.14);
+          w1b.addBox('W1_DarkFrame', darkMetalMat, 10.50, 0.06, 0.04, 20.20, 0.12, 0.14);
+
+          // 1F Transparent Shopfront Glass Panes (so displays inside are cleanly visible!)
+          const g1 = new THREE.Mesh(new THREE.PlaneGeometry(8.20, 2.58), shopClearGlassMat);
+          g1.position.set(4.55, 1.38, 0.06); g1.renderOrder = 2;
+          const g2 = new THREE.Mesh(new THREE.PlaneGeometry(2.50, 2.58), shopClearGlassMat);
+          g2.position.set(10.10, 1.38, 0.06); g2.renderOrder = 2;
+          const g3 = new THREE.Mesh(new THREE.PlaneGeometry(3.55, 2.58), shopClearGlassMat);
+          g3.position.set(13.30, 1.38, 0.06); g3.renderOrder = 2;
+          const g4 = new THREE.Mesh(new THREE.PlaneGeometry(5.20, 2.58), shopClearGlassMat);
+          g4.position.set(17.85, 1.38, 0.06); g4.renderOrder = 2;
+          w1Grp.add(g1, g2, g3, g4);
+
+          w1b.buildAll(w1Grp);
+          w1b.disposeBases();
+        }
+
+        b.buildAll(bodyGroup);
+        b.disposeBases();
+      }
+
+      // =======================================================================
+      // 9. GROUP 2 (`curtainGroup`): 2·3층 투명 통창 커튼월 (서측 10베이 · 북측 4베이 · 북동 모따기 3베이)
+      //    - 투명 청록 유리 (`opacity: 0.28, depthWrite: false, renderOrder: 2`)
+      //    - 짙은 차콜-브론즈 알루미늄 멀리온/트랜섬 프레임 + 일부 창 상단 반투명 롤블라인드
+      // =======================================================================
+      function buildTransparentCurtainWalls() {
+        function buildCurtainEdge(A, B, bays, name, blindPattern) {
+          const { group: edgeGrp, len } = createEdgeFacadeGroup(curtainGroup, A, B, name);
+          const fb = new GeometryBatcher();
+
+          const yBot = 3.40, yMid = 6.65, yTop = 9.90, totalH = yTop - yBot;
+          const pad = 0.06;
+          const span = len - pad * 2;
+          const bayW = span / bays;
+
+          // Vertical dark charcoal-bronze aluminum mullions
+          for (let i = 0; i <= bays; i++) {
+            const mu = pad + i * bayW;
+            const thick = (i === 0 || i === bays) ? 0.12 : 0.08;
+            fb.addBox('CW_Mullions', mullionDarkMat, mu, (yBot + yTop) * 0.5, 0.04, thick, totalH, 0.16);
+          }
+
+          // Horizontal transoms (bottom sill, 2F upper bar, 2F/3F slab band, 3F upper bar, top head)
+          [
+            { y: 3.44, h: 0.09 },
+            { y: 4.55, h: 0.06 }, // 2F lower decal rail
+            { y: 5.95, h: 0.06 }, // 2F upper transom
+            { y: 6.65, h: 0.22 }, // 2F/3F slab spandrel bar
+            { y: 7.75, h: 0.06 }, // 3F lower bar
+            { y: 9.15, h: 0.06 }, // 3F upper transom
+            { y: 9.86, h: 0.09 }
+          ].forEach((tr) => {
+            fb.addBox('CW_Mullions', mullionDarkMat, len * 0.5, tr.y, 0.04, span + 0.08, tr.h, 0.15);
+          });
+
+          fb.buildAll(edgeGrp);
+          fb.disposeBases();
+
+          // Continuous Transparent Teal-Tinted Curtain Wall Glass (`renderOrder = 2` so interiors show cleanly!)
+          const glass2F = new THREE.Mesh(new THREE.PlaneGeometry(span, 3.04), curtainTransparentGlassMat);
+          glass2F.name = `${name}_Glass2F`;
+          glass2F.position.set(len * 0.5, 5.02, 0.05);
+          glass2F.renderOrder = 2;
+
+          const glass3F = new THREE.Mesh(new THREE.PlaneGeometry(span, 3.04), curtainTransparentGlassMat);
+          glass3F.name = `${name}_Glass3F`;
+          glass3F.position.set(len * 0.5, 8.27, 0.05);
+          glass3F.renderOrder = 2;
+          edgeGrp.add(glass2F, glass3F);
+
+          // Select upper translucent roll-down blinds inside 2F & 3F windows for authentic clinic look
+          blindPattern.forEach(({ bayIdx, floor, dropH }) => {
+            if (bayIdx < 0 || bayIdx >= bays) return;
+            const bx = pad + (bayIdx + 0.5) * bayW;
+            const by = (floor === 2 ? 6.50 : 9.75) - dropH * 0.5;
+            const blind = new THREE.Mesh(new THREE.PlaneGeometry(bayW - 0.14, dropH), rollBlindMat);
+            blind.position.set(bx, by, -0.06);
+            blind.renderOrder = 1;
+            edgeGrp.add(blind);
+          });
+        }
+
+        // 1) West Facade (`P_NW -> P_SW`, len = 21.0m): 10 bays
+        buildCurtainEdge(P_NW, P_SW, 10, 'CurtainWall_West', [
+          { bayIdx: 1, floor: 3, dropH: 0.65 },
+          { bayIdx: 4, floor: 3, dropH: 0.55 },
+          { bayIdx: 7, floor: 3, dropH: 0.70 },
+          { bayIdx: 2, floor: 2, dropH: 0.50 },
+          { bayIdx: 6, floor: 2, dropH: 0.62 }
+        ]);
+
+        // 2) North Facade (`P_N -> P_NW`, len = 7.2m): 4 bays
+        buildCurtainEdge(P_N, P_NW, 4, 'CurtainWall_North', [
+          { bayIdx: 1, floor: 3, dropH: 0.55 },
+          { bayIdx: 3, floor: 2, dropH: 0.50 }
+        ]);
+
+        // 3) NE Chamfer Facade (`P_NE -> P_N`, len = 4.5m): 3 bays
+        buildCurtainEdge(P_NE, P_N, 3, 'CurtainWall_NEChamfer', [
+          { bayIdx: 1, floor: 3, dropH: 0.55 }
+        ]);
+      }
+
+      // =======================================================================
+      // 10. GROUP 3 (`interiorGroup`): 2층 성모우리 이비인후과 & 3층 서울미소드림 치과 3D 실내 인테리어
+      //     (2·3층 투명 통창 너머로 깔끔하게 투시되는 경량 실내 모델!)
+      // =======================================================================
+      function buildInteriors() {
+        const b = new GeometryBatcher();
+
+        // ---- 2F Interior (Y = 3.58 .. 6.56m, 성모우리 이비인후과) ----
+        const y2 = 3.58;
+        // 4 Structural Concrete Interior Columns
+        [[-2.2, -5.2], [-2.2, 2.2], [1.4, -3.6], [1.4, 4.6]].forEach(([cx, cz]) => {
+          b.addBox('Int_Cols', interiorWallMat, cx, y2 + 1.48, cz, 0.52, 2.96, 0.52);
+        });
+        // Bright Glowing LED Ceiling Panel Lights (clearly visible from street through transparent glass!)
+        [[-4.0, -7.2], [-4.0, -2.0], [-4.0, 3.2], [-4.0, 7.6], [-0.4, -7.2], [-0.4, 0.0], [-0.4, 6.2]].forEach(([lx, lz]) => {
+          b.addBox('Int_CeilingLED', ledCeilingMat, lx, 6.52, lz, 1.35, 0.06, 0.72);
+        });
+        // Reception Counter Desk (L-shaped white & oak near NW-Center, visible from North & West windows!)
+        b.addBox('Int_OakWood', interiorOakMat, -1.60, y2 + 0.52, -5.80, 3.20, 1.04, 0.68);
+        b.addBox('Int_DeskTop', whiteMat,       -1.60, y2 + 1.07, -5.80, 3.30, 0.07, 0.76);
+        b.addBox('Int_OakWood', interiorOakMat,  0.00, y2 + 0.52, -4.40, 0.68, 1.04, 2.40);
+        // Waiting Area Bench Seating along West Window Bay (`x = -4.7`)
+        [-2.8, 1.2, 5.4].forEach((wz) => {
+          b.addBox('Int_ENTChairs', interiorEntChairMat, -4.65, y2 + 0.28, wz, 0.62, 0.44, 2.40);
+          b.addBox('Int_ENTChairs', interiorEntChairMat, -4.92, y2 + 0.66, wz, 0.14, 0.46, 2.40);
+        });
+        // Clinic Consultation Room Partitions on East Half (`진료실`, `고압산소클리닉`)
+        b.addBox('Int_Partitions', interiorWallMat, 1.20, y2 + 1.48,  0.50, 0.16, 2.96, 13.50);
+        b.addBox('Int_Partitions', interiorWallMat, 3.10, y2 + 1.48, -3.20, 3.80, 2.96,  0.16);
+        b.addBox('Int_Partitions', interiorWallMat, 3.00, y2 + 1.48,  2.20, 4.00, 2.96,  0.16);
+        b.addBox('Int_Partitions', interiorWallMat, 2.60, y2 + 1.48,  6.80, 3.20, 2.96,  0.16);
+        // Medical Cabinet & Desk in ENT rooms
+        b.addBox('Int_Cabinets', interiorOakMat, 3.60, y2 + 0.90, -0.50, 0.55, 1.80, 2.20);
+        b.addBox('Int_Cabinets', whiteMat,       2.60, y2 + 0.42,  4.60, 1.45, 0.80, 0.75);
+
+        // ---- 3F Interior (Y = 6.82 .. 9.84m, 서울미소드림 치과의원) ----
+        const y3 = 6.82;
+        // 4 Structural Columns continuing up
+        [[-2.2, -5.2], [-2.2, 2.2], [1.4, -3.6], [1.4, 4.6]].forEach(([cx, cz]) => {
+          b.addBox('Int_Cols', interiorWallMat, cx, y3 + 1.48, cz, 0.52, 2.96, 0.52);
+        });
+        // Bright Clinical LED Ceiling Lights
+        [[-4.0, -7.2], [-4.0, -2.0], [-4.0, 3.2], [-4.0, 7.6], [-0.4, -7.2], [-0.4, 0.0], [-0.4, 6.2]].forEach(([lx, lz]) => {
+          b.addBox('Int_CeilingLED', ledCeilingMat, lx, 9.80, lz, 1.35, 0.06, 0.72);
+        });
+        // Dental Reception Desk near North Window Bay (`x = -2.2, z = -6.8`)
+        b.addBox('Int_DentalDesk', whiteMat, -2.20, y3 + 0.54, -6.80, 3.60, 1.08, 0.72);
+        b.addBox('Int_DentalTrim', purpleSignMat, -2.20, y3 + 0.88, -7.17, 3.40, 0.16, 0.04);
+
+        // 4 Stylized 3D Dental Treatment Chairs inside Semi-Open Cubicles along West Window (`x = -3.8`, `z = -2.4, +1.0, +4.4, +7.6`)!
+        [-2.4, 1.0, 4.4, 7.6].forEach((cz) => {
+          // Low partition divider between dental chairs
+          b.addBox('Int_Partitions', interiorWallMat, -3.40, y3 + 0.85, cz - 1.65, 3.60, 1.70, 0.12);
+          // Dental Chair Base + Reclined Seat + Backrest + Headrest (pale teal-blue!)
+          b.addBox('Int_DentalBase', whiteMat, -3.80, y3 + 0.22, cz, 0.85, 0.44, 0.65);
+          b.addBox('Int_DentalChairs', interiorDentalChairMat, -3.95, y3 + 0.56, cz, 1.65, 0.22, 0.64, 0, 0, 0.12);
+          b.addBox('Int_DentalChairs', interiorDentalChairMat, -3.25, y3 + 0.94, cz, 0.72, 0.20, 0.58, 0, 0, 0.72);
+          // Overhead articulated dental light post & lamp head
+          b.addCylinder('Int_DentalLamp', stainlessMat, -3.45, y3 + 1.05, cz + 0.46, 0.06, 1.85);
+          b.addBox('Int_DentalLamp', whiteMat, -3.85, y3 + 1.92, cz + 0.10, 0.85, 0.08, 0.10);
+          b.addCylinder('Int_DentalLampHead', ledCeilingMat, -4.15, y3 + 1.78, cz, 0.28, 0.10);
+        });
+
+        // Rear Dental Office Partitions on East Half
+        b.addBox('Int_Partitions', interiorWallMat, 1.25, y3 + 1.48,  1.00, 0.16, 2.96, 14.50);
+        b.addBox('Int_Partitions', interiorWallMat, 3.00, y3 + 1.48, -2.50, 3.60, 2.96,  0.16);
+        b.addBox('Int_Partitions', interiorWallMat, 2.80, y3 + 1.48,  4.20, 3.60, 2.96,  0.16);
+
+        // Frosted interior glass divider panes (separate transparent meshes)
+        const fGlass2 = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 2.6), interiorPartitionGlassMat);
+        fGlass2.position.set(1.10, y2 + 1.35, -7.2); fGlass2.rotation.y = Math.PI / 2;
+        const fGlass3 = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 2.6), interiorPartitionGlassMat);
+        fGlass3.position.set(1.15, y3 + 1.35, -7.2); fGlass3.rotation.y = Math.PI / 2;
+        interiorGroup.add(fGlass2, fGlass3);
+
+        b.buildAll(interiorGroup);
+        b.disposeBases();
+      }
+
+      // =======================================================================
+      // 11. GROUP 4 (`signageGroup`): 전 방위 실사 간판 · 유리 시트지 데칼 · SW/NE 4단 세로 돌출 간판
+      // =======================================================================
+      function buildAllSignage() {
+        // ---- 11-1. WEST FRONT SIGNAGE (`P_NW -> P_SW`, len = 21.0m, `u = 0` North -> `u = 21.0` South) ----
+        {
+          const { group: wGrp } = createEdgeFacadeGroup(signageGroup, P_NW, P_SW, 'Signage_WestFront');
+          const wb = new GeometryBatcher();
+
+          // 1F (1) 좌측(북) `u = 0.2..8.7`: CHANG 커·튼·명·가 창 [성동점] 02 2297 0096
+          addSignPlane(wGrp, {
+            x: 4.45, y: 3.08, z: 0.12, w: 8.40, h: 0.72, cw: 1600, ch: 160,
+            name: 'Sign_1F_CurtainChang',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#1E3A78'; ctx.fillRect(0, 0, 310, h);
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 54px "Montserrat", Arial, sans-serif'; ctx.fillText('CHANG', 155, h / 2 + 2);
+
+              ctx.fillStyle = '#1E293B'; ctx.textAlign = 'left';
+              ctx.font = '900 76px "Noto Sans KR", "Malgun Gothic", sans-serif';
+              ctx.fillText('커 · 튼 · 명 · 가', 360, h / 2 + 2);
+              ctx.fillStyle = '#1E3A78'; ctx.font = '900 108px "Noto Sans KR", sans-serif';
+              ctx.fillText('창', 945, h / 2 + 4);
+
+              ctx.fillStyle = '#475569'; ctx.textAlign = 'right';
+              ctx.font = '700 32px "Noto Sans KR", sans-serif';
+              ctx.fillText('커튼 / 블라인드 / 침구 / 카페트', w - 34, 54);
+              ctx.fillStyle = '#1E293B'; ctx.font = '800 38px "Montserrat", "Noto Sans KR", sans-serif';
+              ctx.fillText('[성동점] 02 2297 0096', w - 34, 114);
+            }
+          });
+          // 1F 기둥 세로 블랙 배너 3종 ('블라인드', '침구·카페트', '공동구매전')
+          [
+            { u: 0.42, chars: ['블','라','인','드'] },
+            { u: 3.85, chars: ['침','구','·','카','페','트'] },
+            { u: 8.75, chars: ['공','동','구','매','전'] }
+          ].forEach((pb, i) => {
+            addSignPlane(wGrp, {
+              x: pb.u, y: 1.38, z: 0.13, w: 0.36, h: 2.38, cw: 120, ch: 640, name: `Sign_1F_CurtainPillar_${i}`,
+              drawFn: (ctx, w, h) => {
+                ctx.fillStyle = '#1C2026'; ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = '#F8FAFC'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = '800 58px "Noto Sans KR", sans-serif';
+                const step = (h - 90) / pb.chars.length;
+                pb.chars.forEach((cS, ci) => ctx.fillText(cS, w / 2, 55 + ci * step + step * 0.4));
+              }
+            });
+          });
+
+          // 1F (2) 중앙 좌측 로비 인방 `u = 8.9..11.3`: 베이지 석재 위 금속 입체 '홍일빌딩'
+          addSignPlane(wGrp, {
+            x: 10.10, y: 3.08, z: 0.10, w: 2.35, h: 0.68, cw: 512, ch: 160,
+            name: 'Sign_1F_HongilLobby',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#D7D0C4'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#9C9488'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+              ctx.fillStyle = '#4A4138'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 76px "Noto Sans KR", serif'; ctx.fillText('홍 일 빌 딩', w / 2, h / 2 + 4);
+            }
+          });
+
+          // 1F (3) 중앙 우측 `u = 11.4..15.2`: 멍냥스토어 24 (짙은 네이비 간판 + 반려동물 집 아이콘 + 24 원형)
+          addSignPlane(wGrp, {
+            x: 13.30, y: 3.08, z: 0.12, w: 3.72, h: 0.78, cw: 960, ch: 220,
+            name: 'Sign_1F_MeongNyangStore',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#153462'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#60A5FA'; ctx.lineWidth = 6; ctx.strokeRect(4, 4, w - 8, h - 8);
+              // 좌측 반려동물 집 아이콘
+              ctx.fillStyle = '#FDBA74';
+              ctx.beginPath(); ctx.moveTo(46, 108); ctx.lineTo(106, 46); ctx.lineTo(166, 108); ctx.lineTo(166, 174); ctx.lineTo(46, 174); ctx.closePath(); ctx.fill();
+              ctx.fillStyle = '#153462'; ctx.beginPath(); ctx.arc(106, 134, 24, 0, Math.PI * 2); ctx.fill();
+              // '멍냥스토어'
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.font = '900 104px "Do Hyeon", "Noto Sans KR", sans-serif'; ctx.fillText('멍냥스토어', 200, h / 2 + 4);
+              // 우측 '24 OPEN' 원형
+              ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 7;
+              ctx.beginPath(); ctx.arc(w - 92, h / 2, 54, 0, Math.PI * 2); ctx.stroke();
+              ctx.textAlign = 'center'; ctx.font = '900 48px "Montserrat", sans-serif'; ctx.fillText('24', w - 92, h / 2 - 8);
+              ctx.font = '700 22px "Montserrat", sans-serif'; ctx.fillText('OPEN', w - 92, h / 2 + 28);
+            }
+          });
+
+          // 1F (4) 우측(남) `u = 15.2..20.7`: 성동 온누리 약국 + 빨간 '약' 원형 스티커 + 우측 코너 파란 동물약국 보드
+          addSignPlane(wGrp, {
+            x: 17.95, y: 3.08, z: 0.12, w: 5.45, h: 0.80, cw: 1200, ch: 200,
+            name: 'Sign_1F_OnnuriPharmacy',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#F6F8FA'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#CBD5E1'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+              ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+              ctx.fillStyle = '#334155'; ctx.font = '800 84px "Noto Sans KR", sans-serif'; ctx.fillText('성동', 210, h / 2 + 2);
+              // 컬러풀 온누리 로고
+              ctx.fillStyle = '#16A34A'; ctx.font = '900 112px "Noto Sans KR", sans-serif'; ctx.fillText('온', 392, h / 2 + 2);
+              ctx.fillStyle = '#0284C7'; ctx.fillText('누', 506, h / 2 + 2);
+              ctx.fillStyle = '#F97316'; ctx.fillText('리', 620, h / 2 + 2);
+              ctx.fillStyle = '#334155'; ctx.font = '800 84px "Noto Sans KR", sans-serif'; ctx.fillText('약국', 748, h / 2 + 2);
+              ctx.fillStyle = '#64748B'; ctx.font = '700 26px "Montserrat", sans-serif'; ctx.fillText('02-2295-8810', 26, h - 32);
+            }
+          });
+          // 유리 위 빨간 '약' 원형 스티커
+          addSignPlane(wGrp, {
+            x: 18.00, y: 1.56, z: 0.10, w: 0.88, h: 0.88, cw: 256, ch: 256, transparent: true,
+            name: 'Sign_1F_RedYakSticker',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.beginPath(); ctx.arc(w / 2, h / 2, 114, 0, Math.PI * 2); ctx.fill();
+              ctx.strokeStyle = '#DC2626'; ctx.lineWidth = 14; ctx.stroke();
+              ctx.fillStyle = '#DC2626'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 144px "Noto Sans KR", sans-serif'; ctx.fillText('약', w / 2, h / 2 + 6);
+            }
+          });
+          // 우측 코너 파란 동물약국 홍보 보드 (`u = 20.15`)
+          addSignPlane(wGrp, {
+            x: 20.15, y: 1.38, z: 0.12, w: 1.25, h: 2.38, cw: 300, ch: 560,
+            name: 'Sign_1F_AnimalPharmBoard',
+            drawFn: (ctx, w, h) => {
+              const g = ctx.createLinearGradient(0, 0, 0, h);
+              g.addColorStop(0, '#38BDF8'); g.addColorStop(1, '#1D4ED8');
+              ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#FFFFFF'; drawRoundRect(ctx, 20, 24, w - 40, 175, 18); ctx.fill();
+              ctx.fillStyle = '#1E3A8A'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 34px "Noto Sans KR", sans-serif'; ctx.fillText('성동온누리약국', w / 2, 92);
+              ctx.fillStyle = '#EA580C'; ctx.fillText('동물약국', w / 2, 148);
+              ctx.fillStyle = '#FFFFFF'; ctx.font = '800 30px "Noto Sans KR", sans-serif';
+              ['동물의약품과', '인체의약품을', '한 곳에서', '만나보세요!'].forEach((t, i) => ctx.fillText(t, w / 2, 275 + i * 56));
+            }
+          });
+
+          // 2F Lower Blue Decal Strip (compact strip only at Y = 4.08..4.56m so 2F transparent glass stays wide open!)
+          addSignPlane(wGrp, {
+            x: 10.50, y: 4.30, z: 0.11, w: 20.30, h: 0.46, cw: 2048, ch: 96, transparent: true,
+            name: 'Decal_2F_WestBlueStrip',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              const items = [
+                { x:  40, bw: 250, t: '고압산소클리닉' },
+                { x: 460, bw: 290, t: '청각재활클리닉 · 보청기' },
+                { x: 920, bw: 220, t: '2F 이비인후과' },
+                { x: 1260, bw: 260, t: '02. 2281.0412' },
+                { x: 1640, bw: 360, t: '성모우리 이비인후과' }
+              ];
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              items.forEach((it) => {
+                ctx.fillStyle = 'rgba(29, 78, 216, 0.90)';
+                drawRoundRect(ctx, it.x, 10, it.bw, h - 20, 8); ctx.fill();
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '800 32px "Noto Sans KR", "Montserrat", sans-serif';
+                ctx.fillText(it.t, it.x + it.bw * 0.5, h * 0.52);
+              });
+            }
+          });
+
+          // 3F North Glass Purple Decal Strip (`u = 0.4..8.4`, Y = 8.15..8.75m): '3F | 서울미소드림 | [엠블럼] | 치 과'
+          addSignPlane(wGrp, {
+            x: 4.35, y: 8.45, z: 0.11, w: 7.80, h: 0.62, cw: 1280, ch: 120, transparent: true,
+            name: 'Decal_3F_WestPurpleStrip',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = 'rgba(88, 56, 148, 0.88)'; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 44px "Montserrat", sans-serif'; ctx.fillText('3F', 74, h / 2);
+              ctx.font = '900 66px "Noto Sans KR", sans-serif'; ctx.fillText('서울미소드림', 360, h / 2 + 2);
+              ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 6;
+              ctx.beginPath(); ctx.arc(655, h / 2, 42, 0, Math.PI * 2); ctx.stroke();
+              ctx.font = '900 76px "Noto Sans KR", sans-serif'; ctx.fillText('치     과', 985, h / 2 + 2);
+            }
+          });
+
+          // 3F Upper Spandrel (`Y = 9.90..11.15m`, cy = 10.52m):
+          // (a) Left: '고압산소클리닉 / 밝은소리 보청기클리닉' (`u = 2.05`)
+          addSignPlane(wGrp, {
+            x: 2.05, y: 10.52, z: 0.10, w: 2.95, h: 0.94, cw: 512, ch: 180,
+            name: 'Sign_3F_HyperbaricClinic',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#EFF6FF'; ctx.fillRect(0, 0, w, h * 0.48);
+              ctx.fillStyle = '#3B82F6'; ctx.fillRect(0, h * 0.48, w, h * 0.52);
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#1E3A8A'; ctx.font = '900 50px "Noto Sans KR", sans-serif'; ctx.fillText('고압산소클리닉', w / 2, h * 0.25);
+              ctx.fillStyle = '#FFFFFF'; ctx.font = '900 46px "Noto Sans KR", sans-serif'; ctx.fillText('밝은소리 보청기클리닉', w / 2, h * 0.74);
+            }
+          });
+
+          // (b) Center-Left (`u = 8.05`): 3D Extruded Channel Sign '[엠블럼] 성모우리이비인후과 2F'
+          add3DChannelSign(wGrp, {
+            x: 8.05, y: 10.52, zStart: 0.06, depth: 0.11,
+            width: 8.40, height: 1.05, canvasW: 1600, canvasH: 220,
+            drawFrontFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              const cy = h * 0.52;
+              // 좌측 흰색 사각 라인 엠블럼
+              ctx.fillStyle = '#F8FAFC'; drawRoundRect(ctx, 20, 32, 136, 156, 22); ctx.fill();
+              ctx.strokeStyle = '#1D4ED8'; ctx.lineWidth = 10; ctx.stroke();
+              ctx.beginPath(); ctx.arc(88, 96, 36, 0, Math.PI * 2); ctx.stroke();
+
+              ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.font = '900 132px "Noto Sans KR", "Malgun Gothic", sans-serif';
+              ctx.lineJoin = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = '#1E293B';
+              // 성모 (화이트) + 우리 (비비드 블루) + 이비인후과 (화이트) + 2F (오렌지 골드)
+              ctx.strokeText('성모', 182, cy); ctx.fillStyle = '#FFFFFF'; ctx.fillText('성모', 182, cy);
+              ctx.strokeText('우리', 442, cy); ctx.fillStyle = '#2563EB'; ctx.fillText('우리', 442, cy);
+              ctx.strokeText('이비인후과', 705, cy); ctx.fillStyle = '#FFFFFF'; ctx.fillText('이비인후과', 705, cy);
+              ctx.font = '900 108px "Montserrat", sans-serif';
+              ctx.strokeText('2F', 1395, cy + 4); ctx.fillStyle = '#F59E0B'; ctx.fillText('2F', 1395, cy + 4);
+            },
+            drawSideFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              const cy = h * 0.52;
+              ctx.fillStyle = '#1E242B'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.font = '900 132px "Noto Sans KR", "Malgun Gothic", sans-serif';
+              ctx.fillText('성모우리이비인후과', 182, cy);
+              ctx.font = '900 108px "Montserrat", sans-serif';
+              ctx.fillText('2F', 1395, cy + 4);
+            },
+            layers: 4, emissiveColor: '#EFF6FF', emissiveIntensity: 0.16,
+            name: 'Sign_3F_SeongmoWooriENT_3D'
+          });
+
+          // (c) Center-Right (`u = 14.15`): Sky-blue/White Info Plaque '귀·코·목 / 소아이비인후과 / T.02.2281.0412'
+          addSignPlane(wGrp, {
+            x: 14.15, y: 10.52, z: 0.10, w: 3.15, h: 0.94, cw: 640, ch: 200,
+            name: 'Sign_3F_ENTInfoPlaque',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#EBF3FA'; ctx.fillRect(0, 0, w, h * 0.65);
+              ctx.fillStyle = '#2563EB'; ctx.fillRect(0, h * 0.65, w, h * 0.35);
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#1E293B'; ctx.font = '800 42px "Noto Sans KR", sans-serif';
+              ctx.fillText('귀·코·목 / 소아이비인후과', w / 2, 46);
+              ctx.font = '700 36px "Noto Sans KR", sans-serif';
+              ctx.fillText('수액 / 어지럼증 / 예방접종', w / 2, 96);
+              ctx.fillStyle = '#FFFFFF'; ctx.font = '900 46px "Montserrat", sans-serif';
+              ctx.fillText('T. 02.2281.0412', w / 2, 166);
+            }
+          });
+
+          // (d) Right(South, `u = 18.25`): Bold 3D Golden-Yellow '치과' + Glossy Crimson Circle '3F'!
+          add3DChannelSign(wGrp, {
+            x: 18.25, y: 10.52, zStart: 0.06, depth: 0.12,
+            width: 3.85, height: 1.15, canvasW: 820, canvasH: 240,
+            drawFrontFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              const cy = h * 0.52;
+              ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.font = '900 184px "Noto Sans KR", "Malgun Gothic", sans-serif';
+              ctx.lineJoin = 'round'; ctx.lineWidth = 12; ctx.strokeStyle = '#713F12';
+              ctx.strokeText('치과', 38, cy);
+              ctx.fillStyle = '#EAB308'; ctx.fillText('치과', 38, cy);
+
+              // 빨간 원형 '3F'
+              ctx.fillStyle = '#B91C1C';
+              ctx.beginPath(); ctx.arc(645, cy - 6, 78, 0, Math.PI * 2); ctx.fill();
+              ctx.strokeStyle = '#FCA5A5'; ctx.lineWidth = 6; ctx.stroke();
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center';
+              ctx.font = '900 72px "Montserrat", sans-serif'; ctx.fillText('3F', 645, cy - 2);
+            },
+            drawSideFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              const cy = h * 0.52;
+              ctx.fillStyle = '#5C320E'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.font = '900 184px "Noto Sans KR", "Malgun Gothic", sans-serif';
+              ctx.fillText('치과', 38, cy);
+              ctx.fillStyle = '#7F1D1D';
+              ctx.beginPath(); ctx.arc(645, cy - 6, 78, 0, Math.PI * 2); ctx.fill();
+            },
+            layers: 5, emissiveColor: '#FEF08A', emissiveIntensity: 0.18,
+            name: 'Sign_3F_GoldenDental3F_3D'
+          });
+
+          wb.buildAll(wGrp);
+          wb.disposeBases();
+        }
+
+        // ---- 11-2. SW CORNER 4-TIER VERTICAL PROJECTING SIGN (at `P_SW = (-6.0, +10.5)`) ----
+        {
+          const swProjGrp = new THREE.Group();
+          swProjGrp.name = 'Sign_SWCorner_4TierVertical';
+          swProjGrp.position.set(-6.05, 0, 10.75);
+          swProjGrp.rotation.y = -Math.PI * 0.25; // faces SW cleanly from both West & South!
+          signageGroup.add(swProjGrp);
+
+          const swTiers = [
+            {
+              y: 10.90, h: 2.35, side: navySignMat,
+              draw: (ctx, w, h) => {
+                ctx.fillStyle = '#24429E'; ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = '#E0F2FE'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = '700 32px "Noto Sans KR", sans-serif'; ctx.fillText('서울미소드림', w / 2, 54);
+                ctx.fillStyle = '#FACC15'; ctx.font = '900 144px "Noto Sans KR", sans-serif';
+                ctx.fillText('치', w / 2, 200); ctx.fillText('과', w / 2, 365);
+              }
+            },
+            {
+              y: 8.45, h: 2.30, side: whiteMat,
+              draw: (ctx, w, h) => {
+                ctx.fillStyle = '#F4F7FA'; ctx.fillRect(0, 0, w, h);
+                ctx.strokeStyle = '#3B82F6'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+                ctx.fillStyle = '#1E3A8A'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = '900 72px "Noto Sans KR", sans-serif';
+                ['이','비','인','후','과'].forEach((cS, i) => ctx.fillText(cS, w * 0.64, 62 + i * 86));
+                ctx.fillStyle = '#3B82F6'; ctx.font = '800 44px "Noto Sans KR", sans-serif';
+                ['성','모','우','리'].forEach((cS, i) => ctx.fillText(cS, w * 0.24, 105 + i * 74));
+              }
+            },
+            {
+              y: 6.05, h: 2.20, side: navySignMat,
+              draw: (ctx, w, h) => {
+                ctx.fillStyle = '#153462'; ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = '900 56px "Montserrat", sans-serif'; ctx.fillText('24', w / 2, 68);
+                ctx.font = '900 78px "Noto Sans KR", sans-serif';
+                ['반','려','동','물'].forEach((cS, i) => ctx.fillText(cS, w / 2, 165 + i * 84));
+              }
+            },
+            {
+              y: 4.00, h: 1.65, side: whiteMat,
+              draw: (ctx, w, h) => {
+                ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h);
+                ctx.strokeStyle = '#DC2626'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+                ctx.fillStyle = '#DC2626'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = '900 156px "Noto Sans KR", sans-serif'; ctx.fillText('약', w / 2, 175);
+                ctx.fillStyle = '#15803D'; ctx.font = '800 38px "Noto Sans KR", sans-serif'; ctx.fillText('온누리약국', w / 2, 320);
+              }
+            }
+          ];
+          swTiers.forEach((tr, i) => {
+            const tTex = createSafeCanvasTexture(220, tr.h > 2.0 ? 480 : 380, tr.draw, { isDynamic: true });
+            const fMat = new THREE.MeshStandardMaterial({ map: tTex, roughness: 0.34 });
+            const box = new THREE.Mesh(
+              new THREE.BoxGeometry(0.24, tr.h, 0.96),
+              [fMat, fMat, tr.side, tr.side, tr.side, tr.side]
+            );
+            box.name = `SW_VertSign_Tier${i + 1}`;
+            box.position.set(0, tr.y, 0.56);
+            swProjGrp.add(box);
+          });
+        }
+
+        // ---- 11-3. NORTH EDGE SIGNAGE (`P_N -> P_NW`, len = 7.2m, `u = 0` at NE chamfer -> `u = 7.2` at NW) ----
+        {
+          const { group: nGrp } = createEdgeFacadeGroup(signageGroup, P_N, P_NW, 'Signage_NorthFace');
+
+          // 3F Upper Spandrel: 3D Extruded '서울미소드림'(silver-white) + '치과'(terracotta orange #E05232) + '2299-7528'
+          add3DChannelSign(nGrp, {
+            x: 3.60, y: 10.62, zStart: 0.05, depth: 0.11,
+            width: 6.40, height: 1.08, canvasW: 1280, canvasH: 240,
+            drawFrontFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+              ctx.font = '900 142px "Noto Sans KR", "Malgun Gothic", sans-serif';
+              ctx.lineJoin = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = '#1E293B';
+              ctx.strokeText('서울미소드림', 36, 98);
+              ctx.fillStyle = '#F1F5F9'; ctx.fillText('서울미소드림', 36, 98);
+              ctx.strokeStyle = '#7C2D12';
+              ctx.strokeText('치과', 912, 98);
+              ctx.fillStyle = '#E05232'; ctx.fillText('치과', 912, 98);
+
+              ctx.fillStyle = '#2B3038'; ctx.textAlign = 'center';
+              ctx.font = '800 54px "Montserrat", Arial, sans-serif';
+              ctx.fillText('2299-7528', 460, 204);
+            },
+            drawSideFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.fillStyle = '#2B3038'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+              ctx.font = '900 142px "Noto Sans KR", "Malgun Gothic", sans-serif';
+              ctx.fillText('서울미소드림', 36, 98);
+              ctx.fillStyle = '#7C2D12'; ctx.fillText('치과', 912, 98);
+            },
+            layers: 4, emissiveColor: '#FED7AA', emissiveIntensity: 0.14,
+            name: 'Sign_North_SeoulMisodreamDental_3D'
+          });
+
+          // 3F Transparent Glass Compact Decals: Purple Circular Emblem (`u = 2.6`) + Purple 'T. 2299-7528' Bar (`u = 5.4`)
+          addSignPlane(nGrp, {
+            x: 2.65, y: 8.65, z: 0.11, w: 1.12, h: 1.12, cw: 256, ch: 256, transparent: true,
+            name: 'Decal_North3F_PurpleCrest',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.fillStyle = 'rgba(91, 58, 142, 0.90)';
+              ctx.beginPath(); ctx.arc(w / 2, h / 2, 110, 0, Math.PI * 2); ctx.fill();
+              ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 8; ctx.stroke();
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 44px "Noto Sans KR", sans-serif'; ctx.fillText('미소드림', w / 2, 108);
+              ctx.font = '800 40px "Noto Sans KR", sans-serif'; ctx.fillText('치 과', w / 2, 162);
+            }
+          });
+          addSignPlane(nGrp, {
+            x: 5.35, y: 8.18, z: 0.11, w: 2.85, h: 0.62, cw: 560, ch: 130, transparent: true,
+            name: 'Decal_North3F_PhoneBar',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = 'rgba(91, 58, 142, 0.90)'; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 66px "Montserrat", Arial, sans-serif'; ctx.fillText('T. 2299-7528', w / 2, h / 2 + 2);
+            }
+          });
+          // 2F North Glass Compact Decal: '청각장애진단 및 보청기클리닉'
+          addSignPlane(nGrp, {
+            x: 5.35, y: 4.90, z: 0.11, w: 2.45, h: 0.68, cw: 512, ch: 150, transparent: true,
+            name: 'Decal_North2F_HearingClinic',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = 'rgba(30, 58, 138, 0.82)'; drawRoundRect(ctx, 4, 4, w - 8, h - 8, 10); ctx.fill();
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '800 40px "Noto Sans KR", sans-serif';
+              ctx.fillText('청각장애진단 및', w / 2, 48);
+              ctx.fillText('난청·보청기클리닉', w / 2, 104);
+            }
+          });
+
+          // 1F North Plinth Directional Plaques ('멍냥스토어', '약 →', NW vertical '커튼명가 창')
+          addSignPlane(nGrp, {
+            x: 4.55, y: 2.15, z: 0.06, w: 1.05, h: 0.44, cw: 260, ch: 110, name: 'Sign_North1F_PetArrow',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#153462'; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '800 38px "Noto Sans KR", sans-serif'; ctx.fillText('멍냥스토어 →', w / 2, h / 2 + 2);
+            }
+          });
+          addSignPlane(nGrp, {
+            x: 5.95, y: 2.15, z: 0.06, w: 0.62, h: 0.44, cw: 160, ch: 110, name: 'Sign_North1F_YakArrow',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#DC2626'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+              ctx.fillStyle = '#DC2626'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 44px "Noto Sans KR", sans-serif'; ctx.fillText('약 →', w / 2, h / 2 + 2);
+            }
+          });
+          addSignPlane(nGrp, {
+            x: 6.95, y: 1.55, z: 0.08, w: 0.42, h: 2.25, cw: 120, ch: 600, name: 'Sign_NorthNW_CurtainVert',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#1C2026'; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '800 58px "Noto Sans KR", sans-serif';
+              ['커','튼','명','가','창'].forEach((cS, i) => ctx.fillText(cS, w / 2, 85 + i * 106));
+            }
+          });
+        }
+
+        // ---- 11-4. NE CHAMFER EDGE SIGNAGE (`P_NE -> P_N`, len = 4.5m) ----
+        {
+          const { group: neGrp, len } = createEdgeFacadeGroup(signageGroup, P_NE, P_N, 'Signage_NEChamfer');
+
+          // 3F Upper Spandrel: Light-grey/white '성모우리 이비인후과 / 내과·소아청소년과·피부·가정의학과'
+          addSignPlane(neGrp, {
+            x: len * 0.5, y: 10.52, z: 0.08, w: 3.65, h: 0.96, cw: 720, ch: 200,
+            name: 'Sign_NEChamfer_ENT',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#E8EEF2'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#1E3A8A'; ctx.font = '900 72px "Noto Sans KR", sans-serif';
+              ctx.fillText('성모우리 이비인후과', w / 2, 74);
+              ctx.fillStyle = '#475569'; ctx.font = '700 34px "Noto Sans KR", sans-serif';
+              ctx.fillText('내과 · 소아청소년과 · 피부 · 가정의학과', w / 2, 148);
+            }
+          });
+          // 2F Compact Blue Decal
+          addSignPlane(neGrp, {
+            x: len * 0.5, y: 4.85, z: 0.11, w: 2.35, h: 0.44, cw: 480, ch: 96, transparent: true,
+            name: 'Decal_NEChamfer_2F',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = 'rgba(29, 78, 216, 0.86)'; drawRoundRect(ctx, 4, 4, w - 8, h - 8, 8); ctx.fill();
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '800 38px "Noto Sans KR", sans-serif'; ctx.fillText('성모우리 이비인후과', w / 2, h / 2 + 2);
+            }
+          });
+        }
+
+        // ---- 11-5. NE CORNER 4-TIER VERTICAL PROJECTING SIGN (at `P_NE = (+4.8, -7.8)`) ----
+        {
+          const neProjGrp = new THREE.Group();
+          neProjGrp.name = 'Sign_NECorner_4TierVertical';
+          neProjGrp.position.set(4.92, 0, -7.90);
+          neProjGrp.rotation.y = Math.PI * 0.72; // faces NE cleanly!
+          signageGroup.add(neProjGrp);
+
+          const neTiers = [
+            {
+              y: 11.60, h: 1.95, side: navySignMat,
+              draw: (ctx, w, h) => {
+                ctx.fillStyle = '#153462'; ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = '900 76px "Noto Sans KR", sans-serif';
+                ['반','려','동','물'].forEach((cS, i) => ctx.fillText(cS, w / 2, 74 + i * 86));
+                ctx.fillStyle = '#93C5FD'; ctx.font = '700 38px "Noto Sans KR", sans-serif'; ctx.fillText('용품점', w / 2, 418);
+              }
+            },
+            {
+              y: 9.55, h: 1.85, side: whiteMat,
+              draw: (ctx, w, h) => {
+                ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h);
+                ctx.strokeStyle = '#DC2626'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+                ctx.fillStyle = '#DC2626'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = '900 156px "Noto Sans KR", sans-serif'; ctx.fillText('약', w / 2, 180);
+                ctx.fillStyle = '#15803D'; ctx.font = '800 38px "Noto Sans KR", sans-serif'; ctx.fillText('온누리약국', w / 2, 330);
+              }
+            },
+            {
+              y: 7.35, h: 2.25, side: skyBlueSignMat,
+              draw: (ctx, w, h) => {
+                ctx.fillStyle = '#E0F2FE'; ctx.fillRect(0, 0, w, h);
+                ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+                ctx.fillStyle = '#1E3A8A'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = '900 72px "Noto Sans KR", sans-serif';
+                ['이','비','인','후','과'].forEach((cS, i) => ctx.fillText(cS, w * 0.65, 64 + i * 86));
+                ctx.fillStyle = '#2563EB'; ctx.font = '800 44px "Noto Sans KR", sans-serif';
+                ['성','모','우','리'].forEach((cS, i) => ctx.fillText(cS, w * 0.25, 110 + i * 76));
+              }
+            },
+            {
+              y: 4.90, h: 2.35, side: whiteMat,
+              draw: (ctx, w, h) => {
+                ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h);
+                ctx.strokeStyle = '#334155'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+                ctx.fillStyle = '#1E293B'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.font = '900 76px "Noto Sans KR", sans-serif';
+                ['커','튼','명','가','창'].forEach((cS, i) => ctx.fillText(cS, w / 2, 68 + i * 86));
+              }
+            }
+          ];
+          neTiers.forEach((tr, i) => {
+            const tTex = createSafeCanvasTexture(220, tr.h > 2.0 ? 480 : 420, tr.draw, { isDynamic: true });
+            const fMat = new THREE.MeshStandardMaterial({ map: tTex, roughness: 0.34 });
+            const box = new THREE.Mesh(
+              new THREE.BoxGeometry(0.24, tr.h, 0.96),
+              [fMat, fMat, tr.side, tr.side, tr.side, tr.side]
+            );
+            box.name = `NE_VertSign_Tier${i + 1}`;
+            box.position.set(0, tr.y, 0.56);
+            neProjGrp.add(box);
+          });
+        }
+
+        // ---- 11-6. EAST-NORTH 4F EDGE SIGNAGE (`P_EM -> P_NE`, len = 9.035m, `15419`, `15423.jpg`) ----
+        {
+          const { group: enGrp, len } = createEdgeFacadeGroup(signageGroup, P_EM, P_NE, 'Signage_EastNorth');
+
+          // 3F 상단 보라-핑크 대형 가로 간판: '[엠블럼] 서울미소드림 2299-7528 치과 의원'
+          addSignPlane(enGrp, {
+            x: len * 0.50, y: 10.15, z: 0.12, w: 7.80, h: 1.38, cw: 1400, ch: 260,
+            name: 'Sign_EastNorth_DentalPinkPurple',
+            drawFn: (ctx, w, h) => {
+              const g = ctx.createLinearGradient(0, 0, w, 0);
+              g.addColorStop(0, '#7E3F8F'); g.addColorStop(0.55, '#B65B9E'); g.addColorStop(1, '#D87AA8');
+              ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#FBCFE8'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+              // 좌측 원형 엠블럼
+              ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 8;
+              ctx.beginPath(); ctx.arc(118, h / 2, 68, 0, Math.PI * 2); ctx.stroke();
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '800 32px "Noto Sans KR", sans-serif'; ctx.fillText('치과', 118, h / 2 + 2);
+
+              ctx.textAlign = 'left';
+              ctx.font = '900 112px "Noto Sans KR", sans-serif'; ctx.fillText('서울미소드림', 218, 108);
+              ctx.fillStyle = '#FEF08A'; ctx.font = '800 44px "Montserrat", sans-serif'; ctx.fillText('2299-7528', 360, 206);
+              ctx.fillStyle = '#FEF08A'; ctx.font = '900 132px "Noto Sans KR", sans-serif'; ctx.fillText('치과', 895, h / 2 + 4);
+              ctx.fillStyle = '#FFFFFF'; ctx.font = '800 72px "Noto Sans KR", sans-serif'; ctx.fillText('의원', 1175, h / 2 + 12);
+            }
+          });
+
+          // 2F/3F 사이 흰색 '성모우리이비인후과 · 밝은소리 보청기' 간판
+          addSignPlane(enGrp, {
+            x: len * 0.50, y: 6.60, z: 0.12, w: 5.40, h: 1.05, cw: 1024, ch: 200,
+            name: 'Sign_EastNorth_ENTHearing',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#1E3A8A'; ctx.font = '800 48px "Noto Sans KR", sans-serif';
+              ctx.fillText('성모우리 이비인후과', w / 2, 58);
+              ctx.fillStyle = '#0284C7'; ctx.font = '900 72px "Noto Sans KR", sans-serif';
+              ctx.fillText('밝은소리 보청기', w / 2, 134);
+            }
+          });
+        }
+
+        // ---- 11-7. EAST-SOUTH 3F EDGE SIGNAGE (`P_SE -> P_EM`, len = 9.437m, `15425.jpg`) ----
+        {
+          const { group: esGrp } = createEdgeFacadeGroup(signageGroup, P_SE, P_EM, 'Signage_EastSouth');
+          addSignPlane(esGrp, {
+            x: 5.20, y: 10.05, z: 0.12, w: 4.10, h: 1.02, cw: 800, ch: 210,
+            name: 'Sign_EastSouth_SeongmoENT',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h * 0.70);
+              ctx.fillStyle = '#38BDF8'; ctx.fillRect(0, h * 0.70, w, h * 0.30);
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#1E3A8A'; ctx.font = '900 66px "Noto Sans KR", sans-serif';
+              ctx.fillText('성모우리 이비인후과', w / 2, 74);
+              ctx.fillStyle = '#FFFFFF'; ctx.font = '900 42px "Montserrat", sans-serif';
+              ctx.fillText('T. 02.2281.0412   2F', w / 2, 178);
+            }
+          });
+        }
+
+        // ---- 11-8. SOUTH EDGE SIGNAGE (`P_SW -> P_SE`, len = 10.0m, `15411.jpg`) ----
+        {
+          const { group: sGrp } = createEdgeFacadeGroup(signageGroup, P_SW, P_SE, 'Signage_SouthFace');
+
+          // 2F~3F 사이 네이비 '멍냥스토어' 간판 (`u = 1.2..6.6`, cx = 3.90, Y = 6.72m)
+          addSignPlane(sGrp, {
+            x: 3.90, y: 6.72, z: 0.12, w: 5.20, h: 1.02, cw: 1024, ch: 210,
+            name: 'Sign_South_MeongNyang',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#153462'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#60A5FA'; ctx.lineWidth = 6; ctx.strokeRect(4, 4, w - 8, h - 8);
+              ctx.fillStyle = '#FDBA74';
+              ctx.beginPath(); ctx.moveTo(76, 102); ctx.lineTo(132, 46); ctx.lineTo(188, 102); ctx.lineTo(188, 162); ctx.lineTo(76, 162); ctx.closePath(); ctx.fill();
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.font = '900 104px "Do Hyeon", "Noto Sans KR", sans-serif'; ctx.fillText('멍냥스토어', 235, 92);
+              ctx.fillStyle = '#BFDBFE'; ctx.font = '700 32px "Noto Sans KR", sans-serif';
+              ctx.fillText('24시 OPEN · 멍냥이들이 행복해지는 공간', 238, 166);
+            }
+          });
+
+          // 2F 창 하단 파란 데칼 ('이비인후과 · 보청기 · 고압산소클리닉')
+          addSignPlane(sGrp, {
+            x: 5.00, y: 4.46, z: 0.11, w: 7.35, h: 0.44, cw: 1024, ch: 84, transparent: true,
+            name: 'Decal_South2F_BlueENT',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = 'rgba(29, 78, 216, 0.90)'; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '800 38px "Noto Sans KR", sans-serif';
+              ctx.fillText('이비인후과        |        보청기        |        고압산소클리닉', w / 2, h / 2 + 2);
+            }
+          });
+
+          // 1F~2F 사이 크림색 '성동 온누리 약국 / 금호 동물 약국' 간판 (`u = 1.2..6.2`, cx = 3.70, Y = 3.48m)
+          addSignPlane(sGrp, {
+            x: 3.70, y: 3.48, z: 0.12, w: 4.80, h: 0.92, cw: 960, ch: 200,
+            name: 'Sign_South_OnnuriAnimalPharm',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#F2EFEA'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#CBD5E1'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+              ctx.fillStyle = '#475569'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '800 58px "Noto Sans KR", sans-serif'; ctx.fillText('성동 온누리 약국', w / 2, 66);
+              ctx.fillStyle = '#64748B'; ctx.font = '700 50px "Noto Sans KR", sans-serif'; ctx.fillText('금호 동물 약국', w / 2, 138);
+            }
+          });
+
+          // 1F 약국 측벽 포스터 (`u = 1.2..5.2`, Y = 1.55m)
+          addSignPlane(sGrp, {
+            x: 3.20, y: 1.55, z: 0.08, w: 3.80, h: 1.95, cw: 640, ch: 340,
+            name: 'Sign_South1F_PharmPoster',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#F7F5F2'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#CBD5E1'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+              ctx.fillStyle = '#F472B6'; ctx.beginPath(); ctx.arc(175, 175, 78, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#F8FAFC'; ctx.beginPath(); ctx.arc(175, 155, 42, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#DC2626'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 132px "Noto Sans KR", sans-serif'; ctx.fillText('약', 465, 175);
+            }
+          });
+        }
+      }
+
+      // =======================================================================
+      // 12. GROUP 5 (`envGroup`): 컴팩트 평지 보도 바닥 (`Y = 0.00m`, GLB 추출 시 기본 제외)
+      //     ※ 옆 건물 담장('벽산아파트'), 전신주, 전선, 신호등, 차량 완전 제외!
+      // =======================================================================
+      function buildCompactSidewalk() {
+        const eb = new GeometryBatcher();
+
+        // Compact flat polygon wrapping the Hongil Building with a clean ~3.2m sidewalk apron
+        const apronPts = [
+          { x: -9.4, z: -13.8 }, // NW outer
+          { x: -9.4, z: +13.8 }, // SW outer
+          { x: +7.0, z: +13.8 }, // SE outer
+          { x: +8.6, z:  +1.2 }, // East mid outer
+          { x: +7.8, z:  -9.6 }, // NE chamfer outer
+          { x: +2.4, z: -13.8 }  // North outer
+        ];
+
+        const apronGeo = makePolygonExtrude(apronPts, 0.14, -0.14, 0.25);
+        const apronMesh = new THREE.Mesh(apronGeo, sidewalkMat);
+        apronMesh.name = 'Compact_Flat_SidewalkApron';
+        envGroup.add(apronMesh);
+
+        // Perimeter granite curbs & yellow tactile paving along West & North edges
+        for (let i = 0; i < apronPts.length; i++) {
+          const A = apronPts[i], B = apronPts[(i + 1) % apronPts.length];
+          const dx = B.x - A.x, dz = B.z - A.z, len = Math.hypot(dx, dz);
+          const rotY = Math.atan2(-dz, dx);
+          eb.addBox('Env_Curbs', curbMat, (A.x + B.x) * 0.5, 0.00, (A.z + B.z) * 0.5, len, 0.16, 0.20, 0, rotY, 0);
+        }
+        eb.addBox('Env_Tactile', tactileYellowMat, -8.55, 0.008,   0.00,  0.34, 0.012, 24.5);
+        eb.addBox('Env_Tactile', tactileYellowMat, -3.50, 0.008, -12.95, 10.4,  0.012,  0.34);
+
+        eb.buildAll(envGroup);
+        eb.disposeBases();
+      }
+
+      // =======================================================================
+      // 13. 전체 빌드, 실시간 메시/삼각형 통계, 8개 카메라 프리셋 & 비파괴 GLB 추출
+      // =======================================================================
+      function buildAll() {
+        buildBuildingBody();
+        buildTransparentCurtainWalls();
+        buildInteriors();
+        buildAllSignage();
+        buildCompactSidewalk();
+      }
+
+      function updateStats() {
+        let meshCount = 0;
+        let triCount = 0;
+
+        [bodyGroup, curtainGroup, interiorGroup, signageGroup, envGroup].forEach((grp) => {
+          if (!grp.visible) return;
+          grp.traverse((obj) => {
+            if (obj.isMesh && obj.geometry) {
+              meshCount++;
+              const g = obj.geometry;
+              if (g.index) triCount += g.index.count / 3;
+              else if (g.attributes.position) triCount += g.attributes.position.count / 3;
+            }
+          });
+        });
+
+        document.getElementById('mesh-stats').innerHTML =
+          `병합 메시 수: <strong>${meshCount.toLocaleString()}</strong>개 (Draw Calls)<br/>` +
+          `총 삼각형 수: <strong>${Math.round(triCount).toLocaleString()}</strong> tris<br/>` +
+          `<span class="status-pill">⚡ 2·3F 투명 통창 + GLB 최적화</span>`;
+      }
+
+      // 8개 시점 프리셋 (`2. 남서 (전경)` = DEFAULT INITIAL VIEW matching `15411.jpg`!)
+      const cameraPresets = {
+        // 1. 스카이뷰 (Top-down matching `15429.jpg`, North = -Z up)
+        top:   { pos: new THREE.Vector3( -0.5, 58.0,   0.4), target: new THREE.Vector3( -0.5, 5.0,  0.0) },
+        // 2. 남서 (전경 — DEFAULT ACTIVE VIEW matching `15411.jpg`)
+        sw:    { pos: new THREE.Vector3(-23.5,  6.2,  25.5), target: new THREE.Vector3( -3.5, 6.2,  3.5) },
+        // 3. 서 (정면 통창 — matching `15413.jpg`)
+        west:  { pos: new THREE.Vector3(-30.5,  6.8,   0.0), target: new THREE.Vector3( -5.5, 6.5,  0.0) },
+        // 4. 북서 (미소드림 코너 — matching `15415.jpg`)
+        nw:    { pos: new THREE.Vector3(-22.5,  6.5, -24.5), target: new THREE.Vector3( -2.8, 7.2, -6.5) },
+        // 5. 북 (투명 통창 코너 — matching `15417.jpg`)
+        north: { pos: new THREE.Vector3(  6.5,  6.2, -26.5), target: new THREE.Vector3( -1.2, 6.8, -7.5) },
+        // 6. 북동 (동측 상부 — matching `15419.jpg`)
+        ne:    { pos: new THREE.Vector3( 22.5,  7.2, -21.5), target: new THREE.Vector3(  2.5, 7.5, -5.5) },
+        // 7. 동 (치과·이비인후과 — matching `15423.jpg`)
+        east:  { pos: new THREE.Vector3( 27.5,  7.4,  -1.5), target: new THREE.Vector3(  4.5, 7.2, -2.5) },
+        // 8. 동남 (남동측 — matching `15425.jpg`)
+        se:    { pos: new THREE.Vector3( 22.5,  6.8,  23.5), target: new THREE.Vector3(  2.5, 6.0,  5.5) }
+      };
+
+      let camAnim = null;
+
+      function setView(viewKey, instant = false) {
+        const preset = cameraPresets[viewKey];
+        if (!preset) return;
+
+        document.querySelectorAll('.cam-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.view === viewKey);
+        });
+
+        if (instant) {
+          camAnim = null;
+          camera.position.copy(preset.pos);
+          controls.target.copy(preset.target);
+          controls.update();
+          return;
+        }
+
+        camAnim = {
+          startPos: camera.position.clone(),
+          endPos: preset.pos.clone(),
+          startTarget: controls.target.clone(),
+          endTarget: preset.target.clone(),
+          progress: 0,
+          duration: 0.68
+        };
+      }
+
+      document.querySelectorAll('.cam-btn').forEach((btn) => {
+        btn.addEventListener('click', () => setView(btn.dataset.view, false));
+      });
+
+      controls.addEventListener('start', () => {
+        camAnim = null;
+      });
+
+      // UI 토글 체크박스 연결
+      [
+        ['chk-body', bodyGroup],
+        ['chk-curtain', curtainGroup],
+        ['chk-interior', interiorGroup],
+        ['chk-signage', signageGroup],
+        ['chk-env', envGroup]
+      ].forEach(([id, grp]) => {
+        document.getElementById(id).addEventListener('change', (e) => {
+          grp.visible = e.target.checked;
+          updateStats();
+        });
+      });
+
+      document.getElementById('chk-outlines').addEventListener('change', (e) => {
+        outlineGroup.visible = e.target.checked;
+      });
+
+      const btnCollapse = document.getElementById('btn-collapse');
+      const optionsBody = document.getElementById('options-body');
+      btnCollapse.addEventListener('click', () => {
+        const collapsed = optionsBody.classList.toggle('collapsed');
+        btnCollapse.textContent = collapsed ? '펼치기' : '접기';
+      });
+
+      const chkExportEnv = document.getElementById('chk-export-env');
+      const exportBtn = document.getElementById('btn-export-glb');
+
+      // 비파괴 + 무결성 검증 GLB 추출 (`Geumho_HongilBuilding_v1.glb`)
+      function exportGLB() {
+        hideErrorBanner();
+
+        const hasAnyBuilding =
+          bodyGroup.visible || curtainGroup.visible || interiorGroup.visible || signageGroup.visible;
+        const includeEnv = chkExportEnv.checked;
+
+        if (!hasAnyBuilding && !includeEnv) {
+          showToast('추출할 건물 또는 바닥 레이어를 1개 이상 선택해주세요.', 2800);
+          return;
+        }
+
+        exportBtn.disabled = true;
+        showToast('Geumho_HongilBuilding_v1.glb 파일을 생성하고 있습니다...', 4500);
+
+        const prevEnvVis = envGroup.visible;
+        let restoreSanitized = null;
+
+        try {
+          // 1) 바닥 포함 체크박스에 맞춰 envGroup만 임시 동기화 (outlineGroup은 buildingRoot 외부)
+          envGroup.visible = includeEnv;
+
+          // 2) 추출 직전 모든 visible 메시의 재질 텍스처 무결성 전수 검증
+          restoreSanitized = sanitizeSceneForGLB(buildingRoot);
+
+          const exporter = new GLTFExporter();
+          exporter.parse(
+            buildingRoot,
+            (result) => {
+              if (restoreSanitized) restoreSanitized();
+              envGroup.visible = prevEnvVis;
+
+              const blob = new Blob([result], { type: 'model/gltf-binary' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = 'Geumho_HongilBuilding_v1.glb';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              setTimeout(() => URL.revokeObjectURL(url), 1200);
+
+              const sizeStr = blob.size >= 1024 * 1024
+                ? `${(blob.size / (1024 * 1024)).toFixed(2)} MB`
+                : `${(blob.size / 1024).toFixed(0)} KB`;
+              showToast(`추출 완료! Geumho_HongilBuilding_v1.glb (${sizeStr})`, 3800);
+              exportBtn.disabled = false;
+            },
+            (err) => {
+              if (restoreSanitized) restoreSanitized();
+              envGroup.visible = prevEnvVis;
+              showErrorBanner(err);
+              exportBtn.disabled = false;
+            },
+            {
+              binary: true,
+              onlyVisible: true
+            }
+          );
+        } catch (err) {
+          if (restoreSanitized) restoreSanitized();
+          envGroup.visible = prevEnvVis;
+          showErrorBanner(err);
+          exportBtn.disabled = false;
+        }
+      }
+
+      exportBtn.addEventListener('click', exportGLB);
+
+      // 반응형 리사이즈
+      window.addEventListener('resize', () => {
+        const w = container.clientWidth || window.innerWidth || 1280;
+        const h = container.clientHeight || window.innerHeight || 720;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      });
+
+      // 비차단 웹폰트 로드 완료 후 간판 텍스처 부드럽게 리프레시
+      if (document.fonts) {
+        if (document.fonts.ready) {
+          document.fonts.ready.then(() => redrawDynamicSigns()).catch(() => {});
+        }
+        if (typeof document.fonts.addEventListener === 'function') {
+          document.fonts.addEventListener('loadingdone', () => redrawDynamicSigns());
+        }
+      }
+
+      const clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.1);
+
+        if (camAnim) {
+          camAnim.progress += dt / camAnim.duration;
+          const t = Math.min(1, camAnim.progress);
+          const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+          camera.position.lerpVectors(camAnim.startPos, camAnim.endPos, ease);
+          controls.target.lerpVectors(camAnim.startTarget, camAnim.endTarget, ease);
+          if (t >= 1) camAnim = null;
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      // 첫 프레임 즉시 동기 빌드 및 렌더링 시작 (`2. 남서 (전경)` 초기 시점)
+      buildAll();
+      updateStats();
+      setView('sw', true);
+      animate();
+    } catch (err) {
+      showErrorBanner(err);
+    }
+  </script>
+</body>
+</html>
