@@ -273,15 +273,23 @@
  },
  "models/place_adamleeds.glb": {
   "file": "img/skyview/place_adamleeds.webp",
-  "hash": "ffa7bc216b",
-  "minX": -14.6,
-  "minZ": -8.7,
-  "width": 29.25,
-  "depth": 21.917
+  "hash": "c7e7b05210",
+  "minX": -20.525,
+  "minZ": -22.148,
+  "width": 37.75,
+  "depth": 37.417
+ },
+ "models/place_bagel.glb": {
+  "file": "img/skyview/place_bagel.webp",
+  "hash": "1b133d768c",
+  "minX": -17,
+  "minZ": -14,
+  "width": 34,
+  "depth": 26.583
  },
  "models/place_bunsik.glb": {
   "file": "img/skyview/place_bunsik.webp",
-  "hash": "be71f18bf1",
+  "hash": "a800c138b4",
   "minX": -13.628,
   "minZ": -12.08,
   "width": 27,
@@ -289,7 +297,7 @@
  },
  "models/place_library.glb": {
   "file": "img/skyview/place_library.webp",
-  "hash": "ec4c9ac853",
+  "hash": "fe3c2e7cfa",
   "minX": -12.985,
   "minZ": -12.708,
   "width": 26.25,
@@ -457,7 +465,7 @@
  },
  "models/place_남광빌딩.glb": {
   "file": "img/skyview/place_남광빌딩.webp",
-  "hash": "90015eaaa4",
+  "hash": "eedbee90b2",
   "minX": -14.2,
   "minZ": -11.17,
   "width": 31,
@@ -494,6 +502,14 @@
   "minZ": -2,
   "width": 14.5,
   "depth": 4.583
+ },
+ "models/place_신금호역5번출구앞상가.glb": {
+  "file": "img/skyview/place_신금호역5번출구앞상가.webp",
+  "hash": "e614d43fad",
+  "minX": -17.345,
+  "minZ": -27.5,
+  "width": 33.75,
+  "depth": 57.583
  },
  "models/place_조형선외과동물병원.glb": {
   "file": "img/skyview/place_조형선외과동물병원.webp",
