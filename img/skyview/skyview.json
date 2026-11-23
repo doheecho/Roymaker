@@ -183,6 +183,14 @@
   "width": 331.204,
   "depth": 205.872
  },
+ "models/Community_south2.glb": {
+  "file": "img/skyview/Community_south2.webp",
+  "hash": "b3319644d1",
+  "minX": 60.629,
+  "minZ": 64.896,
+  "width": 253.777,
+  "depth": 157.95
+ },
  "models/Emart24_GeumhoParkHills_Sign_3D.glb": {
   "file": "img/skyview/Emart24_GeumhoParkHills_Sign_3D.webp",
   "hash": "65e4725293",
@@ -374,6 +382,14 @@
   "minZ": -26.003,
   "width": 66,
   "depth": 52.078
+ },
+ "models/place_금북남전체구역.glb": {
+  "file": "img/skyview/place_금북남전체구역.webp",
+  "hash": "75901b0ee4",
+  "minX": -43.408,
+  "minZ": -79.71,
+  "width": 83.014,
+  "depth": 157.42
  },
  "models/place_금북주택가1.glb": {
   "file": "img/skyview/place_금북주택가1.webp",
@@ -574,6 +590,14 @@
   "minZ": -15.22,
   "width": 16.083,
   "depth": 32.5
+ },
+ "models/place_산마을돈타운2.glb": {
+  "file": "img/skyview/place_산마을돈타운2.webp",
+  "hash": "3429e2ec5f",
+  "minX": -28.5,
+  "minZ": -26.81,
+  "width": 43.75,
+  "depth": 43.25
  },
  "models/place_설내옥.glb": {
   "file": "img/skyview/place_설내옥.webp",
