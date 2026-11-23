@@ -103,8 +103,8 @@ export const PLACES = [
   { id: 67, name: "대현산배수지공원", floors: 1, type: "공원", x: -309.1, z: -475.9 },
   { id: 68, name: "극동미라주 101동", floors: 15, type: "아파트", x: -109.4, z: -619.5, model: "models/place_극미101.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 69, name: "극동미라주 102동", floors: 15, type: "아파트", x: -127.6, z: -702.3, model: "models/place_극미102.glb", rotationDeg: 0, scaleRatio: 1.3 },
-  { id: 70, name: "극동미라주 103동", floors: 15, type: "아파트", x: -139.5, z: -772.1, model: "models/place_극미103.glb", scaleRatio: 1.3 },
-  { id: 71, name: "극동미라주 104동", floors: 15, type: "아파트", x: -133.7, z: -846.5, model: "models/place_극미104.glb" },
+  { id: 70, name: "극동미라주 103동", floors: 15, type: "아파트", x: -113.5, z: -770.5, model: "models/place_극미103.glb", scaleRatio: 1.2 },
+  { id: 71, name: "극동미라주 104동", floors: 15, type: "아파트", x: -121, z: -850.8, model: "models/place_극미104.glb", scaleRatio: 1.3 },
   { id: 72, name: "신금호공원", floors: 1, type: "공원", x: -403, z: 239 },
   { id: 73, name: "행당대림상가", floors: 7, type: "마트", x: 565, z: -209 },
   { id: 74, name: "행현초등학교", floors: 5, type: "학교", x: 875, z: -318 },
@@ -165,8 +165,8 @@ export const PLACES = [
   { id: 215, name: "주택가", floors: 3, type: "기타", x: -43.4, z: -288.2, model: "models/place_금북주택가1.glb", scaleRatio: 1.3 },
   { id: 216, name: "주택가", floors: 3, type: "기타", x: -79.5, z: -301.3, model: "models/place_금북주택가2.glb", rotationDeg: -3.9, scaleRatio: 1.3 },
   { id: 217, name: "금호1가동 주민센터", floors: 5, type: "아파트", x: -339.8, z: -58.8, model: "models/place_금호1가동주민센터.glb", rotationDeg: 28.9, scaleRatio: 1.3 },
-  { id: 218, name: "GS25", floors: 15, type: "아파트", x: -24.1, z: -570.5, model: "models/place_GS25극미점.glb" },
-  { id: 219, name: "상가", floors: 15, type: "기타", x: 23.9, z: -505.7, model: "models/place_산마을돈타운.glb" },
+  { id: 218, name: "GS25", floors: 15, type: "아파트", x: -24.9, z: -570, model: "models/place_gs25극미점.glb", scaleRatio: 1.3 },
+  { id: 219, name: "상가", floors: 15, type: "기타", x: 15.7, z: -506.2, model: "models/place_산마을돈타운.glb", scaleRatio: 1.3 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
