@@ -151,7 +151,7 @@ export const PLACES = [
   { id: 201, name: "금파힐후문", floors: 1, type: "기타", x: -54.9, z: -168.7, model: "models/place_금파힐후문.glb", scaleRatio: 1.5 },
   { id: 202, name: "금파힐정문", floors: 1, type: "기타", x: -369.9, z: 138.4, model: "models/place_금파힐정문.glb", rotationDeg: -53.9, scaleRatio: 1.5 },
   { id: 203, name: "조형선외과동물병원", floors: 3, type: "기타", x: -442.3, z: 69.5, model: "models/place_조형선외과동물병원.glb", rotationDeg: -46.8, scaleRatio: 1.5 },
-  { id: 204, name: "신금호역 인근 상가", floors: 3, type: "기타", x: -483.3, z: 33.7, model: "models/place_신금호역4번출구앞건물.glb", rotationDeg: 2, scaleRatio: 1.4 },
+  { id: 204, name: "신금호역 인근 상가", floors: 3, type: "기타", x: -488.3, z: 33.7, model: "models/place_신금호역4번출구앞건물.glb", rotationDeg: 2, scaleRatio: 1.4 },
   { id: 205, name: "설내옥", floors: 3, type: "식당", x: -456.2, z: 148.1, model: "models/place_설내옥.glb", rotationDeg: -4, scaleRatio: 1.5 },
   { id: 206, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -497.8, z: 97, model: "models/place_키잉글리시.glb", rotationDeg: -4, scaleRatio: 1.5 },
   { id: 207, name: "KFC", floors: 4, type: "식당", x: -589.7, z: 56.6, model: "models/place_KFC.glb", rotationDeg: -10, scaleRatio: 1.5 },
