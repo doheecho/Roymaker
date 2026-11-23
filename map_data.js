@@ -147,7 +147,7 @@ export const PLACES = [
   { id: 113, name: "행당대림아파트 133동", floors: 15, type: "아파트", x: 750, z: 16, model: "models/place_행당대림133.glb", rotationDeg: 0 },
   { id: 114, name: "행당대림아파트 134동", floors: 15, type: "아파트", x: 772, z: 16, model: "models/place_행당대림134.glb", rotationDeg: 0 },
   { id: 115, name: "행당대림아파트 135동", floors: 15, type: "아파트", x: 794, z: 16, model: "models/place_행당대림135.glb", rotationDeg: 0 },
-  { id: 200, name: "신금호역", floors: 1, type: "기타", x: -516.7, z: 1.8, model: "models/place_신금호역5.glb", rotationDeg: -45 },
+  { id: 200, name: "신금호역", floors: 1, type: "기타", x: -516.7, z: 10.8, model: "models/place_신금호역5.glb", rotationDeg: -45 },
   { id: 201, name: "금파힐후문", floors: 1, type: "기타", x: -54.9, z: -168.7, model: "models/place_금파힐후문.glb", scaleRatio: 1.5 },
   { id: 202, name: "금파힐정문", floors: 1, type: "기타", x: -369.9, z: 138.4, model: "models/place_금파힐정문.glb", rotationDeg: -53.9, scaleRatio: 1.5 },
   { id: 203, name: "조형선외과동물병원", floors: 3, type: "기타", x: -452.3, z: 69.5, model: "models/place_조형선외과동물병원.glb", rotationDeg: -46.8, scaleRatio: 1.5 },
