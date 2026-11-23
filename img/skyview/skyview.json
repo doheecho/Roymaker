@@ -1,7 +1,7 @@
 {
  "models/3D_place_101.glb": {
   "file": "img/skyview/3D_place_101.webp",
-  "hash": "28f19549e4",
+  "hash": "c25594d4e4",
   "minX": -24.931,
   "minZ": -22.171,
   "width": 45.25,
@@ -17,7 +17,7 @@
  },
  "models/3D_place_103.glb": {
   "file": "img/skyview/3D_place_103.webp",
-  "hash": "02f519a1aa",
+  "hash": "0d0795e2f0",
   "minX": -19.553,
   "minZ": -19.199,
   "width": 38.583,
@@ -97,7 +97,7 @@
  },
  "models/3D_place_113.glb": {
   "file": "img/skyview/3D_place_113.webp",
-  "hash": "ac21b0924a",
+  "hash": "c58baa15e0",
   "minX": -15.681,
   "minZ": -25.754,
   "width": 36,
@@ -129,7 +129,7 @@
  },
  "models/3D_place_keumbuk.glb": {
   "file": "img/skyview/3D_place_keumbuk.webp",
-  "hash": "4ecef1fdd7",
+  "hash": "45f0835f50",
   "minX": -135,
   "minZ": -120.003,
   "width": 270,
@@ -193,7 +193,7 @@
  },
  "models/Geumho_2Story_Commercial_NorthDoors.glb": {
   "file": "img/skyview/Geumho_2Story_Commercial_NorthDoors.webp",
-  "hash": "2eadbef2d6",
+  "hash": "520f9a8c38",
   "minX": -18.28,
   "minZ": -6.68,
   "width": 25.917,
@@ -209,7 +209,7 @@
  },
  "models/Seoul_Happy_Sign.glb": {
   "file": "img/skyview/Seoul_Happy_Sign.webp",
-  "hash": "b7c37228ef",
+  "hash": "fa837384ab",
   "minX": -3.596,
   "minZ": 0,
   "width": 7.25,
@@ -233,7 +233,7 @@
  },
  "models/asset_금파힐정문문주.glb": {
   "file": "img/skyview/asset_금파힐정문문주.webp",
-  "hash": "5e936fbb47",
+  "hash": "2eadbbae60",
   "minX": -11.4,
   "minZ": -2.1,
   "width": 20.917,
@@ -241,7 +241,7 @@
  },
  "models/asset_금파힐후문문주.glb": {
   "file": "img/skyview/asset_금파힐후문문주.webp",
-  "hash": "32fbfc71d0",
+  "hash": "43200bbd3d",
   "minX": -8.2,
   "minZ": -1.8,
   "width": 16.417,
@@ -289,7 +289,7 @@
  },
  "models/place_bunsik.glb": {
   "file": "img/skyview/place_bunsik.webp",
-  "hash": "a800c138b4",
+  "hash": "44e843a641",
   "minX": -13.628,
   "minZ": -12.08,
   "width": 27,
@@ -305,7 +305,7 @@
  },
  "models/place_library.glb": {
   "file": "img/skyview/place_library.webp",
-  "hash": "fe3c2e7cfa",
+  "hash": "191d0d7950",
   "minX": -12.985,
   "minZ": -12.708,
   "width": 26.25,
@@ -335,6 +335,14 @@
   "width": 28.083,
   "depth": 53.75
  },
+ "models/place_골드축산.glb": {
+  "file": "img/skyview/place_골드축산.webp",
+  "hash": "857bbbb4cb",
+  "minX": -26.501,
+  "minZ": -24.5,
+  "width": 52.083,
+  "depth": 55
+ },
  "models/place_극미101.glb": {
   "file": "img/skyview/place_극미101.webp",
   "hash": "02cdc3c107",
@@ -353,7 +361,7 @@
  },
  "models/place_극미103.glb": {
   "file": "img/skyview/place_극미103.webp",
-  "hash": "0f6a3bbaf4",
+  "hash": "709279fedf",
   "minX": -42,
   "minZ": -32.501,
   "width": 74,
@@ -361,7 +369,7 @@
  },
  "models/place_극미104.glb": {
   "file": "img/skyview/place_극미104.webp",
-  "hash": "a2bd03bff6",
+  "hash": "60dc8dab44",
   "minX": -32,
   "minZ": -26.003,
   "width": 66,
@@ -369,7 +377,7 @@
  },
  "models/place_금북주택가1.glb": {
   "file": "img/skyview/place_금북주택가1.webp",
-  "hash": "047a580ae8",
+  "hash": "3cb2452930",
   "minX": -10.84,
   "minZ": -20,
   "width": 21.333,
@@ -521,7 +529,7 @@
  },
  "models/place_남광빌딩.glb": {
   "file": "img/skyview/place_남광빌딩.webp",
-  "hash": "eedbee90b2",
+  "hash": "42afb06e40",
   "minX": -14.2,
   "minZ": -11.17,
   "width": 31,
@@ -529,7 +537,7 @@
  },
  "models/place_대림독서실.glb": {
   "file": "img/skyview/place_대림독서실.webp",
-  "hash": "6d3db7a91a",
+  "hash": "b1de1d7df7",
   "minX": -18.571,
   "minZ": -14.82,
   "width": 33.5,
@@ -537,11 +545,19 @@
  },
  "models/place_대현교회.glb": {
   "file": "img/skyview/place_대현교회.webp",
-  "hash": "ace16b53e2",
+  "hash": "25a5f1e0b9",
   "minX": -23.315,
   "minZ": -24.669,
   "width": 46.833,
   "depth": 46.5
+ },
+ "models/place_롯데마트.glb": {
+  "file": "img/skyview/place_롯데마트.webp",
+  "hash": "7d8955bbbf",
+  "minX": -32.24,
+  "minZ": -17.519,
+  "width": 72.31,
+  "depth": 50.561
  },
  "models/place_롯데마트행당점.glb": {
   "file": "img/skyview/place_롯데마트행당점.webp",
@@ -553,7 +569,7 @@
  },
  "models/place_산마을돈타운.glb": {
   "file": "img/skyview/place_산마을돈타운.webp",
-  "hash": "71030fc483",
+  "hash": "37e0b638bf",
   "minX": -7.8,
   "minZ": -15.22,
   "width": 16.083,
@@ -591,6 +607,22 @@
   "width": 33.75,
   "depth": 57.583
  },
+ "models/place_신기한나라라운지.glb": {
+  "file": "img/skyview/place_신기한나라라운지.webp",
+  "hash": "a1f933721b",
+  "minX": -22.2,
+  "minZ": -40.8,
+  "width": 45.066,
+  "depth": 83.6
+ },
+ "models/place_제주수퍼.glb": {
+  "file": "img/skyview/place_제주수퍼.webp",
+  "hash": "d6299bd267",
+  "minX": -32.64,
+  "minZ": -31.141,
+  "width": 65.28,
+  "depth": 63.835
+ },
  "models/place_조형선외과동물병원.glb": {
   "file": "img/skyview/place_조형선외과동물병원.webp",
   "hash": "f3a3eb2fc6",
@@ -617,7 +649,7 @@
  },
  "models/place_태권도.glb": {
   "file": "img/skyview/place_태권도.webp",
-  "hash": "38d4a01f4a",
+  "hash": "d9daf9e732",
   "minX": -9.95,
   "minZ": -17.4,
   "width": 18.333,
@@ -849,7 +881,7 @@
  },
  "models/place_행복한교회.glb": {
   "file": "img/skyview/place_행복한교회.webp",
-  "hash": "9b8d34a1db",
+  "hash": "d62365974f",
   "minX": -18.901,
   "minZ": -13.001,
   "width": 39.417,

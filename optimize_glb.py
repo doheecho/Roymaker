@@ -42,6 +42,12 @@ SAFE_OPTIMIZE_FLAGS = [
     "--join", "false",
     "--simplify", "false",
     "--palette", "false",
+    # 2026-11-23: flatten·instance를 켜 두면 일부 모델(Seoul_Happy_Sign, 금파힐 문주 등)의 바운딩박스가
+    # 틀어지고, 기본 압축(quantize)은 캐릭터 모델(walk 등)의 크기를 [-1,1]로 눌러 버렸다.
+    # 그래서 flatten·instance를 끄고 meshopt만 쓴다 — 실측으로 확인한 조합.
+    "--flatten", "false",
+    "--instance", "false",
+    "--compress", "meshopt",
 ]
 
 # 애니메이션이 들어 있는 캐릭터 모델은 건물 모델과 성격이 달라서(뼈대·스킨 등)
