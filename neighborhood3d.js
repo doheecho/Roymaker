@@ -9,7 +9,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261123c";
 import { computeRoadMarkings, markedRanges, slicePolyline } from "./road_markings.js?v=20261123c";
 
-const ASSET_VERSION = "20261123d";
+const ASSET_VERSION = "20261123e";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -363,7 +363,7 @@ function buildStaticScene() {
   const sun = new THREE.DirectionalLight(0xffffff, 1.3);
   sun.position.set(20, 30, 15);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(512, 512); // 그림자 맵을 1024→512로: 그림자 계산량을 4분의 1로 줄임
   Object.assign(sun.shadow.camera, { left: -120, right: 120, top: 120, bottom: -120, far: 200 });
   scene.add(sun);
 
@@ -1885,6 +1885,9 @@ async function initNeighborhood3D() {
   loading = true;
   try {
     renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true });
+    // 화면 밀도가 큰 폰·폴드는 픽셀 수가 많아서 GPU가 힘들다 — 1.5배까지만 그리고 나머지는 늘려서 보여준다
+    // (눈으로 보기엔 거의 차이가 없고, 픽셀 수는 크게 줄어든다)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.shadowMap.enabled = true;
     clock = new THREE.Clock();
     buildStaticScene();
