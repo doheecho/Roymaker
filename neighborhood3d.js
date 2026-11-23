@@ -538,7 +538,6 @@ function surfaceYFor(width) {
 
 // 보도(인도): 도로 양옆에 깔리는 별도 띠. 건물에셋(기본 -0.01, 예외 +0.02) > 도로(0.005~0.0135)
 // > 보도 순으로 보이게, 이 둘의 가장 낮은 자리보다도 더 아래에 둔다(사용자 지정 우선순위).
-const SIDEWALK_Y = -0.015;
 
 // 폭이 있는 띠(리본) 지오메트리를 하나 만든다 — 도로 표면뿐 아니라 중앙 실선도 같은 함수로
 // (실선은 그냥 아주 얇은 리본) 만들어서 곡선 구간에서도 똑같이 매끈하게 휘어지게 한다.
@@ -665,7 +664,12 @@ function buildRoadRibbon(seg, segIndex) {
 
 // 보도 질감: 회색 보도블록(2×2 체크) 한 주기 = 1.2m. 같은 텍스처를 모든 보도가 함께 쓴다.
 const SIDEWALK_TILE_RAW = 1.2;
-const SIDEWALK_YELLOW_Y = -0.0125; // 보도(-0.015)보다 위, 건물(-0.01)·도로(0.005~)보다 아래
+const SIDEWALK_TOP_Y = 0.05; // 보도 윗면 높이 — 도로(0.005~0.0135)보다 연석(턱)만큼 올라와 있다
+const SIDEWALK_YELLOW_Y = SIDEWALK_TOP_Y + 0.001; // 황색 경계선은 보도 윗면 바로 위
+const CURB_COLOR = 0xb9b4a8;
+// 캐릭터가 보도 위에 설 때 쓰는 띠 목록(월드 좌표). 도로 중심선에서 떨어진 거리(inner~outer)가
+// 보도 폭 안이면 보도 위로 본다. 교차로(gaps) 구간에는 보도를 깔지 않으니 띠도 만들지 않는다.
+const walkBands = [];
 const SIDEWALK_YELLOW_W_RAW = 0.3; // 황색 경계선 폭(raw m)
 const SIDEWALK_YELLOW_INSET_RAW = 0.5; // 경계선은 도로 가장자리에서 이만큼 보도 안쪽에 놓임
 let sidewalkTexture = null;
@@ -723,40 +727,100 @@ function storeToGeometry(store) {
   return geo;
 }
 
-// seg.sidewalk(폭, raw m)가 있으면 도로 양옆에 보도 띠를 깔고, 도로 쪽 가장자리 안쪽에 황색 경계선을 긋는다.
-function collectRoadSidewalk(seg, sideStore, lineStore) {
+// 두 점 사이 거리(캐릭터 발밑 판정용)
+function distToSegment(px, pz, ax, az, bx, bz) {
+  const vx = bx - ax, vz = bz - az;
+  const len2 = vx * vx + vz * vz || 1e-9;
+  const t = Math.max(0, Math.min(1, ((px - ax) * vx + (pz - az) * vz) / len2));
+  return Math.hypot(px - (ax + vx * t), pz - (az + vz * t));
+}
+
+// seg.sidewalk(폭, raw m)가 있으면 도로 양옆에 보도를 깐다. 보도는 도로보다 턱(SIDEWALK_TOP_Y)만큼 높고,
+// 도로 쪽 면에 연석(수직 면)을 세우고, 가장자리 안쪽에 황색 경계선을 긋는다. 교차로 구간은 비운다.
+function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore) {
   if (!seg.sidewalk) return;
   const rawPts = roadPolyline(seg);
-  const pts = rawPts.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
-  const tangents = polylineTangents(pts);
-  const cum = [0];
-  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  let rawLen = 0;
+  for (let i = 1; i < rawPts.length; i++) rawLen += Math.hypot(rawPts[i][0] - rawPts[i - 1][0], rawPts[i][1] - rawPts[i - 1][1]);
+  const gaps = roadMarkings.gaps[segIndex] || [];
   const roadW = seg.width * WORLD_SCALE;
   const sideW = seg.sidewalk * WORLD_SCALE;
   const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
-  [-1, 1].forEach((dir) => {
-    pushRibbonToStore(sideStore, pts, tangents, cum, sideW, dir * (roadW / 2 + sideW / 2));
-    const lineOffset = dir * (roadW / 2 + SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE + lineW / 2);
-    pushRibbonToStore(lineStore, pts, tangents, cum, lineW, lineOffset);
-  });
+  for (const [s0, s1] of markedRanges(rawLen, gaps)) {
+    const sub = slicePolyline(rawPts, s0, s1);
+    if (sub.length < 2) continue;
+    const pts = sub.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+    const tangents = polylineTangents(pts);
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    for (let i = 0; i < pts.length - 1; i++) {
+      walkBands.push({
+        ax: pts[i][0], az: pts[i][1], bx: pts[i + 1][0], bz: pts[i + 1][1],
+        inner: roadW / 2, outer: roadW / 2 + sideW,
+      });
+    }
+    [-1, 1].forEach((dir) => {
+      const sideOff = dir * (roadW / 2 + sideW / 2);
+      pushRibbonToStore(sideStore, pts, tangents, cum, sideW, sideOff);
+      const lineOffset = dir * (roadW / 2 + SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE + lineW / 2);
+      pushRibbonToStore(lineStore, pts, tangents, cum, lineW, lineOffset);
+      // 연석: 도로 가장자리(inner)를 따라 바닥에서 보도 윗면까지 세운 수직 면
+      const innerOff = dir * (roadW / 2);
+      const innerPts = pts.map((p, i) => {
+        const [tx, tz] = tangents[i];
+        return [p[0] - tz * innerOff, p[1] + tx * innerOff];
+      });
+      pushVerticalQuadStrip(curbStore, innerPts);
+      // 구간 양 끝의 단면(연석 높이만큼)도 막아서 보도가 허공에 뜨지 않게
+      [0, pts.length - 1].forEach((i) => {
+        const [tx, tz] = tangents[i];
+        const p = pts[i];
+        const a = [p[0] - tz * innerOff, p[1] + tx * innerOff];
+        const c = [p[0] - tz * (roadW / 2 + sideW) * dir, p[1] + tx * (roadW / 2 + sideW) * dir];
+        pushVerticalQuadStrip(curbStore, [a, c]);
+      });
+    });
+  }
+}
+
+// 수평 점들을 따라 바닥(0)~보도 윗면(SIDEWALK_TOP_Y)까지 세운 면(연석)
+function pushVerticalQuadStrip(store, pts2d) {
+  const base = store.pos.length / 3;
+  for (const [x, z] of pts2d) store.pos.push(x, 0, z, x, SIDEWALK_TOP_Y, z);
+  for (let i = 0; i < pts2d.length - 1; i++) {
+    const a0 = base + i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
+    store.idx.push(a0, b0, a1, a1, b0, b1);
+  }
 }
 
 function buildRoadSidewalks() {
+  walkBands.length = 0;
   const sideStore = newRibbonStore();
   const lineStore = newRibbonStore();
-  ROAD_SEGMENTS.forEach((seg) => collectRoadSidewalk(seg, sideStore, lineStore));
+  const curbStore = newRibbonStore();
+  ROAD_SEGMENTS.forEach((seg, i) => collectRoadSidewalk(seg, i, sideStore, lineStore, curbStore));
   if (sideStore.idx.length) {
     const mesh = new THREE.Mesh(
       storeToGeometry(sideStore),
       new THREE.MeshStandardMaterial({ map: getSidewalkTexture(), roughness: 1, side: THREE.DoubleSide })
     );
-    mesh.position.y = SIDEWALK_Y;
+    mesh.position.y = SIDEWALK_TOP_Y;
     mesh.receiveShadow = true;
     scene.add(mesh);
   }
   if (lineStore.idx.length) {
     const mesh = new THREE.Mesh(storeToGeometry(lineStore), new THREE.MeshBasicMaterial({ color: LANE_YELLOW, side: THREE.DoubleSide }));
     mesh.position.y = SIDEWALK_YELLOW_Y;
+    scene.add(mesh);
+  }
+  if (curbStore.idx.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(curbStore.pos, 3));
+    geo.setIndex(curbStore.idx);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: CURB_COLOR, roughness: 1, side: THREE.DoubleSide }));
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     scene.add(mesh);
   }
 }
@@ -1099,6 +1163,13 @@ function insideRect(x, z, cx, cz, cos, sin, halfW, halfD) {
 function groundHeightAt(x, z) {
   for (const p of groundPlatforms) {
     if (insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return p.y;
+  }
+  // 보도 위면 턱만큼 높다(도로에서 보도로 올라서면 캐릭터도 같이 올라간다)
+  for (const s of walkBands) {
+    if (Math.max(s.ax, s.bx) < x - s.outer || Math.min(s.ax, s.bx) > x + s.outer) continue;
+    if (Math.max(s.az, s.bz) < z - s.outer || Math.min(s.az, s.bz) > z + s.outer) continue;
+    const d = distToSegment(x, z, s.ax, s.az, s.bx, s.bz);
+    if (d > s.inner && d <= s.outer) return SIDEWALK_TOP_Y;
   }
   return 0;
 }
