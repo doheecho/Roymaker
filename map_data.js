@@ -54,7 +54,7 @@ export const PLACES = [
   { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 11.2, z: -96, model: "models/place_금파힐114.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -25.1, z: -146, model: "models/place_금파힐115.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -40.3, z: 110.4, model: "models/place_금파힐116.glb", rotationDeg: -4.2, scaleRatio: 1.3 },
-  { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 32.4, z: -158.8, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: 0, scaleRatio: 1.5 },
+  { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 30.6, z: -155.8, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: -5.6, scaleRatio: 1.5 },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -261, z: -114, church: true },
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -60.2, z: 177.3 },
   { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 55.6, z: 267.1, rotationDeg: 29 },
@@ -66,7 +66,7 @@ export const PLACES = [
   { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 102.5, z: -151.8, diagonal: true, model: "models/place_할인마트.glb", rotationDeg: 0, scaleRatio: 1.5 },
   { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 643, z: -371.9, model: "models/place_롯데마트행당점.glb", rotationDeg: 0 },
   { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 48.4, z: -228.3, diagonal: true, model: "models/3D_place_megacoffee.glb", rotationDeg: 0, scaleRatio: 1.3 },
-  { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -92.8, z: -228.8, model: "models/place_adamleeds.glb", scaleRatio: 1.5 },
+  { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -93.7, z: -232, model: "models/place_adamleeds.glb", scaleRatio: 1.5 },
   { id: 30, name: "분식집", floors: 4, type: "식당", x: -36.9, z: -223.5, model: "models/place_bunsik.glb" },
   { id: 31, name: "신금호두산위브 101동", floors: 15, type: "아파트", x: -269.5, z: -212.2 },
   { id: 32, name: "신금호두산위브 102동", floors: 15, type: "아파트", x: -170.9, z: -247.5 },
@@ -159,6 +159,9 @@ export const PLACES = [
   { id: 209, name: "홈플러스익스프레스", floors: 5, type: "중형마트", x: -443, z: 11.9, model: "models/place_홈플러스익스프레스.glb", rotationDeg: -15, scaleRatio: 1.5 },
   { id: 210, name: "경찰서,우체국", floors: 5, type: "기타", x: -611.9, z: -72.4, model: "models/place_경찰서.glb", rotationDeg: -2, scaleRatio: 1.2 },
   { id: 211, name: "신금호역", floors: 1, type: "기타", x: -581.3, z: 29.1, model: "models/place_신금호역5.glb" },
+  { id: 212, name: "신금호역 인근 상가", floors: 15, type: "기타", x: -536.9, z: -86.2, model: "models/place_신금호역5번출구앞상가.glb", rotationDeg: -3.2, scaleRatio: 1.3 },
+  { id: 213, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -631.3, z: 18.2, model: "models/place_megacoffee2.glb", rotationDeg: -29.7, scaleRatio: 1.3 },
+  { id: 214, name: "주택", floors: 5, type: "기타", x: 10.7, z: -225.4, model: "models/place_bagel.glb", rotationDeg: -1.2 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
