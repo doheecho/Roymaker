@@ -165,10 +165,10 @@ export const PLACES = [
   { id: 216, name: "주택가", floors: 3, type: "기타", x: -79.5, z: -301.3, model: "models/place_금북주택가2.glb", rotationDeg: -3.9, scaleRatio: 1.3 },
   { id: 217, name: "금호1가동 주민센터", floors: 5, type: "아파트", x: -339.8, z: -58.8, model: "models/place_금호1가동주민센터.glb", rotationDeg: 28.9, scaleRatio: 1.3 },
   { id: 218, name: "GS25", floors: 15, type: "아파트", x: -25.9, z: -573.4, model: "models/place_gs25극미점.glb", scaleRatio: 1.5 },
-  { id: 219, name: "상가", floors: 15, type: "기타", x: -2.5, z: -514, model: "models/place_산마을돈타운2.glb", scaleRatio: 1.3 },
+  { id: 219, name: "상가", floors: 15, type: "기타", x: 0.6, z: -513.5, model: "models/place_산마을돈타운2.glb", rotationDeg: 0.9, scaleRatio: 1.3 },
   { id: 220, name: "주택가", floors: 4, type: "기타", x: 0.9, z: -363.5, model: "models/place_금북남전체구역.glb", rotationDeg: 0.1, scaleRatio: 1.3 },
   { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -592.7, z: 100.4, model: "models/place_골드축산.glb", rotationDeg: -4.5 },
-  { id: 223, name: "행복한교회", floors: 5, type: "기타", x: 109.9, z: -503.8, model: "models/place_행복한교회.glb", scaleRatio: 1.3 },
+  { id: 223, name: "행복한교회", floors: 5, type: "기타", x: 103.6, z: -504.1, model: "models/place_행복한교회.glb", scaleRatio: 1.3 },
   { id: 224, name: "대림상가", floors: 5, type: "기타", x: 53.4, z: -562.6, model: "models/place_대림독서실.glb", rotationDeg: -15.6, scaleRatio: 1.3 },
 ];
 
@@ -184,7 +184,7 @@ export const PLACES = [
 // neighborhood3d.js는 이 곡선을 짧은 직선 여러 개로 잘게 쪼개 그린다.
 export const ROAD_SEGMENTS = [
   { a: [474, -474.9], b: [189.1, -302.2], width: 10 },
-  { a: [189.1, -302.2], b: [155.4, -311.1], width: 10, curve: [168.2, -292.4] },
+  { a: [189.1, -302.2], b: [155.4, -311.1], width: 10, curve: [162.1, -305.6] },
   { a: [155.4, -311.1], b: [159.8, -455.2], width: 10 },
   { a: [147.1, -499.1], b: [159.8, -455.2], width: 10, curve: [161.1, -480.3] },
   { a: [796.2, -534.5], b: [269.4, -217], width: 30, curve: [302, -224.5] },
