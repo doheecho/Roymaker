@@ -59,7 +59,7 @@ export const PLACES = [
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -60.2, z: 177.3 },
   { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 55.6, z: 267.1, rotationDeg: 29 },
   { id: 21, name: "금호119안전센터", floors: 2, type: "기타", x: 17.2, z: 79, model: "models/3D_place_keumho119.glb", rotationDeg: 0 },
-  { id: 22, name: "성동구립금호도서관", floors: 4, type: "도서관", x: 91, z: 83, model: "models/place_library.glb", rotationDeg: 0 },
+  { id: 22, name: "성동구립금호도서관", floors: 4, type: "도서관", x: 92, z: 72.7, model: "models/place_library.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 23, name: "성동구보건소금호분소", floors: 4, type: "보건소", x: 104, z: 152 },
   { id: 24, name: "성동아이사랑복합문화센터", floors: 4, type: "기타", x: 153.5, z: 287.9 },
   { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 115, z: -88, model: "models/3D_place_taekwondo.glb", rotationDeg: 0 },
@@ -156,7 +156,7 @@ export const PLACES = [
   { id: 206, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -497.6, z: 85.9, model: "models/place_키잉글리시.glb", rotationDeg: -3, scaleRatio: 1.5 },
   { id: 207, name: "KFC", floors: 4, type: "식당", x: -590, z: 56.5, model: "models/place_KFC.glb", rotationDeg: -23, scaleRatio: 1.5 },
   { id: 208, name: "GS25", floors: 154, type: "편의점", x: -541.3, z: 54, model: "models/place_GS25.glb", scaleRatio: 1.5 },
-  { id: 209, name: "홈플러스익스프레스", floors: 5, type: "중형마트", x: -458.3, z: 5.6, model: "models/place_홈플러스익스프레스.glb", scaleRatio: 1.5 },
+  { id: 209, name: "홈플러스익스프레스", floors: 5, type: "중형마트", x: -446.2, z: 9.4, model: "models/place_홈플러스익스프레스.glb", rotationDeg: -6.8, scaleRatio: 1.5 },
   { id: 210, name: "경찰서,우체국", floors: 5, type: "기타", x: -611.9, z: -72.4, model: "models/place_경찰서.glb", rotationDeg: -2, scaleRatio: 1.2 },
 ];
 
@@ -171,7 +171,7 @@ export const PLACES = [
 // 완전한 직선(map_editor.html에서 그림판 곡선 도구처럼 가운데 손잡이를 당겨서 만든다).
 // neighborhood3d.js는 이 곡선을 짧은 직선 여러 개로 잘게 쪼개 그린다.
 export const ROAD_SEGMENTS = [
-  { a: [-42.5, -428.9], b: [54.9, -482.8], width: 15, curve: [-42, -479.6] },
+  { a: [-42.5, -428.9], b: [54.9, -482.8], width: 10, curve: [-42, -479.6] },
   { a: [398.4, -428.8], b: [177.6, -296], width: 6 },
   { a: [177.6, -296], b: [160, -297.6], width: 6 },
   { a: [160, -297.6], b: [152, -316.8], width: 6 },
@@ -187,7 +187,7 @@ export const ROAD_SEGMENTS = [
   { a: [740.8, -273.6], b: [659.2, -220.8], width: 6 },
   { a: [635.2, -272], b: [400, -120], width: 6 },
   { a: [72.1, -255.8], b: [-61.9, -251.5], width: 15 },
-  { a: [-15.8, -254.5], b: [-18.3, -193.3], width: 15 },
+  { a: [-15.8, -254.5], b: [-18.3, -193.3], width: 10 },
   { a: [-582, -29], b: [-400.5, 153.3], width: 30 },
   { a: [-212.9, -255.2], b: [-191, -191.1], width: 18.7 },
   { a: [326.4, -236.8], b: [398.4, -120], width: 6 },
@@ -238,11 +238,11 @@ export const ROAD_SEGMENTS = [
   { a: [382.4, 286.4], b: [369.6, 300.8], width: 6 },
   { a: [384, 286.4], b: [388.8, 300.8], width: 6 },
   { a: [-393.5, -19.3], b: [-281.8, -111.9], width: 30, curve: [-293, -19.3] },
-  { a: [-51.8, -384.9], b: [-51.8, -195.5], width: 15, curve: [-77.1, -292.8] },
+  { a: [-51.8, -384.9], b: [-51.8, -195.5], width: 10, curve: [-77.1, -292.8] },
   { a: [79.4, -384.6], b: [-17.5, -620.2], width: 30, curve: [71.7, -519.4] },
   { a: [-53.7, -821.8], b: [-17.5, -620.2], width: 30, curve: [-77.8, -689.1] },
   { a: [-54.1, -1005.7], b: [-53.7, -821.8], width: 30, curve: [-47.4, -919.4] },
-  { a: [-42, -430.7], b: [-52.4, -382.8], width: 15 },
+  { a: [-42, -430.7], b: [-52.4, -382.8], width: 10 },
   { a: [-649.9, 284.9], b: [-624.4, 58.7], width: 30, curve: [-652.6, 119.6] },
   { a: [-649.9, 284.9], b: [-652.4, 544.2], width: 30 },
   { a: [95.5, -96.5], b: [75.3, -124.6], width: 15, curve: [98.4, -110.1] },
