@@ -25,6 +25,8 @@
   #toolbar button.active { background: #2f7a3f; border-color: #3f9a52; }
   #toolbar .sep { width: 1px; align-self: stretch; background: #3a3f4b; margin: 0 2px; }
   #toolbar .hint { color: #9aa0ad; font-size: 12px; margin-left: auto; }
+  #toolbar button:disabled { opacity: 0.4; cursor: default; }
+  #toolbar button:disabled:hover { background: #3a3f4b; }
   #main { flex: 1; display: flex; min-height: 0; }
   #stageWrap { flex: 1; overflow: auto; background: #14161a; position: relative; }
   #stage { position: relative; transform-origin: 0 0; }
@@ -218,6 +220,8 @@
   <button id="addParkBtn">🌳 공원 추가</button>
   <button id="addTreeBtn">🌲 나무 추가</button>
   <span class="hint" id="statusText">neighborhood3d.js 불러오는 중…</span>
+  <button id="undoBtn" title="되돌리기 (Ctrl+Z)" disabled>↶ 되돌리기</button>
+  <button id="redoBtn" title="다시 실행 (Ctrl+Shift+Z 또는 Ctrl+Y)" disabled>↷ 다시</button>
   <button id="exportBtn">📋 내보내기</button>
   <button id="ghSaveBtn" title="고친 map_data.js를 GitHub 저장소에 바로 커밋합니다">☁️ GitHub에 저장</button>
 </div>
@@ -1769,6 +1773,102 @@
       btn.disabled = false;
     }
   });
+
+  // ── 되돌리기 / 다시 실행 ──
+  // 건물·도로·공원·나무 데이터(PLACES·ROADS·PARKS·TREES)를 바꾸기 직전에 "지금 상태"를 기록해 두고,
+  // 되돌리기를 누르면 그 기록으로 돌아간다. 기록은 바꾸기 직전(마우스·손가락 누름, 입력칸 포커스,
+  // 버튼 클릭)에 checkpoint()로 남기며, 직전 기록과 같으면 중복으로 남기지 않는다.
+  const UNDO_LIMIT = 100;
+  const undoStack = [];
+  const redoStack = [];
+  const undoBtn = document.getElementById("undoBtn");
+  const redoBtn = document.getElementById("redoBtn");
+  function snapshotState() {
+    return JSON.stringify({ PLACES, ROADS, PARKS, TREES });
+  }
+  function updateUndoButtons() {
+    undoBtn.disabled = undoStack.length === 0;
+    redoBtn.disabled = redoStack.length === 0;
+  }
+  function checkpoint() {
+    const cur = snapshotState();
+    if (undoStack.length && undoStack[undoStack.length - 1] === cur) return;
+    undoStack.push(cur);
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack.length = 0;
+    updateUndoButtons();
+  }
+  function replaceAll(arr, items) {
+    arr.length = 0;
+    items.forEach((x) => arr.push(x));
+  }
+  // 저장된 상태로 데이터를 바꾸고, 화면(마커·도로·공원·나무·스카이뷰)을 전부 다시 그린다
+  function restoreState(json) {
+    const st = JSON.parse(json);
+    replaceAll(PLACES, st.PLACES);
+    replaceAll(ROADS, st.ROADS);
+    replaceAll(PARKS, st.PARKS);
+    replaceAll(TREES, st.TREES);
+    rebuildView();
+  }
+  function rebuildView() {
+    selected = null;
+    pendingRoadStart = null;
+    [parkLayer, sidewalkLayer, roadLayer, laneLayer, roadMarkLayer, skyLayer, treeLayer, placeLayer, pendingLayer, handleLayer].forEach((l) => { l.innerHTML = ""; });
+    roadRankGroups.forEach((g) => { g.innerHTML = ""; });
+    Object.keys(placeNodes).forEach((k) => delete placeNodes[k]);
+    roadNodes.length = 0;
+    parkNodes.length = 0;
+    treeNodes.length = 0;
+    PLACES.forEach(addPlaceNode);
+    ROADS.forEach(addRoadNode);
+    PARKS.forEach(addParkNode);
+    TREES.forEach(addTreeNode);
+    scheduleRoadMarkings();
+    renderPanel();
+  }
+  function undo() {
+    const cur = snapshotState();
+    while (undoStack.length && undoStack[undoStack.length - 1] === cur) undoStack.pop();
+    if (!undoStack.length) { updateUndoButtons(); return; }
+    const prev = undoStack.pop();
+    redoStack.push(cur);
+    restoreState(prev);
+    updateUndoButtons();
+    toast("되돌렸어요.");
+  }
+  function redo() {
+    const cur = snapshotState();
+    while (redoStack.length && redoStack[redoStack.length - 1] === cur) redoStack.pop();
+    if (!redoStack.length) { updateUndoButtons(); return; }
+    const next = redoStack.pop();
+    undoStack.push(cur);
+    restoreState(next);
+    updateUndoButtons();
+    toast("다시 실행했어요.");
+  }
+  undoBtn.addEventListener("click", undo);
+  redoBtn.addEventListener("click", redo);
+  // 바꾸기 직전에 기록: 지도(마커·손잡이·빈 곳 누르기), 오른쪽 패널(입력칸·버튼), 툴바의 추가/삭제 버튼
+  const NO_CHECKPOINT = "#undoBtn, #redoBtn, #zoomInBtn, #zoomOutBtn, #searchInput, #labelToggleWrap, #skyToggleWrap, #laneToggleWrap, #panelHeader, #exportBtn, #ghSaveBtn";
+  document.addEventListener("pointerdown", (ev) => {
+    const t = ev.target;
+    if (t && t.closest && t.closest("#overlay, #panelBody, #toolbar") && !t.closest(NO_CHECKPOINT)) checkpoint();
+  }, true);
+  document.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (t && t.closest && t.closest("#panelBody, #toolbar") && !t.closest(NO_CHECKPOINT)) checkpoint();
+  }, true);
+  document.getElementById("panelBody").addEventListener("focusin", () => checkpoint());
+  window.addEventListener("keydown", (ev) => {
+    if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return; // 입력칸 안에서는 브라우저 기본 되돌리기를 그대로 쓴다
+    const k = ev.key.toLowerCase();
+    if (k === "z" && !ev.shiftKey) { ev.preventDefault(); undo(); }
+    else if ((k === "z" && ev.shiftKey) || k === "y") { ev.preventDefault(); redo(); }
+  });
+  updateUndoButtons();
 
   // ── 저장 안 한 채로 나가려 하면 한 번 물어본다 ──
   let lastSavedText = buildMapDataFile();
