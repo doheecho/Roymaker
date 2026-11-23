@@ -6,6 +6,9 @@
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
+  .sky-img { pointer-events: none; }
+  #overlay.sky-hidden .sky-layer { display: none; }
+  #skyOpacity { width: 80px; vertical-align: middle; }
   html, body { margin: 0; height: 100%; font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
   body { display: flex; flex-direction: column; background: #20232a; color: #e8eaf0; }
   #toolbar {
@@ -112,6 +115,8 @@
   <input id="searchInput" type="text" placeholder="건물 이름 검색 후 Enter" />
   <span class="sep"></span>
   <label id="labelToggleWrap"><input type="checkbox" id="labelToggle" checked /> 라벨 표시</label>
+  <label id="skyToggleWrap" title="models/의 glb를 위에서 본 그림(img/skyview/)을 각 건물 자리에 깝니다 — 그림은 node tools/make_skyview.cjs로 만듭니다"><input type="checkbox" id="skyToggle" checked /> 스카이뷰</label>
+  <input id="skyOpacity" type="range" min="0.2" max="1" step="0.05" value="0.9" title="스카이뷰 진하기" />
   <span class="sep"></span>
   <button id="addPlaceBtn">🏢 건물 추가</button>
   <button id="addRoadBtn">🛣️ 도로 추가</button>
@@ -397,6 +402,7 @@
   // ── 마커/도로/공원/나무 렌더링(이 순서로 쌓아서 공원이 제일 아래, 건물 라벨이 제일 위에 오게 한다) ──
   const parkLayer = el("g", {});
   const roadLayer = el("g", {});
+  const skyLayer = el("g", { class: "sky-layer", opacity: 0.9 }); // 건물 스카이뷰 그림 — 도로 위, 마커 아래
   const treeLayer = el("g", {});
   const placeLayer = el("g", {});
   const pendingLayer = el("g", {});
@@ -406,6 +412,7 @@
   const handleLayer = el("g", {});
   svg.appendChild(parkLayer);
   svg.appendChild(roadLayer);
+  svg.appendChild(skyLayer);
   svg.appendChild(treeLayer);
   svg.appendChild(placeLayer);
   svg.appendChild(pendingLayer);
@@ -421,6 +428,47 @@
   let pendingRoadStart = null; // add-road 모드에서 첫 번째 클릭 지점(raw [x,z])
 
   function placeMarkerRadius() { return 8; }
+
+  // ── 스카이뷰: tools/make_skyview.cjs가 만든 img/skyview/skyview.json(모델별 그림 + 그림이 덮는
+  // 모델 좌표 범위)을 읽어서, 각 건물 자리에 게임과 똑같이 rotationDeg·scaleRatio를 적용해 깐다.
+  // 게임(three.js)의 rotation.y는 위에서 볼 때 반시계 회전이고, 이 지도는 y(=z)가 아래로 가는
+  // 좌표라 SVG에서는 rotate(-rotationDeg)가 같은 회전이 된다.
+  let SKYVIEW = {};
+  try {
+    SKYVIEW = await (await fetch("img/skyview/skyview.json", { cache: "no-store" })).json();
+  } catch (err) {
+    SKYVIEW = {};
+    console.warn("스카이뷰 목록(img/skyview/skyview.json)이 없어요 — node tools/make_skyview.cjs로 만들 수 있어요");
+  }
+  function updateSky(id) {
+    const n = placeNodes[id];
+    if (!n) return;
+    const p = n.place;
+    const info = p.model ? SKYVIEW[p.model] : null;
+    if (!info) {
+      if (n.sky) { n.sky.remove(); n.sky = null; }
+      return;
+    }
+    if (!n.sky) {
+      n.sky = el("image", { class: "sky-img", preserveAspectRatio: "none" });
+      skyLayer.appendChild(n.sky);
+    }
+    const href = `${encodeURI(info.file)}?v=${info.hash}`;
+    if (n.sky.getAttribute("href") !== href) n.sky.setAttribute("href", href);
+    n.sky.setAttribute("x", info.minX);
+    n.sky.setAttribute("y", info.minZ);
+    n.sky.setAttribute("width", info.width);
+    n.sky.setAttribute("height", info.depth);
+    const rot = p.rotationDeg != null ? p.rotationDeg : (p.diagonal ? 45 : 0);
+    const k = (p.scaleRatio ?? 1) / SCALE; // 모델 단위(=raw) → 지도 px
+    n.sky.setAttribute("transform", `translate(${n.px}, ${n.py}) rotate(${-rot}) scale(${k})`);
+  }
+  document.getElementById("skyToggle").addEventListener("change", (ev) => {
+    svg.classList.toggle("sky-hidden", !ev.target.checked);
+  });
+  document.getElementById("skyOpacity").addEventListener("input", (ev) => {
+    skyLayer.setAttribute("opacity", ev.target.value);
+  });
 
   function addPlaceNode(place) {
     const [px, py] = rawToPx(place.x, place.z);
@@ -440,7 +488,8 @@
     handleLayer.appendChild(rotLine);
     handleLayer.appendChild(handle);
     handleLayer.appendChild(handleHit);
-    placeNodes[place.id] = { place, g, dot, dotHit, label, rotLine, handle, handleHit, axis: null, px, py };
+    placeNodes[place.id] = { place, g, dot, dotHit, label, rotLine, handle, handleHit, axis: null, px, py, sky: null };
+    updateSky(place.id);
     dotHit.addEventListener("pointerdown", (ev) => startPlaceDrag(ev, place.id));
     handleHit.addEventListener("pointerdown", (ev) => startRotateDrag(ev, place.id));
     wireHoverTip(dotHit, () => {
@@ -567,6 +616,7 @@
 
   function updateRotHandle(id) {
     const n = placeNodes[id];
+    updateSky(id);
     const hasModel = !!n.place.model;
     n.handle.setAttribute("visibility", hasModel ? "visible" : "hidden");
     n.handleHit.setAttribute("visibility", hasModel ? "visible" : "hidden");
@@ -777,7 +827,7 @@
       panelBody.appendChild(fieldNum("rotationDeg", place.rotationDeg ?? 0, (v) => { place.rotationDeg = v; updateRotHandle(place.id); }, {
         step: "1", disabled: !place.model, note: place.model ? "노란 손잡이를 드래그해도 바뀝니다." : "이 건물은 모델이 없어 회전이 게임에 적용되지 않습니다.",
       }));
-      panelBody.appendChild(fieldNum("scaleRatio", place.scaleRatio ?? 1, (v) => { place.scaleRatio = v; }, {
+      panelBody.appendChild(fieldNum("scaleRatio", place.scaleRatio ?? 1, (v) => { place.scaleRatio = v; updateSky(place.id); }, {
         step: "0.05", disabled: !place.model, note: place.model ? "모델이 실제보다 작게/크게 만들어졌을 때 전체 크기를 보정합니다(기본 1)." : "모델이 없는 건물에는 적용되지 않습니다.",
       }));
       panelBody.appendChild(deleteButton(() => deletePlace(place.id), "🗑 이 건물 삭제"));
@@ -842,6 +892,7 @@
     const n = placeNodes[id];
     n.g.remove();
     n.rotLine.remove(); n.handle.remove(); n.handleHit.remove();
+    if (n.sky) n.sky.remove();
     delete placeNodes[id];
     selected = null;
     renderPanel();
