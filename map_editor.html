@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>지도 에디터</title>
 <style>
   :root { color-scheme: light; }
@@ -100,6 +101,61 @@
   #labelToggleWrap { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; color: #e8eaf0; user-select: none; }
   #labelToggleWrap input { cursor: pointer; }
   #overlay.labels-hidden .marker-label { display: none; }
+  /* ── 터치: 끌 수 있는 것들은 브라우저 스크롤 대신 드래그로, 손잡이는 확대 배율에 맞춰 손가락 크기로 ── */
+  #stageWrap { touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
+  .marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect { touch-action: none; }
+  .marker-hit, .rot-hit, .curve-hit, .tree-hit {
+    transform-box: fill-box; transform-origin: center; transform: scale(var(--hit-k, 1));
+  }
+  .rot-handle, .curve-handle, .road-handle {
+    transform-box: fill-box; transform-origin: center; transform: scale(var(--handle-k, 1));
+  }
+  #panelHeader { display: none; }
+  .modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex;
+    align-items: center; justify-content: center; z-index: 55; padding: 12px;
+  }
+  .modal.hidden { display: none; }
+  .modal-box { width: min(520px, 100%); max-height: 90vh; overflow-y: auto; background: #1d2027; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .modal-box h3 { margin: 0; font-size: 16px; }
+  .modal-box p, .modal-box li { margin: 0; font-size: 13px; color: #c3c8d3; line-height: 1.55; }
+  .modal-box ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+  .modal-box a { color: #7fb8ff; }
+  .modal-box input[type="text"], .modal-box input[type="password"] {
+    width: 100%; padding: 9px 10px; border-radius: 6px; border: 1px solid #4a4f5b; background: #121419; color: #e8eaf0; font: inherit; font-size: 15px;
+  }
+  .modal-box .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .modal-box button { font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 6px; border: 1px solid #4a4f5b; background: #3a3f4b; color: #e8eaf0; cursor: pointer; }
+  .modal-box button.primary { background: #2f7a3f; border-color: #3f9a52; }
+  .modal-box button.danger { background: #4a2a2a; border-color: #7a3030; }
+  .modal-box .muted { color: #8d93a0; font-size: 12px; }
+  #ghSaveBtn { background: #2f5f8a; border-color: #3f7ab0; }
+
+  /* ── 휴대폰(좁은 화면): 툴바는 가로로 밀어서 보고, 편집 패널은 아래 서랍으로 ── */
+  @media (max-width: 760px) {
+    #toolbar { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 6px 8px; padding-top: max(6px, env(safe-area-inset-top)); scrollbar-width: none; }
+    #toolbar::-webkit-scrollbar { display: none; }
+    #toolbar > * { flex: none; }
+    #toolbar button, #toolbar input { font-size: 14px; padding: 8px 10px; }
+    #toolbar input[type="text"] { width: 130px; font-size: 16px; }
+    #toolbar .hint { display: none; }
+    #main { flex-direction: column; }
+    #sidePanel {
+      width: 100%; max-height: 46vh; border-left: none; border-top: 1px solid #3a3f4b;
+      padding: 0 12px 12px; padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+    #sidePanel.collapsed { max-height: none; overflow: hidden; padding-bottom: max(0px, env(safe-area-inset-bottom)); }
+    #sidePanel.collapsed #panelBody { display: none; }
+    #panelHeader {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      position: sticky; top: 0; background: #262a33; padding: 10px 0; margin-bottom: 4px; z-index: 1;
+      font-size: 14px; font-weight: 600; cursor: pointer; user-select: none;
+    }
+    #panelHeader .chev { color: #9aa0ad; font-size: 13px; font-weight: 400; }
+    .field input[type="number"], .field input[type="text"] { font-size: 16px; padding: 8px; }
+    #exportBox { width: 100%; max-height: 92vh; padding: 12px; }
+    #exportText { min-height: 40vh; }
+  }
   #hoverTip {
     position: fixed; display: none; z-index: 60; pointer-events: none;
     background: #1d2027; color: #e8eaf0; border: 1px solid #4a4f5b; border-radius: 6px;
@@ -124,6 +180,7 @@
   <button id="addTreeBtn">🌲 나무 추가</button>
   <span class="hint" id="statusText">neighborhood3d.js 불러오는 중…</span>
   <button id="exportBtn">📋 내보내기</button>
+  <button id="ghSaveBtn" title="고친 map_data.js를 GitHub 저장소에 바로 커밋합니다">☁️ GitHub에 저장</button>
 </div>
 <div id="main">
   <div id="stageWrap">
@@ -133,6 +190,7 @@
     </div>
   </div>
   <div id="sidePanel">
+    <div id="panelHeader"><span id="panelTitle">편집 패널</span><span class="chev" id="panelChev">▲ 펼치기</span></div>
     <div id="panelBody"><p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)를 클릭해서 선택하세요.<br><br>· 마커를 드래그하면 위치가 바뀝니다.<br>· 노란 점(방향 손잡이)을 드래그하면 회전이 바뀝니다 — 건물은 모델이 있을 때만, 공원은 항상 적용됩니다.<br>· 도로는 빨간 사각형 손잡이로 양끝을 옮기고, 폭은 옆 칸에 숫자로 넣습니다.<br>· 위 툴바의 "추가" 버튼을 누른 뒤 지도를 클릭하면 새로 만들어집니다(도로는 두 번 클릭 — 시작점, 끝점).<br>· 다 고치면 위의 "내보내기"를 눌러 <code>map_data.js</code> 파일 전체를 통째로 바꿔치기하세요.</p></div>
   </div>
 </div>
@@ -144,6 +202,36 @@
     <div class="actions">
       <button id="copyExportBtn">복사하기</button>
       <button id="closeExportBtn">닫기</button>
+    </div>
+  </div>
+</div>
+<div id="ghModal" class="modal hidden">
+  <div class="modal-box">
+    <h3>☁️ GitHub에 바로 저장</h3>
+    <div id="ghSetup">
+      <p>처음 한 번만, 이 저장소의 파일을 고칠 수 있는 <b>토큰</b>을 만들어 붙여 넣어 주세요. 토큰은 <b>이 기기의 이 브라우저에만</b> 저장되고, 코드나 저장소에는 올라가지 않아요.</p>
+      <ol>
+        <li><a id="ghTokenLink" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub 토큰 만들기 페이지</a>를 열어요(로그인 필요).</li>
+        <li>Token name은 아무거나(예: 맵에디터), Expiration은 원하는 기간으로.</li>
+        <li><b>Repository access</b> → <b>Only select repositories</b> → <b id="ghRepoName1">Roymaker</b> 하나만 고르기.</li>
+        <li><b>Permissions</b> → Repository permissions → <b>Contents</b>를 <b>Read and write</b>로.</li>
+        <li>맨 아래 <b>Generate token</b>을 누르고, 나온 토큰(github_pat_…)을 복사해서 아래에 붙여 넣기.</li>
+      </ol>
+      <input id="ghTokenInput" type="password" placeholder="github_pat_… 붙여 넣기" autocomplete="off" />
+      <div class="actions">
+        <button id="ghTokenSaveBtn" class="primary">토큰 저장</button>
+        <button class="gh-close">닫기</button>
+      </div>
+    </div>
+    <div id="ghReady" hidden>
+      <p><b id="ghRepoName2">doheecho/Roymaker</b> 저장소의 <code>main</code> 브랜치에 있는 <code>map_data.js</code>를 지금 에디터 상태로 바꿔서 커밋해요. 게임에는 1~2분 뒤(GitHub Pages 반영 후)에 보여요.</p>
+      <input id="ghCommitMsg" type="text" placeholder="커밋 메시지" />
+      <p class="muted" id="ghStatus"></p>
+      <div class="actions">
+        <button id="ghForgetBtn" class="danger">토큰 지우기</button>
+        <button class="gh-close">닫기</button>
+        <button id="ghCommitBtn" class="primary">저장(커밋)</button>
+      </div>
     </div>
   </div>
 </div>
@@ -305,15 +393,35 @@
   svg.setAttribute("height", mapImage.height);
   svg.setAttribute("viewBox", `0 0 ${mapImage.width} ${mapImage.height}`);
 
-  let zoom = 0.4;
+  const COARSE = window.matchMedia("(pointer: coarse)").matches; // 손가락으로 쓰는 기기(휴대폰·태블릿)
+  const ZOOM_MIN = 0.08, ZOOM_MAX = 4;
+  let zoom = window.innerWidth <= 760 ? 0.6 : 0.4;
+  let afterZoom = null; // 마커·손잡이가 다 만들어진 뒤 연결된다(확대 배율에 맞춰 손잡이 크기·거리 갱신)
   function applyZoom() {
     stage.style.transform = `scale(${zoom})`;
     stage.style.width = mapImage.width + "px";
     stage.style.height = mapImage.height + "px";
     document.getElementById("zoomLabel").textContent = Math.round(zoom * 100) + "%";
+    if (afterZoom) afterZoom();
   }
-  document.getElementById("zoomInBtn").addEventListener("click", () => { zoom = Math.min(2, zoom * 1.3); applyZoom(); });
-  document.getElementById("zoomOutBtn").addEventListener("click", () => { zoom = Math.max(0.08, zoom / 1.3); applyZoom(); });
+  // 화면의 (cx, cy) 지점(없으면 가운데)이 확대 전후에 같은 자리에 머물도록 스크롤까지 맞춘다
+  function setZoom(z, cx, cy) {
+    const rect = stageWrap.getBoundingClientRect();
+    if (cx == null) { cx = rect.left + stageWrap.clientWidth / 2; cy = rect.top + stageWrap.clientHeight / 2; }
+    const mx = (stageWrap.scrollLeft + cx - rect.left) / zoom;
+    const my = (stageWrap.scrollTop + cy - rect.top) / zoom;
+    setZoomAnchored(z, mx, my, cx, cy);
+  }
+  // 지도 픽셀 (mx, my)가 화면의 (cx, cy)에 오도록 확대 + 스크롤
+  function setZoomAnchored(z, mx, my, cx, cy) {
+    zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+    applyZoom();
+    const rect = stageWrap.getBoundingClientRect();
+    stageWrap.scrollLeft = mx * zoom - (cx - rect.left);
+    stageWrap.scrollTop = my * zoom - (cy - rect.top);
+  }
+  document.getElementById("zoomInBtn").addEventListener("click", () => setZoom(zoom * 1.3));
+  document.getElementById("zoomOutBtn").addEventListener("click", () => setZoom(zoom / 1.3));
   applyZoom();
 
   // ── 라벨 표시/숨김 + 숨겼을 때 마우스오버로 정보 보기 ──
@@ -323,6 +431,7 @@
   });
   const hoverTip = document.getElementById("hoverTip");
   function showTip(text, ev) {
+    if (ev.pointerType === "touch") return;
     hoverTip.textContent = text;
     hoverTip.style.left = ev.clientX + 14 + "px";
     hoverTip.style.top = ev.clientY + 14 + "px";
@@ -624,7 +733,7 @@
     if (!hasModel || n.axis == null) return;
     const worldAngle = rotationDegToWorldAngle(n.place.rotationDeg || 0, n.axis);
     const rad = (worldAngle * Math.PI) / 180;
-    const R = 34;
+    const R = Math.max(34, 44 / zoom);
     const hx = n.px + R * Math.cos(rad);
     const hy = n.py + R * Math.sin(rad);
     n.handle.setAttribute("cx", hx);
@@ -663,7 +772,7 @@
     const worldAngle = parkWorldAngle(node.park.rotationDeg);
     node.rect.setAttribute("transform", `rotate(${worldAngle}, ${px}, ${py})`);
     const rad = (worldAngle * Math.PI) / 180;
-    const R = Math.max(w, d) / 2 + 26;
+    const R = Math.max(w, d) / 2 + Math.max(26, 34 / zoom);
     const hx = px + R * Math.cos(rad);
     const hy = py + R * Math.sin(rad);
     node.handle.setAttribute("cx", hx);
@@ -794,7 +903,22 @@
     return btn;
   }
 
+  const sidePanel = document.getElementById("sidePanel");
+  const panelTitle = document.getElementById("panelTitle");
+  const panelChev = document.getElementById("panelChev");
+  function setPanelCollapsed(c) {
+    sidePanel.classList.toggle("collapsed", c);
+    panelChev.textContent = c ? "▲ 펼치기" : "▼ 접기";
+  }
+  document.getElementById("panelHeader").addEventListener("click", () => setPanelCollapsed(!sidePanel.classList.contains("collapsed")));
+  setPanelCollapsed(true);
+  let lastPanelKey = null;
   function renderPanel() {
+    // 휴대폰 서랍: 새로 뭔가를 고르면 펼치고, 선택이 풀리면 접는다(같은 걸 끄는 중이면 그대로)
+    const key = selected ? selected.kind + ":" + (selected.ref.id ?? selected.ref.index ?? "") + ":" + (selected.ref.seg ? ROADS.indexOf(selected.ref.seg) : "") : null;
+    if (key !== lastPanelKey) setPanelCollapsed(!selected);
+    lastPanelKey = key;
+    panelTitle.textContent = !selected ? "편집 패널" : selected.kind === "place" ? `🏢 ${selected.ref.name}` : selected.kind === "road" ? "🛣️ 도로" : selected.kind === "park" ? "🌳 공원" : "🌲 나무";
     panelBody.innerHTML = "";
     if (!selected) {
       panelBody.innerHTML = '<p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)를 클릭해서 선택하세요.</p>';
@@ -970,7 +1094,20 @@
 
   svg.addEventListener("pointerdown", (ev) => {
     if (ev.target !== svg) return; // 마커 위 클릭은 각자의 pointerdown 핸들러가 처리한다
-    const pt = svgPoint(ev);
+    if (ev.pointerType !== "touch") { handleMapTap(ev); return; }
+    const sx = ev.clientX, sy = ev.clientY, sl = stageWrap.scrollLeft, st = stageWrap.scrollTop;
+    const pt0 = svgPoint(ev); // 손을 뗄 때는 스크롤이 바뀌었을 수 있어서, 누른 순간의 지도 좌표를 쓴다
+    const up = (uev) => {
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      const moved = Math.hypot(uev.clientX - sx, uev.clientY - sy) + Math.abs(stageWrap.scrollLeft - sl) + Math.abs(stageWrap.scrollTop - st);
+      if (uev.type === "pointerup" && moved < 12 && !pinch.active && !pinch.recent) handleMapTap(ev, pt0);
+    };
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  });
+  function handleMapTap(ev, knownPt) {
+    const pt = knownPt || svgPoint(ev);
     const [rx, rz] = pxToRaw(pt.x, pt.y);
     if (mode === "add-place") {
       const id = nextId(PLACES);
@@ -1005,6 +1142,7 @@
         const [px, py] = rawToPx(pendingRoadStart[0], pendingRoadStart[1]);
         pendingLayer.appendChild(el("circle", { cx: px, cy: py, r: 7, class: "pending-point" }));
         statusText.textContent = "이제 끝점을 클릭하세요.";
+        toast("이제 끝점을 누르세요.");
       } else {
         const endPt = snapRoadPoint(Math.round(rx * 10) / 10, Math.round(rz * 10) / 10, null, null);
         const seg = { a: pendingRoadStart, b: endPt, width: 6 };
@@ -1028,7 +1166,7 @@
     clearSelectionVisual();
     selected = null;
     renderPanel();
-  });
+  }
   placeLayer.addEventListener("pointerdown", (ev) => {
     if (mode !== "select") return;
     const g = ev.target.closest("g[data-place-id]");
@@ -1274,6 +1412,191 @@
     datalist.appendChild(opt);
   });
   document.body.appendChild(datalist);
+
+  // ── 터치: 확대 배율에 맞춰 손잡이·클릭 영역을 손가락 크기로 ──
+  function refreshTouchSizes() {
+    const touchPx = COARSE ? 22 : 10; // 화면에서 최소 이만큼(반지름)은 잡히게
+    const hitK = Math.min(3, Math.max(1, touchPx / zoom / 16));
+    const handleK = COARSE ? Math.min(3, Math.max(1, 9 / zoom / 7)) : 1;
+    svg.style.setProperty("--hit-k", hitK.toFixed(3));
+    svg.style.setProperty("--handle-k", handleK.toFixed(3));
+    Object.keys(placeNodes).forEach((id) => updateRotHandle(Number(id)));
+    parkNodes.forEach(updateParkVisual);
+  }
+  afterZoom = refreshTouchSizes;
+  refreshTouchSizes();
+
+  // 끌고 있던 걸 끝낸다(두 번째 손가락이 닿아 확대로 바뀔 때) — 모든 드래그가 window의 pointerup으로 끝나게 돼 있다
+  function endActiveDrags() {
+    window.dispatchEvent(new PointerEvent("pointerup", { pointerType: "touch" }));
+  }
+  // 끌 수 있는 걸 손가락으로 누르면 화면이 같이 스크롤되지 않게(iOS는 SVG의 touch-action을 잘 안 지켜서 한 번 더 막는다)
+  const DRAGGABLE = ".marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect";
+  svg.addEventListener("touchstart", (ev) => {
+    if (ev.touches.length === 1 && ev.target.closest && ev.target.closest(DRAGGABLE) && mode === "select") ev.preventDefault();
+  }, { passive: false });
+
+  // ── 두 손가락으로 확대·축소(+ 이동) ──
+  const pinch = { active: false, recent: false, d0: 0, z0: 0, mx: 0, my: 0 };
+  function touchMid(t) { return [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2]; }
+  function touchDist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+  stageWrap.addEventListener("touchstart", (ev) => {
+    if (ev.touches.length !== 2) return;
+    ev.preventDefault();
+    endActiveDrags();
+    const [cx, cy] = touchMid(ev.touches);
+    const rect = stageWrap.getBoundingClientRect();
+    pinch.active = true;
+    pinch.d0 = Math.max(touchDist(ev.touches), 1);
+    pinch.z0 = zoom;
+    pinch.mx = (stageWrap.scrollLeft + cx - rect.left) / zoom;
+    pinch.my = (stageWrap.scrollTop + cy - rect.top) / zoom;
+  }, { passive: false });
+  stageWrap.addEventListener("touchmove", (ev) => {
+    if (!pinch.active || ev.touches.length < 2) return;
+    ev.preventDefault();
+    const [cx, cy] = touchMid(ev.touches);
+    setZoomAnchored(pinch.z0 * (touchDist(ev.touches) / pinch.d0), pinch.mx, pinch.my, cx, cy);
+  }, { passive: false });
+  const endPinch = (ev) => {
+    if (!pinch.active || ev.touches.length >= 2) return;
+    pinch.active = false;
+    pinch.recent = true; // 손가락을 하나씩 떼는 사이에 "탭"으로 처리되지 않게 잠깐 막는다
+    setTimeout(() => { pinch.recent = false; }, 350);
+  };
+  stageWrap.addEventListener("touchend", endPinch);
+  stageWrap.addEventListener("touchcancel", endPinch);
+  // iOS 사파리의 화면 전체 확대 제스처는 막는다(지도 확대는 위 핀치가 한다)
+  document.addEventListener("gesturestart", (ev) => ev.preventDefault());
+  // PC 트랙패드 핀치(=Ctrl+휠)도 지도 확대로
+  stageWrap.addEventListener("wheel", (ev) => {
+    if (!ev.ctrlKey) return;
+    ev.preventDefault();
+    setZoom(zoom * Math.exp(-ev.deltaY * 0.01), ev.clientX, ev.clientY);
+  }, { passive: false });
+
+  // ── GitHub에 바로 저장(map_data.js를 저장소 main 브랜치에 커밋) ──
+  // 토큰은 이 브라우저 localStorage에만 둔다(게임의 깃허브 세이브와는 다른 키 — 권한도 다름).
+  const GH_EDITOR_TOKEN_KEY = "roymaker-editor-gh-token";
+  const GH_BRANCH = "main";
+  const GH_PATH = "map_data.js";
+  const ghRepo = (() => {
+    // doheecho.github.io/Roymaker/map_editor.html → doheecho/Roymaker (다른 데서 열면 기본값)
+    const host = location.hostname;
+    const seg = location.pathname.split("/").filter(Boolean);
+    if (host.endsWith(".github.io") && seg.length >= 2) return { owner: host.split(".")[0], repo: seg[0] };
+    return { owner: "doheecho", repo: "Roymaker" };
+  })();
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (err) { return null; } }
+  function lsSet(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (err) { /* 저장소를 못 쓰면 무시 */ } }
+  function utf8ToB64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  function b64ToUtf8(b64) {
+    const bin = atob(b64.replace(/\s/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+  async function ghApi(path, { method = "GET", body } = {}) {
+    const res = await fetch(`https://api.github.com${path}`, {
+      method,
+      cache: "no-store",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${lsGet(GH_EDITOR_TOKEN_KEY)}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) throw new Error("토큰이 맞지 않아요(만료됐거나 잘못 붙여 넣음) — 토큰을 지우고 다시 넣어 주세요.");
+    if (res.status === 403 || res.status === 404) throw new Error(`토큰에 ${ghRepo.owner}/${ghRepo.repo} 저장소의 Contents 쓰기 권한이 없어요.`);
+    if (res.status === 409 || res.status === 422) throw new Error("그 사이 GitHub의 파일이 또 바뀌었어요 — 한 번 더 눌러 주세요.");
+    if (!res.ok) throw new Error(`GitHub 응답 오류 (${res.status})`);
+    return res.json();
+  }
+  const ghModal = document.getElementById("ghModal");
+  const ghStatus = document.getElementById("ghStatus");
+  document.getElementById("ghRepoName1").textContent = ghRepo.repo;
+  document.getElementById("ghRepoName2").textContent = `${ghRepo.owner}/${ghRepo.repo}`;
+  function renderGhModal() {
+    const has = !!lsGet(GH_EDITOR_TOKEN_KEY);
+    document.getElementById("ghSetup").hidden = has;
+    document.getElementById("ghReady").hidden = !has;
+  }
+  document.getElementById("ghSaveBtn").addEventListener("click", () => {
+    renderGhModal();
+    ghStatus.textContent = buildMapDataFile() === lastSavedText ? "아직 바뀐 게 없어요(저장해도 똑같아요)." : "";
+    const msg = document.getElementById("ghCommitMsg");
+    if (!msg.value) msg.value = "맵 에디터에서 map_data.js 수정";
+    ghModal.classList.remove("hidden");
+  });
+  ghModal.querySelectorAll(".gh-close").forEach((b) => b.addEventListener("click", () => ghModal.classList.add("hidden")));
+  document.getElementById("ghTokenSaveBtn").addEventListener("click", () => {
+    const t = document.getElementById("ghTokenInput").value.trim();
+    if (!t) { toast("토큰을 붙여 넣어 주세요."); return; }
+    lsSet(GH_EDITOR_TOKEN_KEY, t);
+    document.getElementById("ghTokenInput").value = "";
+    renderGhModal();
+    toast("토큰을 저장했어요.");
+  });
+  document.getElementById("ghForgetBtn").addEventListener("click", () => {
+    if (!window.confirm("이 브라우저에 저장된 GitHub 토큰을 지울까요?")) return;
+    lsSet(GH_EDITOR_TOKEN_KEY, null);
+    renderGhModal();
+  });
+  let ghSaving = false;
+  document.getElementById("ghCommitBtn").addEventListener("click", async () => {
+    if (ghSaving) return;
+    ghSaving = true;
+    const btn = document.getElementById("ghCommitBtn");
+    btn.disabled = true;
+    try {
+      const newText = buildMapDataFile();
+      ghStatus.textContent = "GitHub의 지금 파일을 확인하는 중…";
+      const api = `/repos/${ghRepo.owner}/${ghRepo.repo}/contents/${GH_PATH}`;
+      const cur = await ghApi(`${api}?ref=${GH_BRANCH}`);
+      const remoteText = b64ToUtf8(cur.content || "");
+      if (remoteText === newText) {
+        lastSavedText = newText;
+        ghStatus.textContent = "GitHub 파일이 이미 지금 상태와 같아요 — 저장할 게 없어요.";
+        return;
+      }
+      // 에디터를 연 뒤 GitHub 쪽이 바뀌었으면(다른 기기·웹에서 고침) 덮어쓰기 전에 물어본다
+      if (remoteText !== dataText && !window.confirm(
+        "이 에디터를 연 뒤에 GitHub의 map_data.js가 바뀌었어요(다른 기기나 GitHub 웹에서 고쳤거나, 방금 저장한 게 아직 반영 전일 수 있어요).\n\n" +
+        "저장하면 그 바뀐 내용은 지금 에디터 상태로 덮어써져요. 그래도 저장할까요?\n(취소하고 페이지를 새로고침하면 최신 파일로 다시 시작해요)"
+      )) {
+        ghStatus.textContent = "저장을 취소했어요.";
+        return;
+      }
+      ghStatus.textContent = "저장(커밋)하는 중…";
+      const message = document.getElementById("ghCommitMsg").value.trim() || "맵 에디터에서 map_data.js 수정";
+      const res = await ghApi(api, { method: "PUT", body: { message, content: utf8ToB64(newText), sha: cur.sha, branch: GH_BRANCH } });
+      dataText = newText; // 다음 저장 때 "그 사이 바뀌었나" 비교 기준
+      lastSavedText = newText;
+      const short = (res.commit && res.commit.sha || "").slice(0, 7);
+      ghStatus.textContent = `저장했어요 ✔ (커밋 ${short}) — 게임에는 1~2분 뒤에 보여요.`;
+      toast("GitHub에 저장했어요!");
+    } catch (err) {
+      ghStatus.textContent = "⚠️ " + err.message;
+    } finally {
+      ghSaving = false;
+      btn.disabled = false;
+    }
+  });
+
+  // ── 저장 안 한 채로 나가려 하면 한 번 물어본다 ──
+  let lastSavedText = buildMapDataFile();
+  window.addEventListener("beforeunload", (ev) => {
+    if (buildMapDataFile() === lastSavedText) return;
+    ev.preventDefault();
+    ev.returnValue = "";
+  });
 })();
 </script>
 </body>
