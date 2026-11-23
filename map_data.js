@@ -162,6 +162,9 @@ export const PLACES = [
   { id: 212, name: "신금호역 인근 상가", floors: 15, type: "기타", x: -536.9, z: -86.2, model: "models/place_신금호역5번출구앞상가.glb", rotationDeg: -3.2, scaleRatio: 1.3 },
   { id: 213, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -631.3, z: 18.2, model: "models/place_megacoffee2.glb", rotationDeg: -29.7, scaleRatio: 1.3 },
   { id: 214, name: "주택", floors: 5, type: "기타", x: 10.7, z: -225.4, model: "models/place_bagel.glb", rotationDeg: -1.2 },
+  { id: 215, name: "주택가", floors: 3, type: "기타", x: -43.4, z: -288.2, model: "models/place_금북주택가1.glb", scaleRatio: 1.3 },
+  { id: 216, name: "주택가", floors: 3, type: "기타", x: -80.4, z: -303.5, model: "models/place_금북주택가2.glb", scaleRatio: 1.3 },
+  { id: 217, name: "금호1가동 주민센터", floors: 5, type: "아파트", x: -339.8, z: -58.8, model: "models/place_금호1가동주민센터.glb", rotationDeg: 28.9, scaleRatio: 1.3 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
