@@ -45,9 +45,14 @@
     font-size: 22px; fill: #202225; paint-order: stroke; stroke: #fff; stroke-width: 4px;
     pointer-events: none; font-weight: 600;
   }
-  .road-line { stroke: #4a4a4e; stroke-linecap: round; cursor: pointer; }
+  .road-line { stroke: #4a4a4e; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; pointer-events: none; }
+  .road-line.selected { stroke: #e3482b !important; stroke-opacity: 0.85; }
+  /* 차선: 실제 폭(--w, 지도 px)이 화면에서 너무 가늘면 최소 굵기(--lane-min, 확대 배율로 계산)로 */
+  .lane { fill: none; pointer-events: none; stroke-width: max(calc(var(--w) * 1px), calc(var(--lane-min, 1) * 1px)); }
+  .lane-yellow { stroke: #f2c438; }
+  .lane-white { stroke: #f2f2f2; }
+  #overlay.lanes-hidden .lane-layer { display: none; }
   .road-hit { fill: none; stroke: transparent; stroke-width: 26; cursor: pointer; pointer-events: all; }
-  .road-line.selected { stroke: #e3482b; }
   .road-handle { fill: #e3482b; stroke: #fff; stroke-width: 2; cursor: grab; }
   .road-handle:active { cursor: grabbing; }
   .curve-handle { fill: #ffa63f; stroke: #7a4600; stroke-width: 1.5; cursor: grab; }
@@ -100,6 +105,8 @@
   #toast.show { opacity: 1; }
   #labelToggleWrap { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; color: #e8eaf0; user-select: none; }
   #labelToggleWrap input { cursor: pointer; }
+  #laneToggleWrap { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; color: #e8eaf0; user-select: none; }
+  #roadOpacity { width: 80px; vertical-align: middle; }
   #overlay.labels-hidden .marker-label { display: none; }
   /* ── 터치: 끌 수 있는 것들은 브라우저 스크롤 대신 드래그로, 손잡이는 확대 배율에 맞춰 손가락 크기로 ── */
   #stageWrap { touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
@@ -164,9 +171,9 @@
     #toolbar button, #toolbar input { font-size: 15px; padding: 9px 12px; }
     #toolbar input[type="text"] { width: 160px; font-size: 16px; }
     #toolbar .hint { display: none; }
-    #labelToggleWrap, #skyToggleWrap { font-size: 15px; }
-    #labelToggleWrap input, #skyToggleWrap input { width: 20px; height: 20px; }
-    #skyOpacity { width: 110px; }
+    #labelToggleWrap, #skyToggleWrap, #laneToggleWrap { font-size: 15px; }
+    #labelToggleWrap input, #skyToggleWrap input, #laneToggleWrap input { width: 20px; height: 20px; }
+    #skyOpacity, #roadOpacity { width: 110px; }
     #sidePanel { width: 320px; padding: 0 14px 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
     #panelHeader {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -201,6 +208,8 @@
   <label id="labelToggleWrap"><input type="checkbox" id="labelToggle" checked /> 라벨 표시</label>
   <label id="skyToggleWrap" title="models/의 glb를 위에서 본 그림(img/skyview/)을 각 건물 자리에 깝니다 — 그림은 node tools/make_skyview.cjs로 만듭니다"><input type="checkbox" id="skyToggle" checked /> 스카이뷰</label>
   <input id="skyOpacity" type="range" min="0.2" max="1" step="0.05" value="0.9" title="스카이뷰 진하기" />
+  <label id="laneToggleWrap" title="도로를 게임과 같은 실제 폭·색·차선으로 그립니다"><input type="checkbox" id="laneToggle" checked /> 차선</label>
+  <input id="roadOpacity" type="range" min="0.2" max="1" step="0.05" value="0.85" title="도로 진하기(낮추면 밑의 지도 사진이 비쳐 보여요)" />
   <span class="sep"></span>
   <button id="addPlaceBtn">🏢 건물 추가</button>
   <button id="addRoadBtn">🛣️ 도로 추가</button>
@@ -539,6 +548,13 @@
   // ── 마커/도로/공원/나무 렌더링(이 순서로 쌓아서 공원이 제일 아래, 건물 라벨이 제일 위에 오게 한다) ──
   const parkLayer = el("g", {});
   const roadLayer = el("g", {});
+  // 도로 표면은 게임처럼 "급"(rank)이 높은 길이 위에 오게 급별 그룹에 나눠 담고, 차선은 그 위 한 그룹에
+  const roadSurfaceLayer = el("g", { opacity: 0.85 });
+  const roadRankGroups = [0, 1, 2, 3, 4].map(() => el("g", {}));
+  roadRankGroups.forEach((g) => roadSurfaceLayer.appendChild(g));
+  const laneLayer = el("g", { class: "lane-layer" });
+  roadSurfaceLayer.appendChild(laneLayer);
+  roadLayer.appendChild(roadSurfaceLayer);
   const skyLayer = el("g", { class: "sky-layer", opacity: 0.9 }); // 건물 스카이뷰 그림 — 도로 위, 마커 아래
   const treeLayer = el("g", {});
   const placeLayer = el("g", {});
@@ -659,6 +675,62 @@
       seg.curve = [Math.round(cx * 10) / 10, Math.round(cz * 10) / 10];
     }
   }
+  // ── 도로 폭에 따른 모양: neighborhood3d.js의 roadStyleFor와 같은 규칙(폭은 raw = 실측 m) ──
+  //   8 미만: 골목길(옅은 회색, 선 없음) · 8~11: 노란 점선 중앙선 · 11~13: 단지내도로(베이지, 선 없음)
+  //   13~22: 노란 실선 중앙선 · 22 이상: 노란 실선 + 양옆 흰 점선 차선
+  function roadStyleFor(width) {
+    if (width < 8) return { surface: "#7a7a7e", center: null, sides: false, rank: 1 };
+    if (width < 11) return { surface: "#4a4a4e", center: "dashed", sides: false, rank: 2 };
+    if (width < 13) return { surface: "#d8c9a3", center: null, sides: false, rank: 0 };
+    if (width < 22) return { surface: "#4a4a4e", center: "solid", sides: false, rank: 3 };
+    return { surface: "#4a4a4e", center: "solid", sides: true, rank: 4 };
+  }
+  const ROAD_CURVE_STEPS = 20;
+  function roadPolylinePx(seg) {
+    const c = roadControl(seg);
+    const n = seg.curve ? ROAD_CURVE_STEPS : 1;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, u = 1 - t;
+      pts.push(rawToPx(u * u * seg.a[0] + 2 * u * t * c[0] + t * t * seg.b[0], u * u * seg.a[1] + 2 * u * t * c[1] + t * t * seg.b[1]));
+    }
+    return pts;
+  }
+  // 진행 방향의 왼쪽(+)/오른쪽(-)으로 offset(지도 px)만큼 평행이동한 선
+  function offsetPolylineD(pts, offset) {
+    const n = pts.length;
+    return pts.map((p, i) => {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+      let dx = b[0] - a[0], dy = b[1] - a[1];
+      const len = Math.hypot(dx, dy) || 1;
+      dx /= len; dy /= len;
+      return `${i ? "L" : "M"} ${(p[0] - dy * offset).toFixed(2)} ${(p[1] + dx * offset).toFixed(2)}`;
+    }).join(" ");
+  }
+  function updateRoadLanes(node) {
+    const seg = node.seg;
+    const style = roadStyleFor(seg.width);
+    node.line.setAttribute("stroke", style.surface);
+    if (node.line.parentNode !== roadRankGroups[style.rank]) roadRankGroups[style.rank].appendChild(node.line);
+    node.lanes.innerHTML = "";
+    if (!style.center && !style.sides) return;
+    const pts = roadPolylinePx(seg);
+    const dash = 3 / SCALE; // 점선: 3m 칠하고 3m 비우기, 첫 칸은 1.5m 들어가서 시작(게임과 같음)
+    const dashAttrs = { "stroke-dasharray": `${dash} ${dash}`, "stroke-dashoffset": -dash / 2 };
+    if (style.center === "solid") {
+      const w = Math.max(0.25, seg.width * 0.015) / SCALE;
+      node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, 0), class: "lane lane-yellow", style: `--w: ${w.toFixed(3)}` }));
+    } else if (style.center === "dashed") {
+      node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, 0), class: "lane lane-yellow", style: `--w: ${(0.18 / SCALE).toFixed(3)}`, ...dashAttrs }));
+    }
+    if (style.sides) {
+      const off = (seg.width * 0.25) / SCALE;
+      [-off, off].forEach((o) => node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, o), class: "lane lane-white", style: `--w: ${(0.18 / SCALE).toFixed(3)}`, ...dashAttrs })));
+    }
+  }
+  document.getElementById("laneToggle").addEventListener("change", (ev) => svg.classList.toggle("lanes-hidden", !ev.target.checked));
+  document.getElementById("roadOpacity").addEventListener("input", (ev) => roadSurfaceLayer.setAttribute("opacity", ev.target.value));
+
   function roadPathD(seg) {
     const [ax, ay] = rawToPx(seg.a[0], seg.a[1]);
     const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
@@ -671,18 +743,19 @@
     const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
     const d = roadPathD(seg);
     const hit = el("path", { d, class: "road-hit" });
-    const line = el("path", { d, class: "road-line", fill: "none", "stroke-width": Math.max(2, seg.width / SCALE * 0.5) });
+    const line = el("path", { d, class: "road-line", fill: "none", "stroke-width": seg.width / SCALE });
+    const lanes = el("g", {});
+    laneLayer.appendChild(lanes);
     const handleA = el("rect", { x: ax - 5, y: ay - 5, width: 10, height: 10, class: "road-handle", visibility: "hidden" });
     const handleB = el("rect", { x: bx - 5, y: by - 5, width: 10, height: 10, class: "road-handle", visibility: "hidden" });
     const curveHit = el("circle", { r: 14, class: "curve-hit", visibility: "hidden" });
     const curveHandle = el("circle", { r: 7, class: "curve-handle", visibility: "hidden" });
     roadLayer.appendChild(hit);
-    roadLayer.appendChild(line);
     handleLayer.appendChild(handleA);
     handleLayer.appendChild(handleB);
     handleLayer.appendChild(curveHit);
     handleLayer.appendChild(curveHandle);
-    const node = { seg, index: roadNodes.length, line, hit, handleA, handleB, curveHit, curveHandle };
+    const node = { seg, index: roadNodes.length, line, lanes, hit, handleA, handleB, curveHit, curveHandle };
     roadNodes.push(node);
     hit.addEventListener("pointerdown", (ev) => selectRoad(ev, node));
     handleA.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "a"));
@@ -779,8 +852,10 @@
     const [bx, by] = rawToPx(node.seg.b[0], node.seg.b[1]);
     const d = roadPathD(node.seg);
     node.line.setAttribute("d", d);
-    node.line.setAttribute("stroke-width", Math.max(2, node.seg.width / SCALE * 0.5));
+    node.line.setAttribute("stroke-width", node.seg.width / SCALE); // 게임과 같은 실제 폭
     node.hit.setAttribute("d", d);
+    node.hit.style.strokeWidth = Math.max(26, node.seg.width / SCALE) + "px";
+    updateRoadLanes(node);
     node.handleA.setAttribute("x", ax - 5); node.handleA.setAttribute("y", ay - 5);
     node.handleB.setAttribute("x", bx - 5); node.handleB.setAttribute("y", by - 5);
     const [mx, my] = rawToPx(...roadMidpoint(node.seg));
@@ -1055,7 +1130,7 @@
   function deleteRoad(node) {
     const idx = ROADS.indexOf(node.seg);
     if (idx !== -1) ROADS.splice(idx, 1);
-    node.line.remove(); node.hit.remove(); node.handleA.remove(); node.handleB.remove();
+    node.line.remove(); node.lanes.remove(); node.hit.remove(); node.handleA.remove(); node.handleB.remove();
     node.curveHit.remove(); node.curveHandle.remove();
     const ni = roadNodes.indexOf(node);
     if (ni !== -1) roadNodes.splice(ni, 1);
@@ -1450,6 +1525,7 @@
     const handleK = COARSE ? Math.min(3, Math.max(1, 9 / zoom / 7)) : 1;
     svg.style.setProperty("--hit-k", hitK.toFixed(3));
     svg.style.setProperty("--handle-k", handleK.toFixed(3));
+    svg.style.setProperty("--lane-min", (1.2 / zoom).toFixed(3)); // 차선은 화면에서 최소 1.2px
     Object.keys(placeNodes).forEach((id) => updateRotHandle(Number(id)));
     parkNodes.forEach(updateParkVisual);
   }
