@@ -155,7 +155,7 @@ export const PLACES = [
   { id: 205, name: "설내옥", floors: 3, type: "식당", x: -456.2, z: 148.1, model: "models/place_설내옥.glb", rotationDeg: -4, scaleRatio: 1.5 },
   { id: 206, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -497.6, z: 85.9, model: "models/place_키잉글리시.glb", rotationDeg: -3, scaleRatio: 1.5 },
   { id: 207, name: "KFC", floors: 4, type: "식당", x: -590, z: 56.5, model: "models/place_KFC.glb", rotationDeg: -23, scaleRatio: 1.5 },
-  { id: 208, name: "GS25", floors: 154, type: "편의점", x: -541.3, z: 54, model: "models/place_GS25.glb", scaleRatio: 1.5 },
+  { id: 208, name: "GS25", floors: 154, type: "편의점", x: -541.9, z: 55.7, model: "models/place_GS25.glb", rotationDeg: 2.8, scaleRatio: 1.5 },
   { id: 209, name: "홈플러스익스프레스", floors: 5, type: "중형마트", x: -440.8, z: 10.9, model: "models/place_홈플러스익스프레스.glb", rotationDeg: -15, scaleRatio: 1.5 },
   { id: 210, name: "경찰서,우체국", floors: 5, type: "기타", x: -609.9, z: -74.4, model: "models/place_경찰서.glb", rotationDeg: -2, scaleRatio: 1.2 },
   { id: 211, name: "신금호역", floors: 1, type: "기타", x: -581.3, z: 29.1, model: "models/place_신금호역5.glb" },
@@ -168,8 +168,8 @@ export const PLACES = [
   { id: 218, name: "GS25", floors: 15, type: "아파트", x: -24.9, z: -570, model: "models/place_gs25극미점.glb", scaleRatio: 1.3 },
   { id: 219, name: "상가", floors: 15, type: "기타", x: 11.9, z: -508.7, model: "models/place_산마을돈타운.glb", scaleRatio: 1.3 },
   { id: 220, name: "주택가", floors: 4, type: "기타", x: 20.4, z: -428.1, model: "models/place_제주슈퍼.glb" },
-  { id: 221, name: "주택가", floors: 3, type: "기타", x: 41.4, z: -326.6, model: "models/place_신기한나라라운지.glb" },
-  { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -589.5, z: 105.5, model: "models/place_골드축산.glb" },
+  { id: 221, name: "주택가", floors: 3, type: "기타", x: 31.9, z: -320.1, model: "models/place_신기한나라라운지.glb", scaleRatio: 1.4 },
+  { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -592.7, z: 100.4, model: "models/place_골드축산.glb", rotationDeg: -4.5 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
