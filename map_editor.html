@@ -51,6 +51,7 @@
   .lane { fill: none; pointer-events: none; stroke-width: max(calc(var(--w) * 1px), calc(var(--lane-min, 1) * 1px)); }
   .lane-yellow { stroke: #f2c438; }
   .lane-white { stroke: #f2f2f2; }
+  .road-mark { fill: #f2f2f2; pointer-events: none; }
   #overlay.lanes-hidden .lane-layer { display: none; }
   .road-hit { fill: none; stroke: transparent; stroke-width: 26; cursor: pointer; pointer-events: all; }
   .road-handle { fill: #e3482b; stroke: #fff; stroke-width: 2; cursor: grab; }
@@ -554,6 +555,8 @@
   roadRankGroups.forEach((g) => roadSurfaceLayer.appendChild(g));
   const laneLayer = el("g", { class: "lane-layer" });
   roadSurfaceLayer.appendChild(laneLayer);
+  const roadMarkLayer = el("g", { class: "lane-layer" }); // 정지선·횡단보도
+  roadSurfaceLayer.appendChild(roadMarkLayer);
   roadLayer.appendChild(roadSurfaceLayer);
   const skyLayer = el("g", { class: "sky-layer", opacity: 0.9 }); // 건물 스카이뷰 그림 — 도로 위, 마커 아래
   const treeLayer = el("g", {});
@@ -707,6 +710,29 @@
       return `${i ? "L" : "M"} ${(p[0] - dy * offset).toFixed(2)} ${(p[1] + dx * offset).toFixed(2)}`;
     }).join(" ");
   }
+  // 교차로 노면표시(교차로 안 차선 비우기·정지선·횡단보도)는 게임과 같은 road_markings.js로 계산한다
+  let RM = null;
+  try {
+    RM = await import("./road_markings.js?v=20261123c");
+  } catch (err) {
+    console.warn("road_markings.js를 못 불러와서 교차로 표시 없이 그려요", err);
+  }
+  let roadMarks = { gaps: [], whiteQuads: [] };
+  let marksQueued = false;
+  // 도로 하나가 바뀌어도 교차로는 이웃 도로와 같이 바뀌니, 한 프레임에 한 번 전체를 다시 계산한다
+  function scheduleRoadMarkings() {
+    if (marksQueued) return;
+    marksQueued = true;
+    requestAnimationFrame(() => {
+      marksQueued = false;
+      roadMarks = RM ? RM.computeRoadMarkings(ROADS) : { gaps: [], whiteQuads: [] };
+      roadNodes.forEach(updateRoadLanes);
+      roadMarkLayer.innerHTML = "";
+      roadMarks.whiteQuads.forEach((q) => {
+        roadMarkLayer.appendChild(el("polygon", { points: q.map(([x, z]) => rawToPx(x, z).map((v) => v.toFixed(2)).join(",")).join(" "), class: "road-mark" }));
+      });
+    });
+  }
   function updateRoadLanes(node) {
     const seg = node.seg;
     const style = roadStyleFor(seg.width);
@@ -714,18 +740,29 @@
     if (node.line.parentNode !== roadRankGroups[style.rank]) roadRankGroups[style.rank].appendChild(node.line);
     node.lanes.innerHTML = "";
     if (!style.center && !style.sides) return;
-    const pts = roadPolylinePx(seg);
+    const rawPts = RM ? RM.roadPolylineRaw(seg) : null;
+    let pieces;
+    if (RM) {
+      let L = 0;
+      for (let i = 1; i < rawPts.length; i++) L += Math.hypot(rawPts[i][0] - rawPts[i - 1][0], rawPts[i][1] - rawPts[i - 1][1]);
+      const gaps = roadMarks.gaps[ROADS.indexOf(seg)] || [];
+      pieces = RM.markedRanges(L, gaps).map(([s0, s1]) => RM.slicePolyline(rawPts, s0, s1).map(([x, z]) => rawToPx(x, z)));
+    } else {
+      pieces = [roadPolylinePx(seg)];
+    }
     const dash = 3 / SCALE; // 점선: 3m 칠하고 3m 비우기, 첫 칸은 1.5m 들어가서 시작(게임과 같음)
     const dashAttrs = { "stroke-dasharray": `${dash} ${dash}`, "stroke-dashoffset": -dash / 2 };
-    if (style.center === "solid") {
-      const w = Math.max(0.25, seg.width * 0.015) / SCALE;
-      node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, 0), class: "lane lane-yellow", style: `--w: ${w.toFixed(3)}` }));
-    } else if (style.center === "dashed") {
-      node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, 0), class: "lane lane-yellow", style: `--w: ${(0.18 / SCALE).toFixed(3)}`, ...dashAttrs }));
-    }
-    if (style.sides) {
-      const off = (seg.width * 0.25) / SCALE;
-      [-off, off].forEach((o) => node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, o), class: "lane lane-white", style: `--w: ${(0.18 / SCALE).toFixed(3)}`, ...dashAttrs })));
+    for (const pts of pieces) {
+      if (style.center === "solid") {
+        const w = Math.max(0.25, seg.width * 0.015) / SCALE;
+        node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, 0), class: "lane lane-yellow", style: `--w: ${w.toFixed(3)}` }));
+      } else if (style.center === "dashed") {
+        node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, 0), class: "lane lane-yellow", style: `--w: ${(0.18 / SCALE).toFixed(3)}`, ...dashAttrs }));
+      }
+      if (style.sides) {
+        const off = (seg.width * 0.25) / SCALE;
+        [-off, off].forEach((o) => node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, o), class: "lane lane-white", style: `--w: ${(0.18 / SCALE).toFixed(3)}`, ...dashAttrs })));
+      }
     }
   }
   document.getElementById("laneToggle").addEventListener("change", (ev) => svg.classList.toggle("lanes-hidden", !ev.target.checked));
@@ -855,7 +892,7 @@
     node.line.setAttribute("stroke-width", node.seg.width / SCALE); // 게임과 같은 실제 폭
     node.hit.setAttribute("d", d);
     node.hit.style.strokeWidth = Math.max(26, node.seg.width / SCALE) + "px";
-    updateRoadLanes(node);
+    scheduleRoadMarkings();
     node.handleA.setAttribute("x", ax - 5); node.handleA.setAttribute("y", ay - 5);
     node.handleB.setAttribute("x", bx - 5); node.handleB.setAttribute("y", by - 5);
     const [mx, my] = rawToPx(...roadMidpoint(node.seg));
@@ -1134,6 +1171,7 @@
     node.curveHit.remove(); node.curveHandle.remove();
     const ni = roadNodes.indexOf(node);
     if (ni !== -1) roadNodes.splice(ni, 1);
+    scheduleRoadMarkings();
     selected = null;
     renderPanel();
     toast("도로를 지웠어요.");

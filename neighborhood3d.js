@@ -6,7 +6,8 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261123b";
+import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261123c";
+import { computeRoadMarkings, markedRanges, slicePolyline } from "./road_markings.js?v=20261123c";
 
 const ASSET_VERSION = "20261123b";
 
@@ -488,6 +489,8 @@ function buildParks() {
 // 그래서 위치만 모아 뒀다가 색깔별로 InstancedMesh 하나씩(노란 점선 1개, 흰 점선 1개)으로 그린다.
 let yellowDashTransforms = [];
 let whiteDashTransforms = [];
+// 교차로 노면표시(road_markings.js): 도로마다 차선을 비울 구간(gaps) + 정지선·횡단보도 사각형(whiteQuads)
+let roadMarkings = { gaps: [], whiteQuads: [] };
 
 // map_editor.html에서 a→curve(제어점)→b로 그린 2차 베지어 곡선을 따라 점을 여러 개 뽑는다 —
 // curve가 없으면(직선) 그냥 양 끝점 2개뿐이라 아래 리본 그리기가 그대로 직선 사각형이 된다.
@@ -563,12 +566,9 @@ function buildRibbonGeometry(pts, tangents, width, offset = 0) {
 // 메웠는데, 샘플 간격이 좁으면 그 둥근 판들이 다닥다닥 겹쳐서 도로 전체가 구슬을 꿴 것처럼
 // 울퉁불퉁해 보였다. 지금은 점들을 한 번에 이어 리본 하나로 그려서, 안쪽 꺾임은 양옆 방향의
 // 평균(미터) 방향으로 폭을 내밀어 틈도 겹침도 없이 매끈하게 이어진다.
-function buildRoadRibbon(seg) {
-  const rawPts = roadPolyline(seg);
-  const pts = rawPts.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+function polylineTangents(pts) {
   const n = pts.length;
-  const roadW = seg.width * WORLD_SCALE;
-  const tangents = pts.map((p, i) => {
+  return pts.map((p, i) => {
     let dx, dz;
     if (i === 0) {
       dx = pts[1][0] - pts[0][0];
@@ -586,6 +586,19 @@ function buildRoadRibbon(seg) {
     const len = Math.hypot(dx, dz) || 1;
     return [dx / len, dz / len];
   });
+}
+
+function buildRoadRibbon(seg, segIndex) {
+  const rawPts = roadPolyline(seg);
+  const pts = rawPts.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+  const n = pts.length;
+  const roadW = seg.width * WORLD_SCALE;
+  const tangents = polylineTangents(pts);
+  // 교차로 안쪽 등 차선을 긋지 않는 구간(raw, a 끝에서 잰 거리)
+  const gaps = roadMarkings.gaps[segIndex] || [];
+  let rawLen = 0;
+  for (let i = 1; i < rawPts.length; i++) rawLen += Math.hypot(rawPts[i][0] - rawPts[i - 1][0], rawPts[i][1] - rawPts[i - 1][1]);
+  const ranges = markedRanges(rawLen, gaps);
 
   const style = roadStyleFor(seg.width);
   const surfaceY = surfaceYFor(seg.width);
@@ -599,12 +612,13 @@ function buildRoadRibbon(seg) {
 
   if (style.center === "solid") {
     const lineW = Math.max(0.25 * WORLD_SCALE, roadW * 0.015);
-    const line = new THREE.Mesh(
-      buildRibbonGeometry(pts, tangents, lineW, 0),
-      new THREE.MeshBasicMaterial({ color: LANE_YELLOW })
-    );
-    line.position.y = surfaceY + 0.002;
-    scene.add(line);
+    const lineMat = new THREE.MeshBasicMaterial({ color: LANE_YELLOW });
+    for (const [s0, s1] of ranges) {
+      const sub = slicePolyline(rawPts, s0, s1).map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+      const line = new THREE.Mesh(buildRibbonGeometry(sub, polylineTangents(sub), lineW, 0), lineMat);
+      line.position.y = surfaceY + 0.002;
+      scene.add(line);
+    }
   }
   if (!style.center && !style.sides) return; // 골목길·단지내도로는 점선도 없다
 
@@ -614,6 +628,8 @@ function buildRoadRibbon(seg) {
   const gapLen = 3 * WORLD_SCALE;
   const step = dashLen + gapLen;
   const dashY = surfaceY + 0.0025;
+  const halfDashRaw = dashLen / WORLD_SCALE / 2;
+  const inGap = (sRaw) => gaps.some(([g0, g1]) => sRaw + halfDashRaw > g0 && sRaw - halfDashRaw < g1);
   function pushDashes(offset, list) {
     let dist = 0;
     let nextDashAt = step / 2;
@@ -627,6 +643,7 @@ function buildRoadRibbon(seg) {
         const perpX = -dz / segLen, perpZ = dx / segLen;
         while (nextDashAt < dist + segLen) {
           const t = (nextDashAt - dist) / segLen;
+          if (inGap(nextDashAt / WORLD_SCALE)) { nextDashAt += step; continue; }
           list.push({ x: x1 + dx * t + perpX * offset, z: z1 + dz * t + perpZ * offset, yaw, y: dashY });
           nextDashAt += step;
         }
@@ -748,12 +765,34 @@ function buildJunctionFillers() {
   }
 }
 
+// 정지선·횡단보도 줄무늬를 메시 하나로 — 어느 도로 표면보다도 위(가장 높은 rank 위)에 깐다
+function buildRoadMarks() {
+  const quads = roadMarkings.whiteQuads;
+  if (!quads.length) return;
+  const positions = [];
+  const indices = [];
+  quads.forEach((q, k) => {
+    q.forEach(([x, z]) => positions.push(x * WORLD_SCALE, 0, z * WORLD_SCALE));
+    const b = k * 4;
+    indices.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: LANE_WHITE, side: THREE.DoubleSide }));
+  mesh.position.y = ROAD_LAYER_BASE_Y + 4 * ROAD_LAYER_STEP + 0.003;
+  scene.add(mesh);
+}
+
 function buildRoads() {
   yellowDashTransforms = [];
   whiteDashTransforms = [];
+  roadMarkings = computeRoadMarkings(ROAD_SEGMENTS);
   ROAD_SEGMENTS.forEach(buildRoadRibbon);
   buildLaneDashes();
   buildJunctionFillers();
+  buildRoadMarks();
 }
 
 // ── 가로등: 도로를 따라 일정 간격으로 세운다 ──
@@ -800,7 +839,8 @@ function pointAlongPolyline(pts, dist) {
 
 let streetlightTransforms = []; // { x, z, yaw }
 
-function placeRoadsideProps(seg) {
+function placeRoadsideProps(seg, segIndex) {
+  const gaps = roadMarkings.gaps[segIndex] || []; // 교차로 안쪽(차선을 비운 구간)에는 가로등도 세우지 않는다
   const pts = roadPolyline(seg).map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
   const total = polylineLength(pts);
   if (total < 1e-3) return;
@@ -808,6 +848,8 @@ function placeRoadsideProps(seg) {
 
   const lightSide = hashSeed(seg.a[0], seg.a[1], seg.b[0], seg.b[1], "light") % 2 === 0 ? 1 : -1;
   for (let d = STREETLIGHT_MARGIN; d <= total - STREETLIGHT_MARGIN; d += STREETLIGHT_SPACING) {
+    const dRaw = d / WORLD_SCALE;
+    if (gaps.some(([g0, g1]) => dRaw > g0 && dRaw < g1)) continue;
     const { x, z, dirX, dirZ } = pointAlongPolyline(pts, d);
     const px = -dirZ, pz = dirX;
     const offset = roadW / 2 + STREETLIGHT_OFFSET_GAP;
