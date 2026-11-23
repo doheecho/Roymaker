@@ -391,6 +391,14 @@
   "width": 163.365,
   "depth": 176.711
  },
+ "models/place_금북초앞주택가.glb": {
+  "file": "img/skyview/place_금북초앞주택가.webp",
+  "hash": "820f2457bc",
+  "minX": -25.009,
+  "minZ": -37.5,
+  "width": 46.437,
+  "depth": 74.61
+ },
  "models/place_금파힐101.glb": {
   "file": "img/skyview/place_금파힐101.webp",
   "hash": "5a900368c0",
@@ -518,6 +526,22 @@
   "minZ": -11.17,
   "width": 31,
   "depth": 28.417
+ },
+ "models/place_대림독서실.glb": {
+  "file": "img/skyview/place_대림독서실.webp",
+  "hash": "6d3db7a91a",
+  "minX": -18.571,
+  "minZ": -14.82,
+  "width": 33.5,
+  "depth": 31.75
+ },
+ "models/place_대현교회.glb": {
+  "file": "img/skyview/place_대현교회.webp",
+  "hash": "ace16b53e2",
+  "minX": -23.315,
+  "minZ": -24.669,
+  "width": 46.833,
+  "depth": 46.5
  },
  "models/place_롯데마트행당점.glb": {
   "file": "img/skyview/place_롯데마트행당점.webp",
@@ -822,6 +846,14 @@
   "minZ": -20.319,
   "width": 27.917,
   "depth": 37
+ },
+ "models/place_행복한교회.glb": {
+  "file": "img/skyview/place_행복한교회.webp",
+  "hash": "9b8d34a1db",
+  "minX": -18.901,
+  "minZ": -13.001,
+  "width": 39.417,
+  "depth": 26.583
  },
  "models/place_홈플러스익스프레스.glb": {
   "file": "img/skyview/place_홈플러스익스프레스.webp",
