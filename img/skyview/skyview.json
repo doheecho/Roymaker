@@ -351,6 +351,14 @@
   "width": 21.333,
   "depth": 39.75
  },
+ "models/place_금북주택가2.glb": {
+  "file": "img/skyview/place_금북주택가2.webp",
+  "hash": "97981cd263",
+  "minX": -12.27,
+  "minZ": -13.35,
+  "width": 19.917,
+  "depth": 29.417
+ },
  "models/place_금북초.glb": {
   "file": "img/skyview/place_금북초.webp",
   "hash": "e1fa74fe42",
@@ -790,13 +798,5 @@
   "minZ": -12.68,
   "width": 43.667,
   "depth": 28.25
- },
- "models/place금북주택가2.glb": {
-  "file": "img/skyview/place금북주택가2.webp",
-  "hash": "97981cd263",
-  "minX": -12.27,
-  "minZ": -13.35,
-  "width": 19.917,
-  "depth": 29.417
  }
 }
