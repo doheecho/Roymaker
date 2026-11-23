@@ -295,6 +295,14 @@
   "width": 27,
   "depth": 24.5
  },
+ "models/place_gs25극미점.glb": {
+  "file": "img/skyview/place_gs25극미점.webp",
+  "hash": "b9d9694edf",
+  "minX": -6.56,
+  "minZ": -7.08,
+  "width": 13.5,
+  "depth": 14.833
+ },
  "models/place_library.glb": {
   "file": "img/skyview/place_library.webp",
   "hash": "fe3c2e7cfa",
@@ -502,6 +510,14 @@
   "minZ": -112.89,
   "width": 234.048,
   "depth": 225.82
+ },
+ "models/place_산마을돈타운.glb": {
+  "file": "img/skyview/place_산마을돈타운.webp",
+  "hash": "71030fc483",
+  "minX": -7.8,
+  "minZ": -15.22,
+  "width": 16.083,
+  "depth": 32.5
  },
  "models/place_설내옥.glb": {
   "file": "img/skyview/place_설내옥.webp",
