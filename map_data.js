@@ -63,7 +63,7 @@ export const PLACES = [
   { id: 23, name: "성동구보건소금호분소", floors: 4, type: "보건소", x: 91.6, z: 137.5 },
   { id: 24, name: "성동아이사랑복합문화센터", floors: 4, type: "기타", x: 153.5, z: 287.9 },
   { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 119.7, z: -87.5, model: "models/3D_place_taekwondo.glb", rotationDeg: 0, scaleRatio: 1.5 },
-  { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 102.5, z: -151.8, diagonal: true, model: "models/place_할인마트.glb", rotationDeg: 0, scaleRatio: 1.5 },
+  { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 102.5, z: -151.8, diagonal: true, model: "models/place_홍일빌딩.glb", rotationDeg: 0, scaleRatio: 1.5 },
   { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 638.2, z: -370.4, model: "models/place_롯데마트.glb", rotationDeg: 31.9, scaleRatio: 1.9 },
   { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 50.5, z: -222.6, diagonal: true, model: "models/3D_place_megacoffee.glb", rotationDeg: 0, scaleRatio: 1.5 },
   { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -95, z: -229.8, model: "models/place_adamleeds.glb", scaleRatio: 1.5 },
