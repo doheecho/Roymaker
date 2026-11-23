@@ -156,6 +156,34 @@
     #exportBox { width: 100%; max-height: 92vh; padding: 12px; }
     #exportText { min-height: 40vh; }
   }
+  /* ── 폴드 펼친 화면·태블릿(손가락 + 넓은 화면): 툴바 한 줄, 편집 패널은 오른쪽에서 접고 펼치기 ── */
+  @media (pointer: coarse) and (min-width: 761px) {
+    #toolbar { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); scrollbar-width: none; }
+    #toolbar::-webkit-scrollbar { display: none; }
+    #toolbar > * { flex: none; }
+    #toolbar button, #toolbar input { font-size: 15px; padding: 9px 12px; }
+    #toolbar input[type="text"] { width: 160px; font-size: 16px; }
+    #toolbar .hint { display: none; }
+    #labelToggleWrap, #skyToggleWrap { font-size: 15px; }
+    #labelToggleWrap input, #skyToggleWrap input { width: 20px; height: 20px; }
+    #skyOpacity { width: 110px; }
+    #sidePanel { width: 320px; padding: 0 14px 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+    #panelHeader {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      position: sticky; top: 0; background: #262a33; padding: 12px 0; margin-bottom: 4px; z-index: 1;
+      font-size: 15px; font-weight: 600; cursor: pointer; user-select: none;
+    }
+    #panelHeader .chev { color: #9aa0ad; font-size: 13px; font-weight: 400; white-space: nowrap; }
+    #sidePanel.collapsed { width: 52px; padding: 0; overflow: hidden; }
+    #sidePanel.collapsed #panelBody { display: none; }
+    #sidePanel.collapsed #panelHeader {
+      writing-mode: vertical-rl; justify-content: flex-start; height: 100%; padding: 14px 0; margin: 0;
+      align-items: center; gap: 12px;
+    }
+    .field label { font-size: 13px; }
+    .field input[type="number"], .field input[type="text"] { font-size: 16px; padding: 9px 10px; }
+    #sidePanel button.full { padding: 11px; font-size: 15px; }
+  }
   #hoverTip {
     position: fixed; display: none; z-index: 60; pointer-events: none;
     background: #1d2027; color: #e8eaf0; border: 1px solid #4a4f5b; border-radius: 6px;
@@ -395,7 +423,7 @@
 
   const COARSE = window.matchMedia("(pointer: coarse)").matches; // 손가락으로 쓰는 기기(휴대폰·태블릿)
   const ZOOM_MIN = 0.08, ZOOM_MAX = 4;
-  let zoom = window.innerWidth <= 760 ? 0.6 : 0.4;
+  let zoom = window.innerWidth <= 760 || COARSE ? 0.6 : 0.4;
   let afterZoom = null; // 마커·손잡이가 다 만들어진 뒤 연결된다(확대 배율에 맞춰 손잡이 크기·거리 갱신)
   function applyZoom() {
     stage.style.transform = `scale(${zoom})`;
@@ -906,11 +934,13 @@
   const sidePanel = document.getElementById("sidePanel");
   const panelTitle = document.getElementById("panelTitle");
   const panelChev = document.getElementById("panelChev");
+  const NARROW = window.matchMedia("(max-width: 760px)"); // 좁으면 아래 서랍, 넓으면(폴드 펼침 등) 오른쪽 패널
   function setPanelCollapsed(c) {
     sidePanel.classList.toggle("collapsed", c);
-    panelChev.textContent = c ? "▲ 펼치기" : "▼ 접기";
+    panelChev.textContent = NARROW.matches ? (c ? "▲ 펼치기" : "▼ 접기") : (c ? "◀ 펼치기" : "접기 ▶");
   }
   document.getElementById("panelHeader").addEventListener("click", () => setPanelCollapsed(!sidePanel.classList.contains("collapsed")));
+  NARROW.addEventListener("change", () => setPanelCollapsed(sidePanel.classList.contains("collapsed"))); // 폴드를 접었다 폈을 때
   setPanelCollapsed(true);
   let lastPanelKey = null;
   function renderPanel() {
