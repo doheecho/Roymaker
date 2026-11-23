@@ -935,6 +935,11 @@ const MODEL_FLOOR_OVERRIDE = { 66: 0 };
 // 모델 자체에 바닥 도로 텍스처가 포함된 건물(금파힐정문·후문)은 그 텍스처가 바닥(procedural
 // 도로 — surfaceYFor로 0.005~0.0135 사이에 쌓임) 바로 위에 겹쳐서 깜빡거리는(z-fighting)
 // 일이 없게, 그 범위보다 확실히 위로 살짝 띄운다(건물 자체가 떠 보일 만큼 크진 않은 값).
+// 여기 없는 나머지 모든 건물은 반대로 DEFAULT_MODEL_Y_LIFT만큼 아래로 내려서(바닥보다
+// 살짝 지하로) 도로가 항상 그 위에 또렷하게 이기도록 한다 — y=0 하나로 딱 붙여두면 세계
+// 좌표가 커질수록(이 동네는 x·z가 수백 단위까지 간다) float32 정밀도 때문에 그 둘 사이
+// 간격이 흐려질 수 있어서, 양쪽에서 여유를 벌려 둔다.
+const DEFAULT_MODEL_Y_LIFT = -0.01;
 const MODEL_Y_LIFT_OVERRIDE = { 201: 0.02, 202: 0.02 };
 function worldToLocalXZ(x, z, cx, cz, cos, sin) {
   const dx = x - cx;
@@ -996,7 +1001,7 @@ function loadPlaceModelInto(entry) {
       const box = new THREE.Box3().setFromObject(model);
       const floorY = MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
       model.position.y -= floorY;
-      model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? 0;
+      model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
       entry.group.add(model);
       entry.loadedModel = model;
       if (entry.placeholder) entry.placeholder.visible = false;
