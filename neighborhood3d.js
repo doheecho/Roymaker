@@ -536,6 +536,11 @@ function surfaceYFor(width) {
   return ROAD_LAYER_BASE_Y + roadStyleFor(width).rank * ROAD_LAYER_STEP;
 }
 
+// 보도(인도): 도로 양옆에 깔리는 별도 띠. 건물에셋(기본 -0.01, 예외 +0.02) > 도로(0.005~0.0135)
+// > 보도 순으로 보이게, 이 둘의 가장 낮은 자리보다도 더 아래에 둔다(사용자 지정 우선순위).
+const SIDEWALK_COLOR = 0xc7c2b4;
+const SIDEWALK_Y = -0.015;
+
 // 폭이 있는 띠(리본) 지오메트리를 하나 만든다 — 도로 표면뿐 아니라 중앙 실선도 같은 함수로
 // (실선은 그냥 아주 얇은 리본) 만들어서 곡선 구간에서도 똑같이 매끈하게 휘어지게 한다.
 function buildRibbonGeometry(pts, tangents, width, offset = 0) {
@@ -657,6 +662,25 @@ function buildRoadRibbon(seg, segIndex) {
     pushDashes(-sideOffset, whiteDashTransforms);
     pushDashes(sideOffset, whiteDashTransforms);
   }
+}
+
+// seg.sidewalk(폭, raw m)가 있으면 도로 양옆에 보도 띠를 하나씩 깐다 — 도로 리본과 같은 점·접선을
+// 써서 곡선 구간에서도 똑같이 매끈하게 휘어지고, 도로 가장자리에 틈·겹침 없이 바로 붙는다.
+function buildRoadSidewalk(seg) {
+  if (!seg.sidewalk) return;
+  const rawPts = roadPolyline(seg);
+  const pts = rawPts.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+  const tangents = polylineTangents(pts);
+  const roadW = seg.width * WORLD_SCALE;
+  const sideW = seg.sidewalk * WORLD_SCALE;
+  const mat = new THREE.MeshStandardMaterial({ color: SIDEWALK_COLOR, side: THREE.DoubleSide });
+  [-1, 1].forEach((dir) => {
+    const offset = dir * (roadW / 2 + sideW / 2);
+    const mesh = new THREE.Mesh(buildRibbonGeometry(pts, tangents, sideW, offset), mat);
+    mesh.position.y = SIDEWALK_Y;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+  });
 }
 
 function buildDashInstances(transforms, color) {
@@ -790,6 +814,7 @@ function buildRoads() {
   whiteDashTransforms = [];
   roadMarkings = computeRoadMarkings(ROAD_SEGMENTS);
   ROAD_SEGMENTS.forEach(buildRoadRibbon);
+  ROAD_SEGMENTS.forEach(buildRoadSidewalk);
   buildLaneDashes();
   buildJunctionFillers();
   buildRoadMarks();

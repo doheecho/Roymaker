@@ -47,6 +47,7 @@
   }
   .road-line { stroke: #4a4a4e; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; pointer-events: none; }
   .road-line.selected { stroke: #e3482b !important; stroke-opacity: 0.85; }
+  .sidewalk-line { stroke: #c7c2b4; stroke-linecap: round; pointer-events: none; }
   /* 차선: 실제 폭(--w, 지도 px)이 화면에서 너무 가늘면 최소 굵기(--lane-min, 확대 배율로 계산)로 */
   .lane { fill: none; pointer-events: none; stroke-width: max(calc(var(--w) * 1px), calc(var(--lane-min, 1) * 1px)); }
   .lane-yellow { stroke: #f2c438; }
@@ -375,6 +376,8 @@
       const seg = { a, b, width };
       const cm = line.match(/curve:\s*\[([^\]]+)\]/);
       if (cm) seg.curve = cm[1].split(",").map((v) => parseFloat(v));
+      const sm = line.match(/sidewalk:\s*([\d.]+)/);
+      if (sm) seg.sidewalk = parseFloat(sm[1]);
       roads.push(seg);
     }
     return roads;
@@ -548,6 +551,7 @@
 
   // ── 마커/도로/공원/나무 렌더링(이 순서로 쌓아서 공원이 제일 아래, 건물 라벨이 제일 위에 오게 한다) ──
   const parkLayer = el("g", {});
+  const sidewalkLayer = el("g", { opacity: 0.85 }); // 보도 — 도로보다 아래(도로가 항상 이긴다)
   const roadLayer = el("g", {});
   // 도로 표면은 게임처럼 "급"(rank)이 높은 길이 위에 오게 급별 그룹에 나눠 담고, 차선은 그 위 한 그룹에
   const roadSurfaceLayer = el("g", { opacity: 0.85 });
@@ -567,6 +571,7 @@
   // 일이 없다(건물 근처 도로를 곡선으로 만들려다 건물이 대신 끌려가던 문제).
   const handleLayer = el("g", {});
   svg.appendChild(parkLayer);
+  svg.appendChild(sidewalkLayer);
   svg.appendChild(roadLayer);
   svg.appendChild(skyLayer);
   svg.appendChild(treeLayer);
@@ -775,12 +780,25 @@
     return `M ${ax} ${ay} Q ${cx} ${cy} ${bx} ${by}`;
   }
 
+  function updateRoadSidewalk(node) {
+    node.sidewalk.innerHTML = "";
+    const seg = node.seg;
+    if (!seg.sidewalk) return;
+    const pts = roadPolylinePx(seg);
+    const sw = seg.sidewalk / SCALE;
+    const off = (seg.width / 2 + seg.sidewalk / 2) / SCALE;
+    [-off, off].forEach((o) => {
+      node.sidewalk.appendChild(el("path", { d: offsetPolylineD(pts, o), class: "sidewalk-line", fill: "none", "stroke-width": sw }));
+    });
+  }
   function addRoadNode(seg) {
     const [ax, ay] = rawToPx(seg.a[0], seg.a[1]);
     const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
     const d = roadPathD(seg);
     const hit = el("path", { d, class: "road-hit" });
     const line = el("path", { d, class: "road-line", fill: "none", "stroke-width": seg.width / SCALE });
+    const sidewalk = el("g", {});
+    sidewalkLayer.appendChild(sidewalk);
     const lanes = el("g", {});
     laneLayer.appendChild(lanes);
     const handleA = el("rect", { x: ax - 5, y: ay - 5, width: 10, height: 10, class: "road-handle", visibility: "hidden" });
@@ -792,13 +810,13 @@
     handleLayer.appendChild(handleB);
     handleLayer.appendChild(curveHit);
     handleLayer.appendChild(curveHandle);
-    const node = { seg, index: roadNodes.length, line, lanes, hit, handleA, handleB, curveHit, curveHandle };
+    const node = { seg, index: roadNodes.length, line, lanes, sidewalk, hit, handleA, handleB, curveHit, curveHandle };
     roadNodes.push(node);
     hit.addEventListener("pointerdown", (ev) => selectRoad(ev, node));
     handleA.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "a"));
     handleB.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "b"));
     curveHit.addEventListener("pointerdown", (ev) => startRoadCurveDrag(ev, node));
-    wireHoverTip(hit, () => `도로 #${node.index} · 폭 ${node.seg.width}m${node.seg.curve ? " · 곡선" : ""}`);
+    wireHoverTip(hit, () => `도로 #${node.index} · 폭 ${node.seg.width}m${node.seg.curve ? " · 곡선" : ""}${node.seg.sidewalk ? ` · 보도 ${node.seg.sidewalk}m` : ""}`);
     updateRoadVisual(node);
     return node;
   }
@@ -895,6 +913,7 @@
     node.line.setAttribute("stroke-width", node.seg.width / SCALE); // 게임과 같은 실제 폭
     node.hit.setAttribute("d", d);
     node.hit.style.strokeWidth = Math.max(26, node.seg.width / SCALE) + "px";
+    updateRoadSidewalk(node);
     scheduleRoadMarkings();
     node.handleA.setAttribute("x", ax - 5); node.handleA.setAttribute("y", ay - 5);
     node.handleB.setAttribute("x", bx - 5); node.handleB.setAttribute("y", by - 5);
@@ -1119,6 +1138,10 @@
       panelBody.appendChild(fieldNum("b.x (raw)", node.seg.b[0], (v) => { node.seg.b[0] = v; updateRoadVisual(node); }));
       panelBody.appendChild(fieldNum("b.z (raw)", node.seg.b[1], (v) => { node.seg.b[1] = v; updateRoadVisual(node); }));
       panelBody.appendChild(fieldNum("width (raw)", node.seg.width, (v) => { node.seg.width = v; updateRoadVisual(node); }, { step: "0.5" }));
+      panelBody.appendChild(fieldNum("보도 폭 (raw, m · 0=없음)", node.seg.sidewalk ?? 0, (v) => {
+        if (v > 0) node.seg.sidewalk = v; else delete node.seg.sidewalk;
+        updateRoadVisual(node);
+      }, { step: "0.5", note: "0보다 크게 두면 이 도로 양옆에 보도가 생깁니다(건물에셋 > 도로 > 보도 순으로 보입니다)." }));
       const curveNote = document.createElement("p");
       curveNote.className = "note";
       curveNote.style.marginBottom = "10px";
@@ -1179,7 +1202,7 @@
   function deleteRoad(node) {
     const idx = ROADS.indexOf(node.seg);
     if (idx !== -1) ROADS.splice(idx, 1);
-    node.line.remove(); node.lanes.remove(); node.hit.remove(); node.handleA.remove(); node.handleB.remove();
+    node.line.remove(); node.lanes.remove(); node.sidewalk.remove(); node.hit.remove(); node.handleA.remove(); node.handleB.remove();
     node.curveHit.remove(); node.curveHandle.remove();
     const ni = roadNodes.indexOf(node);
     if (ni !== -1) roadNodes.splice(ni, 1);
@@ -1503,7 +1526,8 @@
   }
   function serializeRoad(r) {
     const curvePart = r.curve ? `, curve: [${fmtNum(r.curve[0])}, ${fmtNum(r.curve[1])}]` : "";
-    return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)}${curvePart} },`;
+    const sidewalkPart = r.sidewalk ? `, sidewalk: ${fmtNum(r.sidewalk)}` : "";
+    return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)}${curvePart}${sidewalkPart} },`;
   }
   function serializeTree(t) {
     return `[${fmtNum(t.x)}, ${fmtNum(t.z)}]`;
