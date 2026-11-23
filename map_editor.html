@@ -865,10 +865,13 @@
     const n = placeNodes[id];
     updateSky(id);
     const hasModel = !!n.place.model;
-    n.handle.setAttribute("visibility", hasModel ? "visible" : "hidden");
-    n.handleHit.setAttribute("visibility", hasModel ? "visible" : "hidden");
-    n.rotLine.setAttribute("visibility", hasModel ? "visible" : "hidden");
-    if (!hasModel || n.axis == null) return;
+    // 방위각 손잡이는 "지금 선택된 건물"에만 보인다(다른 걸 고르거나 빈 곳을 누르면 사라짐)
+    const isSelected = !!selected && selected.kind === "place" && selected.ref && selected.ref.id === id;
+    const show = hasModel && isSelected && n.axis != null;
+    n.handle.setAttribute("visibility", show ? "visible" : "hidden");
+    n.handleHit.setAttribute("visibility", show ? "visible" : "hidden");
+    n.rotLine.setAttribute("visibility", show ? "visible" : "hidden");
+    if (!show) return;
     const worldAngle = rotationDegToWorldAngle(n.place.rotationDeg || 0, n.axis);
     const rad = (worldAngle * Math.PI) / 180;
     const R = Math.max(34, 44 / zoom);
@@ -939,7 +942,15 @@
 
   function clearSelectionVisual() {
     if (!selected) return;
-    if (selected.kind === "place") placeNodes[selected.ref.id].dot.classList.remove("selected");
+    if (selected.kind === "place") {
+      const pn = placeNodes[selected.ref.id];
+      if (pn) {
+        pn.dot.classList.remove("selected");
+        pn.handle.setAttribute("visibility", "hidden");
+        pn.handleHit.setAttribute("visibility", "hidden");
+        pn.rotLine.setAttribute("visibility", "hidden");
+      }
+    }
     if (selected.kind === "road") {
       selected.ref.line.classList.remove("selected");
       selected.ref.handleA.setAttribute("visibility", "hidden");
@@ -956,6 +967,7 @@
     selected = { kind: "place", ref: PLACES.find((p) => p.id === id) };
     const n = placeNodes[id];
     n.dot.classList.add("selected");
+    updateRotHandle(id);
     if (n.place.model && n.axis == null) {
       n.axis = await getDefaultAxis(n.place);
       updateRotHandle(id);
