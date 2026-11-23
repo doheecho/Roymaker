@@ -64,7 +64,7 @@ export const PLACES = [
   { id: 24, name: "성동아이사랑복합문화센터", floors: 4, type: "기타", x: 153.5, z: 287.9 },
   { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 119.7, z: -87.5, model: "models/3D_place_taekwondo.glb", rotationDeg: 0, scaleRatio: 1.5 },
   { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 102.5, z: -151.8, diagonal: true, model: "models/place_할인마트.glb", rotationDeg: 0, scaleRatio: 1.5 },
-  { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 656.9, z: -401, model: "models/place_롯데마트행당점.glb", rotationDeg: 4.6 },
+  { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 656.9, z: -401, model: "models/place_롯데마트.glb", rotationDeg: 4.6 },
   { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 48.4, z: -228.3, diagonal: true, model: "models/3D_place_megacoffee.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -93.3, z: -228.8, model: "models/place_adamleeds.glb", scaleRatio: 1.5 },
   { id: 30, name: "분식집", floors: 4, type: "식당", x: -35.9, z: -221.9, model: "models/place_bunsik.glb", scaleRatio: 1.1 },
@@ -167,6 +167,9 @@ export const PLACES = [
   { id: 217, name: "금호1가동 주민센터", floors: 5, type: "아파트", x: -339.8, z: -58.8, model: "models/place_금호1가동주민센터.glb", rotationDeg: 28.9, scaleRatio: 1.3 },
   { id: 218, name: "GS25", floors: 15, type: "아파트", x: -24.9, z: -570, model: "models/place_gs25극미점.glb", scaleRatio: 1.3 },
   { id: 219, name: "상가", floors: 15, type: "기타", x: 11.9, z: -508.7, model: "models/place_산마을돈타운.glb", scaleRatio: 1.3 },
+  { id: 220, name: "주택가", floors: 4, type: "기타", x: 20.4, z: -428.1, model: "models/place_제주슈퍼.glb" },
+  { id: 221, name: "주택가", floors: 3, type: "기타", x: 41.4, z: -326.6, model: "models/place_신기한나라라운지.glb" },
+  { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -589.5, z: 105.5, model: "models/place_골드축산.glb" },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
