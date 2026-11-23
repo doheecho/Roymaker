@@ -593,9 +593,9 @@
  },
  "models/place_산마을돈타운2.glb": {
   "file": "img/skyview/place_산마을돈타운2.webp",
-  "hash": "3429e2ec5f",
+  "hash": "ca72dbf85d",
   "minX": -28.5,
-  "minZ": -26.81,
+  "minZ": -26.811,
   "width": 43.75,
   "depth": 43.25
  },
@@ -870,6 +870,14 @@
   "minZ": -6.427,
   "width": 24.917,
   "depth": 16.333
+ },
+ "models/place_행당대림프라자.glb": {
+  "file": "img/skyview/place_행당대림프라자.webp",
+  "hash": "37dbde20db",
+  "minX": -36,
+  "minZ": -18.48,
+  "width": 67.875,
+  "depth": 35.352
  },
  "models/place_행당한진201.glb": {
   "file": "img/skyview/place_행당한진201.webp",
