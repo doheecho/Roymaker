@@ -1,7 +1,7 @@
 {
  "models/3D_place_101.glb": {
   "file": "img/skyview/3D_place_101.webp",
-  "hash": "24e440d8bf",
+  "hash": "28f19549e4",
   "minX": -24.931,
   "minZ": -22.171,
   "width": 45.25,
@@ -9,7 +9,7 @@
  },
  "models/3D_place_102.glb": {
   "file": "img/skyview/3D_place_102.webp",
-  "hash": "4e05ca4f12",
+  "hash": "80de481d1a",
   "minX": -19.553,
   "minZ": -19.199,
   "width": 38.583,
@@ -17,7 +17,7 @@
  },
  "models/3D_place_103.glb": {
   "file": "img/skyview/3D_place_103.webp",
-  "hash": "4f09abefc8",
+  "hash": "02f519a1aa",
   "minX": -19.553,
   "minZ": -19.199,
   "width": 38.583,
@@ -25,7 +25,7 @@
  },
  "models/3D_place_104.glb": {
   "file": "img/skyview/3D_place_104.webp",
-  "hash": "296607eb67",
+  "hash": "21220e45be",
   "minX": -24.931,
   "minZ": -22.171,
   "width": 45.25,
@@ -33,15 +33,15 @@
  },
  "models/3D_place_105.glb": {
   "file": "img/skyview/3D_place_105.webp",
-  "hash": "a1f7a74cd2",
+  "hash": "c7c7c0e324",
   "minX": -22,
-  "minZ": -28.5,
+  "minZ": -28.501,
   "width": 49.417,
   "depth": 44.083
  },
  "models/3D_place_106.glb": {
   "file": "img/skyview/3D_place_106.webp",
-  "hash": "82c5636ad3",
+  "hash": "b45f18d329",
   "minX": -24.931,
   "minZ": -22.171,
   "width": 45.25,
@@ -49,7 +49,7 @@
  },
  "models/3D_place_107.glb": {
   "file": "img/skyview/3D_place_107.webp",
-  "hash": "5f9d15a891",
+  "hash": "033f8131b7",
   "minX": -24.931,
   "minZ": -22.171,
   "width": 45.25,
@@ -57,7 +57,7 @@
  },
  "models/3D_place_108.glb": {
   "file": "img/skyview/3D_place_108.webp",
-  "hash": "725471c9b8",
+  "hash": "2984aee7c1",
   "minX": -24.931,
   "minZ": -22.171,
   "width": 45.25,
@@ -65,7 +65,7 @@
  },
  "models/3D_place_109.glb": {
   "file": "img/skyview/3D_place_109.webp",
-  "hash": "a84a8e4399",
+  "hash": "7b0002b040",
   "minX": -18.444,
   "minZ": -15.4,
   "width": 36.833,
@@ -73,15 +73,15 @@
  },
  "models/3D_place_110.glb": {
   "file": "img/skyview/3D_place_110.webp",
-  "hash": "a2e3e83f4b",
+  "hash": "520a681a44",
   "minX": -28.48,
-  "minZ": -16.011,
+  "minZ": -16.012,
   "width": 57,
   "depth": 24.083
  },
  "models/3D_place_111.glb": {
   "file": "img/skyview/3D_place_111.webp",
-  "hash": "99f90d516e",
+  "hash": "865b5c1f9b",
   "minX": -18.209,
   "minZ": -14.41,
   "width": 36.417,
@@ -89,15 +89,15 @@
  },
  "models/3D_place_112.glb": {
   "file": "img/skyview/3D_place_112.webp",
-  "hash": "fe8a1dcf23",
+  "hash": "f993c23893",
   "minX": -19.818,
-  "minZ": -18.244,
+  "minZ": -18.245,
   "width": 40.917,
   "depth": 36.75
  },
  "models/3D_place_113.glb": {
   "file": "img/skyview/3D_place_113.webp",
-  "hash": "b6180791eb",
+  "hash": "ac21b0924a",
   "minX": -15.681,
   "minZ": -25.754,
   "width": 36,
@@ -105,15 +105,15 @@
  },
  "models/3D_place_114.glb": {
   "file": "img/skyview/3D_place_114.webp",
-  "hash": "866ddaafcc",
+  "hash": "2bacd6bdc8",
   "minX": -15.47,
   "minZ": -36.155,
-  "width": 44.977,
-  "depth": 68.946
+  "width": 44.976,
+  "depth": 68.945
  },
  "models/3D_place_115.glb": {
   "file": "img/skyview/3D_place_115.webp",
-  "hash": "4654051345",
+  "hash": "94ab6e72bc",
   "minX": -14.35,
   "minZ": -14.2,
   "width": 28.75,
@@ -121,7 +121,7 @@
  },
  "models/3D_place_116.glb": {
   "file": "img/skyview/3D_place_116.webp",
-  "hash": "069a3800b9",
+  "hash": "51ea154d24",
   "minX": -14.05,
   "minZ": -13.4,
   "width": 21.083,
@@ -129,9 +129,9 @@
  },
  "models/3D_place_keumbuk.glb": {
   "file": "img/skyview/3D_place_keumbuk.webp",
-  "hash": "8cb5bece93",
+  "hash": "4ecef1fdd7",
   "minX": -135,
-  "minZ": -120,
+  "minZ": -120.003,
   "width": 270,
   "depth": 240.117
  },
@@ -185,7 +185,7 @@
  },
  "models/Emart24_GeumhoParkHills_Sign_3D.glb": {
   "file": "img/skyview/Emart24_GeumhoParkHills_Sign_3D.webp",
-  "hash": "810319370c",
+  "hash": "65e4725293",
   "minX": -11.02,
   "minZ": -0.1,
   "width": 22.083,
@@ -193,7 +193,7 @@
  },
  "models/Geumho_2Story_Commercial_NorthDoors.glb": {
   "file": "img/skyview/Geumho_2Story_Commercial_NorthDoors.webp",
-  "hash": "8868bb0ccc",
+  "hash": "2eadbef2d6",
   "minX": -18.28,
   "minZ": -6.68,
   "width": 25.917,
@@ -201,7 +201,7 @@
  },
  "models/SeoulHaengbok_Sinhyup_Banner_3D.glb": {
   "file": "img/skyview/SeoulHaengbok_Sinhyup_Banner_3D.webp",
-  "hash": "ef4fad28d5",
+  "hash": "85fbd9d847",
   "minX": -5.05,
   "minZ": -0.05,
   "width": 10.167,
@@ -209,7 +209,7 @@
  },
  "models/Seoul_Happy_Sign.glb": {
   "file": "img/skyview/Seoul_Happy_Sign.webp",
-  "hash": "d0785121c4",
+  "hash": "b7c37228ef",
   "minX": -3.596,
   "minZ": 0,
   "width": 7.25,
@@ -217,7 +217,7 @@
  },
  "models/Sign_Hyeop_3D.glb": {
   "file": "img/skyview/Sign_Hyeop_3D.webp",
-  "hash": "8bfb0fa2ad",
+  "hash": "5d49c621b9",
   "minX": -1.115,
   "minZ": -0.085,
   "width": 2.25,
@@ -225,7 +225,7 @@
  },
  "models/Sign_Shin_3D.glb": {
   "file": "img/skyview/Sign_Shin_3D.webp",
-  "hash": "dd71b507cd",
+  "hash": "a8370d20b7",
   "minX": -1.115,
   "minZ": -0.085,
   "width": 2.25,
@@ -233,7 +233,7 @@
  },
  "models/asset_금파힐정문문주.glb": {
   "file": "img/skyview/asset_금파힐정문문주.webp",
-  "hash": "86aa9857ab",
+  "hash": "5e936fbb47",
   "minX": -11.4,
   "minZ": -2.1,
   "width": 20.917,
@@ -241,7 +241,7 @@
  },
  "models/asset_금파힐후문문주.glb": {
   "file": "img/skyview/asset_금파힐후문문주.webp",
-  "hash": "6abcccf011",
+  "hash": "32fbfc71d0",
   "minX": -8.2,
   "minZ": -1.8,
   "width": 16.417,
@@ -249,7 +249,7 @@
  },
  "models/asset_버스정류장.glb": {
   "file": "img/skyview/asset_버스정류장.webp",
-  "hash": "4138e82bdc",
+  "hash": "ce115efd6a",
   "minX": -3.275,
   "minZ": -1.225,
   "width": 5.667,
@@ -350,6 +350,22 @@
   "minZ": -28,
   "width": 56,
   "depth": 56
+ },
+ "models/place_극미103.glb": {
+  "file": "img/skyview/place_극미103.webp",
+  "hash": "0f6a3bbaf4",
+  "minX": -42,
+  "minZ": -32.501,
+  "width": 74,
+  "depth": 58.005
+ },
+ "models/place_극미104.glb": {
+  "file": "img/skyview/place_극미104.webp",
+  "hash": "a2bd03bff6",
+  "minX": -32,
+  "minZ": -26.003,
+  "width": 66,
+  "depth": 52.078
  },
  "models/place_금북주택가1.glb": {
   "file": "img/skyview/place_금북주택가1.webp",
@@ -577,7 +593,7 @@
  },
  "models/place_태권도.glb": {
   "file": "img/skyview/place_태권도.webp",
-  "hash": "9854091f55",
+  "hash": "38d4a01f4a",
   "minX": -9.95,
   "minZ": -17.4,
   "width": 18.333,
