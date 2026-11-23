@@ -1,0 +1,898 @@
+{
+ "models/3D_place_101.glb": {
+  "file": "img/skyview/3D_place_101.webp",
+  "hash": "c25594d4e4",
+  "minX": -24.931,
+  "minZ": -22.171,
+  "width": 45.25,
+  "depth": 38.75
+ },
+ "models/3D_place_102.glb": {
+  "file": "img/skyview/3D_place_102.webp",
+  "hash": "80de481d1a",
+  "minX": -19.553,
+  "minZ": -19.199,
+  "width": 38.583,
+  "depth": 40.417
+ },
+ "models/3D_place_103.glb": {
+  "file": "img/skyview/3D_place_103.webp",
+  "hash": "0d0795e2f0",
+  "minX": -19.553,
+  "minZ": -19.199,
+  "width": 38.583,
+  "depth": 40.417
+ },
+ "models/3D_place_104.glb": {
+  "file": "img/skyview/3D_place_104.webp",
+  "hash": "21220e45be",
+  "minX": -24.931,
+  "minZ": -22.171,
+  "width": 45.25,
+  "depth": 38.75
+ },
+ "models/3D_place_105.glb": {
+  "file": "img/skyview/3D_place_105.webp",
+  "hash": "c7c7c0e324",
+  "minX": -22,
+  "minZ": -28.501,
+  "width": 49.417,
+  "depth": 44.083
+ },
+ "models/3D_place_106.glb": {
+  "file": "img/skyview/3D_place_106.webp",
+  "hash": "b45f18d329",
+  "minX": -24.931,
+  "minZ": -22.171,
+  "width": 45.25,
+  "depth": 38.75
+ },
+ "models/3D_place_107.glb": {
+  "file": "img/skyview/3D_place_107.webp",
+  "hash": "033f8131b7",
+  "minX": -24.931,
+  "minZ": -22.171,
+  "width": 45.25,
+  "depth": 38.75
+ },
+ "models/3D_place_108.glb": {
+  "file": "img/skyview/3D_place_108.webp",
+  "hash": "2984aee7c1",
+  "minX": -24.931,
+  "minZ": -22.171,
+  "width": 45.25,
+  "depth": 38.75
+ },
+ "models/3D_place_109.glb": {
+  "file": "img/skyview/3D_place_109.webp",
+  "hash": "7b0002b040",
+  "minX": -18.444,
+  "minZ": -15.4,
+  "width": 36.833,
+  "depth": 28.167
+ },
+ "models/3D_place_110.glb": {
+  "file": "img/skyview/3D_place_110.webp",
+  "hash": "520a681a44",
+  "minX": -28.48,
+  "minZ": -16.012,
+  "width": 57,
+  "depth": 24.083
+ },
+ "models/3D_place_111.glb": {
+  "file": "img/skyview/3D_place_111.webp",
+  "hash": "865b5c1f9b",
+  "minX": -18.209,
+  "minZ": -14.41,
+  "width": 36.417,
+  "depth": 22
+ },
+ "models/3D_place_112.glb": {
+  "file": "img/skyview/3D_place_112.webp",
+  "hash": "f993c23893",
+  "minX": -19.818,
+  "minZ": -18.245,
+  "width": 40.917,
+  "depth": 36.75
+ },
+ "models/3D_place_113.glb": {
+  "file": "img/skyview/3D_place_113.webp",
+  "hash": "c58baa15e0",
+  "minX": -15.681,
+  "minZ": -25.754,
+  "width": 36,
+  "depth": 51.583
+ },
+ "models/3D_place_114.glb": {
+  "file": "img/skyview/3D_place_114.webp",
+  "hash": "2bacd6bdc8",
+  "minX": -15.47,
+  "minZ": -36.155,
+  "width": 44.976,
+  "depth": 68.945
+ },
+ "models/3D_place_115.glb": {
+  "file": "img/skyview/3D_place_115.webp",
+  "hash": "94ab6e72bc",
+  "minX": -14.35,
+  "minZ": -14.2,
+  "width": 28.75,
+  "depth": 20.667
+ },
+ "models/3D_place_116.glb": {
+  "file": "img/skyview/3D_place_116.webp",
+  "hash": "51ea154d24",
+  "minX": -14.05,
+  "minZ": -13.4,
+  "width": 21.083,
+  "depth": 26.833
+ },
+ "models/3D_place_keumbuk.glb": {
+  "file": "img/skyview/3D_place_keumbuk.webp",
+  "hash": "45f0835f50",
+  "minX": -135,
+  "minZ": -120.003,
+  "width": 270,
+  "depth": 240.117
+ },
+ "models/3D_place_keumho119.glb": {
+  "file": "img/skyview/3D_place_keumho119.webp",
+  "hash": "8e679c70e1",
+  "minX": -6.9,
+  "minZ": -10,
+  "width": 30.333,
+  "depth": 21.25
+ },
+ "models/3D_place_megacoffee.glb": {
+  "file": "img/skyview/3D_place_megacoffee.webp",
+  "hash": "1b4533d0e3",
+  "minX": -6.58,
+  "minZ": -6.5,
+  "width": 14.667,
+  "depth": 15.333
+ },
+ "models/3D_place_namkwang.glb": {
+  "file": "img/skyview/3D_place_namkwang.webp",
+  "hash": "369ab53ecc",
+  "minX": -13.04,
+  "minZ": -13.5,
+  "width": 27.5,
+  "depth": 36.75
+ },
+ "models/3D_place_taekwondo.glb": {
+  "file": "img/skyview/3D_place_taekwondo.webp",
+  "hash": "67bb98c3f5",
+  "minX": -10.253,
+  "minZ": -15.046,
+  "width": 18.833,
+  "depth": 32.5
+ },
+ "models/Community_north.glb": {
+  "file": "img/skyview/Community_north.webp",
+  "hash": "8af817412a",
+  "minX": -102.552,
+  "minZ": -84.935,
+  "width": 205.434,
+  "depth": 170.66
+ },
+ "models/Community_south.glb": {
+  "file": "img/skyview/Community_south.webp",
+  "hash": "502f78c79d",
+  "minX": 16.721,
+  "minZ": 31.754,
+  "width": 331.204,
+  "depth": 205.872
+ },
+ "models/Emart24_GeumhoParkHills_Sign_3D.glb": {
+  "file": "img/skyview/Emart24_GeumhoParkHills_Sign_3D.webp",
+  "hash": "65e4725293",
+  "minX": -11.02,
+  "minZ": -0.1,
+  "width": 22.083,
+  "depth": 0.5
+ },
+ "models/Geumho_2Story_Commercial_NorthDoors.glb": {
+  "file": "img/skyview/Geumho_2Story_Commercial_NorthDoors.webp",
+  "hash": "520f9a8c38",
+  "minX": -18.28,
+  "minZ": -6.68,
+  "width": 25.917,
+  "depth": 13.75
+ },
+ "models/SeoulHaengbok_Sinhyup_Banner_3D.glb": {
+  "file": "img/skyview/SeoulHaengbok_Sinhyup_Banner_3D.webp",
+  "hash": "85fbd9d847",
+  "minX": -5.05,
+  "minZ": -0.05,
+  "width": 10.167,
+  "depth": 0.167
+ },
+ "models/Seoul_Happy_Sign.glb": {
+  "file": "img/skyview/Seoul_Happy_Sign.webp",
+  "hash": "fa837384ab",
+  "minX": -3.596,
+  "minZ": 0,
+  "width": 7.25,
+  "depth": 0.083
+ },
+ "models/Sign_Hyeop_3D.glb": {
+  "file": "img/skyview/Sign_Hyeop_3D.webp",
+  "hash": "5d49c621b9",
+  "minX": -1.115,
+  "minZ": -0.085,
+  "width": 2.25,
+  "depth": 0.333
+ },
+ "models/Sign_Shin_3D.glb": {
+  "file": "img/skyview/Sign_Shin_3D.webp",
+  "hash": "a8370d20b7",
+  "minX": -1.115,
+  "minZ": -0.085,
+  "width": 2.25,
+  "depth": 0.333
+ },
+ "models/asset_금파힐정문문주.glb": {
+  "file": "img/skyview/asset_금파힐정문문주.webp",
+  "hash": "2eadbbae60",
+  "minX": -11.4,
+  "minZ": -2.1,
+  "width": 20.917,
+  "depth": 4.25
+ },
+ "models/asset_금파힐후문문주.glb": {
+  "file": "img/skyview/asset_금파힐후문문주.webp",
+  "hash": "43200bbd3d",
+  "minX": -8.2,
+  "minZ": -1.8,
+  "width": 16.417,
+  "depth": 3.667
+ },
+ "models/asset_버스정류장.glb": {
+  "file": "img/skyview/asset_버스정류장.webp",
+  "hash": "ce115efd6a",
+  "minX": -3.275,
+  "minZ": -1.225,
+  "width": 5.667,
+  "depth": 2.417
+ },
+ "models/place_GS25.glb": {
+  "file": "img/skyview/place_GS25.webp",
+  "hash": "e4dc1115f6",
+  "minX": -10.512,
+  "minZ": -13.534,
+  "width": 22.5,
+  "depth": 24.083
+ },
+ "models/place_KFC.glb": {
+  "file": "img/skyview/place_KFC.webp",
+  "hash": "e05859937f",
+  "minX": -9.823,
+  "minZ": -13.52,
+  "width": 19.833,
+  "depth": 26.583
+ },
+ "models/place_adamleeds.glb": {
+  "file": "img/skyview/place_adamleeds.webp",
+  "hash": "c7e7b05210",
+  "minX": -20.525,
+  "minZ": -22.148,
+  "width": 37.75,
+  "depth": 37.417
+ },
+ "models/place_bagel.glb": {
+  "file": "img/skyview/place_bagel.webp",
+  "hash": "1b133d768c",
+  "minX": -17,
+  "minZ": -14,
+  "width": 34,
+  "depth": 26.583
+ },
+ "models/place_bunsik.glb": {
+  "file": "img/skyview/place_bunsik.webp",
+  "hash": "44e843a641",
+  "minX": -13.628,
+  "minZ": -12.08,
+  "width": 27,
+  "depth": 24.5
+ },
+ "models/place_gs25극미점.glb": {
+  "file": "img/skyview/place_gs25극미점.webp",
+  "hash": "b9d9694edf",
+  "minX": -6.56,
+  "minZ": -7.08,
+  "width": 13.5,
+  "depth": 14.833
+ },
+ "models/place_library.glb": {
+  "file": "img/skyview/place_library.webp",
+  "hash": "191d0d7950",
+  "minX": -12.985,
+  "minZ": -12.708,
+  "width": 26.25,
+  "depth": 21.75
+ },
+ "models/place_megacoffee.glb": {
+  "file": "img/skyview/place_megacoffee.webp",
+  "hash": "6f05a62426",
+  "minX": -6.57,
+  "minZ": -6.713,
+  "width": 14.333,
+  "depth": 15.25
+ },
+ "models/place_megacoffee2.glb": {
+  "file": "img/skyview/place_megacoffee2.webp",
+  "hash": "87a7d837dd",
+  "minX": -18.53,
+  "minZ": -29.685,
+  "width": 21.5,
+  "depth": 54
+ },
+ "models/place_경찰서.glb": {
+  "file": "img/skyview/place_경찰서.webp",
+  "hash": "89583b1693",
+  "minX": -15.231,
+  "minZ": -23.4,
+  "width": 28.083,
+  "depth": 53.75
+ },
+ "models/place_골드축산.glb": {
+  "file": "img/skyview/place_골드축산.webp",
+  "hash": "857bbbb4cb",
+  "minX": -26.501,
+  "minZ": -24.5,
+  "width": 52.083,
+  "depth": 55
+ },
+ "models/place_극미101.glb": {
+  "file": "img/skyview/place_극미101.webp",
+  "hash": "02cdc3c107",
+  "minX": -44,
+  "minZ": -36.999,
+  "width": 92,
+  "depth": 74.031
+ },
+ "models/place_극미102.glb": {
+  "file": "img/skyview/place_극미102.webp",
+  "hash": "1c71e4f5d4",
+  "minX": -32,
+  "minZ": -28,
+  "width": 56,
+  "depth": 56
+ },
+ "models/place_극미103.glb": {
+  "file": "img/skyview/place_극미103.webp",
+  "hash": "709279fedf",
+  "minX": -42,
+  "minZ": -32.501,
+  "width": 74,
+  "depth": 58.005
+ },
+ "models/place_극미104.glb": {
+  "file": "img/skyview/place_극미104.webp",
+  "hash": "60dc8dab44",
+  "minX": -32,
+  "minZ": -26.003,
+  "width": 66,
+  "depth": 52.078
+ },
+ "models/place_금북주택가1.glb": {
+  "file": "img/skyview/place_금북주택가1.webp",
+  "hash": "3cb2452930",
+  "minX": -10.84,
+  "minZ": -20,
+  "width": 21.333,
+  "depth": 39.75
+ },
+ "models/place_금북주택가2.glb": {
+  "file": "img/skyview/place_금북주택가2.webp",
+  "hash": "97981cd263",
+  "minX": -12.27,
+  "minZ": -13.35,
+  "width": 19.917,
+  "depth": 29.417
+ },
+ "models/place_금북초.glb": {
+  "file": "img/skyview/place_금북초.webp",
+  "hash": "e1fa74fe42",
+  "minX": -62.364,
+  "minZ": -58.62,
+  "width": 163.365,
+  "depth": 176.711
+ },
+ "models/place_금북초앞주택가.glb": {
+  "file": "img/skyview/place_금북초앞주택가.webp",
+  "hash": "820f2457bc",
+  "minX": -25.009,
+  "minZ": -37.5,
+  "width": 46.437,
+  "depth": 74.61
+ },
+ "models/place_금파힐101.glb": {
+  "file": "img/skyview/place_금파힐101.webp",
+  "hash": "5a900368c0",
+  "minX": -24.342,
+  "minZ": -20.391,
+  "width": 47.083,
+  "depth": 41
+ },
+ "models/place_금파힐103.glb": {
+  "file": "img/skyview/place_금파힐103.webp",
+  "hash": "e2acfb4f4c",
+  "minX": -32.804,
+  "minZ": -31.922,
+  "width": 60.833,
+  "depth": 63.417
+ },
+ "models/place_금파힐104.glb": {
+  "file": "img/skyview/place_금파힐104.webp",
+  "hash": "0f04dd4b67",
+  "minX": -23.524,
+  "minZ": -19.249,
+  "width": 50.083,
+  "depth": 43.833
+ },
+ "models/place_금파힐105.glb": {
+  "file": "img/skyview/place_금파힐105.webp",
+  "hash": "55defb632a",
+  "minX": -28.2,
+  "minZ": -22.701,
+  "width": 64.25,
+  "depth": 42.164
+ },
+ "models/place_금파힐109.glb": {
+  "file": "img/skyview/place_금파힐109.webp",
+  "hash": "3c15282255",
+  "minX": -10.469,
+  "minZ": -11.89,
+  "width": 21,
+  "depth": 18.083
+ },
+ "models/place_금파힐110.glb": {
+  "file": "img/skyview/place_금파힐110.webp",
+  "hash": "de21b68f64",
+  "minX": -20.769,
+  "minZ": -11.79,
+  "width": 41.583,
+  "depth": 18
+ },
+ "models/place_금파힐111.glb": {
+  "file": "img/skyview/place_금파힐111.webp",
+  "hash": "9babb60584",
+  "minX": -12.769,
+  "minZ": -12.24,
+  "width": 25.583,
+  "depth": 18.667
+ },
+ "models/place_금파힐112.glb": {
+  "file": "img/skyview/place_금파힐112.webp",
+  "hash": "73828335e6",
+  "minX": -24.342,
+  "minZ": -20.391,
+  "width": 49.5,
+  "depth": 41
+ },
+ "models/place_금파힐113.glb": {
+  "file": "img/skyview/place_금파힐113.webp",
+  "hash": "18903eb285",
+  "minX": -15.681,
+  "minZ": -25.754,
+  "width": 36,
+  "depth": 51.583
+ },
+ "models/place_금파힐114.glb": {
+  "file": "img/skyview/place_금파힐114.webp",
+  "hash": "47c7f2eb68",
+  "minX": -14.441,
+  "minZ": -23.579,
+  "width": 30.5,
+  "depth": 48
+ },
+ "models/place_금파힐115.glb": {
+  "file": "img/skyview/place_금파힐115.webp",
+  "hash": "9c7e73a4cf",
+  "minX": -12.369,
+  "minZ": -11.54,
+  "width": 24.75,
+  "depth": 17.667
+ },
+ "models/place_금파힐116.glb": {
+  "file": "img/skyview/place_금파힐116.webp",
+  "hash": "1967fd07a6",
+  "minX": -11.04,
+  "minZ": -10.461,
+  "width": 16.667,
+  "depth": 21
+ },
+ "models/place_금파힐정문.glb": {
+  "file": "img/skyview/place_금파힐정문.webp",
+  "hash": "400334f48f",
+  "minX": -14.289,
+  "minZ": -16.8,
+  "width": 27.333,
+  "depth": 23.333
+ },
+ "models/place_금파힐후문.glb": {
+  "file": "img/skyview/place_금파힐후문.webp",
+  "hash": "c053f144d3",
+  "minX": -11.615,
+  "minZ": -3.75,
+  "width": 23.333,
+  "depth": 18.583
+ },
+ "models/place_금호1가동주민센터.glb": {
+  "file": "img/skyview/place_금호1가동주민센터.webp",
+  "hash": "4e1e4031e0",
+  "minX": -18.8,
+  "minZ": -6.62,
+  "width": 32,
+  "depth": 15.167
+ },
+ "models/place_남광빌딩.glb": {
+  "file": "img/skyview/place_남광빌딩.webp",
+  "hash": "42afb06e40",
+  "minX": -14.2,
+  "minZ": -11.17,
+  "width": 31,
+  "depth": 28.417
+ },
+ "models/place_대림독서실.glb": {
+  "file": "img/skyview/place_대림독서실.webp",
+  "hash": "b1de1d7df7",
+  "minX": -18.571,
+  "minZ": -14.82,
+  "width": 33.5,
+  "depth": 31.75
+ },
+ "models/place_대현교회.glb": {
+  "file": "img/skyview/place_대현교회.webp",
+  "hash": "25a5f1e0b9",
+  "minX": -23.315,
+  "minZ": -24.669,
+  "width": 46.833,
+  "depth": 46.5
+ },
+ "models/place_롯데마트.glb": {
+  "file": "img/skyview/place_롯데마트.webp",
+  "hash": "7d8955bbbf",
+  "minX": -32.24,
+  "minZ": -17.519,
+  "width": 72.31,
+  "depth": 50.561
+ },
+ "models/place_롯데마트행당점.glb": {
+  "file": "img/skyview/place_롯데마트행당점.webp",
+  "hash": "35e80f871a",
+  "minX": -117.024,
+  "minZ": -112.89,
+  "width": 234.048,
+  "depth": 225.82
+ },
+ "models/place_산마을돈타운.glb": {
+  "file": "img/skyview/place_산마을돈타운.webp",
+  "hash": "37e0b638bf",
+  "minX": -7.8,
+  "minZ": -15.22,
+  "width": 16.083,
+  "depth": 32.5
+ },
+ "models/place_설내옥.glb": {
+  "file": "img/skyview/place_설내옥.webp",
+  "hash": "14b32c4c0a",
+  "minX": -17.574,
+  "minZ": -20.98,
+  "width": 39.917,
+  "depth": 38.083
+ },
+ "models/place_신금호역4번출구앞건물.glb": {
+  "file": "img/skyview/place_신금호역4번출구앞건물.webp",
+  "hash": "a37592b73f",
+  "minX": -20.299,
+  "minZ": -28.567,
+  "width": 44.417,
+  "depth": 55.167
+ },
+ "models/place_신금호역5.glb": {
+  "file": "img/skyview/place_신금호역5.webp",
+  "hash": "1ffed1abf1",
+  "minX": -11,
+  "minZ": -2,
+  "width": 14.5,
+  "depth": 4.583
+ },
+ "models/place_신금호역5번출구앞상가.glb": {
+  "file": "img/skyview/place_신금호역5번출구앞상가.webp",
+  "hash": "e614d43fad",
+  "minX": -17.345,
+  "minZ": -27.5,
+  "width": 33.75,
+  "depth": 57.583
+ },
+ "models/place_신기한나라라운지.glb": {
+  "file": "img/skyview/place_신기한나라라운지.webp",
+  "hash": "a1f933721b",
+  "minX": -22.2,
+  "minZ": -40.8,
+  "width": 45.066,
+  "depth": 83.6
+ },
+ "models/place_제주수퍼.glb": {
+  "file": "img/skyview/place_제주수퍼.webp",
+  "hash": "d6299bd267",
+  "minX": -32.64,
+  "minZ": -31.141,
+  "width": 65.28,
+  "depth": 63.835
+ },
+ "models/place_조형선외과동물병원.glb": {
+  "file": "img/skyview/place_조형선외과동물병원.webp",
+  "hash": "f3a3eb2fc6",
+  "minX": -3.4,
+  "minZ": -6,
+  "width": 6.833,
+  "depth": 12.25
+ },
+ "models/place_커뮤니티+102,106,107,108.glb": {
+  "file": "img/skyview/place_커뮤니티+102,106,107,108.webp",
+  "hash": "5d18467e38",
+  "minX": -170,
+  "minZ": -170,
+  "width": 340,
+  "depth": 340
+ },
+ "models/place_키잉글리시.glb": {
+  "file": "img/skyview/place_키잉글리시.webp",
+  "hash": "db62859b0d",
+  "minX": -31.023,
+  "minZ": -21.85,
+  "width": 53,
+  "depth": 50.25
+ },
+ "models/place_태권도.glb": {
+  "file": "img/skyview/place_태권도.webp",
+  "hash": "d9daf9e732",
+  "minX": -9.95,
+  "minZ": -17.4,
+  "width": 18.333,
+  "depth": 33.333
+ },
+ "models/place_할인마트.glb": {
+  "file": "img/skyview/place_할인마트.webp",
+  "hash": "1156664464",
+  "minX": -5.125,
+  "minZ": -11.155,
+  "width": 13.333,
+  "depth": 22.333
+ },
+ "models/place_행당대림101.glb": {
+  "file": "img/skyview/place_행당대림101.webp",
+  "hash": "f2be4eea02",
+  "minX": -28.161,
+  "minZ": -9.993,
+  "width": 61,
+  "depth": 22.667
+ },
+ "models/place_행당대림102.glb": {
+  "file": "img/skyview/place_행당대림102.webp",
+  "hash": "4cf05110b7",
+  "minX": -30.101,
+  "minZ": -24.214,
+  "width": 52.75,
+  "depth": 48.667
+ },
+ "models/place_행당대림103.glb": {
+  "file": "img/skyview/place_행당대림103.webp",
+  "hash": "cc4f506de6",
+  "minX": -34.879,
+  "minZ": -33.861,
+  "width": 56.879,
+  "depth": 64.716
+ },
+ "models/place_행당대림104.glb": {
+  "file": "img/skyview/place_행당대림104.webp",
+  "hash": "44257f5e14",
+  "minX": -47.703,
+  "minZ": -37.525,
+  "width": 64.052,
+  "depth": 64.641
+ },
+ "models/place_행당대림106.glb": {
+  "file": "img/skyview/place_행당대림106.webp",
+  "hash": "8c1c7b322c",
+  "minX": -31.128,
+  "minZ": -10.086,
+  "width": 66.846,
+  "depth": 20.628
+ },
+ "models/place_행당대림107.glb": {
+  "file": "img/skyview/place_행당대림107.webp",
+  "hash": "0a5ece427d",
+  "minX": -15.098,
+  "minZ": -9.986,
+  "width": 30.417,
+  "depth": 20.25
+ },
+ "models/place_행당대림108.glb": {
+  "file": "img/skyview/place_행당대림108.webp",
+  "hash": "1735223aad",
+  "minX": -35.098,
+  "minZ": -14.586,
+  "width": 70.351,
+  "depth": 29.221
+ },
+ "models/place_행당대림109.glb": {
+  "file": "img/skyview/place_행당대림109.webp",
+  "hash": "b395097b74",
+  "minX": -10.29,
+  "minZ": -7.017,
+  "width": 20.583,
+  "depth": 16.917
+ },
+ "models/place_행당대림110.glb": {
+  "file": "img/skyview/place_행당대림110.webp",
+  "hash": "47ad4ad521",
+  "minX": -30.04,
+  "minZ": -6.436,
+  "width": 60.083,
+  "depth": 16.333
+ },
+ "models/place_행당대림112.glb": {
+  "file": "img/skyview/place_행당대림112.webp",
+  "hash": "2f15568404",
+  "minX": -10.29,
+  "minZ": -7.017,
+  "width": 20.583,
+  "depth": 16.917
+ },
+ "models/place_행당대림113.glb": {
+  "file": "img/skyview/place_행당대림113.webp",
+  "hash": "f4d5b5d299",
+  "minX": -31.128,
+  "minZ": -10.086,
+  "width": 66.846,
+  "depth": 20.628
+ },
+ "models/place_행당대림115.glb": {
+  "file": "img/skyview/place_행당대림115.webp",
+  "hash": "d20c1ceb4f",
+  "minX": -30.098,
+  "minZ": -10.112,
+  "width": 60.417,
+  "depth": 20.75
+ },
+ "models/place_행당대림116.glb": {
+  "file": "img/skyview/place_행당대림116.webp",
+  "hash": "b873fb92df",
+  "minX": -31.128,
+  "minZ": -10.086,
+  "width": 66.846,
+  "depth": 20.628
+ },
+ "models/place_행당대림120.glb": {
+  "file": "img/skyview/place_행당대림120.webp",
+  "hash": "d51f8aa9aa",
+  "minX": -31.128,
+  "minZ": -10.086,
+  "width": 66.846,
+  "depth": 20.628
+ },
+ "models/place_행당대림123.glb": {
+  "file": "img/skyview/place_행당대림123.webp",
+  "hash": "bd256a61ff",
+  "minX": -24.84,
+  "minZ": -6.429,
+  "width": 50.583,
+  "depth": 16.333
+ },
+ "models/place_행당대림124.glb": {
+  "file": "img/skyview/place_행당대림124.webp",
+  "hash": "a29837461e",
+  "minX": -24.84,
+  "minZ": -6.43,
+  "width": 50.583,
+  "depth": 16.333
+ },
+ "models/place_행당대림125.glb": {
+  "file": "img/skyview/place_행당대림125.webp",
+  "hash": "c04a2840f3",
+  "minX": -24.84,
+  "minZ": -6.43,
+  "width": 50.583,
+  "depth": 16.333
+ },
+ "models/place_행당대림126.glb": {
+  "file": "img/skyview/place_행당대림126.webp",
+  "hash": "eaa18c3e88",
+  "minX": -24.84,
+  "minZ": -6.43,
+  "width": 50.583,
+  "depth": 16.333
+ },
+ "models/place_행당대림127.glb": {
+  "file": "img/skyview/place_행당대림127.webp",
+  "hash": "94a56102de",
+  "minX": -24.84,
+  "minZ": -6.43,
+  "width": 50.583,
+  "depth": 16.333
+ },
+ "models/place_행당대림128.glb": {
+  "file": "img/skyview/place_행당대림128.webp",
+  "hash": "b8045a9e7a",
+  "minX": -24.84,
+  "minZ": -6.424,
+  "width": 50.417,
+  "depth": 16.333
+ },
+ "models/place_행당대림129.glb": {
+  "file": "img/skyview/place_행당대림129.webp",
+  "hash": "df5197c623",
+  "minX": -16.098,
+  "minZ": -9.986,
+  "width": 32.417,
+  "depth": 20.25
+ },
+ "models/place_행당대림131.glb": {
+  "file": "img/skyview/place_행당대림131.webp",
+  "hash": "1a8b58ab72",
+  "minX": -12.43,
+  "minZ": -6.427,
+  "width": 24.917,
+  "depth": 16.333
+ },
+ "models/place_행당대림132.glb": {
+  "file": "img/skyview/place_행당대림132.webp",
+  "hash": "7eb2b59b24",
+  "minX": -12.43,
+  "minZ": -6.427,
+  "width": 24.917,
+  "depth": 16.333
+ },
+ "models/place_행당한진201.glb": {
+  "file": "img/skyview/place_행당한진201.webp",
+  "hash": "73bc3de187",
+  "minX": -14.26,
+  "minZ": -20.319,
+  "width": 27.917,
+  "depth": 37
+ },
+ "models/place_행당한진202.glb": {
+  "file": "img/skyview/place_행당한진202.webp",
+  "hash": "e38beab999",
+  "minX": -14.26,
+  "minZ": -20.319,
+  "width": 27.917,
+  "depth": 37
+ },
+ "models/place_행당한진203.glb": {
+  "file": "img/skyview/place_행당한진203.webp",
+  "hash": "3c16c905e3",
+  "minX": -14.26,
+  "minZ": -20.319,
+  "width": 27.917,
+  "depth": 37
+ },
+ "models/place_행당한진204.glb": {
+  "file": "img/skyview/place_행당한진204.webp",
+  "hash": "1891c2d23b",
+  "minX": -14.26,
+  "minZ": -20.319,
+  "width": 27.917,
+  "depth": 37
+ },
+ "models/place_행복한교회.glb": {
+  "file": "img/skyview/place_행복한교회.webp",
+  "hash": "d62365974f",
+  "minX": -18.901,
+  "minZ": -13.001,
+  "width": 39.417,
+  "depth": 26.583
+ },
+ "models/place_홈플러스익스프레스.glb": {
+  "file": "img/skyview/place_홈플러스익스프레스.webp",
+  "hash": "7bd783a4a2",
+  "minX": -17.803,
+  "minZ": -12.68,
+  "width": 43.667,
+  "depth": 28.25
+ }
+}

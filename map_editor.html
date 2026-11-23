@@ -2,10 +2,14 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>지도 에디터</title>
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
+  .sky-img { pointer-events: none; }
+  #overlay.sky-hidden .sky-layer { display: none; }
+  #skyOpacity { width: 80px; vertical-align: middle; }
   html, body { margin: 0; height: 100%; font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
   body { display: flex; flex-direction: column; background: #20232a; color: #e8eaf0; }
   #toolbar {
@@ -41,9 +45,15 @@
     font-size: 22px; fill: #202225; paint-order: stroke; stroke: #fff; stroke-width: 4px;
     pointer-events: none; font-weight: 600;
   }
-  .road-line { stroke: #4a4a4e; stroke-linecap: round; cursor: pointer; }
+  .road-line { stroke: #4a4a4e; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; pointer-events: none; }
+  .road-line.selected { stroke: #e3482b !important; stroke-opacity: 0.85; }
+  /* 차선: 실제 폭(--w, 지도 px)이 화면에서 너무 가늘면 최소 굵기(--lane-min, 확대 배율로 계산)로 */
+  .lane { fill: none; pointer-events: none; stroke-width: max(calc(var(--w) * 1px), calc(var(--lane-min, 1) * 1px)); }
+  .lane-yellow { stroke: #f2c438; }
+  .lane-white { stroke: #f2f2f2; }
+  .road-mark { fill: #f2f2f2; pointer-events: none; }
+  #overlay.lanes-hidden .lane-layer { display: none; }
   .road-hit { fill: none; stroke: transparent; stroke-width: 26; cursor: pointer; pointer-events: all; }
-  .road-line.selected { stroke: #e3482b; }
   .road-handle { fill: #e3482b; stroke: #fff; stroke-width: 2; cursor: grab; }
   .road-handle:active { cursor: grabbing; }
   .curve-handle { fill: #ffa63f; stroke: #7a4600; stroke-width: 1.5; cursor: grab; }
@@ -96,7 +106,92 @@
   #toast.show { opacity: 1; }
   #labelToggleWrap { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; color: #e8eaf0; user-select: none; }
   #labelToggleWrap input { cursor: pointer; }
+  #laneToggleWrap { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; color: #e8eaf0; user-select: none; }
+  #roadOpacity { width: 80px; vertical-align: middle; }
   #overlay.labels-hidden .marker-label { display: none; }
+  /* ── 터치: 끌 수 있는 것들은 브라우저 스크롤 대신 드래그로, 손잡이는 확대 배율에 맞춰 손가락 크기로 ── */
+  #stageWrap { touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
+  .marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect { touch-action: none; }
+  .marker-hit, .rot-hit, .curve-hit, .tree-hit {
+    transform-box: fill-box; transform-origin: center; transform: scale(var(--hit-k, 1));
+  }
+  .rot-handle, .curve-handle, .road-handle {
+    transform-box: fill-box; transform-origin: center; transform: scale(var(--handle-k, 1));
+  }
+  #panelHeader { display: none; }
+  .modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex;
+    align-items: center; justify-content: center; z-index: 55; padding: 12px;
+  }
+  .modal.hidden { display: none; }
+  .modal-box { width: min(520px, 100%); max-height: 90vh; overflow-y: auto; background: #1d2027; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .modal-box h3 { margin: 0; font-size: 16px; }
+  .modal-box p, .modal-box li { margin: 0; font-size: 13px; color: #c3c8d3; line-height: 1.55; }
+  .modal-box ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+  .modal-box a { color: #7fb8ff; }
+  .modal-box input[type="text"], .modal-box input[type="password"] {
+    width: 100%; padding: 9px 10px; border-radius: 6px; border: 1px solid #4a4f5b; background: #121419; color: #e8eaf0; font: inherit; font-size: 15px;
+  }
+  .modal-box .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .modal-box button { font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 6px; border: 1px solid #4a4f5b; background: #3a3f4b; color: #e8eaf0; cursor: pointer; }
+  .modal-box button.primary { background: #2f7a3f; border-color: #3f9a52; }
+  .modal-box button.danger { background: #4a2a2a; border-color: #7a3030; }
+  .modal-box .muted { color: #8d93a0; font-size: 12px; }
+  #ghSaveBtn { background: #2f5f8a; border-color: #3f7ab0; }
+
+  /* ── 휴대폰(좁은 화면): 툴바는 가로로 밀어서 보고, 편집 패널은 아래 서랍으로 ── */
+  @media (max-width: 760px) {
+    #toolbar { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 6px 8px; padding-top: max(6px, env(safe-area-inset-top)); scrollbar-width: none; }
+    #toolbar::-webkit-scrollbar { display: none; }
+    #toolbar > * { flex: none; }
+    #toolbar button, #toolbar input { font-size: 14px; padding: 8px 10px; }
+    #toolbar input[type="text"] { width: 130px; font-size: 16px; }
+    #toolbar .hint { display: none; }
+    #main { flex-direction: column; }
+    #sidePanel {
+      width: 100%; max-height: 46vh; border-left: none; border-top: 1px solid #3a3f4b;
+      padding: 0 12px 12px; padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+    #sidePanel.collapsed { max-height: none; overflow: hidden; padding-bottom: max(0px, env(safe-area-inset-bottom)); }
+    #sidePanel.collapsed #panelBody { display: none; }
+    #panelHeader {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      position: sticky; top: 0; background: #262a33; padding: 10px 0; margin-bottom: 4px; z-index: 1;
+      font-size: 14px; font-weight: 600; cursor: pointer; user-select: none;
+    }
+    #panelHeader .chev { color: #9aa0ad; font-size: 13px; font-weight: 400; }
+    .field input[type="number"], .field input[type="text"] { font-size: 16px; padding: 8px; }
+    #exportBox { width: 100%; max-height: 92vh; padding: 12px; }
+    #exportText { min-height: 40vh; }
+  }
+  /* ── 폴드 펼친 화면·태블릿(손가락 + 넓은 화면): 툴바 한 줄, 편집 패널은 오른쪽에서 접고 펼치기 ── */
+  @media (pointer: coarse) and (min-width: 761px) {
+    #toolbar { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); scrollbar-width: none; }
+    #toolbar::-webkit-scrollbar { display: none; }
+    #toolbar > * { flex: none; }
+    #toolbar button, #toolbar input { font-size: 15px; padding: 9px 12px; }
+    #toolbar input[type="text"] { width: 160px; font-size: 16px; }
+    #toolbar .hint { display: none; }
+    #labelToggleWrap, #skyToggleWrap, #laneToggleWrap { font-size: 15px; }
+    #labelToggleWrap input, #skyToggleWrap input, #laneToggleWrap input { width: 20px; height: 20px; }
+    #skyOpacity, #roadOpacity { width: 110px; }
+    #sidePanel { width: 320px; padding: 0 14px 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+    #panelHeader {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      position: sticky; top: 0; background: #262a33; padding: 12px 0; margin-bottom: 4px; z-index: 1;
+      font-size: 15px; font-weight: 600; cursor: pointer; user-select: none;
+    }
+    #panelHeader .chev { color: #9aa0ad; font-size: 13px; font-weight: 400; white-space: nowrap; }
+    #sidePanel.collapsed { width: 52px; padding: 0; overflow: hidden; }
+    #sidePanel.collapsed #panelBody { display: none; }
+    #sidePanel.collapsed #panelHeader {
+      writing-mode: vertical-rl; justify-content: flex-start; height: 100%; padding: 14px 0; margin: 0;
+      align-items: center; gap: 12px;
+    }
+    .field label { font-size: 13px; }
+    .field input[type="number"], .field input[type="text"] { font-size: 16px; padding: 9px 10px; }
+    #sidePanel button.full { padding: 11px; font-size: 15px; }
+  }
   #hoverTip {
     position: fixed; display: none; z-index: 60; pointer-events: none;
     background: #1d2027; color: #e8eaf0; border: 1px solid #4a4f5b; border-radius: 6px;
@@ -112,6 +207,10 @@
   <input id="searchInput" type="text" placeholder="건물 이름 검색 후 Enter" />
   <span class="sep"></span>
   <label id="labelToggleWrap"><input type="checkbox" id="labelToggle" checked /> 라벨 표시</label>
+  <label id="skyToggleWrap" title="models/의 glb를 위에서 본 그림(img/skyview/)을 각 건물 자리에 깝니다 — 그림은 node tools/make_skyview.cjs로 만듭니다"><input type="checkbox" id="skyToggle" checked /> 스카이뷰</label>
+  <input id="skyOpacity" type="range" min="0.2" max="1" step="0.05" value="0.9" title="스카이뷰 진하기" />
+  <label id="laneToggleWrap" title="도로를 게임과 같은 실제 폭·색·차선으로 그립니다"><input type="checkbox" id="laneToggle" checked /> 차선</label>
+  <input id="roadOpacity" type="range" min="0.2" max="1" step="0.05" value="0.85" title="도로 진하기(낮추면 밑의 지도 사진이 비쳐 보여요)" />
   <span class="sep"></span>
   <button id="addPlaceBtn">🏢 건물 추가</button>
   <button id="addRoadBtn">🛣️ 도로 추가</button>
@@ -119,6 +218,7 @@
   <button id="addTreeBtn">🌲 나무 추가</button>
   <span class="hint" id="statusText">neighborhood3d.js 불러오는 중…</span>
   <button id="exportBtn">📋 내보내기</button>
+  <button id="ghSaveBtn" title="고친 map_data.js를 GitHub 저장소에 바로 커밋합니다">☁️ GitHub에 저장</button>
 </div>
 <div id="main">
   <div id="stageWrap">
@@ -128,6 +228,7 @@
     </div>
   </div>
   <div id="sidePanel">
+    <div id="panelHeader"><span id="panelTitle">편집 패널</span><span class="chev" id="panelChev">▲ 펼치기</span></div>
     <div id="panelBody"><p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)를 클릭해서 선택하세요.<br><br>· 마커를 드래그하면 위치가 바뀝니다.<br>· 노란 점(방향 손잡이)을 드래그하면 회전이 바뀝니다 — 건물은 모델이 있을 때만, 공원은 항상 적용됩니다.<br>· 도로는 빨간 사각형 손잡이로 양끝을 옮기고, 폭은 옆 칸에 숫자로 넣습니다.<br>· 위 툴바의 "추가" 버튼을 누른 뒤 지도를 클릭하면 새로 만들어집니다(도로는 두 번 클릭 — 시작점, 끝점).<br>· 다 고치면 위의 "내보내기"를 눌러 <code>map_data.js</code> 파일 전체를 통째로 바꿔치기하세요.</p></div>
   </div>
 </div>
@@ -139,6 +240,36 @@
     <div class="actions">
       <button id="copyExportBtn">복사하기</button>
       <button id="closeExportBtn">닫기</button>
+    </div>
+  </div>
+</div>
+<div id="ghModal" class="modal hidden">
+  <div class="modal-box">
+    <h3>☁️ GitHub에 바로 저장</h3>
+    <div id="ghSetup">
+      <p>처음 한 번만, 이 저장소의 파일을 고칠 수 있는 <b>토큰</b>을 만들어 붙여 넣어 주세요. 토큰은 <b>이 기기의 이 브라우저에만</b> 저장되고, 코드나 저장소에는 올라가지 않아요.</p>
+      <ol>
+        <li><a id="ghTokenLink" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub 토큰 만들기 페이지</a>를 열어요(로그인 필요).</li>
+        <li>Token name은 아무거나(예: 맵에디터), Expiration은 원하는 기간으로.</li>
+        <li><b>Repository access</b> → <b>Only select repositories</b> → <b id="ghRepoName1">Roymaker</b> 하나만 고르기.</li>
+        <li><b>Permissions</b> → Repository permissions → <b>Contents</b>를 <b>Read and write</b>로.</li>
+        <li>맨 아래 <b>Generate token</b>을 누르고, 나온 토큰(github_pat_…)을 복사해서 아래에 붙여 넣기.</li>
+      </ol>
+      <input id="ghTokenInput" type="password" placeholder="github_pat_… 붙여 넣기" autocomplete="off" />
+      <div class="actions">
+        <button id="ghTokenSaveBtn" class="primary">토큰 저장</button>
+        <button class="gh-close">닫기</button>
+      </div>
+    </div>
+    <div id="ghReady" hidden>
+      <p><b id="ghRepoName2">doheecho/Roymaker</b> 저장소의 <code>main</code> 브랜치에 있는 <code>map_data.js</code>를 지금 에디터 상태로 바꿔서 커밋해요. 게임에는 1~2분 뒤(GitHub Pages 반영 후)에 보여요.</p>
+      <input id="ghCommitMsg" type="text" placeholder="커밋 메시지" />
+      <p class="muted" id="ghStatus"></p>
+      <div class="actions">
+        <button id="ghForgetBtn" class="danger">토큰 지우기</button>
+        <button class="gh-close">닫기</button>
+        <button id="ghCommitBtn" class="primary">저장(커밋)</button>
+      </div>
     </div>
   </div>
 </div>
@@ -300,15 +431,35 @@
   svg.setAttribute("height", mapImage.height);
   svg.setAttribute("viewBox", `0 0 ${mapImage.width} ${mapImage.height}`);
 
-  let zoom = 0.4;
+  const COARSE = window.matchMedia("(pointer: coarse)").matches; // 손가락으로 쓰는 기기(휴대폰·태블릿)
+  const ZOOM_MIN = 0.08, ZOOM_MAX = 4;
+  let zoom = window.innerWidth <= 760 || COARSE ? 0.6 : 0.4;
+  let afterZoom = null; // 마커·손잡이가 다 만들어진 뒤 연결된다(확대 배율에 맞춰 손잡이 크기·거리 갱신)
   function applyZoom() {
     stage.style.transform = `scale(${zoom})`;
     stage.style.width = mapImage.width + "px";
     stage.style.height = mapImage.height + "px";
     document.getElementById("zoomLabel").textContent = Math.round(zoom * 100) + "%";
+    if (afterZoom) afterZoom();
   }
-  document.getElementById("zoomInBtn").addEventListener("click", () => { zoom = Math.min(2, zoom * 1.3); applyZoom(); });
-  document.getElementById("zoomOutBtn").addEventListener("click", () => { zoom = Math.max(0.08, zoom / 1.3); applyZoom(); });
+  // 화면의 (cx, cy) 지점(없으면 가운데)이 확대 전후에 같은 자리에 머물도록 스크롤까지 맞춘다
+  function setZoom(z, cx, cy) {
+    const rect = stageWrap.getBoundingClientRect();
+    if (cx == null) { cx = rect.left + stageWrap.clientWidth / 2; cy = rect.top + stageWrap.clientHeight / 2; }
+    const mx = (stageWrap.scrollLeft + cx - rect.left) / zoom;
+    const my = (stageWrap.scrollTop + cy - rect.top) / zoom;
+    setZoomAnchored(z, mx, my, cx, cy);
+  }
+  // 지도 픽셀 (mx, my)가 화면의 (cx, cy)에 오도록 확대 + 스크롤
+  function setZoomAnchored(z, mx, my, cx, cy) {
+    zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+    applyZoom();
+    const rect = stageWrap.getBoundingClientRect();
+    stageWrap.scrollLeft = mx * zoom - (cx - rect.left);
+    stageWrap.scrollTop = my * zoom - (cy - rect.top);
+  }
+  document.getElementById("zoomInBtn").addEventListener("click", () => setZoom(zoom * 1.3));
+  document.getElementById("zoomOutBtn").addEventListener("click", () => setZoom(zoom / 1.3));
   applyZoom();
 
   // ── 라벨 표시/숨김 + 숨겼을 때 마우스오버로 정보 보기 ──
@@ -318,6 +469,7 @@
   });
   const hoverTip = document.getElementById("hoverTip");
   function showTip(text, ev) {
+    if (ev.pointerType === "touch") return;
     hoverTip.textContent = text;
     hoverTip.style.left = ev.clientX + 14 + "px";
     hoverTip.style.top = ev.clientY + 14 + "px";
@@ -397,6 +549,16 @@
   // ── 마커/도로/공원/나무 렌더링(이 순서로 쌓아서 공원이 제일 아래, 건물 라벨이 제일 위에 오게 한다) ──
   const parkLayer = el("g", {});
   const roadLayer = el("g", {});
+  // 도로 표면은 게임처럼 "급"(rank)이 높은 길이 위에 오게 급별 그룹에 나눠 담고, 차선은 그 위 한 그룹에
+  const roadSurfaceLayer = el("g", { opacity: 0.85 });
+  const roadRankGroups = [0, 1, 2, 3, 4].map(() => el("g", {}));
+  roadRankGroups.forEach((g) => roadSurfaceLayer.appendChild(g));
+  const laneLayer = el("g", { class: "lane-layer" });
+  roadSurfaceLayer.appendChild(laneLayer);
+  const roadMarkLayer = el("g", { class: "lane-layer" }); // 정지선·횡단보도
+  roadSurfaceLayer.appendChild(roadMarkLayer);
+  roadLayer.appendChild(roadSurfaceLayer);
+  const skyLayer = el("g", { class: "sky-layer", opacity: 0.9 }); // 건물 스카이뷰 그림 — 도로 위, 마커 아래
   const treeLayer = el("g", {});
   const placeLayer = el("g", {});
   const pendingLayer = el("g", {});
@@ -406,6 +568,7 @@
   const handleLayer = el("g", {});
   svg.appendChild(parkLayer);
   svg.appendChild(roadLayer);
+  svg.appendChild(skyLayer);
   svg.appendChild(treeLayer);
   svg.appendChild(placeLayer);
   svg.appendChild(pendingLayer);
@@ -421,6 +584,47 @@
   let pendingRoadStart = null; // add-road 모드에서 첫 번째 클릭 지점(raw [x,z])
 
   function placeMarkerRadius() { return 8; }
+
+  // ── 스카이뷰: tools/make_skyview.cjs가 만든 img/skyview/skyview.json(모델별 그림 + 그림이 덮는
+  // 모델 좌표 범위)을 읽어서, 각 건물 자리에 게임과 똑같이 rotationDeg·scaleRatio를 적용해 깐다.
+  // 게임(three.js)의 rotation.y는 위에서 볼 때 반시계 회전이고, 이 지도는 y(=z)가 아래로 가는
+  // 좌표라 SVG에서는 rotate(-rotationDeg)가 같은 회전이 된다.
+  let SKYVIEW = {};
+  try {
+    SKYVIEW = await (await fetch("img/skyview/skyview.json", { cache: "no-store" })).json();
+  } catch (err) {
+    SKYVIEW = {};
+    console.warn("스카이뷰 목록(img/skyview/skyview.json)이 없어요 — node tools/make_skyview.cjs로 만들 수 있어요");
+  }
+  function updateSky(id) {
+    const n = placeNodes[id];
+    if (!n) return;
+    const p = n.place;
+    const info = p.model ? SKYVIEW[p.model] : null;
+    if (!info) {
+      if (n.sky) { n.sky.remove(); n.sky = null; }
+      return;
+    }
+    if (!n.sky) {
+      n.sky = el("image", { class: "sky-img", preserveAspectRatio: "none" });
+      skyLayer.appendChild(n.sky);
+    }
+    const href = `${encodeURI(info.file)}?v=${info.hash}`;
+    if (n.sky.getAttribute("href") !== href) n.sky.setAttribute("href", href);
+    n.sky.setAttribute("x", info.minX);
+    n.sky.setAttribute("y", info.minZ);
+    n.sky.setAttribute("width", info.width);
+    n.sky.setAttribute("height", info.depth);
+    const rot = p.rotationDeg != null ? p.rotationDeg : (p.diagonal ? 45 : 0);
+    const k = (p.scaleRatio ?? 1) / SCALE; // 모델 단위(=raw) → 지도 px
+    n.sky.setAttribute("transform", `translate(${n.px}, ${n.py}) rotate(${-rot}) scale(${k})`);
+  }
+  document.getElementById("skyToggle").addEventListener("change", (ev) => {
+    svg.classList.toggle("sky-hidden", !ev.target.checked);
+  });
+  document.getElementById("skyOpacity").addEventListener("input", (ev) => {
+    skyLayer.setAttribute("opacity", ev.target.value);
+  });
 
   function addPlaceNode(place) {
     const [px, py] = rawToPx(place.x, place.z);
@@ -440,7 +644,8 @@
     handleLayer.appendChild(rotLine);
     handleLayer.appendChild(handle);
     handleLayer.appendChild(handleHit);
-    placeNodes[place.id] = { place, g, dot, dotHit, label, rotLine, handle, handleHit, axis: null, px, py };
+    placeNodes[place.id] = { place, g, dot, dotHit, label, rotLine, handle, handleHit, axis: null, px, py, sky: null };
+    updateSky(place.id);
     dotHit.addEventListener("pointerdown", (ev) => startPlaceDrag(ev, place.id));
     handleHit.addEventListener("pointerdown", (ev) => startRotateDrag(ev, place.id));
     wireHoverTip(dotHit, () => {
@@ -473,6 +678,96 @@
       seg.curve = [Math.round(cx * 10) / 10, Math.round(cz * 10) / 10];
     }
   }
+  // ── 도로 폭에 따른 모양: neighborhood3d.js의 roadStyleFor와 같은 규칙(폭은 raw = 실측 m) ──
+  //   8 미만: 골목길(옅은 회색, 선 없음) · 8~11: 노란 점선 중앙선 · 11~13: 단지내도로(베이지, 선 없음)
+  //   13~22: 노란 실선 중앙선 · 22 이상: 노란 실선 + 양옆 흰 점선 차선
+  function roadStyleFor(width) {
+    if (width < 8) return { surface: "#7a7a7e", center: null, sides: false, rank: 1 };
+    if (width < 11) return { surface: "#4a4a4e", center: "dashed", sides: false, rank: 2 };
+    if (width < 13) return { surface: "#d8c9a3", center: null, sides: false, rank: 0 };
+    if (width < 22) return { surface: "#4a4a4e", center: "solid", sides: false, rank: 3 };
+    return { surface: "#4a4a4e", center: "solid", sides: true, rank: 4 };
+  }
+  const ROAD_CURVE_STEPS = 20;
+  function roadPolylinePx(seg) {
+    const c = roadControl(seg);
+    const n = seg.curve ? ROAD_CURVE_STEPS : 1;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, u = 1 - t;
+      pts.push(rawToPx(u * u * seg.a[0] + 2 * u * t * c[0] + t * t * seg.b[0], u * u * seg.a[1] + 2 * u * t * c[1] + t * t * seg.b[1]));
+    }
+    return pts;
+  }
+  // 진행 방향의 왼쪽(+)/오른쪽(-)으로 offset(지도 px)만큼 평행이동한 선
+  function offsetPolylineD(pts, offset) {
+    const n = pts.length;
+    return pts.map((p, i) => {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+      let dx = b[0] - a[0], dy = b[1] - a[1];
+      const len = Math.hypot(dx, dy) || 1;
+      dx /= len; dy /= len;
+      return `${i ? "L" : "M"} ${(p[0] - dy * offset).toFixed(2)} ${(p[1] + dx * offset).toFixed(2)}`;
+    }).join(" ");
+  }
+  // 교차로 노면표시(교차로 안 차선 비우기·정지선·횡단보도)는 게임과 같은 road_markings.js로 계산한다
+  let RM = null;
+  try {
+    RM = await import("./road_markings.js?v=20261123c");
+  } catch (err) {
+    console.warn("road_markings.js를 못 불러와서 교차로 표시 없이 그려요", err);
+  }
+  let roadMarks = { gaps: [], whiteQuads: [] };
+  let marksQueued = false;
+  // 도로 하나가 바뀌어도 교차로는 이웃 도로와 같이 바뀌니, 한 프레임에 한 번 전체를 다시 계산한다
+  function scheduleRoadMarkings() {
+    if (marksQueued) return;
+    marksQueued = true;
+    requestAnimationFrame(() => {
+      marksQueued = false;
+      roadMarks = RM ? RM.computeRoadMarkings(ROADS) : { gaps: [], whiteQuads: [] };
+      roadNodes.forEach(updateRoadLanes);
+      roadMarkLayer.innerHTML = "";
+      roadMarks.whiteQuads.forEach((q) => {
+        roadMarkLayer.appendChild(el("polygon", { points: q.map(([x, z]) => rawToPx(x, z).map((v) => v.toFixed(2)).join(",")).join(" "), class: "road-mark" }));
+      });
+    });
+  }
+  function updateRoadLanes(node) {
+    const seg = node.seg;
+    const style = roadStyleFor(seg.width);
+    node.line.setAttribute("stroke", style.surface);
+    if (node.line.parentNode !== roadRankGroups[style.rank]) roadRankGroups[style.rank].appendChild(node.line);
+    node.lanes.innerHTML = "";
+    if (!style.center && !style.sides) return;
+    const rawPts = RM ? RM.roadPolylineRaw(seg) : null;
+    let pieces;
+    if (RM) {
+      let L = 0;
+      for (let i = 1; i < rawPts.length; i++) L += Math.hypot(rawPts[i][0] - rawPts[i - 1][0], rawPts[i][1] - rawPts[i - 1][1]);
+      const gaps = roadMarks.gaps[ROADS.indexOf(seg)] || [];
+      pieces = RM.markedRanges(L, gaps).map(([s0, s1]) => RM.slicePolyline(rawPts, s0, s1).map(([x, z]) => rawToPx(x, z)));
+    } else {
+      pieces = [roadPolylinePx(seg)];
+    }
+    const dash = 3 / SCALE; // 점선: 3m 칠하고 3m 비우기, 첫 칸은 1.5m 들어가서 시작(게임과 같음)
+    const dashAttrs = { "stroke-dasharray": `${dash} ${dash}`, "stroke-dashoffset": -dash / 2 };
+    for (const pts of pieces) {
+      if (style.center === "solid") {
+        const w = Math.max(0.25, seg.width * 0.015) / SCALE;
+        node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, 0), class: "lane lane-yellow", style: `--w: ${w.toFixed(3)}` }));
+      } else if (style.center === "dashed") {
+        node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, 0), class: "lane lane-yellow", style: `--w: ${(0.18 / SCALE).toFixed(3)}`, ...dashAttrs }));
+      }
+      if (style.sides) {
+        const off = (seg.width * 0.25) / SCALE;
+        [-off, off].forEach((o) => node.lanes.appendChild(el("path", { d: offsetPolylineD(pts, o), class: "lane lane-white", style: `--w: ${(0.18 / SCALE).toFixed(3)}`, ...dashAttrs })));
+      }
+    }
+  }
+  document.getElementById("laneToggle").addEventListener("change", (ev) => svg.classList.toggle("lanes-hidden", !ev.target.checked));
+  document.getElementById("roadOpacity").addEventListener("input", (ev) => roadSurfaceLayer.setAttribute("opacity", ev.target.value));
+
   function roadPathD(seg) {
     const [ax, ay] = rawToPx(seg.a[0], seg.a[1]);
     const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
@@ -485,18 +780,19 @@
     const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
     const d = roadPathD(seg);
     const hit = el("path", { d, class: "road-hit" });
-    const line = el("path", { d, class: "road-line", fill: "none", "stroke-width": Math.max(2, seg.width / SCALE * 0.5) });
+    const line = el("path", { d, class: "road-line", fill: "none", "stroke-width": seg.width / SCALE });
+    const lanes = el("g", {});
+    laneLayer.appendChild(lanes);
     const handleA = el("rect", { x: ax - 5, y: ay - 5, width: 10, height: 10, class: "road-handle", visibility: "hidden" });
     const handleB = el("rect", { x: bx - 5, y: by - 5, width: 10, height: 10, class: "road-handle", visibility: "hidden" });
     const curveHit = el("circle", { r: 14, class: "curve-hit", visibility: "hidden" });
     const curveHandle = el("circle", { r: 7, class: "curve-handle", visibility: "hidden" });
     roadLayer.appendChild(hit);
-    roadLayer.appendChild(line);
     handleLayer.appendChild(handleA);
     handleLayer.appendChild(handleB);
     handleLayer.appendChild(curveHit);
     handleLayer.appendChild(curveHandle);
-    const node = { seg, index: roadNodes.length, line, hit, handleA, handleB, curveHit, curveHandle };
+    const node = { seg, index: roadNodes.length, line, lanes, hit, handleA, handleB, curveHit, curveHandle };
     roadNodes.push(node);
     hit.addEventListener("pointerdown", (ev) => selectRoad(ev, node));
     handleA.addEventListener("pointerdown", (ev) => startRoadEndpointDrag(ev, node, "a"));
@@ -567,14 +863,18 @@
 
   function updateRotHandle(id) {
     const n = placeNodes[id];
+    updateSky(id);
     const hasModel = !!n.place.model;
-    n.handle.setAttribute("visibility", hasModel ? "visible" : "hidden");
-    n.handleHit.setAttribute("visibility", hasModel ? "visible" : "hidden");
-    n.rotLine.setAttribute("visibility", hasModel ? "visible" : "hidden");
-    if (!hasModel || n.axis == null) return;
+    // 방위각 손잡이는 "지금 선택된 건물"에만 보인다(다른 걸 고르거나 빈 곳을 누르면 사라짐)
+    const isSelected = !!selected && selected.kind === "place" && selected.ref && selected.ref.id === id;
+    const show = hasModel && isSelected && n.axis != null;
+    n.handle.setAttribute("visibility", show ? "visible" : "hidden");
+    n.handleHit.setAttribute("visibility", show ? "visible" : "hidden");
+    n.rotLine.setAttribute("visibility", show ? "visible" : "hidden");
+    if (!show) return;
     const worldAngle = rotationDegToWorldAngle(n.place.rotationDeg || 0, n.axis);
     const rad = (worldAngle * Math.PI) / 180;
-    const R = 34;
+    const R = Math.max(34, 44 / zoom);
     const hx = n.px + R * Math.cos(rad);
     const hy = n.py + R * Math.sin(rad);
     n.handle.setAttribute("cx", hx);
@@ -592,8 +892,10 @@
     const [bx, by] = rawToPx(node.seg.b[0], node.seg.b[1]);
     const d = roadPathD(node.seg);
     node.line.setAttribute("d", d);
-    node.line.setAttribute("stroke-width", Math.max(2, node.seg.width / SCALE * 0.5));
+    node.line.setAttribute("stroke-width", node.seg.width / SCALE); // 게임과 같은 실제 폭
     node.hit.setAttribute("d", d);
+    node.hit.style.strokeWidth = Math.max(26, node.seg.width / SCALE) + "px";
+    scheduleRoadMarkings();
     node.handleA.setAttribute("x", ax - 5); node.handleA.setAttribute("y", ay - 5);
     node.handleB.setAttribute("x", bx - 5); node.handleB.setAttribute("y", by - 5);
     const [mx, my] = rawToPx(...roadMidpoint(node.seg));
@@ -613,7 +915,7 @@
     const worldAngle = parkWorldAngle(node.park.rotationDeg);
     node.rect.setAttribute("transform", `rotate(${worldAngle}, ${px}, ${py})`);
     const rad = (worldAngle * Math.PI) / 180;
-    const R = Math.max(w, d) / 2 + 26;
+    const R = Math.max(w, d) / 2 + Math.max(26, 34 / zoom);
     const hx = px + R * Math.cos(rad);
     const hy = py + R * Math.sin(rad);
     node.handle.setAttribute("cx", hx);
@@ -640,7 +942,15 @@
 
   function clearSelectionVisual() {
     if (!selected) return;
-    if (selected.kind === "place") placeNodes[selected.ref.id].dot.classList.remove("selected");
+    if (selected.kind === "place") {
+      const pn = placeNodes[selected.ref.id];
+      if (pn) {
+        pn.dot.classList.remove("selected");
+        pn.handle.setAttribute("visibility", "hidden");
+        pn.handleHit.setAttribute("visibility", "hidden");
+        pn.rotLine.setAttribute("visibility", "hidden");
+      }
+    }
     if (selected.kind === "road") {
       selected.ref.line.classList.remove("selected");
       selected.ref.handleA.setAttribute("visibility", "hidden");
@@ -657,6 +967,7 @@
     selected = { kind: "place", ref: PLACES.find((p) => p.id === id) };
     const n = placeNodes[id];
     n.dot.classList.add("selected");
+    updateRotHandle(id);
     if (n.place.model && n.axis == null) {
       n.axis = await getDefaultAxis(n.place);
       updateRotHandle(id);
@@ -744,7 +1055,24 @@
     return btn;
   }
 
+  const sidePanel = document.getElementById("sidePanel");
+  const panelTitle = document.getElementById("panelTitle");
+  const panelChev = document.getElementById("panelChev");
+  const NARROW = window.matchMedia("(max-width: 760px)"); // 좁으면 아래 서랍, 넓으면(폴드 펼침 등) 오른쪽 패널
+  function setPanelCollapsed(c) {
+    sidePanel.classList.toggle("collapsed", c);
+    panelChev.textContent = NARROW.matches ? (c ? "▲ 펼치기" : "▼ 접기") : (c ? "◀ 펼치기" : "접기 ▶");
+  }
+  document.getElementById("panelHeader").addEventListener("click", () => setPanelCollapsed(!sidePanel.classList.contains("collapsed")));
+  NARROW.addEventListener("change", () => setPanelCollapsed(sidePanel.classList.contains("collapsed"))); // 폴드를 접었다 폈을 때
+  setPanelCollapsed(true);
+  let lastPanelKey = null;
   function renderPanel() {
+    // 휴대폰 서랍: 새로 뭔가를 고르면 펼치고, 선택이 풀리면 접는다(같은 걸 끄는 중이면 그대로)
+    const key = selected ? selected.kind + ":" + (selected.ref.id ?? selected.ref.index ?? "") + ":" + (selected.ref.seg ? ROADS.indexOf(selected.ref.seg) : "") : null;
+    if (key !== lastPanelKey) setPanelCollapsed(!selected);
+    lastPanelKey = key;
+    panelTitle.textContent = !selected ? "편집 패널" : selected.kind === "place" ? `🏢 ${selected.ref.name}` : selected.kind === "road" ? "🛣️ 도로" : selected.kind === "park" ? "🌳 공원" : "🌲 나무";
     panelBody.innerHTML = "";
     if (!selected) {
       panelBody.innerHTML = '<p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)를 클릭해서 선택하세요.</p>';
@@ -777,7 +1105,7 @@
       panelBody.appendChild(fieldNum("rotationDeg", place.rotationDeg ?? 0, (v) => { place.rotationDeg = v; updateRotHandle(place.id); }, {
         step: "1", disabled: !place.model, note: place.model ? "노란 손잡이를 드래그해도 바뀝니다." : "이 건물은 모델이 없어 회전이 게임에 적용되지 않습니다.",
       }));
-      panelBody.appendChild(fieldNum("scaleRatio", place.scaleRatio ?? 1, (v) => { place.scaleRatio = v; }, {
+      panelBody.appendChild(fieldNum("scaleRatio", place.scaleRatio ?? 1, (v) => { place.scaleRatio = v; updateSky(place.id); }, {
         step: "0.05", disabled: !place.model, note: place.model ? "모델이 실제보다 작게/크게 만들어졌을 때 전체 크기를 보정합니다(기본 1)." : "모델이 없는 건물에는 적용되지 않습니다.",
       }));
       panelBody.appendChild(deleteButton(() => deletePlace(place.id), "🗑 이 건물 삭제"));
@@ -842,6 +1170,7 @@
     const n = placeNodes[id];
     n.g.remove();
     n.rotLine.remove(); n.handle.remove(); n.handleHit.remove();
+    if (n.sky) n.sky.remove();
     delete placeNodes[id];
     selected = null;
     renderPanel();
@@ -850,10 +1179,11 @@
   function deleteRoad(node) {
     const idx = ROADS.indexOf(node.seg);
     if (idx !== -1) ROADS.splice(idx, 1);
-    node.line.remove(); node.hit.remove(); node.handleA.remove(); node.handleB.remove();
+    node.line.remove(); node.lanes.remove(); node.hit.remove(); node.handleA.remove(); node.handleB.remove();
     node.curveHit.remove(); node.curveHandle.remove();
     const ni = roadNodes.indexOf(node);
     if (ni !== -1) roadNodes.splice(ni, 1);
+    scheduleRoadMarkings();
     selected = null;
     renderPanel();
     toast("도로를 지웠어요.");
@@ -919,7 +1249,20 @@
 
   svg.addEventListener("pointerdown", (ev) => {
     if (ev.target !== svg) return; // 마커 위 클릭은 각자의 pointerdown 핸들러가 처리한다
-    const pt = svgPoint(ev);
+    if (ev.pointerType !== "touch") { handleMapTap(ev); return; }
+    const sx = ev.clientX, sy = ev.clientY, sl = stageWrap.scrollLeft, st = stageWrap.scrollTop;
+    const pt0 = svgPoint(ev); // 손을 뗄 때는 스크롤이 바뀌었을 수 있어서, 누른 순간의 지도 좌표를 쓴다
+    const up = (uev) => {
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      const moved = Math.hypot(uev.clientX - sx, uev.clientY - sy) + Math.abs(stageWrap.scrollLeft - sl) + Math.abs(stageWrap.scrollTop - st);
+      if (uev.type === "pointerup" && moved < 12 && !pinch.active && !pinch.recent) handleMapTap(ev, pt0);
+    };
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  });
+  function handleMapTap(ev, knownPt) {
+    const pt = knownPt || svgPoint(ev);
     const [rx, rz] = pxToRaw(pt.x, pt.y);
     if (mode === "add-place") {
       const id = nextId(PLACES);
@@ -954,6 +1297,7 @@
         const [px, py] = rawToPx(pendingRoadStart[0], pendingRoadStart[1]);
         pendingLayer.appendChild(el("circle", { cx: px, cy: py, r: 7, class: "pending-point" }));
         statusText.textContent = "이제 끝점을 클릭하세요.";
+        toast("이제 끝점을 누르세요.");
       } else {
         const endPt = snapRoadPoint(Math.round(rx * 10) / 10, Math.round(rz * 10) / 10, null, null);
         const seg = { a: pendingRoadStart, b: endPt, width: 6 };
@@ -977,7 +1321,7 @@
     clearSelectionVisual();
     selected = null;
     renderPanel();
-  });
+  }
   placeLayer.addEventListener("pointerdown", (ev) => {
     if (mode !== "select") return;
     const g = ev.target.closest("g[data-place-id]");
@@ -1223,6 +1567,192 @@
     datalist.appendChild(opt);
   });
   document.body.appendChild(datalist);
+
+  // ── 터치: 확대 배율에 맞춰 손잡이·클릭 영역을 손가락 크기로 ──
+  function refreshTouchSizes() {
+    const touchPx = COARSE ? 22 : 10; // 화면에서 최소 이만큼(반지름)은 잡히게
+    const hitK = Math.min(3, Math.max(1, touchPx / zoom / 16));
+    const handleK = COARSE ? Math.min(3, Math.max(1, 9 / zoom / 7)) : 1;
+    svg.style.setProperty("--hit-k", hitK.toFixed(3));
+    svg.style.setProperty("--handle-k", handleK.toFixed(3));
+    svg.style.setProperty("--lane-min", (1.2 / zoom).toFixed(3)); // 차선은 화면에서 최소 1.2px
+    Object.keys(placeNodes).forEach((id) => updateRotHandle(Number(id)));
+    parkNodes.forEach(updateParkVisual);
+  }
+  afterZoom = refreshTouchSizes;
+  refreshTouchSizes();
+
+  // 끌고 있던 걸 끝낸다(두 번째 손가락이 닿아 확대로 바뀔 때) — 모든 드래그가 window의 pointerup으로 끝나게 돼 있다
+  function endActiveDrags() {
+    window.dispatchEvent(new PointerEvent("pointerup", { pointerType: "touch" }));
+  }
+  // 끌 수 있는 걸 손가락으로 누르면 화면이 같이 스크롤되지 않게(iOS는 SVG의 touch-action을 잘 안 지켜서 한 번 더 막는다)
+  const DRAGGABLE = ".marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect";
+  svg.addEventListener("touchstart", (ev) => {
+    if (ev.touches.length === 1 && ev.target.closest && ev.target.closest(DRAGGABLE) && mode === "select") ev.preventDefault();
+  }, { passive: false });
+
+  // ── 두 손가락으로 확대·축소(+ 이동) ──
+  const pinch = { active: false, recent: false, d0: 0, z0: 0, mx: 0, my: 0 };
+  function touchMid(t) { return [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2]; }
+  function touchDist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+  stageWrap.addEventListener("touchstart", (ev) => {
+    if (ev.touches.length !== 2) return;
+    ev.preventDefault();
+    endActiveDrags();
+    const [cx, cy] = touchMid(ev.touches);
+    const rect = stageWrap.getBoundingClientRect();
+    pinch.active = true;
+    pinch.d0 = Math.max(touchDist(ev.touches), 1);
+    pinch.z0 = zoom;
+    pinch.mx = (stageWrap.scrollLeft + cx - rect.left) / zoom;
+    pinch.my = (stageWrap.scrollTop + cy - rect.top) / zoom;
+  }, { passive: false });
+  stageWrap.addEventListener("touchmove", (ev) => {
+    if (!pinch.active || ev.touches.length < 2) return;
+    ev.preventDefault();
+    const [cx, cy] = touchMid(ev.touches);
+    setZoomAnchored(pinch.z0 * (touchDist(ev.touches) / pinch.d0), pinch.mx, pinch.my, cx, cy);
+  }, { passive: false });
+  const endPinch = (ev) => {
+    if (!pinch.active || ev.touches.length >= 2) return;
+    pinch.active = false;
+    pinch.recent = true; // 손가락을 하나씩 떼는 사이에 "탭"으로 처리되지 않게 잠깐 막는다
+    setTimeout(() => { pinch.recent = false; }, 350);
+  };
+  stageWrap.addEventListener("touchend", endPinch);
+  stageWrap.addEventListener("touchcancel", endPinch);
+  // iOS 사파리의 화면 전체 확대 제스처는 막는다(지도 확대는 위 핀치가 한다)
+  document.addEventListener("gesturestart", (ev) => ev.preventDefault());
+  // PC 트랙패드 핀치(=Ctrl+휠)도 지도 확대로
+  stageWrap.addEventListener("wheel", (ev) => {
+    if (!ev.ctrlKey) return;
+    ev.preventDefault();
+    setZoom(zoom * Math.exp(-ev.deltaY * 0.01), ev.clientX, ev.clientY);
+  }, { passive: false });
+
+  // ── GitHub에 바로 저장(map_data.js를 저장소 main 브랜치에 커밋) ──
+  // 토큰은 이 브라우저 localStorage에만 둔다(게임의 깃허브 세이브와는 다른 키 — 권한도 다름).
+  const GH_EDITOR_TOKEN_KEY = "roymaker-editor-gh-token";
+  const GH_BRANCH = "main";
+  const GH_PATH = "map_data.js";
+  const ghRepo = (() => {
+    // doheecho.github.io/Roymaker/map_editor.html → doheecho/Roymaker (다른 데서 열면 기본값)
+    const host = location.hostname;
+    const seg = location.pathname.split("/").filter(Boolean);
+    if (host.endsWith(".github.io") && seg.length >= 2) return { owner: host.split(".")[0], repo: seg[0] };
+    return { owner: "doheecho", repo: "Roymaker" };
+  })();
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (err) { return null; } }
+  function lsSet(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (err) { /* 저장소를 못 쓰면 무시 */ } }
+  function utf8ToB64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  function b64ToUtf8(b64) {
+    const bin = atob(b64.replace(/\s/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+  async function ghApi(path, { method = "GET", body } = {}) {
+    const res = await fetch(`https://api.github.com${path}`, {
+      method,
+      cache: "no-store",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${lsGet(GH_EDITOR_TOKEN_KEY)}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) throw new Error("토큰이 맞지 않아요(만료됐거나 잘못 붙여 넣음) — 토큰을 지우고 다시 넣어 주세요.");
+    if (res.status === 403 || res.status === 404) throw new Error(`토큰에 ${ghRepo.owner}/${ghRepo.repo} 저장소의 Contents 쓰기 권한이 없어요.`);
+    if (res.status === 409 || res.status === 422) throw new Error("그 사이 GitHub의 파일이 또 바뀌었어요 — 한 번 더 눌러 주세요.");
+    if (!res.ok) throw new Error(`GitHub 응답 오류 (${res.status})`);
+    return res.json();
+  }
+  const ghModal = document.getElementById("ghModal");
+  const ghStatus = document.getElementById("ghStatus");
+  document.getElementById("ghRepoName1").textContent = ghRepo.repo;
+  document.getElementById("ghRepoName2").textContent = `${ghRepo.owner}/${ghRepo.repo}`;
+  function renderGhModal() {
+    const has = !!lsGet(GH_EDITOR_TOKEN_KEY);
+    document.getElementById("ghSetup").hidden = has;
+    document.getElementById("ghReady").hidden = !has;
+  }
+  document.getElementById("ghSaveBtn").addEventListener("click", () => {
+    renderGhModal();
+    ghStatus.textContent = buildMapDataFile() === lastSavedText ? "아직 바뀐 게 없어요(저장해도 똑같아요)." : "";
+    const msg = document.getElementById("ghCommitMsg");
+    if (!msg.value) msg.value = "맵 에디터에서 map_data.js 수정";
+    ghModal.classList.remove("hidden");
+  });
+  ghModal.querySelectorAll(".gh-close").forEach((b) => b.addEventListener("click", () => ghModal.classList.add("hidden")));
+  document.getElementById("ghTokenSaveBtn").addEventListener("click", () => {
+    const t = document.getElementById("ghTokenInput").value.trim();
+    if (!t) { toast("토큰을 붙여 넣어 주세요."); return; }
+    lsSet(GH_EDITOR_TOKEN_KEY, t);
+    document.getElementById("ghTokenInput").value = "";
+    renderGhModal();
+    toast("토큰을 저장했어요.");
+  });
+  document.getElementById("ghForgetBtn").addEventListener("click", () => {
+    if (!window.confirm("이 브라우저에 저장된 GitHub 토큰을 지울까요?")) return;
+    lsSet(GH_EDITOR_TOKEN_KEY, null);
+    renderGhModal();
+  });
+  let ghSaving = false;
+  document.getElementById("ghCommitBtn").addEventListener("click", async () => {
+    if (ghSaving) return;
+    ghSaving = true;
+    const btn = document.getElementById("ghCommitBtn");
+    btn.disabled = true;
+    try {
+      const newText = buildMapDataFile();
+      ghStatus.textContent = "GitHub의 지금 파일을 확인하는 중…";
+      const api = `/repos/${ghRepo.owner}/${ghRepo.repo}/contents/${GH_PATH}`;
+      const cur = await ghApi(`${api}?ref=${GH_BRANCH}`);
+      const remoteText = b64ToUtf8(cur.content || "");
+      if (remoteText === newText) {
+        lastSavedText = newText;
+        ghStatus.textContent = "GitHub 파일이 이미 지금 상태와 같아요 — 저장할 게 없어요.";
+        return;
+      }
+      // 에디터를 연 뒤 GitHub 쪽이 바뀌었으면(다른 기기·웹에서 고침) 덮어쓰기 전에 물어본다
+      if (remoteText !== dataText && !window.confirm(
+        "이 에디터를 연 뒤에 GitHub의 map_data.js가 바뀌었어요(다른 기기나 GitHub 웹에서 고쳤거나, 방금 저장한 게 아직 반영 전일 수 있어요).\n\n" +
+        "저장하면 그 바뀐 내용은 지금 에디터 상태로 덮어써져요. 그래도 저장할까요?\n(취소하고 페이지를 새로고침하면 최신 파일로 다시 시작해요)"
+      )) {
+        ghStatus.textContent = "저장을 취소했어요.";
+        return;
+      }
+      ghStatus.textContent = "저장(커밋)하는 중…";
+      const message = document.getElementById("ghCommitMsg").value.trim() || "맵 에디터에서 map_data.js 수정";
+      const res = await ghApi(api, { method: "PUT", body: { message, content: utf8ToB64(newText), sha: cur.sha, branch: GH_BRANCH } });
+      dataText = newText; // 다음 저장 때 "그 사이 바뀌었나" 비교 기준
+      lastSavedText = newText;
+      const short = (res.commit && res.commit.sha || "").slice(0, 7);
+      ghStatus.textContent = `저장했어요 ✔ (커밋 ${short}) — 게임에는 1~2분 뒤에 보여요.`;
+      toast("GitHub에 저장했어요!");
+    } catch (err) {
+      ghStatus.textContent = "⚠️ " + err.message;
+    } finally {
+      ghSaving = false;
+      btn.disabled = false;
+    }
+  });
+
+  // ── 저장 안 한 채로 나가려 하면 한 번 물어본다 ──
+  let lastSavedText = buildMapDataFile();
+  window.addEventListener("beforeunload", (ev) => {
+    if (buildMapDataFile() === lastSavedText) return;
+    ev.preventDefault();
+    ev.returnValue = "";
+  });
 })();
 </script>
 </body>
