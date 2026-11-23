@@ -538,7 +538,6 @@ function surfaceYFor(width) {
 
 // 보도(인도): 도로 양옆에 깔리는 별도 띠. 건물에셋(기본 -0.01, 예외 +0.02) > 도로(0.005~0.0135)
 // > 보도 순으로 보이게, 이 둘의 가장 낮은 자리보다도 더 아래에 둔다(사용자 지정 우선순위).
-const SIDEWALK_COLOR = 0xc7c2b4;
 const SIDEWALK_Y = -0.015;
 
 // 폭이 있는 띠(리본) 지오메트리를 하나 만든다 — 도로 표면뿐 아니라 중앙 실선도 같은 함수로
@@ -664,23 +663,102 @@ function buildRoadRibbon(seg, segIndex) {
   }
 }
 
-// seg.sidewalk(폭, raw m)가 있으면 도로 양옆에 보도 띠를 하나씩 깐다 — 도로 리본과 같은 점·접선을
-// 써서 곡선 구간에서도 똑같이 매끈하게 휘어지고, 도로 가장자리에 틈·겹침 없이 바로 붙는다.
-function buildRoadSidewalk(seg) {
+// 보도 질감: 회색 보도블록(2×2 체크) 한 주기 = 1.2m. 같은 텍스처를 모든 보도가 함께 쓴다.
+const SIDEWALK_TILE_RAW = 1.2;
+const SIDEWALK_YELLOW_Y = -0.0125; // 보도(-0.015)보다 위, 건물(-0.01)·도로(0.005~)보다 아래
+const SIDEWALK_YELLOW_W_RAW = 0.3; // 황색 경계선 폭(raw m)
+const SIDEWALK_YELLOW_INSET_RAW = 0.5; // 경계선은 도로 가장자리에서 이만큼 보도 안쪽에 놓임
+let sidewalkTexture = null;
+function getSidewalkTexture() {
+  if (sidewalkTexture) return sidewalkTexture;
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d");
+  const tiles = [["#e6e2d8", "#d8d3c6"], ["#d8d3c6", "#e6e2d8"]];
+  for (let r = 0; r < 2; r++) for (let k = 0; k < 2; k++) {
+    g.fillStyle = tiles[r][k];
+    g.fillRect(k * 128, r * 128, 128, 128);
+  }
+  g.strokeStyle = "#a7a194";
+  g.lineWidth = 3;
+  for (let i = 0; i <= 2; i++) {
+    g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, 256); g.stroke();
+    g.beginPath(); g.moveTo(0, i * 128); g.lineTo(256, i * 128); g.stroke();
+  }
+  sidewalkTexture = new THREE.CanvasTexture(c);
+  sidewalkTexture.colorSpace = THREE.SRGBColorSpace;
+  sidewalkTexture.wrapS = sidewalkTexture.wrapT = THREE.RepeatWrapping;
+  sidewalkTexture.anisotropy = 4;
+  return sidewalkTexture;
+}
+
+// 여러 도로의 띠를 한 묶음(positions/uvs/indices)으로 모은다 — 도로마다 메시를 만들면 도로가 수백 개라
+// 드로우콜이 그만큼 늘어나서, 보도와 경계선은 각각 메시 하나로 합쳐 그린다(드로우콜 2개).
+function newRibbonStore() { return { pos: [], uv: [], idx: [] }; }
+function pushRibbonToStore(store, pts, tangents, cum, width, offset) {
+  const base = store.pos.length / 3;
+  const tileW = SIDEWALK_TILE_RAW * WORLD_SCALE;
+  const uL = (offset + width / 2) / tileW;
+  const uR = (offset - width / 2) / tileW;
+  for (let i = 0; i < pts.length; i++) {
+    const [tx, tz] = tangents[i];
+    const px = -tz, pz = tx;
+    const [x, z] = pts[i];
+    const cx = x + px * offset, cz = z + pz * offset;
+    store.pos.push(cx + (px * width) / 2, 0, cz + (pz * width) / 2, cx - (px * width) / 2, 0, cz - (pz * width) / 2);
+    const v = cum[i] / tileW;
+    store.uv.push(uL, v, uR, v);
+  }
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a0 = base + i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
+    store.idx.push(a0, b0, a1, a1, b0, b1);
+  }
+}
+function storeToGeometry(store) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(store.pos, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(store.uv, 2));
+  geo.setIndex(store.idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// seg.sidewalk(폭, raw m)가 있으면 도로 양옆에 보도 띠를 깔고, 도로 쪽 가장자리 안쪽에 황색 경계선을 긋는다.
+function collectRoadSidewalk(seg, sideStore, lineStore) {
   if (!seg.sidewalk) return;
   const rawPts = roadPolyline(seg);
   const pts = rawPts.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
   const tangents = polylineTangents(pts);
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
   const roadW = seg.width * WORLD_SCALE;
   const sideW = seg.sidewalk * WORLD_SCALE;
-  const mat = new THREE.MeshStandardMaterial({ color: SIDEWALK_COLOR, side: THREE.DoubleSide });
+  const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
   [-1, 1].forEach((dir) => {
-    const offset = dir * (roadW / 2 + sideW / 2);
-    const mesh = new THREE.Mesh(buildRibbonGeometry(pts, tangents, sideW, offset), mat);
+    pushRibbonToStore(sideStore, pts, tangents, cum, sideW, dir * (roadW / 2 + sideW / 2));
+    const lineOffset = dir * (roadW / 2 + SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE + lineW / 2);
+    pushRibbonToStore(lineStore, pts, tangents, cum, lineW, lineOffset);
+  });
+}
+
+function buildRoadSidewalks() {
+  const sideStore = newRibbonStore();
+  const lineStore = newRibbonStore();
+  ROAD_SEGMENTS.forEach((seg) => collectRoadSidewalk(seg, sideStore, lineStore));
+  if (sideStore.idx.length) {
+    const mesh = new THREE.Mesh(
+      storeToGeometry(sideStore),
+      new THREE.MeshStandardMaterial({ map: getSidewalkTexture(), roughness: 1, side: THREE.DoubleSide })
+    );
     mesh.position.y = SIDEWALK_Y;
     mesh.receiveShadow = true;
     scene.add(mesh);
-  });
+  }
+  if (lineStore.idx.length) {
+    const mesh = new THREE.Mesh(storeToGeometry(lineStore), new THREE.MeshBasicMaterial({ color: LANE_YELLOW, side: THREE.DoubleSide }));
+    mesh.position.y = SIDEWALK_YELLOW_Y;
+    scene.add(mesh);
+  }
 }
 
 function buildDashInstances(transforms, color) {
@@ -814,7 +892,7 @@ function buildRoads() {
   whiteDashTransforms = [];
   roadMarkings = computeRoadMarkings(ROAD_SEGMENTS);
   ROAD_SEGMENTS.forEach(buildRoadRibbon);
-  ROAD_SEGMENTS.forEach(buildRoadSidewalk);
+  buildRoadSidewalks();
   buildLaneDashes();
   buildJunctionFillers();
   buildRoadMarks();
