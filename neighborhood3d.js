@@ -1271,8 +1271,13 @@ const MODEL_FLOOR_OVERRIDE = { 66: 0 };
 // 살짝 지하로) 도로가 항상 그 위에 또렷하게 이기도록 한다 — y=0 하나로 딱 붙여두면 세계
 // 좌표가 커질수록(이 동네는 x·z가 수백 단위까지 간다) float32 정밀도 때문에 그 둘 사이
 // 간격이 흐려질 수 있어서, 양쪽에서 여유를 벌려 둔다.
-const DEFAULT_MODEL_Y_LIFT = -0.01;
+// 2026-11-24: 이제 "보도 높이(SIDEWALK_TOP_Y)"가 기본 지면이고 도로가 그보다 낮다 — 그래서 건물은
+// group째로 보도 높이까지 올리고(아래 buildPlaces의 baseLift), 모델은 그 안에서 아주 살짝만 내려
+// 보도 윗면과 딱 겹쳐 깜빡이지 않게 한다. 금파힐정문·후문은 모델 안에 도로 바닥이 있어서 도로 높이 그대로.
+const DEFAULT_MODEL_Y_LIFT = -0.002;
 const MODEL_Y_LIFT_OVERRIDE = { 201: 0.02, 202: 0.02 };
+const ROAD_LEVEL_PLACE_IDS = new Set([201, 202]); // 보도 높이로 올리지 않는 건물(도로에 놓인 문주)
+const PLINTH_MAX_RAW = 80; // 이보다 큰 모델(단지 전체 등)은 받침을 깔지 않는다(주변 도로를 덮을 수 있어서)
 function worldToLocalXZ(x, z, cx, cz, cos, sin) {
   const dx = x - cx;
   const dz = z - cz;
@@ -1317,6 +1322,44 @@ function disposeObject3D(obj) {
 // place.rotationDeg를 넣어 두면(모델마다 정면 방향이 다를 수 있어서) 그 값으로 덮어써 미세조정한다.
 // place.scaleRatio(기본 1)는 실제 건물보다 작게/크게 모델링된 .glb를 지도 위 실측 크기에 맞춰
 // 통째로 키우거나 줄이는 보정값이다 — WORLD_SCALE과 곱해져서 적용된다.
+// 보도 높이로 올라간 건물 밑에 받침(보도블록)을 깔아 허공에 뜬 틈이 안 보이게 하고,
+// 같은 자리를 캐릭터 발판으로 등록해서 건물 앞마당을 걸을 때도 보도 높이로 서게 한다.
+// 받침은 모델의 자식으로 붙여서 모델을 내려놓을(언로드) 때 같이 사라진다.
+let plinthMaterial = null;
+function addPlinthAndPlatform(entry, model, localBox, modelScale) {
+  if (ROAD_LEVEL_PLACE_IDS.has(entry.place.id)) return;
+  const baseY = entry.group.position.y;
+  if (baseY <= 0) return;
+  const w = localBox.max.x - localBox.min.x;
+  const d = localBox.max.z - localBox.min.z;
+  const cx = (localBox.min.x + localBox.max.x) / 2;
+  const cz = (localBox.min.z + localBox.max.z) / 2;
+  const floorLocal = MODEL_FLOOR_OVERRIDE[entry.place.id] ?? localBox.min.y;
+  const rawLongest = Math.max(w, d) * (entry.place.scaleRatio ?? 1);
+  if (rawLongest <= PLINTH_MAX_RAW) {
+    if (!plinthMaterial) plinthMaterial = new THREE.MeshStandardMaterial({ map: getSidewalkTexture(), roughness: 1 });
+    const hLocal = baseY / modelScale; // 받침은 모델 좌표계 안이라 크기를 모델 배율로 나눠 둔다
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(w, hLocal, d), plinthMaterial);
+    plinth.position.set(cx, floorLocal - hLocal / 2 - 0.002 / modelScale, cz); // 윗면이 모델 바닥보다 아주 살짝 아래
+    plinth.receiveShadow = true;
+    model.add(plinth);
+  }
+  if (!entry.platformAdded) {
+    const rot = model.rotation.y;
+    const cos = Math.cos(rot), sin = Math.sin(rot);
+    const wx = cx * modelScale, wz = cz * modelScale;
+    groundPlatforms.push({
+      cx: entry.px + wx * cos + wz * sin,
+      cz: entry.pz - wx * sin + wz * cos,
+      cos, sin,
+      halfW: (w * modelScale) / 2,
+      halfD: (d * modelScale) / 2,
+      y: baseY,
+    });
+    entry.platformAdded = true;
+  }
+}
+
 function loadPlaceModelInto(entry) {
   entry.loading = true;
   gltfLoader.load(
@@ -1327,7 +1370,11 @@ function loadPlaceModelInto(entry) {
       const curDist = character ? Math.hypot(character.position.x - entry.px, character.position.z - entry.pz) : Infinity;
       if (curDist > modelUnloadRangeFor(entry.place.id)) return;
       const model = gltf.scene;
-      model.scale.setScalar(WORLD_SCALE * (entry.place.scaleRatio ?? 1));
+      // 회전·크기를 넣기 전에 모델 자체 좌표의 바운딩박스를 재 둔다(받침·발판 크기용)
+      model.updateMatrixWorld(true);
+      const localBox = new THREE.Box3().setFromObject(model);
+      const modelScale = WORLD_SCALE * (entry.place.scaleRatio ?? 1);
+      model.scale.setScalar(modelScale);
       model.position.set(entry.px, 0, entry.pz);
       model.rotation.y = entry.place.rotationDeg != null ? THREE.MathUtils.degToRad(entry.place.rotationDeg) : entry.rotY;
       model.traverse((o) => {
@@ -1341,6 +1388,7 @@ function loadPlaceModelInto(entry) {
       const floorY = MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
       model.position.y -= floorY;
       model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
+      addPlinthAndPlatform(entry, model, localBox, modelScale);
       entry.group.add(model);
       entry.loadedModel = model;
       if (entry.placeholder) entry.placeholder.visible = false;
@@ -1396,15 +1444,18 @@ function buildPlaces() {
     // 지면 높이가 다른 걸 표현하는 값 — group 자체를 그만큼 올리고/내리고, 바닥(y=0)까지
     // 이어지는 벽(스커트)을 세워서 "여기만 지대가 높다/낮다"는 느낌을 준다.
     const groundY = (place.y || 0) * WORLD_SCALE;
+    // 건물 바닥은 보도 높이(SIDEWALK_TOP_Y)에 맞춘다 — 도로는 그보다 낮다(문주 등 도로 위 시설은 예외)
+    const baseLift = ROAD_LEVEL_PLACE_IDS.has(place.id) ? 0 : SIDEWALK_TOP_Y;
     const group = new THREE.Group();
-    group.position.y = groundY;
+    group.position.y = groundY + baseLift;
     scene.add(group);
     if (groundY !== 0) {
+      const skirtH = Math.abs(groundY + baseLift);
       const skirt = new THREE.Mesh(
-        new THREE.BoxGeometry(colW * 1.4, Math.abs(groundY), colD * 1.4),
+        new THREE.BoxGeometry(colW * 1.4, skirtH, colD * 1.4),
         new THREE.MeshStandardMaterial({ color: 0x9a9488 })
       );
-      skirt.position.set(0, -groundY / 2, 0); // group 기준 로컬 좌표 — group.position.y와 합쳐지면 실제 지면(y=0)까지 이어진다
+      skirt.position.set(0, -(groundY + baseLift) / 2, 0); // group 기준 로컬 좌표 — group.position.y와 합쳐지면 실제 지면(y=0)까지 이어진다
       skirt.castShadow = true;
       skirt.receiveShadow = true;
       group.add(skirt);
@@ -1420,7 +1471,7 @@ function buildPlaces() {
       const cos = Math.cos(colRot);
       const sin = Math.sin(colRot);
       if (groundY !== 0) {
-        groundPlatforms.push({ cx: px, cz: pz, cos, sin, halfW: (colW * 1.4) / 2, halfD: (colD * 1.4) / 2, y: groundY });
+        groundPlatforms.push({ cx: px, cz: pz, cos, sin, halfW: (colW * 1.4) / 2, halfD: (colD * 1.4) / 2, y: groundY + baseLift });
       }
 
       // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동 등)은 캐릭터가 가까워지면 불러와 쓴다
