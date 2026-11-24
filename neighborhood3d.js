@@ -3818,6 +3818,35 @@ function buildCarNetwork() {
     const node = { members };
     members.forEach((m) => carNodes.set(`${m.i}:${m.which}`, node));
   });
+  buildBusStops();
+}
+
+// ── 버스정류장: 유형이 "버스정류장"인 장소를 가장 가까운 찻길에 붙인다 — 정류장이 진행 방향 오른쪽(인도 쪽)에
+// 오는 방향으로 달리는 버스는 정류장 앞에 서서 몇 초 기다렸다가(사람이 타고 내리는 시간) 다시 출발한다 ──
+const BUS_STOP_ATTACH_RAW = 30; // 정류장에서 이 거리(raw m) 안의 찻길에만 붙인다
+const BUS_DWELL_MIN = 4, BUS_DWELL_MAX = 7; // 정류장에 서 있는 시간(초)
+let busStopsBySeg = new Map(); // 도로 번호 → [{ s, dir, place }]
+function buildBusStops() {
+  busStopsBySeg = new Map();
+  PLACES.forEach((place) => {
+    if (place.type !== "버스정류장") return;
+    let best = null;
+    carRoads.forEach((r) => {
+      if (!r.drivable) return;
+      const q = nearestOnRawPolyline(r.pts, r.cum, place.x, place.z);
+      // 도로 끝 교차로 구간 안이면 버스가 서기 어려우니 그 바로 바깥으로
+      const s = Math.max(r.gapA + 3, Math.min(r.L - r.gapB - 3, q.s));
+      if (r.L - r.gapA - r.gapB < 8) return;
+      const d = q.dist - r.w / 2;
+      if (d < BUS_STOP_ATTACH_RAW && (!best || d < best.d || (Math.abs(d - best.d) < 2 && r.w > best.r.w))) best = { r, q, s, d };
+    });
+    if (!best) return;
+    // 정류장이 도로 중심선의 어느 쪽인가 → 그쪽이 오른쪽이 되는 진행 방향
+    const side = (place.x - best.q.x) * -best.q.dz + (place.z - best.q.z) * best.q.dx; // dir=+1 기준 오른쪽(-dz, dx)이면 양수
+    const dir = side >= 0 ? 1 : -1;
+    if (!busStopsBySeg.has(best.r.i)) busStopsBySeg.set(best.r.i, []);
+    busStopsBySeg.get(best.r.i).push({ s: best.s, dir, place });
+  });
 }
 
 function carRoadPose(r, s, dir, lane) {
@@ -3850,7 +3879,7 @@ function spawnCar(car) {
     if (d < VEHICLE_SPAWN_MIN || d > VEHICLE_SPAWN_MAX) continue;
     const clearRaw = (car.len * 1.6) / WORLD_SCALE + 4;
     if (cars.some((o) => o !== car && o.active && o.mode === "road" && o.seg === r.i && o.dir === dir && Math.abs(o.lane - lane) < 0.5 && Math.abs(o.s - s) < clearRaw)) continue;
-    Object.assign(car, { active: true, mode: "road", seg: r.i, s, dir, lane, turn: null, x: pose.x, z: pose.z, fx: pose.fx, fz: pose.fz, lean: 0, prevYaw: undefined });
+    Object.assign(car, { active: true, mode: "road", seg: r.i, s, dir, lane, turn: null, x: pose.x, z: pose.z, fx: pose.fx, fz: pose.fz, lean: 0, prevYaw: undefined, dwell: 0, lastStop: null });
     car.maxSpeed = (isBus ? BUS_MAX_SPEED : car.type === "moto" ? MOTO_MAX_SPEED : CAR_MAX_SPEED) * (0.85 + Math.random() * 0.3);
     car.speed = car.maxSpeed * 0.6;
     return true;
@@ -4205,6 +4234,27 @@ function updateCars(dt) {
           const toStop = (arm.sStop - car.s) * car.dir;
           if (toStop > -0.3 && !(st === "Y" && toStop < 3)) {
             limit = Math.min(limit, speedToStopWithin((toStop - 0.4) * W - car.len * 0.5));
+          }
+        }
+      }
+      // 버스정류장: 이 도로·방향의 정류장 앞에서 서서 잠깐 기다린다
+      if (car.type === "bus") {
+        if (car.dwell > 0) {
+          car.dwell -= dt;
+          limit = 0;
+          if (car.dwell <= 0) car.dwell = 0;
+        } else {
+          for (const st of busStopsBySeg.get(car.seg) || []) {
+            if (st.dir !== car.dir || car.lastStop === st) continue;
+            const to = (st.s - car.s) * car.dir; // raw, 정류장까지
+            if (to < -2 || to > 45) continue;
+            limit = Math.min(limit, speedToStopWithin(Math.max(0, to) * W));
+            if (to < 1 && car.speed < 0.2) {
+              car.dwell = BUS_DWELL_MIN + Math.random() * (BUS_DWELL_MAX - BUS_DWELL_MIN);
+              car.lastStop = st; // 다 기다리면 이 정류장은 지나간다
+              limit = 0;
+            }
+            break;
           }
         }
       }
