@@ -527,6 +527,14 @@
   "width": 16.667,
   "depth": 21
  },
+ "models/place_금파힐117동.glb": {
+  "file": "img/skyview/place_금파힐117동.webp",
+  "hash": "e2036ca2eb",
+  "minX": -24.07,
+  "minZ": -21.57,
+  "width": 50,
+  "depth": 47
+ },
  "models/place_금파힐정문.glb": {
   "file": "img/skyview/place_금파힐정문.webp",
   "hash": "400334f48f",
@@ -542,6 +550,14 @@
   "minZ": -3.75,
   "width": 23.333,
   "depth": 18.583
+ },
+ "models/place_금호119안전센터.glb": {
+  "file": "img/skyview/place_금호119안전센터.webp",
+  "hash": "5cc9d19310",
+  "minX": -15.5,
+  "minZ": -31.61,
+  "width": 23.329,
+  "depth": 65.153
  },
  "models/place_금호1가동주민센터.glb": {
   "file": "img/skyview/place_금호1가동주민센터.webp",
@@ -622,6 +638,38 @@
   "minZ": -20.98,
   "width": 39.917,
   "depth": 38.083
+ },
+ "models/place_성동중앙교회.glb": {
+  "file": "img/skyview/place_성동중앙교회.webp",
+  "hash": "79d8fa54c7",
+  "minX": -22.746,
+  "minZ": -25.557,
+  "width": 34.667,
+  "depth": 39.75
+ },
+ "models/place_신금호두산위브102.glb": {
+  "file": "img/skyview/place_신금호두산위브102.webp",
+  "hash": "7e63f3c4dd",
+  "minX": -20.026,
+  "minZ": -18.951,
+  "width": 38.5,
+  "depth": 34.917
+ },
+ "models/place_신금호두산위브103.glb": {
+  "file": "img/skyview/place_신금호두산위브103.webp",
+  "hash": "497fb53ba0",
+  "minX": -28.614,
+  "minZ": -28.558,
+  "width": 59.583,
+  "depth": 63.667
+ },
+ "models/place_신금호두산위브104.glb": {
+  "file": "img/skyview/place_신금호두산위브104.webp",
+  "hash": "b361a559ce",
+  "minX": -23.667,
+  "minZ": -19.173,
+  "width": 47.083,
+  "depth": 37.417
  },
  "models/place_신금호역4번출구앞건물.glb": {
   "file": "img/skyview/place_신금호역4번출구앞건물.webp",
