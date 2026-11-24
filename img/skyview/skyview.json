@@ -1,7 +1,7 @@
 {
  "models/3D_place_101.glb": {
   "file": "img/skyview/3D_place_101.webp",
-  "hash": "c25594d4e4",
+  "hash": "3fb6c4548c",
   "minX": -24.931,
   "minZ": -22.171,
   "width": 45.25,
@@ -17,7 +17,7 @@
  },
  "models/3D_place_103.glb": {
   "file": "img/skyview/3D_place_103.webp",
-  "hash": "0d0795e2f0",
+  "hash": "d7e98645f1",
   "minX": -19.553,
   "minZ": -19.199,
   "width": 38.583,
@@ -33,7 +33,7 @@
  },
  "models/3D_place_105.glb": {
   "file": "img/skyview/3D_place_105.webp",
-  "hash": "c7c7c0e324",
+  "hash": "3de4db02c0",
   "minX": -22,
   "minZ": -28.501,
   "width": 49.417,
@@ -41,7 +41,7 @@
  },
  "models/3D_place_106.glb": {
   "file": "img/skyview/3D_place_106.webp",
-  "hash": "b45f18d329",
+  "hash": "fc71eb0d38",
   "minX": -24.931,
   "minZ": -22.171,
   "width": 45.25,
@@ -57,7 +57,7 @@
  },
  "models/3D_place_108.glb": {
   "file": "img/skyview/3D_place_108.webp",
-  "hash": "2984aee7c1",
+  "hash": "d56aa8d491",
   "minX": -24.931,
   "minZ": -22.171,
   "width": 45.25,
@@ -97,7 +97,7 @@
  },
  "models/3D_place_113.glb": {
   "file": "img/skyview/3D_place_113.webp",
-  "hash": "c58baa15e0",
+  "hash": "145ab49700",
   "minX": -15.681,
   "minZ": -25.754,
   "width": 36,
@@ -129,7 +129,7 @@
  },
  "models/3D_place_keumbuk.glb": {
   "file": "img/skyview/3D_place_keumbuk.webp",
-  "hash": "45f0835f50",
+  "hash": "ce8786105d",
   "minX": -135,
   "minZ": -120.003,
   "width": 270,
@@ -137,7 +137,7 @@
  },
  "models/3D_place_keumho119.glb": {
   "file": "img/skyview/3D_place_keumho119.webp",
-  "hash": "8e679c70e1",
+  "hash": "96a79755de",
   "minX": -6.9,
   "minZ": -10,
   "width": 30.333,
@@ -145,7 +145,7 @@
  },
  "models/3D_place_megacoffee.glb": {
   "file": "img/skyview/3D_place_megacoffee.webp",
-  "hash": "1b4533d0e3",
+  "hash": "67e780138f",
   "minX": -6.58,
   "minZ": -6.5,
   "width": 14.667,
@@ -153,7 +153,7 @@
  },
  "models/3D_place_namkwang.glb": {
   "file": "img/skyview/3D_place_namkwang.webp",
-  "hash": "369ab53ecc",
+  "hash": "9f16d1857d",
   "minX": -13.04,
   "minZ": -13.5,
   "width": 27.5,
@@ -161,7 +161,7 @@
  },
  "models/3D_place_taekwondo.glb": {
   "file": "img/skyview/3D_place_taekwondo.webp",
-  "hash": "67bb98c3f5",
+  "hash": "b5ffb0e6e2",
   "minX": -10.253,
   "minZ": -15.046,
   "width": 18.833,
@@ -169,7 +169,7 @@
  },
  "models/Community_north.glb": {
   "file": "img/skyview/Community_north.webp",
-  "hash": "8af817412a",
+  "hash": "61b5f4b62d",
   "minX": -102.552,
   "minZ": -84.935,
   "width": 205.434,
@@ -177,7 +177,7 @@
  },
  "models/Community_south.glb": {
   "file": "img/skyview/Community_south.webp",
-  "hash": "502f78c79d",
+  "hash": "51b8238044",
   "minX": 16.721,
   "minZ": 31.754,
   "width": 331.204,
@@ -185,7 +185,7 @@
  },
  "models/Community_south2.glb": {
   "file": "img/skyview/Community_south2.webp",
-  "hash": "b3319644d1",
+  "hash": "02b05a68c8",
   "minX": 60.629,
   "minZ": 64.896,
   "width": 253.777,
@@ -193,7 +193,7 @@
  },
  "models/Emart24_GeumhoParkHills_Sign_3D.glb": {
   "file": "img/skyview/Emart24_GeumhoParkHills_Sign_3D.webp",
-  "hash": "65e4725293",
+  "hash": "0c3290232d",
   "minX": -11.02,
   "minZ": -0.1,
   "width": 22.083,
@@ -209,7 +209,7 @@
  },
  "models/SeoulHaengbok_Sinhyup_Banner_3D.glb": {
   "file": "img/skyview/SeoulHaengbok_Sinhyup_Banner_3D.webp",
-  "hash": "85fbd9d847",
+  "hash": "52e394ee40",
   "minX": -5.05,
   "minZ": -0.05,
   "width": 10.167,
@@ -217,7 +217,7 @@
  },
  "models/Seoul_Happy_Sign.glb": {
   "file": "img/skyview/Seoul_Happy_Sign.webp",
-  "hash": "fa837384ab",
+  "hash": "d9f56d955e",
   "minX": -3.596,
   "minZ": 0,
   "width": 7.25,
@@ -225,7 +225,7 @@
  },
  "models/Sign_Hyeop_3D.glb": {
   "file": "img/skyview/Sign_Hyeop_3D.webp",
-  "hash": "5d49c621b9",
+  "hash": "f4f46670ff",
   "minX": -1.115,
   "minZ": -0.085,
   "width": 2.25,
@@ -233,15 +233,23 @@
  },
  "models/Sign_Shin_3D.glb": {
   "file": "img/skyview/Sign_Shin_3D.webp",
-  "hash": "a8370d20b7",
+  "hash": "eef9c3b99a",
   "minX": -1.115,
   "minZ": -0.085,
   "width": 2.25,
   "depth": 0.333
  },
+ "models/Untitled.glb": {
+  "file": "img/skyview/Untitled.webp",
+  "hash": "5620a66349",
+  "minX": -17.588,
+  "minZ": -3.017,
+  "width": 29.25,
+  "depth": 31.75
+ },
  "models/asset_금파힐정문문주.glb": {
   "file": "img/skyview/asset_금파힐정문문주.webp",
-  "hash": "2eadbbae60",
+  "hash": "65efccb6da",
   "minX": -11.4,
   "minZ": -2.1,
   "width": 20.917,
@@ -249,7 +257,7 @@
  },
  "models/asset_금파힐후문문주.glb": {
   "file": "img/skyview/asset_금파힐후문문주.webp",
-  "hash": "43200bbd3d",
+  "hash": "f6d647bc46",
   "minX": -8.2,
   "minZ": -1.8,
   "width": 16.417,
@@ -257,7 +265,7 @@
  },
  "models/asset_버스정류장.glb": {
   "file": "img/skyview/asset_버스정류장.webp",
-  "hash": "ce115efd6a",
+  "hash": "f89df4a9d4",
   "minX": -3.275,
   "minZ": -1.225,
   "width": 5.667,
@@ -265,7 +273,7 @@
  },
  "models/place_GS25.glb": {
   "file": "img/skyview/place_GS25.webp",
-  "hash": "e4dc1115f6",
+  "hash": "ae89167279",
   "minX": -10.512,
   "minZ": -13.534,
   "width": 22.5,
@@ -273,7 +281,7 @@
  },
  "models/place_KFC.glb": {
   "file": "img/skyview/place_KFC.webp",
-  "hash": "e05859937f",
+  "hash": "27b79b719a",
   "minX": -9.823,
   "minZ": -13.52,
   "width": 19.833,
@@ -281,7 +289,7 @@
  },
  "models/place_adamleeds.glb": {
   "file": "img/skyview/place_adamleeds.webp",
-  "hash": "c7e7b05210",
+  "hash": "609c9f2b83",
   "minX": -20.525,
   "minZ": -22.148,
   "width": 37.75,
@@ -289,7 +297,7 @@
  },
  "models/place_bagel.glb": {
   "file": "img/skyview/place_bagel.webp",
-  "hash": "1b133d768c",
+  "hash": "1259651202",
   "minX": -17,
   "minZ": -14,
   "width": 34,
@@ -297,7 +305,7 @@
  },
  "models/place_bunsik.glb": {
   "file": "img/skyview/place_bunsik.webp",
-  "hash": "44e843a641",
+  "hash": "f6004730d4",
   "minX": -13.628,
   "minZ": -12.08,
   "width": 27,
@@ -305,7 +313,7 @@
  },
  "models/place_gs25극미점.glb": {
   "file": "img/skyview/place_gs25극미점.webp",
-  "hash": "b9d9694edf",
+  "hash": "0bd792baa0",
   "minX": -6.56,
   "minZ": -7.08,
   "width": 13.5,
@@ -313,7 +321,7 @@
  },
  "models/place_library.glb": {
   "file": "img/skyview/place_library.webp",
-  "hash": "191d0d7950",
+  "hash": "f27f08453e",
   "minX": -12.985,
   "minZ": -12.708,
   "width": 26.25,
@@ -321,7 +329,7 @@
  },
  "models/place_megacoffee.glb": {
   "file": "img/skyview/place_megacoffee.webp",
-  "hash": "6f05a62426",
+  "hash": "38541edf5d",
   "minX": -6.57,
   "minZ": -6.713,
   "width": 14.333,
@@ -329,7 +337,7 @@
  },
  "models/place_megacoffee2.glb": {
   "file": "img/skyview/place_megacoffee2.webp",
-  "hash": "87a7d837dd",
+  "hash": "32a1d4f54c",
   "minX": -18.53,
   "minZ": -29.685,
   "width": 21.5,
@@ -337,7 +345,7 @@
  },
  "models/place_경찰서.glb": {
   "file": "img/skyview/place_경찰서.webp",
-  "hash": "89583b1693",
+  "hash": "e2e7de0bf4",
   "minX": -15.231,
   "minZ": -23.4,
   "width": 28.083,
@@ -345,7 +353,7 @@
  },
  "models/place_골드축산.glb": {
   "file": "img/skyview/place_골드축산.webp",
-  "hash": "857bbbb4cb",
+  "hash": "c30afc48e7",
   "minX": -26.501,
   "minZ": -24.5,
   "width": 52.083,
@@ -353,7 +361,7 @@
  },
  "models/place_구립성동청소년독서실.glb": {
   "file": "img/skyview/place_구립성동청소년독서실.webp",
-  "hash": "345ae48ec4",
+  "hash": "bd8a40af05",
   "minX": -19.744,
   "minZ": -17.703,
   "width": 40,
@@ -361,7 +369,7 @@
  },
  "models/place_극미101.glb": {
   "file": "img/skyview/place_극미101.webp",
-  "hash": "02cdc3c107",
+  "hash": "900385ead1",
   "minX": -44,
   "minZ": -36.999,
   "width": 92,
@@ -369,7 +377,7 @@
  },
  "models/place_극미102.glb": {
   "file": "img/skyview/place_극미102.webp",
-  "hash": "1c71e4f5d4",
+  "hash": "e6b51342ba",
   "minX": -32,
   "minZ": -28,
   "width": 56,
@@ -377,7 +385,7 @@
  },
  "models/place_극미103.glb": {
   "file": "img/skyview/place_극미103.webp",
-  "hash": "709279fedf",
+  "hash": "b1299a2410",
   "minX": -42,
   "minZ": -32.501,
   "width": 74,
@@ -401,7 +409,7 @@
  },
  "models/place_금북주택가1.glb": {
   "file": "img/skyview/place_금북주택가1.webp",
-  "hash": "3cb2452930",
+  "hash": "777a388a37",
   "minX": -10.84,
   "minZ": -20,
   "width": 21.333,
@@ -409,7 +417,7 @@
  },
  "models/place_금북주택가2.glb": {
   "file": "img/skyview/place_금북주택가2.webp",
-  "hash": "97981cd263",
+  "hash": "6eb53d46be",
   "minX": -12.27,
   "minZ": -13.35,
   "width": 19.917,
@@ -425,7 +433,7 @@
  },
  "models/place_금북초앞주택가.glb": {
   "file": "img/skyview/place_금북초앞주택가.webp",
-  "hash": "820f2457bc",
+  "hash": "2bccb8d4cd",
   "minX": -25.009,
   "minZ": -37.5,
   "width": 46.437,
@@ -433,7 +441,7 @@
  },
  "models/place_금파힐101.glb": {
   "file": "img/skyview/place_금파힐101.webp",
-  "hash": "5a900368c0",
+  "hash": "4628304702",
   "minX": -24.342,
   "minZ": -20.391,
   "width": 47.083,
@@ -441,7 +449,7 @@
  },
  "models/place_금파힐103.glb": {
   "file": "img/skyview/place_금파힐103.webp",
-  "hash": "e2acfb4f4c",
+  "hash": "f09c6b9658",
   "minX": -32.804,
   "minZ": -31.922,
   "width": 60.833,
@@ -449,7 +457,7 @@
  },
  "models/place_금파힐104.glb": {
   "file": "img/skyview/place_금파힐104.webp",
-  "hash": "0f04dd4b67",
+  "hash": "d33fda6d71",
   "minX": -23.524,
   "minZ": -19.249,
   "width": 50.083,
@@ -457,7 +465,7 @@
  },
  "models/place_금파힐105.glb": {
   "file": "img/skyview/place_금파힐105.webp",
-  "hash": "55defb632a",
+  "hash": "e50e1cfd54",
   "minX": -28.2,
   "minZ": -22.701,
   "width": 64.25,
@@ -465,7 +473,7 @@
  },
  "models/place_금파힐109.glb": {
   "file": "img/skyview/place_금파힐109.webp",
-  "hash": "3c15282255",
+  "hash": "d2620b1a61",
   "minX": -10.469,
   "minZ": -11.89,
   "width": 21,
@@ -473,7 +481,7 @@
  },
  "models/place_금파힐110.glb": {
   "file": "img/skyview/place_금파힐110.webp",
-  "hash": "de21b68f64",
+  "hash": "8d928186c2",
   "minX": -20.769,
   "minZ": -11.79,
   "width": 41.583,
@@ -489,7 +497,7 @@
  },
  "models/place_금파힐112.glb": {
   "file": "img/skyview/place_금파힐112.webp",
-  "hash": "73828335e6",
+  "hash": "81175916a1",
   "minX": -24.342,
   "minZ": -20.391,
   "width": 49.5,
@@ -497,7 +505,7 @@
  },
  "models/place_금파힐113.glb": {
   "file": "img/skyview/place_금파힐113.webp",
-  "hash": "18903eb285",
+  "hash": "2daff4fab4",
   "minX": -15.681,
   "minZ": -25.754,
   "width": 36,
@@ -513,7 +521,7 @@
  },
  "models/place_금파힐115.glb": {
   "file": "img/skyview/place_금파힐115.webp",
-  "hash": "9c7e73a4cf",
+  "hash": "5dfb31ad9b",
   "minX": -12.369,
   "minZ": -11.54,
   "width": 24.75,
@@ -529,7 +537,7 @@
  },
  "models/place_금파힐117동.glb": {
   "file": "img/skyview/place_금파힐117동.webp",
-  "hash": "e2036ca2eb",
+  "hash": "0f865f58f0",
   "minX": -24.07,
   "minZ": -21.57,
   "width": 50,
@@ -537,7 +545,7 @@
  },
  "models/place_금파힐정문.glb": {
   "file": "img/skyview/place_금파힐정문.webp",
-  "hash": "400334f48f",
+  "hash": "eb1f485b8a",
   "minX": -14.289,
   "minZ": -16.8,
   "width": 27.333,
@@ -545,7 +553,7 @@
  },
  "models/place_금파힐후문.glb": {
   "file": "img/skyview/place_금파힐후문.webp",
-  "hash": "c053f144d3",
+  "hash": "e602e48cab",
   "minX": -11.615,
   "minZ": -3.75,
   "width": 23.333,
@@ -553,7 +561,7 @@
  },
  "models/place_금호119안전센터.glb": {
   "file": "img/skyview/place_금호119안전센터.webp",
-  "hash": "5cc9d19310",
+  "hash": "14054b5b9d",
   "minX": -15.5,
   "minZ": -31.61,
   "width": 23.329,
@@ -561,7 +569,7 @@
  },
  "models/place_금호1가동주민센터.glb": {
   "file": "img/skyview/place_금호1가동주민센터.webp",
-  "hash": "4e1e4031e0",
+  "hash": "1d624ea211",
   "minX": -18.8,
   "minZ": -6.62,
   "width": 32,
@@ -569,7 +577,7 @@
  },
  "models/place_금호초등학교.glb": {
   "file": "img/skyview/place_금호초등학교.webp",
-  "hash": "895d17767a",
+  "hash": "e0f50bd746",
   "minX": -61.201,
   "minZ": -64.812,
   "width": 116.718,
@@ -577,7 +585,7 @@
  },
  "models/place_남광빌딩.glb": {
   "file": "img/skyview/place_남광빌딩.webp",
-  "hash": "42afb06e40",
+  "hash": "7d38278065",
   "minX": -14.2,
   "minZ": -11.17,
   "width": 31,
@@ -585,7 +593,7 @@
  },
  "models/place_대림독서실.glb": {
   "file": "img/skyview/place_대림독서실.webp",
-  "hash": "b1de1d7df7",
+  "hash": "3381879725",
   "minX": -18.571,
   "minZ": -14.82,
   "width": 33.5,
@@ -593,7 +601,7 @@
  },
  "models/place_대현교회.glb": {
   "file": "img/skyview/place_대현교회.webp",
-  "hash": "25a5f1e0b9",
+  "hash": "8f9ba2811d",
   "minX": -23.315,
   "minZ": -24.669,
   "width": 46.833,
@@ -601,7 +609,7 @@
  },
  "models/place_롯데마트.glb": {
   "file": "img/skyview/place_롯데마트.webp",
-  "hash": "7d8955bbbf",
+  "hash": "0006ebd5dd",
   "minX": -32.24,
   "minZ": -17.519,
   "width": 72.31,
@@ -609,7 +617,7 @@
  },
  "models/place_롯데마트행당점.glb": {
   "file": "img/skyview/place_롯데마트행당점.webp",
-  "hash": "35e80f871a",
+  "hash": "bd14f8790f",
   "minX": -117.024,
   "minZ": -112.89,
   "width": 234.048,
@@ -617,7 +625,7 @@
  },
  "models/place_산마을돈타운.glb": {
   "file": "img/skyview/place_산마을돈타운.webp",
-  "hash": "37e0b638bf",
+  "hash": "4bfef3e626",
   "minX": -7.8,
   "minZ": -15.22,
   "width": 16.083,
@@ -625,7 +633,7 @@
  },
  "models/place_산마을돈타운2.glb": {
   "file": "img/skyview/place_산마을돈타운2.webp",
-  "hash": "ca72dbf85d",
+  "hash": "38f5601d8a",
   "minX": -28.5,
   "minZ": -26.811,
   "width": 43.75,
@@ -633,7 +641,7 @@
  },
  "models/place_설내옥.glb": {
   "file": "img/skyview/place_설내옥.webp",
-  "hash": "14b32c4c0a",
+  "hash": "1ae27d68f4",
   "minX": -17.574,
   "minZ": -20.98,
   "width": 39.917,
@@ -641,7 +649,7 @@
  },
  "models/place_성동중앙교회.glb": {
   "file": "img/skyview/place_성동중앙교회.webp",
-  "hash": "79d8fa54c7",
+  "hash": "36ee5952d7",
   "minX": -22.746,
   "minZ": -25.557,
   "width": 34.667,
@@ -649,7 +657,7 @@
  },
  "models/place_신금호두산위브102.glb": {
   "file": "img/skyview/place_신금호두산위브102.webp",
-  "hash": "7e63f3c4dd",
+  "hash": "a68384a82c",
   "minX": -20.026,
   "minZ": -18.951,
   "width": 38.5,
@@ -657,7 +665,7 @@
  },
  "models/place_신금호두산위브103.glb": {
   "file": "img/skyview/place_신금호두산위브103.webp",
-  "hash": "497fb53ba0",
+  "hash": "5bba6ea760",
   "minX": -28.614,
   "minZ": -28.558,
   "width": 59.583,
@@ -665,7 +673,7 @@
  },
  "models/place_신금호두산위브104.glb": {
   "file": "img/skyview/place_신금호두산위브104.webp",
-  "hash": "b361a559ce",
+  "hash": "03ef67e6dd",
   "minX": -23.667,
   "minZ": -19.173,
   "width": 47.083,
@@ -673,7 +681,7 @@
  },
  "models/place_신금호역4번출구앞건물.glb": {
   "file": "img/skyview/place_신금호역4번출구앞건물.webp",
-  "hash": "a37592b73f",
+  "hash": "17a5508a75",
   "minX": -20.299,
   "minZ": -28.567,
   "width": 44.417,
@@ -681,7 +689,7 @@
  },
  "models/place_신금호역5.glb": {
   "file": "img/skyview/place_신금호역5.webp",
-  "hash": "1ffed1abf1",
+  "hash": "1530d2d3a7",
   "minX": -11,
   "minZ": -2,
   "width": 14.5,
@@ -689,7 +697,7 @@
  },
  "models/place_신금호역5번출구앞상가.glb": {
   "file": "img/skyview/place_신금호역5번출구앞상가.webp",
-  "hash": "e614d43fad",
+  "hash": "cd5c454156",
   "minX": -17.345,
   "minZ": -27.5,
   "width": 33.75,
@@ -697,7 +705,7 @@
  },
  "models/place_신기한나라라운지.glb": {
   "file": "img/skyview/place_신기한나라라운지.webp",
-  "hash": "a1f933721b",
+  "hash": "d6bc61877b",
   "minX": -22.2,
   "minZ": -40.8,
   "width": 45.066,
@@ -705,7 +713,7 @@
  },
  "models/place_제주수퍼.glb": {
   "file": "img/skyview/place_제주수퍼.webp",
-  "hash": "d6299bd267",
+  "hash": "67c75df42d",
   "minX": -32.64,
   "minZ": -31.141,
   "width": 65.28,
@@ -713,7 +721,7 @@
  },
  "models/place_조형선외과동물병원.glb": {
   "file": "img/skyview/place_조형선외과동물병원.webp",
-  "hash": "f3a3eb2fc6",
+  "hash": "49394c102d",
   "minX": -3.4,
   "minZ": -6,
   "width": 6.833,
@@ -729,7 +737,7 @@
  },
  "models/place_키잉글리시.glb": {
   "file": "img/skyview/place_키잉글리시.webp",
-  "hash": "db62859b0d",
+  "hash": "26c1267211",
   "minX": -31.023,
   "minZ": -21.85,
   "width": 53,
@@ -737,7 +745,7 @@
  },
  "models/place_태권도.glb": {
   "file": "img/skyview/place_태권도.webp",
-  "hash": "d9daf9e732",
+  "hash": "7e616b142e",
   "minX": -9.95,
   "minZ": -17.4,
   "width": 18.333,
@@ -745,7 +753,7 @@
  },
  "models/place_할인마트.glb": {
   "file": "img/skyview/place_할인마트.webp",
-  "hash": "1156664464",
+  "hash": "7e43a35c38",
   "minX": -5.125,
   "minZ": -11.155,
   "width": 13.333,
@@ -753,7 +761,7 @@
  },
  "models/place_행당대림101.glb": {
   "file": "img/skyview/place_행당대림101.webp",
-  "hash": "f2be4eea02",
+  "hash": "b421cac948",
   "minX": -28.161,
   "minZ": -9.993,
   "width": 61,
@@ -761,7 +769,7 @@
  },
  "models/place_행당대림102.glb": {
   "file": "img/skyview/place_행당대림102.webp",
-  "hash": "4cf05110b7",
+  "hash": "cc2f028785",
   "minX": -30.101,
   "minZ": -24.214,
   "width": 52.75,
@@ -785,7 +793,7 @@
  },
  "models/place_행당대림106.glb": {
   "file": "img/skyview/place_행당대림106.webp",
-  "hash": "8c1c7b322c",
+  "hash": "105158ddf2",
   "minX": -31.128,
   "minZ": -10.086,
   "width": 66.846,
@@ -793,7 +801,7 @@
  },
  "models/place_행당대림107.glb": {
   "file": "img/skyview/place_행당대림107.webp",
-  "hash": "0a5ece427d",
+  "hash": "a6efa83deb",
   "minX": -15.098,
   "minZ": -9.986,
   "width": 30.417,
@@ -801,7 +809,7 @@
  },
  "models/place_행당대림108.glb": {
   "file": "img/skyview/place_행당대림108.webp",
-  "hash": "1735223aad",
+  "hash": "cc8c3dbf51",
   "minX": -35.098,
   "minZ": -14.586,
   "width": 70.351,
@@ -809,7 +817,7 @@
  },
  "models/place_행당대림109.glb": {
   "file": "img/skyview/place_행당대림109.webp",
-  "hash": "b395097b74",
+  "hash": "b9e7c3ca59",
   "minX": -10.29,
   "minZ": -7.017,
   "width": 20.583,
@@ -825,7 +833,7 @@
  },
  "models/place_행당대림112.glb": {
   "file": "img/skyview/place_행당대림112.webp",
-  "hash": "2f15568404",
+  "hash": "fbcfc5ca84",
   "minX": -10.29,
   "minZ": -7.017,
   "width": 20.583,
@@ -833,7 +841,7 @@
  },
  "models/place_행당대림113.glb": {
   "file": "img/skyview/place_행당대림113.webp",
-  "hash": "f4d5b5d299",
+  "hash": "011eb1988c",
   "minX": -31.128,
   "minZ": -10.086,
   "width": 66.846,
@@ -841,7 +849,7 @@
  },
  "models/place_행당대림115.glb": {
   "file": "img/skyview/place_행당대림115.webp",
-  "hash": "d20c1ceb4f",
+  "hash": "116a6c76f6",
   "minX": -30.098,
   "minZ": -10.112,
   "width": 60.417,
@@ -849,7 +857,7 @@
  },
  "models/place_행당대림116.glb": {
   "file": "img/skyview/place_행당대림116.webp",
-  "hash": "b873fb92df",
+  "hash": "af7db40556",
   "minX": -31.128,
   "minZ": -10.086,
   "width": 66.846,
@@ -857,7 +865,7 @@
  },
  "models/place_행당대림120.glb": {
   "file": "img/skyview/place_행당대림120.webp",
-  "hash": "d51f8aa9aa",
+  "hash": "920daa89d7",
   "minX": -31.128,
   "minZ": -10.086,
   "width": 66.846,
@@ -881,7 +889,7 @@
  },
  "models/place_행당대림125.glb": {
   "file": "img/skyview/place_행당대림125.webp",
-  "hash": "c04a2840f3",
+  "hash": "f92ef33526",
   "minX": -24.84,
   "minZ": -6.43,
   "width": 50.583,
@@ -913,7 +921,7 @@
  },
  "models/place_행당대림129.glb": {
   "file": "img/skyview/place_행당대림129.webp",
-  "hash": "df5197c623",
+  "hash": "ccb07754cd",
   "minX": -16.098,
   "minZ": -9.986,
   "width": 32.417,
@@ -921,7 +929,7 @@
  },
  "models/place_행당대림131.glb": {
   "file": "img/skyview/place_행당대림131.webp",
-  "hash": "1a8b58ab72",
+  "hash": "ff2c5dd5eb",
   "minX": -12.43,
   "minZ": -6.427,
   "width": 24.917,
@@ -929,7 +937,7 @@
  },
  "models/place_행당대림132.glb": {
   "file": "img/skyview/place_행당대림132.webp",
-  "hash": "7eb2b59b24",
+  "hash": "4ada20852f",
   "minX": -12.43,
   "minZ": -6.427,
   "width": 24.917,
@@ -937,7 +945,7 @@
  },
  "models/place_행당대림프라자.glb": {
   "file": "img/skyview/place_행당대림프라자.webp",
-  "hash": "37dbde20db",
+  "hash": "73eae57b53",
   "minX": -36,
   "minZ": -18.48,
   "width": 67.875,
@@ -977,7 +985,7 @@
  },
  "models/place_행복한교회.glb": {
   "file": "img/skyview/place_행복한교회.webp",
-  "hash": "d62365974f",
+  "hash": "ff2d70adc7",
   "minX": -18.901,
   "minZ": -13.001,
   "width": 39.417,
@@ -985,7 +993,7 @@
  },
  "models/place_홈플러스익스프레스.glb": {
   "file": "img/skyview/place_홈플러스익스프레스.webp",
-  "hash": "7bd783a4a2",
+  "hash": "fb912d9447",
   "minX": -17.803,
   "minZ": -12.68,
   "width": 43.667,
@@ -993,7 +1001,7 @@
  },
  "models/place_홍일빌딩.glb": {
   "file": "img/skyview/place_홍일빌딩.webp",
-  "hash": "d48815d580",
+  "hash": "cf76fba240",
   "minX": -6.87,
   "minZ": -10.666,
   "width": 13,
