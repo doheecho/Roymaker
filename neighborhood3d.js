@@ -699,25 +699,6 @@ function getSidewalkTexture() {
 // 여러 도로의 띠를 한 묶음(positions/uvs/indices)으로 모은다 — 도로마다 메시를 만들면 도로가 수백 개라
 // 드로우콜이 그만큼 늘어나서, 보도와 경계선은 각각 메시 하나로 합쳐 그린다(드로우콜 2개).
 function newRibbonStore() { return { pos: [], uv: [], idx: [] }; }
-function pushRibbonToStore(store, pts, tangents, cum, width, offset) {
-  const base = store.pos.length / 3;
-  const tileW = SIDEWALK_TILE_RAW * WORLD_SCALE;
-  const uL = (offset + width / 2) / tileW;
-  const uR = (offset - width / 2) / tileW;
-  for (let i = 0; i < pts.length; i++) {
-    const [tx, tz] = tangents[i];
-    const px = -tz, pz = tx;
-    const [x, z] = pts[i];
-    const cx = x + px * offset, cz = z + pz * offset;
-    store.pos.push(cx + (px * width) / 2, 0, cz + (pz * width) / 2, cx - (px * width) / 2, 0, cz - (pz * width) / 2);
-    const v = cum[i] / tileW;
-    store.uv.push(uL, v, uR, v);
-  }
-  for (let i = 0; i < pts.length - 1; i++) {
-    const a0 = base + i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
-    store.idx.push(a0, b0, a1, a1, b0, b1);
-  }
-}
 function storeToGeometry(store) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(store.pos, 3));
@@ -735,9 +716,50 @@ function distToSegment(px, pz, ax, az, bx, bz) {
   return Math.hypot(px - (ax + vx * t), pz - (az + vz * t));
 }
 
-// seg.sidewalk(폭, raw m)가 있으면 도로 양옆에 보도를 깐다. 보도는 도로보다 턱(SIDEWALK_TOP_Y)만큼 높고,
-// 도로 쪽 면에 연석(수직 면)을 세우고, 가장자리 안쪽에 황색 경계선을 긋는다. 교차로 구간은 비운다.
-function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore) {
+// 보도 모서리 둥글기(교차로 쪽 바깥 모서리, raw m) — 반지름이 이 값인 1/4 원으로 깎는다
+const SIDEWALK_CORNER_RAW = 2.0;
+const SIDEWALK_SAMPLE_RAW = 0.6; // 보도를 이 간격으로 잘게 나눠서 깎인 모서리와 도로 겹침을 판정한다
+
+// 보도 띠 하나(안쪽 점들 A, 바깥 점들 B)를 두 줄 띠로 추가 — 텍스처는 평면 좌표로 입힌다
+function pushStrip(store, A, B) {
+  const base = store.pos.length / 3;
+  const tileW = SIDEWALK_TILE_RAW * WORLD_SCALE;
+  for (let k = 0; k < A.length; k++) {
+    store.pos.push(A[k][0], 0, A[k][1], B[k][0], 0, B[k][1]);
+    store.uv.push(A[k][0] / tileW, A[k][1] / tileW, B[k][0] / tileW, B[k][1] / tileW);
+  }
+  for (let k = 0; k < A.length - 1; k++) {
+    const a0 = base + k * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
+    store.idx.push(a0, b0, a1, a1, b0, b1);
+  }
+}
+
+// 다른 도로들의 중심선·반폭 — 보도가 다른 도로 위를 지나가지 않게 판정할 때 쓴다(도로 우선)
+function buildRoadFootprints() {
+  return ROAD_SEGMENTS.map((seg, i) => {
+    const pts = roadPolyline(seg).map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+    const xs = pts.map((q) => q[0]), zs = pts.map((q) => q[1]);
+    return {
+      index: i, pts, half: (seg.width * WORLD_SCALE) / 2,
+      minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs),
+    };
+  });
+}
+function pointOnOtherRoad(x, z, selfIndex, footprints) {
+  for (const f of footprints) {
+    if (f.index === selfIndex) continue;
+    const m = f.half + 0.1;
+    if (x < f.minx - m || x > f.maxx + m || z < f.minz - m || z > f.maxz + m) continue;
+    for (let i = 0; i < f.pts.length - 1; i++) {
+      const [ax, az] = f.pts[i], [bx, bz] = f.pts[i + 1];
+      if (distToSegment(x, z, ax, az, bx, bz) <= m) return true;
+    }
+  }
+  return false;
+}
+
+// 보도 한 구간(sub, 월드 좌표): 0.6m 간격 단면을 만들고, 양 끝 바깥 모서리를 깎고, 다른 도로 위 단면은 뺀다
+function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore, footprints) {
   if (!seg.sidewalk) return;
   const rawPts = roadPolyline(seg);
   let rawLen = 0;
@@ -745,40 +767,55 @@ function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore) {
   const gaps = roadMarkings.gaps[segIndex] || [];
   const roadW = seg.width * WORLD_SCALE;
   const sideW = seg.sidewalk * WORLD_SCALE;
+  const R = Math.min(SIDEWALK_CORNER_RAW * WORLD_SCALE, sideW);
   const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
+  const inset = SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE;
   for (const [s0, s1] of markedRanges(rawLen, gaps)) {
     const sub = slicePolyline(rawPts, s0, s1);
     if (sub.length < 2) continue;
     const pts = sub.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
-    const tangents = polylineTangents(pts);
+    for (let i = 0; i < pts.length - 1; i++) {
+      walkBands.push({ ax: pts[i][0], az: pts[i][1], bx: pts[i + 1][0], bz: pts[i + 1][1], inner: roadW / 2, outer: roadW / 2 + sideW });
+    }
+    // 0.6m 간격 단면(위치·진행 방향·누적 거리)
     const cum = [0];
     for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-    for (let i = 0; i < pts.length - 1; i++) {
-      walkBands.push({
-        ax: pts[i][0], az: pts[i][1], bx: pts[i + 1][0], bz: pts[i + 1][1],
-        inner: roadW / 2, outer: roadW / 2 + sideW,
-      });
-    }
+    const L = cum[cum.length - 1];
+    const h = SIDEWALK_SAMPLE_RAW * WORLD_SCALE;
+    const stations = [];
+    for (let d = 0; d < L; d += h) stations.push(d);
+    stations.push(L);
+    const samples = stations.map((d) => pointAlongPolyline(pts, d)).map((q) => ({ x: q.x, z: q.z, tx: q.dirX, tz: q.dirZ }));
     [-1, 1].forEach((dir) => {
-      const sideOff = dir * (roadW / 2 + sideW / 2);
-      pushRibbonToStore(sideStore, pts, tangents, cum, sideW, sideOff);
-      const lineOffset = dir * (roadW / 2 + SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE + lineW / 2);
-      pushRibbonToStore(lineStore, pts, tangents, cum, lineW, lineOffset);
-      // 연석: 도로 가장자리(inner)를 따라 바닥에서 보도 윗면까지 세운 수직 면
-      const innerOff = dir * (roadW / 2);
-      const innerPts = pts.map((p, i) => {
-        const [tx, tz] = tangents[i];
-        return [p[0] - tz * innerOff, p[1] + tx * innerOff];
+      // 각 단면: 안쪽(도로 가장자리)은 고정, 바깥은 끝에서 R 안쪽부터 둥글게 줄어든다
+      const secs = samples.map((q, k) => {
+        const d = Math.min(stations[k], L - stations[k]);
+        const vOff = d >= R ? sideW : sideW - R + Math.sqrt(Math.max(0, R * R - (R - d) * (R - d)));
+        const nx = -q.tz * dir, nz = q.tx * dir; // 도로 바깥쪽 법선
+        const inner = [q.x + nx * (roadW / 2), q.z + nz * (roadW / 2)];
+        const outer = [q.x + nx * (roadW / 2 + vOff), q.z + nz * (roadW / 2 + vOff)];
+        const mid = [q.x + nx * (roadW / 2 + vOff / 2), q.z + nz * (roadW / 2 + vOff / 2)];
+        const blocked = pointOnOtherRoad(mid[0], mid[1], segIndex, footprints);
+        return { inner, outer, nx, nz, q, blocked };
       });
-      pushVerticalQuadStrip(curbStore, innerPts);
-      // 구간 양 끝의 단면(연석 높이만큼)도 막아서 보도가 허공에 뜨지 않게
-      [0, pts.length - 1].forEach((i) => {
-        const [tx, tz] = tangents[i];
-        const p = pts[i];
-        const a = [p[0] - tz * innerOff, p[1] + tx * innerOff];
-        const c = [p[0] - tz * (roadW / 2 + sideW) * dir, p[1] + tx * (roadW / 2 + sideW) * dir];
-        pushVerticalQuadStrip(curbStore, [a, c]);
-      });
+      // 다른 도로에 안 덮인 연속 구간끼리 묶어서 띠를 만든다
+      let run = [];
+      const flush = () => {
+        if (run.length < 2) { run = []; return; }
+        const A = run.map((r) => r.inner), B = run.map((r) => r.outer);
+        pushStrip(sideStore, A, B);
+        pushVerticalQuadStrip(curbStore, A); // 도로 쪽 연석 면
+        [run[0], run[run.length - 1]].forEach((r) => pushVerticalQuadStrip(curbStore, [r.inner, r.outer])); // 구간 끝 단면
+        const lineIn = run.map((r) => [r.q.x + r.nx * (roadW / 2 + inset), r.q.z + r.nz * (roadW / 2 + inset)]);
+        const lineOut = run.map((r) => [r.q.x + r.nx * (roadW / 2 + inset + lineW), r.q.z + r.nz * (roadW / 2 + inset + lineW)]);
+        pushStrip(lineStore, lineIn, lineOut);
+        run = [];
+      };
+      for (const sec of secs) {
+        if (sec.blocked) flush();
+        else run.push(sec);
+      }
+      flush();
     });
   }
 }
@@ -798,7 +835,8 @@ function buildRoadSidewalks() {
   const sideStore = newRibbonStore();
   const lineStore = newRibbonStore();
   const curbStore = newRibbonStore();
-  ROAD_SEGMENTS.forEach((seg, i) => collectRoadSidewalk(seg, i, sideStore, lineStore, curbStore));
+  const footprints = buildRoadFootprints();
+  ROAD_SEGMENTS.forEach((seg, i) => collectRoadSidewalk(seg, i, sideStore, lineStore, curbStore, footprints));
   if (sideStore.idx.length) {
     const mesh = new THREE.Mesh(
       storeToGeometry(sideStore),
