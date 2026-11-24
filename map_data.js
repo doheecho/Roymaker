@@ -179,6 +179,9 @@ export const PLACES = [
   { id: 231, name: "버스정류장", floors: 15, type: "버스정류장", x: 100.5, z: -244.7, model: "models/asset_버스정류장.glb", rotationDeg: -86.6 },
   { id: 232, name: "버스정류장", floors: 15, type: "버스정류장", x: 60.9, z: -279.5, model: "models/asset_버스정류장.glb", rotationDeg: 89.2 },
   { id: 233, name: "버스정류장", floors: 15, type: "버스정류장", x: -34.1, z: -605.8, model: "models/asset_버스정류장.glb", rotationDeg: 124.4 },
+  { id: 234, name: "버스정류장", floors: 15, type: "버스정류장", x: -40.6, z: -776, model: "models/asset_버스정류장.glb", rotationDeg: -93.9 },
+  { id: 235, name: "버스정류장", floors: 15, type: "버스정류장", x: -81, z: -768.5, model: "models/asset_버스정류장.glb", rotationDeg: 87.3 },
+  { id: 236, name: "버스정류장", floors: 15, type: "버스정류장", x: -94.5, z: -168.8, model: "models/asset_버스정류장.glb", rotationDeg: -179.4 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
