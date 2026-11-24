@@ -351,6 +351,14 @@
   "width": 52.083,
   "depth": 55
  },
+ "models/place_구립성동청소년독서실.glb": {
+  "file": "img/skyview/place_구립성동청소년독서실.webp",
+  "hash": "345ae48ec4",
+  "minX": -19.744,
+  "minZ": -17.703,
+  "width": 40,
+  "depth": 36.333
+ },
  "models/place_극미101.glb": {
   "file": "img/skyview/place_극미101.webp",
   "hash": "02cdc3c107",
@@ -542,6 +550,14 @@
   "minZ": -6.62,
   "width": 32,
   "depth": 15.167
+ },
+ "models/place_금호초등학교.glb": {
+  "file": "img/skyview/place_금호초등학교.webp",
+  "hash": "895d17767a",
+  "minX": -61.201,
+  "minZ": -64.812,
+  "width": 116.718,
+  "depth": 130.67
  },
  "models/place_남광빌딩.glb": {
   "file": "img/skyview/place_남광빌딩.webp",
@@ -926,5 +942,13 @@
   "minZ": -12.68,
   "width": 43.667,
   "depth": 28.25
+ },
+ "models/place_홍일빌딩.glb": {
+  "file": "img/skyview/place_홍일빌딩.webp",
+  "hash": "d48815d580",
+  "minX": -6.87,
+  "minZ": -10.666,
+  "width": 13,
+  "depth": 22.25
  }
 }
