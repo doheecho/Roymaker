@@ -470,7 +470,13 @@ function buildMapGround(scene) {
 // ── 울타리: map_data.js의 FENCES(에디터 "🧱 울타리 추가"로 그림)를 fence_types.js의 종류별 모양대로 세운다 ──
 // 토막 길이에 맞춰 기둥 간격(spacing)에 가장 가까운 칸 수로 나누고, 칸·기둥마다 반복되는 부품 상자를 재질별
 // 인스턴스 하나에 모두 담는다 — 울타리가 아무리 길어도 그리기 명령은 재질 수(유리울타리 4개)뿐이다.
+const FENCE_CHUNK = 40; // 월드 단위(약 270m) 칸 — 잘게 나누면 그리기 명령이 늘어나서 크게 나눈다
+const FENCE_VIEW_RANGE = 35; // 월드 단위(약 230m) — 칸 가장자리 기준
+const fenceChunks = []; // { mesh, x, z, r }
+const fenceMats = new Map(); // "종류:재질" → 재질(칸끼리 같이 쓴다)
 function buildFences() {
+  fenceChunks.length = 0;
+  fenceMats.clear();
   if (!FENCES.length) return;
   const W = WORLD_SCALE;
   const boxes = new Map(); // "종류:재질" → [{ m: Matrix4 }]
@@ -500,7 +506,9 @@ function buildFences() {
       tmp.rotation.set(0, yaw, 0);
       tmp.scale.set(len * W, (y1 - y0) * W, (part.d || 0.05) * W);
       tmp.updateMatrix();
-      const key = `${typeKey}:${matName || part.mat}`;
+      // 동네를 FENCE_CHUNK 크기 칸으로 나눠 칸마다 따로 담는다 — 화면 밖·멀리 있는 칸은 아예 안 그린다
+      const chunk = `${Math.floor(tmp.position.x / FENCE_CHUNK)},${Math.floor(tmp.position.z / FENCE_CHUNK)}`;
+      const key = `${typeKey}:${matName || part.mat}:${chunk}`;
       if (!boxes.has(key)) boxes.set(key, []);
       boxes.get(key).push(tmp.matrix.clone());
     };
@@ -519,21 +527,32 @@ function buildFences() {
   });
   boxes.forEach((mats, key) => {
     const [typeKey, matName] = key.split(":");
+    const matKey = `${typeKey}:${matName}`;
     const def = FENCE_TYPES[typeKey].mats[matName] || { color: 0x888888 };
     const glass = def.opacity != null && def.opacity < 1;
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = fenceMats.get(matKey) || new THREE.MeshStandardMaterial({
       color: def.color, roughness: def.roughness ?? 0.7, metalness: def.metalness ?? 0, map: def.tex ? fenceTexture(def.tex) : null,
       transparent: glass, opacity: def.opacity ?? 1, depthWrite: !glass, side: glass ? THREE.DoubleSide : THREE.FrontSide,
     });
+    fenceMats.set(matKey, mat);
     const mesh = new THREE.InstancedMesh(unit, mat, mats.length);
     mats.forEach((m, i) => mesh.setMatrixAt(i, m));
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
-    mesh.castShadow = !glass;
+    // 울타리는 낮고 가늘어서 그림자가 거의 안 보이는데 그림자 계산은 삼각형 수만큼 다시 그려야 한다 → 그림자는 안 드리운다
+    mesh.castShadow = false;
     mesh.receiveShadow = true;
     if (glass) mesh.renderOrder = 1;
     scene.add(mesh);
+    fenceChunks.push({ mesh, x: mesh.boundingSphere.center.x, z: mesh.boundingSphere.center.z, r: mesh.boundingSphere.radius });
   });
+  updateFenceVisibility();
+}
+// 캐릭터에서 FENCE_VIEW_RANGE(월드) 넘게 떨어진 울타리 칸은 숨긴다(울타리는 낮아서 멀면 거의 안 보인다)
+function updateFenceVisibility() {
+  if (!fenceChunks.length || !character) return;
+  const cp = character.position;
+  fenceChunks.forEach((c) => { c.mesh.visible = Math.hypot(c.x - cp.x, c.z - cp.z) - c.r < FENCE_VIEW_RANGE; });
 }
 
 // 울타리 무늬(칸 하나 면 = 가로 2m × 그 부품 높이에 딱 맞게 한 장) — 종류마다 한 번만 그려 둔다
@@ -3125,6 +3144,7 @@ function animate() {
     visibilityTimer = 0;
     updateLabelVisibility();
     updatePlaceVisibility();
+    updateFenceVisibility();
   }
   updateModelStreaming(dt);
   renderer.render(scene, camera);

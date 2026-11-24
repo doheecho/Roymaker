@@ -1,0 +1,76 @@
+# GLB 자동 최적화 + 스카이뷰 생성
+# - models/ 폴더에 .glb를 올리면(깃허브 웹 "Add file → Upload files"로 올려도) 자동으로 돈다.
+# - 깃허브 저장소의 Actions 탭 → "GLB 최적화 + 스카이뷰" → Run workflow 버튼으로 직접 돌릴 수도 있다.
+# - 하는 일: 아직 최적화 안 된 glb만 최적화(python optimize_glb.py --new) → 새로 생겼거나 바뀐 glb의
+#   스카이뷰 그림(img/skyview/)을 그림(node tools/make_skyview.cjs) → 바뀐 게 있으면 main에 커밋.
+# 자세한 설명: docs/glb_최적화_스카이뷰_가이드.md
+name: GLB 최적화 + 스카이뷰
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "models/**.glb"
+  workflow_dispatch:
+    inputs:
+      skyview_force:
+        description: "스카이뷰를 전부 다시 그릴까요? (보통은 false)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: glb-optimize-skyview
+  cancel-in-progress: false
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 도구 설치 (gltf-transform, Playwright 크로미움, three.js)
+        run: |
+          npm install --no-save --no-package-lock playwright three@0.160.0
+          npx playwright install --with-deps chromium
+          npx --yes @gltf-transform/cli --version
+
+      - name: 아직 최적화 안 된 glb 최적화
+        run: python optimize_glb.py --new
+
+      - name: 스카이뷰 그림 만들기
+        run: |
+          if [ "${{ inputs.skyview_force }}" = "true" ]; then
+            node tools/make_skyview.cjs --force
+          else
+            node tools/make_skyview.cjs
+          fi
+
+      - name: 바뀐 파일 커밋
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add models img/skyview
+          if git diff --cached --quiet; then
+            echo "바뀐 파일이 없어요."
+            exit 0
+          fi
+          git commit -m "GLB 최적화·스카이뷰 자동 갱신"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1

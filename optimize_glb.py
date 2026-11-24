@@ -8,6 +8,7 @@ Blender 등에서 새로 뽑은 .glb를 models/ 폴더에 넣은 뒤 이 스크�
 사용법:
   python optimize_glb.py models/place_새건물.glb        # 파일 하나
   python optimize_glb.py models/a.glb models/b.glb      # 여러 개
+  python optimize_glb.py --new                          # models/ 안에서 아직 최적화 안 된 것만(추천)
   python optimize_glb.py --all                          # models/ 안의 전부(제외 목록 빼고)
   python optimize_glb.py --all --dir other_models       # 다른 폴더 전체
   python optimize_glb.py models/mom.glb --force         # 기본 제외 목록에 있는 파일도 강제로
@@ -93,6 +94,19 @@ def optimize_textures_only(path, texture_size):
         return True
 
 
+def is_already_optimized(path):
+    """GLB 안 JSON에 meshopt 압축 확장이 적혀 있으면 이미 이 스크립트로 최적화된 파일이다."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(20)
+            if len(head) < 20 or head[:4] != b"glTF":
+                return False
+            json_len = int.from_bytes(head[12:16], "little")
+            return b"EXT_meshopt_compression" in f.read(json_len)
+    except OSError:
+        return False
+
+
 def optimize_one(path, texture_size):
     size_before = os.path.getsize(path)
     with tempfile.TemporaryDirectory() as tmp:
@@ -118,6 +132,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("files", nargs="*", help="최적화할 .glb 파일 경로(들)")
     parser.add_argument("--all", action="store_true", help="--dir 안의 .glb 파일을 전부 처리")
+    parser.add_argument("--new", action="store_true", help="--dir 안에서 아직 최적화 안 된 .glb만 처리(이미 된 건 다시 압축하지 않음)")
     parser.add_argument("--dir", default="models", help="--all일 때 뒤질 폴더 (기본: models)")
     parser.add_argument("--texture-size", type=int, default=1024, help="텍스처 최대 한 변 픽셀 (기본: 1024)")
     parser.add_argument("--force", action="store_true", help="기본 제외 목록(mom.glb 등)도 처리")
@@ -129,6 +144,14 @@ def main():
         sys.exit(1)
 
     targets = list(args.files)
+    if args.new:
+        for name in sorted(os.listdir(args.dir)):
+            full = os.path.join(args.dir, name)
+            if name.endswith(".glb") and name not in DEFAULT_SKIP and not is_already_optimized(full):
+                targets.append(full)
+        if not targets:
+            print("최적화할 새 glb가 없다 — 모두 이미 최적화돼 있다.")
+            sys.exit(0)
     if args.all:
         for name in sorted(os.listdir(args.dir)):
             if name.endswith(".glb"):

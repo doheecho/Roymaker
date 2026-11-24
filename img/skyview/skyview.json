@@ -655,6 +655,14 @@
   "width": 39.917,
   "depth": 38.083
  },
+ "models/place_성동구보건소금호분소.glb": {
+  "file": "img/skyview/place_성동구보건소금호분소.webp",
+  "hash": "dd4064d4f1",
+  "minX": -23.5,
+  "minZ": -12.001,
+  "width": 46,
+  "depth": 24.583
+ },
  "models/place_성동중앙교회.glb": {
   "file": "img/skyview/place_성동중앙교회.webp",
   "hash": "36ee5952d7",
