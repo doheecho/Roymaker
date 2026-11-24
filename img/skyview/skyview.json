@@ -575,6 +575,14 @@
   "width": 32,
   "depth": 15.167
  },
+ "models/place_금호센트럴자이103.glb": {
+  "file": "img/skyview/place_금호센트럴자이103.webp",
+  "hash": "9bbacebc16",
+  "minX": -36.795,
+  "minZ": -31.681,
+  "width": 63.583,
+  "depth": 62
+ },
  "models/place_금호초등학교.glb": {
   "file": "img/skyview/place_금호초등학교.webp",
   "hash": "e0f50bd746",
