@@ -662,32 +662,43 @@ function buildRoadRibbon(seg, segIndex) {
   }
 }
 
-// 보도 질감: 회색 보도블록(2×2 체크) 한 주기 = 1.2m. 같은 텍스처를 모든 보도가 함께 쓴다.
-const SIDEWALK_TILE_RAW = 1.2;
+// ── 보도(인도) ──
+// 보도 윗면이 기본 지면 높이(SIDEWALK_TOP_Y)이고 도로는 그보다 낮다. 보도·경계선·연석·울타리는
+// 도로마다 메시를 만들지 않고 종류별로 하나씩 합쳐 그린다(드로우콜 몇 개뿐).
+const SIDEWALK_TILE_RAW = 2.4; // 보도 텍스처 한 장이 덮는 길이(raw m) — 0.3m 블록 8×8
 const SIDEWALK_TOP_Y = 0.05; // 보도 윗면 높이 — 도로(0.005~0.0135)보다 연석(턱)만큼 올라와 있다
 const SIDEWALK_YELLOW_Y = SIDEWALK_TOP_Y + 0.001; // 황색 경계선은 보도 윗면 바로 위
 const CURB_COLOR = 0xb9b4a8;
 // 캐릭터가 보도 위에 설 때 쓰는 띠 목록(월드 좌표). 도로 중심선에서 떨어진 거리(inner~outer)가
 // 보도 폭 안이면 보도 위로 본다. 교차로(gaps) 구간에는 보도를 깔지 않으니 띠도 만들지 않는다.
 const walkBands = [];
-const SIDEWALK_YELLOW_W_RAW = 0.3; // 황색 경계선 폭(raw m)
-const SIDEWALK_YELLOW_INSET_RAW = 0.5; // 경계선은 도로 가장자리에서 이만큼 보도 안쪽에 놓임
+const SIDEWALK_YELLOW_W_RAW = 0.45; // 황색 점자블록 띠 폭(raw m)
+const SIDEWALK_YELLOW_INSET_RAW = 0.7; // 도로 가장자리에서 이만큼 보도 안쪽에 놓임
+const SIDEWALK_SAMPLE_RAW = 0.6; // 보도를 이 간격으로 잘게 나눠서 다른 도로와 겹치는지 판정한다
+const SIDEWALK_CORNER_MAX_RAW = 6; // 교차로 모서리 둥글기 최대 반지름(raw m)
+const SIDEWALK_RAILING = true; // 보도 도로 쪽 가장자리에 울타리
+const RAILING_INSET_RAW = 0.25; // 연석에서 보도 안쪽으로 이만큼
+const RAILING_POST_SPACING_RAW = 2.5;
+const RAILING_H = 0.1; // 울타리 높이(월드 단위, 보도 윗면 기준)
+const RAILING_COLOR = 0x5b6068;
 let sidewalkTexture = null;
+// 회색 보도블록 — 0.3m 정사각 블록에 군데군데 진한 블록이 섞인 무늬(사진 속 인도처럼)
 function getSidewalkTexture() {
   if (sidewalkTexture) return sidewalkTexture;
   const c = document.createElement("canvas");
   c.width = c.height = 256;
   const g = c.getContext("2d");
-  const tiles = [["#e6e2d8", "#d8d3c6"], ["#d8d3c6", "#e6e2d8"]];
-  for (let r = 0; r < 2; r++) for (let k = 0; k < 2; k++) {
-    g.fillStyle = tiles[r][k];
-    g.fillRect(k * 128, r * 128, 128, 128);
-  }
-  g.strokeStyle = "#a7a194";
-  g.lineWidth = 3;
-  for (let i = 0; i <= 2; i++) {
-    g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, 256); g.stroke();
-    g.beginPath(); g.moveTo(0, i * 128); g.lineTo(256, i * 128); g.stroke();
+  g.fillStyle = "#bdbdba";
+  g.fillRect(0, 0, 256, 256);
+  let seed = 12345;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const n = 8, cs = 256 / n;
+  for (let r = 0; r < n; r++) {
+    for (let k = 0; k < n; k++) {
+      const v = rnd();
+      g.fillStyle = v < 0.16 ? "#8b8c8e" : v < 0.3 ? "#acadaf" : v < 0.62 ? "#d2d2cf" : "#dcdcd9";
+      g.fillRect(k * cs + 1, r * cs + 1, cs - 2, cs - 2);
+    }
   }
   sidewalkTexture = new THREE.CanvasTexture(c);
   sidewalkTexture.colorSpace = THREE.SRGBColorSpace;
@@ -696,16 +707,37 @@ function getSidewalkTexture() {
   return sidewalkTexture;
 }
 
-// 여러 도로의 띠를 한 묶음(positions/uvs/indices)으로 모은다 — 도로마다 메시를 만들면 도로가 수백 개라
-// 드로우콜이 그만큼 늘어나서, 보도와 경계선은 각각 메시 하나로 합쳐 그린다(드로우콜 2개).
+// 여러 도로의 띠를 한 묶음(positions/uvs/indices)으로 모은다
 function newRibbonStore() { return { pos: [], uv: [], idx: [] }; }
 function storeToGeometry(store) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(store.pos, 3));
-  geo.setAttribute("uv", new THREE.Float32BufferAttribute(store.uv, 2));
+  if (store.uv.length) geo.setAttribute("uv", new THREE.Float32BufferAttribute(store.uv, 2));
   geo.setIndex(store.idx);
   geo.computeVertexNormals();
   return geo;
+}
+// 띠 하나(안쪽 점들 A, 바깥 점들 B, 높이 y)를 추가 — 텍스처는 평면 좌표로 입힌다
+function pushStrip(store, A, B, y = 0) {
+  const base = store.pos.length / 3;
+  const tileW = SIDEWALK_TILE_RAW * WORLD_SCALE;
+  for (let k = 0; k < A.length; k++) {
+    store.pos.push(A[k][0], y, A[k][1], B[k][0], y, B[k][1]);
+    store.uv.push(A[k][0] / tileW, A[k][1] / tileW, B[k][0] / tileW, B[k][1] / tileW);
+  }
+  for (let k = 0; k < A.length - 1; k++) {
+    const a0 = base + k * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
+    store.idx.push(a0, b0, a1, a1, b0, b1);
+  }
+}
+// 수평 점들을 따라 y0~y1 높이로 세운 면(연석·받침 벽)
+function pushVerticalQuadStrip(store, pts2d, y0 = 0, y1 = SIDEWALK_TOP_Y) {
+  const base = store.pos.length / 3;
+  for (const [x, z] of pts2d) store.pos.push(x, y0, z, x, y1, z);
+  for (let i = 0; i < pts2d.length - 1; i++) {
+    const a0 = base + i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
+    store.idx.push(a0, b0, a1, a1, b0, b1);
+  }
 }
 
 // 두 점 사이 거리(캐릭터 발밑 판정용)
@@ -715,28 +747,20 @@ function distToSegment(px, pz, ax, az, bx, bz) {
   const t = Math.max(0, Math.min(1, ((px - ax) * vx + (pz - az) * vz) / len2));
   return Math.hypot(px - (ax + vx * t), pz - (az + vz * t));
 }
-
-// 보도 모서리 둥글기(교차로 쪽 바깥 모서리, raw m) — 반지름이 이 값인 1/4 원으로 깎는다
-const SIDEWALK_CORNER_RAW = 2.0;
-const SIDEWALK_SAMPLE_RAW = 0.6; // 보도를 이 간격으로 잘게 나눠서 깎인 모서리와 도로 겹침을 판정한다
-
-// 보도 띠 하나(안쪽 점들 A, 바깥 점들 B)를 두 줄 띠로 추가 — 텍스처는 평면 좌표로 입힌다
-function pushStrip(store, A, B) {
-  const base = store.pos.length / 3;
-  const tileW = SIDEWALK_TILE_RAW * WORLD_SCALE;
-  for (let k = 0; k < A.length; k++) {
-    store.pos.push(A[k][0], 0, A[k][1], B[k][0], 0, B[k][1]);
-    store.uv.push(A[k][0] / tileW, A[k][1] / tileW, B[k][0] / tileW, B[k][1] / tileW);
+function pointInPolygon(x, z, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi || 1e-12) + xi) inside = !inside;
   }
-  for (let k = 0; k < A.length - 1; k++) {
-    const a0 = base + k * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
-    store.idx.push(a0, b0, a1, a1, b0, b1);
-  }
+  return inside;
 }
 
-// 다른 도로들의 중심선·반폭 — 보도가 다른 도로 위를 지나가지 않게 판정할 때 쓴다(도로 우선)
+// 도로들의 중심선·반폭(월드) — 보도·건물이 도로 위로 넘어가지 않게 판정할 때 쓴다(도로 우선)
+let roadFootprintsCache = null;
 function buildRoadFootprints() {
-  return ROAD_SEGMENTS.map((seg, i) => {
+  if (roadFootprintsCache) return roadFootprintsCache;
+  roadFootprintsCache = ROAD_SEGMENTS.map((seg, i) => {
     const pts = roadPolyline(seg).map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
     const xs = pts.map((q) => q[0]), zs = pts.map((q) => q[1]);
     return {
@@ -744,11 +768,13 @@ function buildRoadFootprints() {
       minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs),
     };
   });
+  return roadFootprintsCache;
 }
-function pointOnOtherRoad(x, z, selfIndex, footprints, ignore) {
-  for (const f of footprints) {
-    if (f.index === selfIndex || (ignore && ignore.has(f.index))) continue;
-    const m = f.half + 0.1;
+// (x,z)가 ignore에 없는 도로 위(반폭 + margin 안)인가
+function pointOnRoad(x, z, ignore, margin = 0.015) {
+  for (const f of buildRoadFootprints()) {
+    if (ignore && ignore.has(f.index)) continue;
+    const m = f.half + margin;
     if (x < f.minx - m || x > f.maxx + m || z < f.minz - m || z > f.maxz + m) continue;
     for (let i = 0; i < f.pts.length - 1; i++) {
       const [ax, az] = f.pts[i], [bx, bz] = f.pts[i + 1];
@@ -758,32 +784,125 @@ function pointOnOtherRoad(x, z, selfIndex, footprints, ignore) {
   return false;
 }
 
-// 보도 한 구간(sub, 월드 좌표): 0.6m 간격 단면을 만들고, 양 끝 바깥 모서리를 깎고, 다른 도로 위 단면은 뺀다
-// conn: { a, b } — 그 끝이 다른 도로 하나와 그냥 이어지는(교차로가 아닌) 경우 그 도로 번호, 아니면 null
-function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore, footprints, conn) {
-  if (!seg.sidewalk) return;
-  const rawPts = roadPolyline(seg);
-  let rawLen = 0;
-  for (let i = 1; i < rawPts.length; i++) rawLen += Math.hypot(rawPts[i][0] - rawPts[i - 1][0], rawPts[i][1] - rawPts[i - 1][1]);
-  const gaps = roadMarkings.gaps[segIndex] || [];
-  const roadW = seg.width * WORLD_SCALE;
-  const sideW = seg.sidewalk * WORLD_SCALE;
-  const R = Math.min(SIDEWALK_CORNER_RAW * WORLD_SCALE, sideW);
+// 도로 끝마다, 거기서 "그냥 이어지는" 도로가 하나만 있으면(끝점 2개가 모이는 곳 = 교차로 아님) 그 번호를 적어 둔다
+const JOIN_RAW = 14; // road_markings.js의 교차로 묶음 거리와 같은 값
+function buildRoadConnections() {
+  const ends = [];
+  ROAD_SEGMENTS.forEach((seg, i) => {
+    ends.push({ i, which: "a", x: seg.a[0], z: seg.a[1] });
+    ends.push({ i, which: "b", x: seg.b[0], z: seg.b[1] });
+  });
+  const conns = ROAD_SEGMENTS.map(() => ({ a: null, b: null, aWhich: null, bWhich: null }));
+  for (const e of ends) {
+    const near = ends.filter((o) => o !== e && o.i !== e.i && Math.hypot(o.x - e.x, o.z - e.z) < JOIN_RAW);
+    if (near.length !== 1) continue; // 혼자(막다른 길)거나 셋 이상(교차로)
+    conns[e.i][e.which] = near[0].i;
+    conns[e.i][e.which + "Which"] = near[0].which;
+  }
+  return conns;
+}
+
+// 같은 폭·같은 보도 폭으로 그냥 이어지는 구간들을 한 줄(체인)로 묶는다 — 한 줄로 그리면 이음매에서
+// 연석·경계선이 엇갈리거나 겹치지 않고 곡선처럼 매끈하게 이어진다.
+function sidewalkCompatible(i, j) {
+  const a = ROAD_SEGMENTS[i], b = ROAD_SEGMENTS[j];
+  return !!a.sidewalk && !!b.sidewalk && a.width === b.width && a.sidewalk === b.sidewalk;
+}
+function buildSidewalkChains(conns) {
+  const link = (i, end) => {
+    const j = conns[i][end];
+    if (j == null || !sidewalkCompatible(i, j)) return null;
+    return { j, jEnd: conns[i][end + "Which"] };
+  };
+  const opp = (e) => (e === "a" ? "b" : "a");
+  const visited = new Set();
+  const chains = [];
+  ROAD_SEGMENTS.forEach((seg, i) => {
+    if (!seg.sidewalk || visited.has(i)) return;
+    // 머리 찾기: a 쪽으로 이어진 데까지 거슬러 간다
+    let cur = i, freeEnd = "a";
+    const seen = new Set([i]);
+    for (;;) {
+      const l = link(cur, freeEnd);
+      if (!l || seen.has(l.j)) break;
+      seen.add(l.j);
+      cur = l.j;
+      freeEnd = opp(l.jEnd);
+    }
+    // 머리부터 앞으로 훑으며 방향(뒤집힘)까지 기록
+    const members = [];
+    let c = cur, startEnd = freeEnd;
+    for (;;) {
+      if (visited.has(c)) break;
+      visited.add(c);
+      members.push({ idx: c, reversed: startEnd === "b" });
+      const l = link(c, opp(startEnd));
+      if (!l || visited.has(l.j)) break;
+      c = l.j;
+      startEnd = l.jEnd;
+    }
+    chains.push(members);
+  });
+  return chains;
+}
+// 체인 전체의 중심선(raw)과 교차로 구간(gaps, 체인 시작에서 잰 거리)
+function chainGeometry(members) {
+  const pts = [];
+  const gaps = [];
+  let offset = 0;
+  members.forEach((m) => {
+    let p = roadPolyline(ROAD_SEGMENTS[m.idx]).map((q) => [q[0], q[1]]);
+    if (m.reversed) p.reverse();
+    let L = 0;
+    for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    if (pts.length) {
+      const last = pts[pts.length - 1];
+      const jump = Math.hypot(p[0][0] - last[0], p[0][1] - last[1]);
+      if (jump < 1e-6) p = p.slice(1);
+      else offset += jump; // 끝점이 딱 붙지 않은 이음매는 그 틈만큼 거리를 더한다
+    }
+    pts.push(...p);
+    (roadMarkings.gaps[m.idx] || []).forEach(([g0, g1]) => {
+      let a = Math.max(0, g0), b = Math.min(L, g1);
+      if (b <= a) return;
+      if (m.reversed) [a, b] = [L - b, L - a];
+      gaps.push([offset + a, offset + b]);
+    });
+    offset += L;
+  });
+  gaps.sort((p, q) => p[0] - q[0]);
+  const merged = [];
+  for (const g of gaps) {
+    if (merged.length && g[0] <= merged[merged.length - 1][1]) merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], g[1]);
+    else merged.push([...g]);
+  }
+  return { pts, gaps: merged, len: offset };
+}
+
+// 보도 한 체인: 0.6m 간격 단면을 만들고, 다른 도로 위에 걸친 단면은 빼고(도로 우선) 띠·연석·경계선·울타리를 만든다
+function collectChainSidewalk(members, stores, conns) {
+  const first = ROAD_SEGMENTS[members[0].idx];
+  const { pts: rawPts, gaps, len: rawLen } = chainGeometry(members);
+  if (rawPts.length < 2) return;
+  const roadW = first.width * WORLD_SCALE;
+  const sideW = first.sidewalk * WORLD_SCALE;
   const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
   const inset = SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE;
-  // 그냥 이어지는 옆 도로(같은 길의 다음 구간)는 "다른 도로"로 치지 않는다 — 안 그러면 곡선·이음매에서 보도가 지워진다
-  const ignore = new Set([conn.a, conn.b].filter((v) => v != null));
+  const railOff = RAILING_INSET_RAW * WORLD_SCALE;
+  // 이 체인의 구간들과, 거기에 단순 이음매로 붙은 도로는 "다른 도로"로 치지 않는다
+  const ignore = new Set();
+  members.forEach((m) => {
+    ignore.add(m.idx);
+    if (conns[m.idx].a != null) ignore.add(conns[m.idx].a);
+    if (conns[m.idx].b != null) ignore.add(conns[m.idx].b);
+  });
   for (const [s0, s1] of markedRanges(rawLen, gaps)) {
     const sub = slicePolyline(rawPts, s0, s1);
     if (sub.length < 2) continue;
-    // 이 구간 끝이 도로 끝이면서 보도 있는 옆 도로와 그냥 이어지면 둥글게 깎지 않는다(교차로 쪽만 깎음)
-    const roundStart = !(s0 <= 1e-6 && conn.a != null && conn.aHasSidewalk);
-    const roundEnd = !(s1 >= rawLen - 1e-6 && conn.b != null && conn.bHasSidewalk);
     const pts = sub.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
     for (let i = 0; i < pts.length - 1; i++) {
       walkBands.push({ ax: pts[i][0], az: pts[i][1], bx: pts[i + 1][0], bz: pts[i + 1][1], inner: roadW / 2, outer: roadW / 2 + sideW });
     }
-    // 0.6m 간격 단면(위치·진행 방향·누적 거리)
     const cum = [0];
     for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
     const L = cum[cum.length - 1];
@@ -791,30 +910,48 @@ function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore, foo
     const stations = [];
     for (let d = 0; d < L; d += h) stations.push(d);
     stations.push(L);
-    const samples = stations.map((d) => pointAlongPolyline(pts, d)).map((q) => ({ x: q.x, z: q.z, tx: q.dirX, tz: q.dirZ }));
+    // 단면의 방향은 앞뒤 점을 같이 보고 정해서(이음매에서 꺾이는 각을 나눠 가짐) 보도가 매끈하게 돈다
+    const samples = stations.map((d) => {
+      const q = pointAlongPolyline(pts, d);
+      const q0 = pointAlongPolyline(pts, Math.max(0, d - h * 0.5));
+      const q1 = pointAlongPolyline(pts, Math.min(L, d + h * 0.5));
+      let tx = q0.dirX + q1.dirX, tz = q0.dirZ + q1.dirZ;
+      const tl = Math.hypot(tx, tz) || 1;
+      return { x: q.x, z: q.z, tx: tx / tl, tz: tz / tl, d };
+    });
     [-1, 1].forEach((dir) => {
-      // 각 단면: 안쪽(도로 가장자리)은 고정, 바깥은 끝에서 R 안쪽부터 둥글게 줄어든다
-      const secs = samples.map((q, k) => {
-        const d = Math.min(roundStart ? stations[k] : Infinity, roundEnd ? L - stations[k] : Infinity);
-        const vOff = d >= R ? sideW : sideW - R + Math.sqrt(Math.max(0, R * R - (R - d) * (R - d)));
+      const secs = samples.map((q) => {
         const nx = -q.tz * dir, nz = q.tx * dir; // 도로 바깥쪽 법선
-        const inner = [q.x + nx * (roadW / 2), q.z + nz * (roadW / 2)];
-        const outer = [q.x + nx * (roadW / 2 + vOff), q.z + nz * (roadW / 2 + vOff)];
-        const mid = [q.x + nx * (roadW / 2 + vOff / 2), q.z + nz * (roadW / 2 + vOff / 2)];
-        const blocked = pointOnOtherRoad(mid[0], mid[1], segIndex, footprints, ignore);
-        return { inner, outer, nx, nz, q, blocked };
+        const at = (o) => [q.x + nx * o, q.z + nz * o];
+        const mid = at(roadW / 2 + sideW / 2);
+        return { q, at, inner: at(roadW / 2), outer: at(roadW / 2 + sideW), blocked: pointOnRoad(mid[0], mid[1], ignore) };
       });
-      // 다른 도로에 안 덮인 연속 구간끼리 묶어서 띠를 만든다
       let run = [];
       const flush = () => {
-        if (run.length < 2) { run = []; return; }
-        const A = run.map((r) => r.inner), B = run.map((r) => r.outer);
-        pushStrip(sideStore, A, B);
-        pushVerticalQuadStrip(curbStore, A); // 도로 쪽 연석 면
-        [run[0], run[run.length - 1]].forEach((r) => pushVerticalQuadStrip(curbStore, [r.inner, r.outer])); // 구간 끝 단면
-        const lineIn = run.map((r) => [r.q.x + r.nx * (roadW / 2 + inset), r.q.z + r.nz * (roadW / 2 + inset)]);
-        const lineOut = run.map((r) => [r.q.x + r.nx * (roadW / 2 + inset + lineW), r.q.z + r.nz * (roadW / 2 + inset + lineW)]);
-        pushStrip(lineStore, lineIn, lineOut);
+        if (run.length >= 2) {
+          const A = run.map((r) => r.inner), B = run.map((r) => r.outer);
+          pushStrip(stores.side, A, B);
+          pushVerticalQuadStrip(stores.curb, A); // 도로 쪽 연석 면
+          [run[0], run[run.length - 1]].forEach((r) => pushVerticalQuadStrip(stores.curb, [r.inner, r.outer])); // 구간 끝 단면
+          pushStrip(stores.line, run.map((r) => r.at(roadW / 2 + inset)), run.map((r) => r.at(roadW / 2 + inset + lineW)));
+          if (SIDEWALK_RAILING) {
+            const o = roadW / 2 + railOff;
+            const rw = 0.012;
+            pushStrip(stores.rail, run.map((r) => r.at(o - rw)), run.map((r) => r.at(o + rw)), RAILING_H);
+            pushStrip(stores.rail, run.map((r) => r.at(o - rw * 0.7)), run.map((r) => r.at(o + rw * 0.7)), RAILING_H * 0.5);
+            const spacing = RAILING_POST_SPACING_RAW * WORLD_SCALE;
+            let next = run[0].q.d;
+            for (const r of run) {
+              if (r.q.d + 1e-6 >= next) {
+                const p = r.at(o);
+                stores.posts.push(p);
+                next = r.q.d + spacing;
+              }
+            }
+            const lastP = run[run.length - 1].at(o);
+            stores.posts.push(lastP);
+          }
+        }
         run = [];
       };
       for (const sec of secs) {
@@ -826,41 +963,9 @@ function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore, foo
   }
 }
 
-// 수평 점들을 따라 바닥(0)~보도 윗면(SIDEWALK_TOP_Y)까지 세운 면(연석)
-function pushVerticalQuadStrip(store, pts2d) {
-  const base = store.pos.length / 3;
-  for (const [x, z] of pts2d) store.pos.push(x, 0, z, x, SIDEWALK_TOP_Y, z);
-  for (let i = 0; i < pts2d.length - 1; i++) {
-    const a0 = base + i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
-    store.idx.push(a0, b0, a1, a1, b0, b1);
-  }
-}
-
-// 도로 끝마다, 거기서 "그냥 이어지는" 도로가 하나만 있으면(끝점 2개가 모이는 곳 = 교차로 아님) 그 번호를 적어 둔다
-const JOIN_RAW = 14; // road_markings.js의 교차로 묶음 거리와 같은 값
-function buildRoadConnections() {
-  const ends = [];
-  ROAD_SEGMENTS.forEach((seg, i) => {
-    ends.push({ i, which: "a", x: seg.a[0], z: seg.a[1] });
-    ends.push({ i, which: "b", x: seg.b[0], z: seg.b[1] });
-  });
-  const conns = ROAD_SEGMENTS.map(() => ({ a: null, b: null, aWhich: null, bWhich: null, aHasSidewalk: false, bHasSidewalk: false }));
-  for (const e of ends) {
-    const near = ends.filter((o) => o !== e && o.i !== e.i && Math.hypot(o.x - e.x, o.z - e.z) < JOIN_RAW);
-    if (near.length !== 1) continue; // 혼자(막다른 길)거나 셋 이상(교차로)
-    const o = near[0];
-    conns[e.i][e.which] = o.i;
-    conns[e.i][e.which + "Which"] = o.which;
-    conns[e.i][e.which + "HasSidewalk"] = !!ROAD_SEGMENTS[o.i].sidewalk;
-  }
-  return conns;
-}
-
-// 같은 길의 두 구간이 꺾여서 이어지는 자리: 바깥쪽에 부채꼴 보도를 채워 보도가 끊기지 않게 한다
-// (안쪽은 두 구간 보도가 이미 겹치므로 채우지 않는다 — 채우면 도로 위로 넘어온다)
-function buildSidewalkJoints(conns, sideStore, lineStore, curbStore) {
+// 폭이 다른 두 구간이 꺾여서 이어지는 자리(체인이 끊기는 곳): 바깥쪽에 부채꼴 보도를 채워 끊기지 않게 한다
+function buildSidewalkJoints(conns, chainOf, stores) {
   const endDir = (seg, which, outward) => {
-    // outward=true면 이음매에서 도로 안쪽으로 들어가는 방향, false면 도로에서 이음매로 나오는 방향
     const pts = roadPolyline(seg);
     const n = pts.length;
     let dx, dz;
@@ -874,21 +979,21 @@ function buildSidewalkJoints(conns, sideStore, lineStore, curbStore) {
   ROAD_SEGMENTS.forEach((seg, i) => {
     ["a", "b"].forEach((which) => {
       const j = conns[i][which];
-      if (j == null || j < i) return; // 한 이음매는 한 번만
+      if (j == null || j < i) return;
+      if (chainOf.get(i) != null && chainOf.get(i) === chainOf.get(j)) return; // 같은 체인이면 이미 한 줄로 이어졌다
       const segJ = ROAD_SEGMENTS[j];
       if (!seg.sidewalk || !segJ.sidewalk) return;
       const whichJ = conns[i][which + "Which"];
-      const u = endDir(seg, which, false); // i에서 이음매로 들어오는 방향
-      const v = endDir(segJ, whichJ, true); // 이음매에서 j로 나가는 방향
+      const u = endDir(seg, which, false);
+      const v = endDir(segJ, whichJ, true);
       const turn = u[0] * v[1] - u[1] * v[0];
       const angle = Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1])));
-      if (angle < (2 * Math.PI) / 180) return; // 거의 일직선이면 채울 필요 없음
+      if (angle < (2 * Math.PI) / 180) return;
       const pi = which === "a" ? seg.a : seg.b;
       const pj = whichJ === "a" ? segJ.a : segJ.b;
       const P = [((pi[0] + pj[0]) / 2) * WORLD_SCALE, ((pi[1] + pj[1]) / 2) * WORLD_SCALE];
       const ri = (Math.max(seg.width, segJ.width) / 2) * WORLD_SCALE;
       const ro = ri + Math.min(seg.sidewalk, segJ.sidewalk) * WORLD_SCALE;
-      // 바깥쪽 법선: 꺾이는 방향의 반대편
       const side = turn > 0 ? -1 : 1;
       const n1 = [-u[1] * side, u[0] * side];
       const n2 = [-v[1] * side, v[0] * side];
@@ -906,45 +1011,164 @@ function buildSidewalkJoints(conns, sideStore, lineStore, curbStore) {
         return out;
       };
       const inner = arc(ri);
-      pushStrip(sideStore, inner, arc(ro));
-      pushVerticalQuadStrip(curbStore, inner);
-      pushStrip(lineStore, arc(ri + inset), arc(ri + inset + lineW));
+      pushStrip(stores.side, inner, arc(ro));
+      pushVerticalQuadStrip(stores.curb, inner);
+      pushStrip(stores.line, arc(ri + inset), arc(ri + inset + lineW));
     });
   });
 }
 
+// 교차로 모서리: 서로 이웃한 두 길의 보도 끝을 둥근 모서리(연석 곡선)로 이어 준다.
+// 두 길의 도로 가장자리 선이 만나는 점(K) 앞에서 반지름 r만큼 곡선으로 돌린다.
+function buildSidewalkCorners(stores) {
+  const ends = [];
+  ROAD_SEGMENTS.forEach((seg, i) => {
+    ends.push({ i, which: "a", x: seg.a[0], z: seg.a[1] });
+    ends.push({ i, which: "b", x: seg.b[0], z: seg.b[1] });
+  });
+  const used = new Set();
+  const groups = [];
+  ends.forEach((e, k) => {
+    if (used.has(k)) return;
+    const g = [e];
+    used.add(k);
+    ends.forEach((o, m) => {
+      if (!used.has(m) && Math.hypot(o.x - e.x, o.z - e.z) < JOIN_RAW) { g.push(o); used.add(m); }
+    });
+    if (g.length >= 3) groups.push(g);
+  });
+  const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
+  const inset = SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE;
+  for (const g of groups) {
+    const arms = g.map((e) => {
+      const seg = ROAD_SEGMENTS[e.i];
+      const rawPts = roadPolyline(seg);
+      const pts = rawPts.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+      let rawLen = 0;
+      for (let i = 1; i < rawPts.length; i++) rawLen += Math.hypot(rawPts[i][0] - rawPts[i - 1][0], rawPts[i][1] - rawPts[i - 1][1]);
+      const n = pts.length;
+      // 교차로에서 멀어지는 방향(정렬용)
+      let dx, dz;
+      if (e.which === "a") { dx = pts[1][0] - pts[0][0]; dz = pts[1][1] - pts[0][1]; }
+      else { dx = pts[n - 2][0] - pts[n - 1][0]; dz = pts[n - 2][1] - pts[n - 1][1]; }
+      const dl = Math.hypot(dx, dz) || 1;
+      const arm = { e, seg, angle: Math.atan2(dz / dl, dx / dl), has: false };
+      if (!seg.sidewalk) return arm;
+      const ranges = markedRanges(rawLen, roadMarkings.gaps[e.i] || []);
+      if (!ranges.length) return arm;
+      const sEnd = e.which === "a" ? ranges[0][0] : ranges[ranges.length - 1][1];
+      const q = pointAlongPolyline(pts, sEnd * WORLD_SCALE);
+      const away = e.which === "a" ? [q.dirX, q.dirZ] : [-q.dirX, -q.dirZ];
+      Object.assign(arm, { has: true, P: [q.x, q.z], away, half: (seg.width * WORLD_SCALE) / 2, sw: seg.sidewalk * WORLD_SCALE });
+      return arm;
+    });
+    arms.sort((p, q) => p.angle - q.angle);
+    const ignore = new Set(g.map((e) => e.i));
+    for (let k = 0; k < arms.length; k++) {
+      const A = arms[k], B = arms[(k + 1) % arms.length];
+      if (!A.has || !B.has) continue;
+      let delta = B.angle - A.angle;
+      if (delta <= 0) delta += 2 * Math.PI;
+      if (delta > (170 * Math.PI) / 180) continue; // 거의 일직선(또는 그 이상) 사이는 모서리가 아니다
+      const nA = [-A.away[1], A.away[0]]; // A의 반시계 쪽(=B 쪽 블록)
+      const nB = [B.away[1], -B.away[0]]; // B의 시계 쪽(=A 쪽 블록)
+      const IA = [A.P[0] + nA[0] * A.half, A.P[1] + nA[1] * A.half];
+      const IB = [B.P[0] + nB[0] * B.half, B.P[1] + nB[1] * B.half];
+      const gA = [-A.away[0], -A.away[1]], gB = [-B.away[0], -B.away[1]]; // 교차로 쪽으로
+      const dxy = [IB[0] - IA[0], IB[1] - IA[1]];
+      const det = -gA[0] * gB[1] + gA[1] * gB[0];
+      if (Math.abs(det) < 1e-6) continue;
+      const u = (dxy[0] * -gB[1] - dxy[1] * -gB[0]) / det;
+      const v = (gA[0] * dxy[1] - gA[1] * dxy[0]) / det;
+      if (u < 0 || v < 0) continue;
+      const rf = Math.min(u, v, SIDEWALK_CORNER_MAX_RAW * WORLD_SCALE);
+      const K = [IA[0] + gA[0] * u, IA[1] + gA[1] * u];
+      const TA = [IA[0] + gA[0] * (u - rf), IA[1] + gA[1] * (u - rf)];
+      const TB = [IB[0] + gB[0] * (v - rf), IB[1] + gB[1] * (v - rf)];
+      const Q = [IA];
+      if (u - rf > 1e-4) Q.push(TA);
+      const steps = 10;
+      for (let s = 1; s < steps; s++) {
+        const t = s / steps, w = 1 - t;
+        Q.push([w * w * TA[0] + 2 * w * t * K[0] + t * t * TB[0], w * w * TA[1] + 2 * w * t * K[1] + t * t * TB[1]]);
+      }
+      if (v - rf > 1e-4) Q.push(TB);
+      Q.push(IB);
+      // 각 점에서 블록 쪽(바깥) 법선
+      const W = Math.min(A.sw, B.sw);
+      const normals = Q.map((p, idx) => {
+        const a = Q[Math.max(0, idx - 1)], b = Q[Math.min(Q.length - 1, idx + 1)];
+        let tx = b[0] - a[0], tz = b[1] - a[1];
+        const tl = Math.hypot(tx, tz) || 1;
+        tx /= tl; tz /= tl;
+        let nx = -tz, nz = tx;
+        const f = idx / (Q.length - 1);
+        const hx = nA[0] * (1 - f) + nB[0] * f, hz = nA[1] * (1 - f) + nB[1] * f;
+        if (nx * hx + nz * hz < 0) { nx = -nx; nz = -nz; }
+        return [nx, nz];
+      });
+      const at = (o) => Q.map((p, idx) => [p[0] + normals[idx][0] * o, p[1] + normals[idx][1] * o]);
+      const outer = at(W);
+      // 모서리가 다른(이 교차로에 속하지 않은) 도로 위로 넘어가면 그 모서리는 만들지 않는다
+      const mids = at(W / 2);
+      if (mids.some(([x, z]) => pointOnRoad(x, z, ignore))) continue;
+      pushStrip(stores.side, Q, outer);
+      pushVerticalQuadStrip(stores.curb, Q);
+      pushStrip(stores.line, at(inset), at(inset + lineW));
+      groundPlatforms.push({ poly: [...Q, ...outer.slice().reverse()], y: SIDEWALK_TOP_Y });
+    }
+  }
+}
+
 function buildRoadSidewalks() {
   walkBands.length = 0;
-  const sideStore = newRibbonStore();
-  const lineStore = newRibbonStore();
-  const curbStore = newRibbonStore();
-  const footprints = buildRoadFootprints();
+  const stores = { side: newRibbonStore(), line: newRibbonStore(), curb: newRibbonStore(), rail: newRibbonStore(), posts: [] };
   const conns = buildRoadConnections();
-  ROAD_SEGMENTS.forEach((seg, i) => collectRoadSidewalk(seg, i, sideStore, lineStore, curbStore, footprints, conns[i]));
-  buildSidewalkJoints(conns, sideStore, lineStore, curbStore);
-  if (sideStore.idx.length) {
+  const chains = buildSidewalkChains(conns);
+  const chainOf = new Map();
+  chains.forEach((members, c) => members.forEach((m) => chainOf.set(m.idx, c)));
+  chains.forEach((members) => collectChainSidewalk(members, stores, conns));
+  buildSidewalkJoints(conns, chainOf, stores);
+  buildSidewalkCorners(stores);
+  if (stores.side.idx.length) {
     const mesh = new THREE.Mesh(
-      storeToGeometry(sideStore),
+      storeToGeometry(stores.side),
       new THREE.MeshStandardMaterial({ map: getSidewalkTexture(), roughness: 1, side: THREE.DoubleSide })
     );
     mesh.position.y = SIDEWALK_TOP_Y;
     mesh.receiveShadow = true;
     scene.add(mesh);
   }
-  if (lineStore.idx.length) {
-    const mesh = new THREE.Mesh(storeToGeometry(lineStore), new THREE.MeshBasicMaterial({ color: LANE_YELLOW, side: THREE.DoubleSide }));
+  if (stores.line.idx.length) {
+    const mesh = new THREE.Mesh(storeToGeometry(stores.line), new THREE.MeshBasicMaterial({ color: LANE_YELLOW, side: THREE.DoubleSide }));
     mesh.position.y = SIDEWALK_YELLOW_Y;
     scene.add(mesh);
   }
-  if (curbStore.idx.length) {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(curbStore.pos, 3));
-    geo.setIndex(curbStore.idx);
-    geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: CURB_COLOR, roughness: 1, side: THREE.DoubleSide }));
+  if (stores.curb.idx.length) {
+    stores.curb.uv.length = 0;
+    const mesh = new THREE.Mesh(storeToGeometry(stores.curb), new THREE.MeshStandardMaterial({ color: CURB_COLOR, roughness: 1, side: THREE.DoubleSide }));
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
+  }
+  if (stores.rail.idx.length) {
+    stores.rail.uv.length = 0;
+    const railMat = new THREE.MeshStandardMaterial({ color: RAILING_COLOR, roughness: 0.6, metalness: 0.4, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(storeToGeometry(stores.rail), railMat);
+    mesh.position.y = SIDEWALK_TOP_Y;
+    scene.add(mesh);
+    if (stores.posts.length) {
+      const postGeo = new THREE.BoxGeometry(0.012, RAILING_H, 0.012);
+      const posts = new THREE.InstancedMesh(postGeo, railMat, stores.posts.length);
+      const dummy = new THREE.Object3D();
+      stores.posts.forEach(([x, z], i) => {
+        dummy.position.set(x, SIDEWALK_TOP_Y + RAILING_H / 2, z);
+        dummy.updateMatrix();
+        posts.setMatrixAt(i, dummy.matrix);
+      });
+      posts.instanceMatrix.needsUpdate = true;
+      scene.add(posts);
+    }
   }
 }
 
@@ -1277,7 +1501,6 @@ const MODEL_FLOOR_OVERRIDE = { 66: 0 };
 const DEFAULT_MODEL_Y_LIFT = -0.002;
 const MODEL_Y_LIFT_OVERRIDE = { 201: 0.02, 202: 0.02 };
 const ROAD_LEVEL_PLACE_IDS = new Set([201, 202]); // 보도 높이로 올리지 않는 건물(도로에 놓인 문주)
-const PLINTH_MAX_RAW = 80; // 이보다 큰 모델(단지 전체 등)은 받침을 깔지 않는다(주변 도로를 덮을 수 있어서)
 function worldToLocalXZ(x, z, cx, cz, cos, sin) {
   const dx = x - cx;
   const dz = z - cz;
@@ -1290,7 +1513,7 @@ function insideRect(x, z, cx, cz, cos, sin, halfW, halfD) {
 // 캐릭터가 서 있는 자리의 지면 높이 — 단차가 있는 건물의 발판 위면 그 높이, 아니면 기본(0)
 function groundHeightAt(x, z) {
   for (const p of groundPlatforms) {
-    if (insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return p.y;
+    if (p.poly ? pointInPolygon(x, z, p.poly) : insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return p.y;
   }
   // 보도 위면 턱만큼 높다(도로에서 보도로 올라서면 캐릭터도 같이 올라간다)
   for (const s of walkBands) {
@@ -1322,42 +1545,86 @@ function disposeObject3D(obj) {
 // place.rotationDeg를 넣어 두면(모델마다 정면 방향이 다를 수 있어서) 그 값으로 덮어써 미세조정한다.
 // place.scaleRatio(기본 1)는 실제 건물보다 작게/크게 모델링된 .glb를 지도 위 실측 크기에 맞춰
 // 통째로 키우거나 줄이는 보정값이다 — WORLD_SCALE과 곱해져서 적용된다.
-// 보도 높이로 올라간 건물 밑에 받침(보도블록)을 깔아 허공에 뜬 틈이 안 보이게 하고,
-// 같은 자리를 캐릭터 발판으로 등록해서 건물 앞마당을 걸을 때도 보도 높이로 서게 한다.
-// 받침은 모델의 자식으로 붙여서 모델을 내려놓을(언로드) 때 같이 사라진다.
-let plinthMaterial = null;
-function addPlinthAndPlatform(entry, model, localBox, modelScale) {
+// 보도 높이로 올라간 건물 처리:
+// · 모델 바닥 정점들의 외곽(볼록 껍질)을 구해서, 그게 도로 위로 넘어가면 그 건물은 예전처럼 도로보다
+//   살짝 낮게 둔다(건물 판이 도로를 덮지 않게 — 도로 우선).
+// · 안 넘어가면 보도 높이 그대로 두고, 외곽을 따라 바닥까지 벽(받침 옆면)만 세워 허공에 뜬 틈을 가린다
+//   (예전처럼 사각형 판을 통째로 깔면 모양이 다른 건물은 판이 도로까지 튀어나왔다).
+// · 같은 외곽을 캐릭터 발판으로 등록해서 건물 앞마당에서도 보도 높이로 선다.
+function modelBottomHull(model) {
+  model.updateMatrixWorld(true);
+  const v = new THREE.Vector3();
+  const im = new THREE.Matrix4();
+  const mw = new THREE.Matrix4();
+  const visit = (cb) => model.traverse((o) => {
+    if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+    const pos = o.geometry.attributes.position;
+    const step = Math.max(1, Math.floor(pos.count / 3000));
+    const mats = [];
+    if (o.isInstancedMesh) {
+      const cnt = Math.min(o.count, 300);
+      for (let k = 0; k < cnt; k++) {
+        o.getMatrixAt(k, im);
+        mats.push(new THREE.Matrix4().multiplyMatrices(o.matrixWorld, im));
+      }
+    } else {
+      mats.push(mw.copy(o.matrixWorld));
+    }
+    for (const m of mats) {
+      for (let i = 0; i < pos.count; i += step) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m);
+        cb(v);
+      }
+    }
+  });
+  let minY = Infinity;
+  visit((p) => { if (p.y < minY) minY = p.y; });
+  const pts = [];
+  const th = minY + 0.03;
+  visit((p) => { if (p.y <= th) pts.push([p.x, p.z]); });
+  return pts.length >= 3 ? convexHull2D(pts) : null;
+}
+function hullOverlapsRoad(hull) {
+  const step = 0.05;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i + 1) % hull.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const n = Math.max(1, Math.ceil(len / step));
+    for (let k = 0; k < n; k++) {
+      const t = k / n;
+      if (pointOnRoad(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, null, -0.02)) return true;
+    }
+  }
+  return false;
+}
+let buildingSkirtMaterial = null;
+function settleBuildingBase(entry, model) {
   if (ROAD_LEVEL_PLACE_IDS.has(entry.place.id)) return;
+  if (entry.baseDecided === "low") {
+    model.position.y += -0.01 - DEFAULT_MODEL_Y_LIFT;
+    return;
+  }
+  if (entry.baseDecided === "raised") return;
+  const hull = modelBottomHull(model);
+  if (!hull) { entry.baseDecided = "raised"; return; }
+  if (hullOverlapsRoad(hull)) {
+    // 건물 판이 도로에 걸친다 → 도로보다 살짝 낮게(도로가 위에 보이게)
+    entry.baseDecided = "low";
+    entry.group.position.y = entry.groundY;
+    model.position.y += -0.01 - DEFAULT_MODEL_Y_LIFT;
+    return;
+  }
+  entry.baseDecided = "raised";
   const baseY = entry.group.position.y;
   if (baseY <= 0) return;
-  const w = localBox.max.x - localBox.min.x;
-  const d = localBox.max.z - localBox.min.z;
-  const cx = (localBox.min.x + localBox.max.x) / 2;
-  const cz = (localBox.min.z + localBox.max.z) / 2;
-  const floorLocal = MODEL_FLOOR_OVERRIDE[entry.place.id] ?? localBox.min.y;
-  const rawLongest = Math.max(w, d) * (entry.place.scaleRatio ?? 1);
-  if (rawLongest <= PLINTH_MAX_RAW) {
-    if (!plinthMaterial) plinthMaterial = new THREE.MeshStandardMaterial({ map: getSidewalkTexture(), roughness: 1 });
-    const hLocal = baseY / modelScale; // 받침은 모델 좌표계 안이라 크기를 모델 배율로 나눠 둔다
-    const plinth = new THREE.Mesh(new THREE.BoxGeometry(w, hLocal, d), plinthMaterial);
-    plinth.position.set(cx, floorLocal - hLocal / 2 - 0.002 / modelScale, cz); // 윗면이 모델 바닥보다 아주 살짝 아래
-    plinth.receiveShadow = true;
-    model.add(plinth);
-  }
-  if (!entry.platformAdded) {
-    const rot = model.rotation.y;
-    const cos = Math.cos(rot), sin = Math.sin(rot);
-    const wx = cx * modelScale, wz = cz * modelScale;
-    groundPlatforms.push({
-      cx: entry.px + wx * cos + wz * sin,
-      cz: entry.pz - wx * sin + wz * cos,
-      cos, sin,
-      halfW: (w * modelScale) / 2,
-      halfD: (d * modelScale) / 2,
-      y: baseY,
-    });
-    entry.platformAdded = true;
-  }
+  if (!buildingSkirtMaterial) buildingSkirtMaterial = new THREE.MeshStandardMaterial({ color: CURB_COLOR, roughness: 1, side: THREE.DoubleSide });
+  const store = newRibbonStore();
+  pushVerticalQuadStrip(store, [...hull, hull[0]], -baseY, -0.003); // group 기준: 지면(0)~건물 바닥 바로 아래
+  store.uv.length = 0;
+  const skirt = new THREE.Mesh(storeToGeometry(store), buildingSkirtMaterial);
+  skirt.receiveShadow = true;
+  entry.group.add(skirt);
+  groundPlatforms.push({ poly: hull, y: baseY });
 }
 
 function loadPlaceModelInto(entry) {
@@ -1370,9 +1637,6 @@ function loadPlaceModelInto(entry) {
       const curDist = character ? Math.hypot(character.position.x - entry.px, character.position.z - entry.pz) : Infinity;
       if (curDist > modelUnloadRangeFor(entry.place.id)) return;
       const model = gltf.scene;
-      // 회전·크기를 넣기 전에 모델 자체 좌표의 바운딩박스를 재 둔다(받침·발판 크기용)
-      model.updateMatrixWorld(true);
-      const localBox = new THREE.Box3().setFromObject(model);
       const modelScale = WORLD_SCALE * (entry.place.scaleRatio ?? 1);
       model.scale.setScalar(modelScale);
       model.position.set(entry.px, 0, entry.pz);
@@ -1388,7 +1652,7 @@ function loadPlaceModelInto(entry) {
       const floorY = MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
       model.position.y -= floorY;
       model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
-      addPlinthAndPlatform(entry, model, localBox, modelScale);
+      settleBuildingBase(entry, model);
       entry.group.add(model);
       entry.loadedModel = model;
       if (entry.placeholder) entry.placeholder.visible = false;
@@ -1488,7 +1752,7 @@ function buildPlaces() {
         placeholder.add(mesh);
       }
       group.add(placeholder);
-      modelStreamEntries.push({ place, px, pz, rotY, placeholder, group, loadedModel: null, loading: false, inRange: true });
+      modelStreamEntries.push({ place, px, pz, rotY, placeholder, group, groundY, loadedModel: null, loading: false, inRange: true, baseDecided: null });
 
       // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
       if (place.church) {
