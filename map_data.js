@@ -170,11 +170,11 @@ export const PLACES = [
   { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -595.1, z: 100, model: "models/place_골드축산.glb", rotationDeg: -4.5 },
   { id: 223, name: "행복한교회", floors: 5, type: "기타", x: 107.8, z: -495.1, model: "models/place_행복한교회.glb", rotationDeg: 5.5, scaleRatio: 1.5 },
   { id: 224, name: "대림상가", floors: 5, type: "기타", x: 53.4, z: -562.6, model: "models/place_대림독서실.glb", rotationDeg: -15.6, scaleRatio: 1.3 },
-  { id: 225, name: "금호초등학교", floors: 5, type: "학교", x: -546.8, z: 361.1, model: "models/place_금호초등학교1.glb", rotationDeg: 19.3, scaleRatio: 2 },
+  { id: 225, name: "금호초등학교", floors: 5, type: "학교", x: -568.3, z: 360.1, model: "models/place_금호초등학교1.glb", rotationDeg: 23.2, scaleRatio: 1.5 },
   { id: 226, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: -42.9, z: 223.5 },
   { id: 227, name: "성동중앙교회", floors: 5, type: "기타", x: 52.7, z: 223.2, model: "models/place_성동중앙교회.glb", rotationDeg: 4.7, scaleRatio: 1.5 },
   { id: 228, name: "버스정류장", floors: 1, type: "버스정류장", x: 55.8, z: -113.2, model: "models/asset_버스정류장.glb", rotationDeg: 84.2 },
-  { id: 229, name: "신금호역 인근상가", floors: 5, type: "기타", x: -520.9, z: 123.4, model: "models/place_우리농산물직판장.glb", rotationDeg: -12.2 },
+  { id: 229, name: "신금호역 인근상가", floors: 5, type: "기타", x: -520.1, z: 118.6, model: "models/place_우리농산물직판장.glb", rotationDeg: 17.6 },
   { id: 230, name: "버스정류장", floors: 15, type: "버스정류장", x: 89.8, z: -143.9, model: "models/asset_버스정류장.glb", rotationDeg: -95.1 },
   { id: 231, name: "버스정류장", floors: 15, type: "버스정류장", x: 94.9, z: -246.1, model: "models/asset_버스정류장.glb", rotationDeg: -91.2 },
   { id: 232, name: "버스정류장", floors: 15, type: "버스정류장", x: 63.1, z: -280.3, model: "models/asset_버스정류장.glb", rotationDeg: 89.2 },
@@ -182,7 +182,7 @@ export const PLACES = [
   { id: 234, name: "버스정류장", floors: 15, type: "버스정류장", x: -43.6, z: -779.8, model: "models/asset_버스정류장.glb", rotationDeg: -93.9 },
   { id: 235, name: "버스정류장", floors: 15, type: "버스정류장", x: -75.9, z: -768.1, model: "models/asset_버스정류장.glb", rotationDeg: 87.3 },
   { id: 236, name: "버스정류장", floors: 15, type: "버스정류장", x: -94.5, z: -168.8, model: "models/asset_버스정류장.glb", rotationDeg: -179.4 },
-  { id: 237, name: "성동구보건소 금호분소", floors: 5, type: "보건소", x: -192.7, z: -317.6, model: "models/place_성동구보건소금호분소.glb" },
+  { id: 237, name: "성동구보건소 금호분소", floors: 5, type: "보건소", x: -383.2, z: 22.3, model: "models/place_성동구보건소금호분소.glb" },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
@@ -265,7 +265,7 @@ export const ROAD_SEGMENTS = [
   { a: [-54.1, -1005.7], b: [-50.9, -887.2], width: 25, curve: [-49.7, -948.9], sidewalk: 15, lanes: 6 },
   { a: [-37.5, -460.6], b: [-52, -358.1], width: 10, sidewalk: 15, lanes: 1 },
   { a: [-649.9, 284.9], b: [-643.6, 135.4], width: 10, curve: [-651.4, 194.5], sidewalk: 10, kind: "school" },
-  { a: [-649.9, 284.9], b: [-652.4, 544.2], width: 10, sidewalk: 10, kind: "school" },
+  { a: [-649.9, 284.9], b: [-651.5, 455.8], width: 10, sidewalk: 10, kind: "school" },
   { a: [95.5, -96.5], b: [72.4, -126.1], width: 10, curve: [98.4, -110.1], sidewalk: 5 },
   { a: [-400.5, 153.3], b: [-328.5, 102.6], width: 10, sidewalk: 15 },
   { a: [-328.5, 102.6], b: [-260, 85], width: 10, curve: [-304.6, 80.7], sidewalk: 15 },
@@ -285,7 +285,7 @@ export const ROAD_SEGMENTS = [
   { a: [-919.9, -889.9], b: [-975.1, -781.3], width: 30 },
   { a: [-167.4, -553.9], b: [29.5, -554.7], width: 10, sidewalk: 5, railing: true, lanes: 1 },
   { a: [-487.3, 218.5], b: [-479.3, 355.1], width: 15 },
-  { a: [-479.3, 355.1], b: [-406.9, 492.9], width: 15, curve: [-474.1, 455] },
+  { a: [-479.3, 355.1], b: [-436.1, 470.6], width: 15, curve: [-475.4, 430.5] },
   { a: [-406.9, 492.9], b: [-337.1, 546.3], width: 15, curve: [-346.2, 528.3] },
   { a: [-671, -26.2], b: [-576.2, -120.1], width: 15, curve: [-667.5, -100], sidewalk: 5 },
   { a: [-671, -26.2], b: [-695.9, 42.8], width: 15, curve: [-672, 25.3], sidewalk: 5 },
@@ -375,6 +375,9 @@ export const ROAD_SEGMENTS = [
   { a: [-563.3, -10.2], b: [-448.1, 105.5], width: 30, sidewalk: 10 },
   { a: [-537.3, 137.6], b: [-563.3, -10.2], width: 15, curve: [-573.8, 60.7], sidewalk: 5 },
   { a: [-522.7, 170.3], b: [-537.3, 137.6], width: 15, sidewalk: 5 },
+  { a: [-436.1, 470.6], b: [-651.5, 455.8], width: 10, kind: "school" },
+  { a: [-651.5, 455.8], b: [-652.4, 544.2], width: 10, sidewalk: 10, kind: "school" },
+  { a: [-436.1, 470.6], b: [-406.9, 492.9], width: 15, curve: [-423.4, 483.6] },
 ];
 
 // ── 가로수(TREES) ──
