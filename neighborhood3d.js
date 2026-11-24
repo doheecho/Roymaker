@@ -7,8 +7,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261124a";
-import { computeRoadMarkings, markedRanges, slicePolyline } from "./road_markings.js?v=20261124h";
+import * as MAP_DATA from "./map_data.js?v=20261124b";
+import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 
 const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
 // 길 중간 횡단보도·신호등(맵 에디터 "🚦 신호등 추가"로 찍은 곳) — 예전 map_data.js에는 이 목록이 없을 수 있어서
@@ -104,8 +104,7 @@ const WORLD_SCALE = 0.15;
 // 두께 분포(3~5m / 13m 안팎 / 19~29m / 30m 이상)를 그대로 골목·보통길·큰길·난계로급 4단계 폭으로
 // 옮겼다. map_data.js의 각 구간은 이 상수 대신 실측한 raw 숫자를 그대로 쓰지만(map_editor.html이
 // 혹시 몰라 이 이름들도 폭으로 해석할 수 있게 남겨 둔다), 표면 색·중앙선·차선은 폭 숫자 자체로
-// 구간마다 정한다(roadStyleFor: 8m 미만 골목길, 11m 미만 10m급, 13m 미만 단지내도로,
-// 22m 미만 15~20m급, 그 이상 30m급).
+// 구간마다 정한다(roadLook: 도로 종류 kind·왕복 차로 수 lanes·폭 — 아래 "도로 모양" 설명 참고).
 const ROAD_MAJOR = 16; // 난계로·사거리 교차로 등 가장 두껍게 칠해진 간선도로
 const ROAD_WIDE = 10; // 그다음으로 두꺼운 큰길
 const ROAD_MEDIUM = 6; // 단지 안 보통 도로
@@ -526,34 +525,86 @@ function roadPolyline(seg) {
   return pts;
 }
 
-// 도로 폭(실측 m)에 따라 표면 색과 중앙선·차선을 다르게 그린다. 폭 하나하나를 보고 정하는
-// 거라, 같은 길이라도 구간마다 실측 오차로 폭이 살짝씩 다르면 그 경계에서 스타일이 바뀔 수
-// 있다(예: 10.7→10.3→12.1처럼 변하는 구간) — 길 단위로 통일하려면 손이 많이 가서, 우선은
-// 구간(segment)별 실측 폭을 그대로 기준으로 쓰는 단순한 규칙을 쓴다.
-//   8m 미만          : 골목길 — 옅은 회색, 선 없음
-//   8m 이상 11m 미만 : 작은도로(10m급) — 기본 아스팔트색, 노란 점선 중앙선
-//   11m 이상 13m 미만: 단지내도로(12m급) — 베이지(보도 느낌), 선 없음
-//   13m 이상 22m 미만: 15~20m급 — 기본 아스팔트색, 노란 실선 중앙선
-//   22m 이상         : 30m급 — 기본 아스팔트색, 노란 실선 중앙선 + 양옆 흰 점선 차선
+// ── 도로 모양: 종류(kind)·왕복 차로 수(lanes)·폭으로 정한다(road_markings.js의 roadLook — 맵 에디터와 같은 규칙) ──
+//   일반 자동차 도로: 차로 수를 따로 정하지 않으면 폭으로 — 6m 미만 1(골목) · 6~12m 2(8m 미만은 선 없는 이면도로,
+//                     8m 이상은 노란 점선 중앙선) · 12~17m 4 · 17~23m 6 · 23m 이상 8(4차로 이상은 노란 겹실선 +
+//                     차로 사이 흰 점선). 실제 도시 도로의 차로 하나 폭 3.0~3.5m에 맞춘 기준이다.
+//   보행용 도로(kind: "walk"): 아파트 단지 안 길처럼 사람이 다니는 길 — 베이지 블록 포장, 차선·차 없음
+//   어린이 보호구역(kind: "school"): 붉은 포장 + "어린이 보호구역"·"30" 글씨, 차가 천천히 다닌다
 const ROAD_SURFACE = 0x4a4a4e;
 const ROAD_SURFACE_ALLEY = 0x7a7a7e;
-const ROAD_SURFACE_COMPLEX = 0xd8c9a3;
 const LANE_YELLOW = 0xf2c438;
 const LANE_WHITE = 0xf2f2f2;
-// rank는 도로끼리 겹칠 때(또는 교차로에서) 어느 쪽이 위에 보일지 정하는 우선순위다 — 차선이
-// 많은(=더 중요한) 도로일수록 높고, 단지내도로(베이지)가 가장 낮다(사용자 지정, 2026-11-22).
-// rank가 다른 두 도로가 평면상 겹치면 숫자가 큰 쪽이 항상 위에 그려진다(surfaceYFor).
-function roadStyleFor(width) {
-  if (width < 8) return { surface: ROAD_SURFACE_ALLEY, center: null, sides: false, rank: 1 };
-  if (width < 11) return { surface: ROAD_SURFACE, center: "dashed", sides: false, rank: 2 };
-  if (width < 13) return { surface: ROAD_SURFACE_COMPLEX, center: null, sides: false, rank: 0 };
-  if (width < 22) return { surface: ROAD_SURFACE, center: "solid", sides: false, rank: 3 };
-  return { surface: ROAD_SURFACE, center: "solid", sides: true, rank: 4 };
-}
+const PAVING_TILE_RAW = { walk: 3, school: 2.4 }; // 포장 무늬 한 장이 덮는 길이(raw m)
+// rank는 도로끼리 겹칠 때(또는 교차로에서) 어느 쪽이 위에 보일지 정하는 우선순위다 — 차로가 많은(=더
+// 중요한) 도로일수록 높고, 보행용 도로가 가장 낮다(사용자 지정, 2026-11-22).
 const ROAD_LAYER_BASE_Y = 0.005;
 const ROAD_LAYER_STEP = 0.0015; // 눈에 띄는 단차는 아니고, 겹칠 때 어느 면이 위인지만 확실히 가르는 정도
-function surfaceYFor(width) {
-  return ROAD_LAYER_BASE_Y + roadStyleFor(width).rank * ROAD_LAYER_STEP;
+function surfaceYFor(seg) {
+  return ROAD_LAYER_BASE_Y + roadLook(seg).rank * ROAD_LAYER_STEP;
+}
+// 보행용 도로·어린이 보호구역 포장 무늬(캔버스로 한 번만 그린다)
+const pavingTextures = {};
+function getPavingTexture(kind) {
+  if (pavingTextures[kind]) return pavingTextures[kind];
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d");
+  let seed = kind === "walk" ? 4242 : 777;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  if (kind === "walk") {
+    // 단지 안 길: 베이지 직사각 블록(2:1)을 엇갈려 깐 포장
+    g.fillStyle = "#b9a77f";
+    g.fillRect(0, 0, 256, 256);
+    const cols = ["#d9c9a5", "#e1d3b2", "#cfbd96", "#d4c39e", "#c8b58c"];
+    const bw = 64, bh = 32;
+    for (let r = 0; r < 256 / bh; r++) {
+      const off = r % 2 ? bw / 2 : 0;
+      for (let x = -off; x < 256; x += bw) {
+        g.fillStyle = cols[Math.floor(rnd() * cols.length)];
+        g.fillRect(x + 2, r * bh + 2, bw - 4, bh - 4);
+      }
+    }
+  } else {
+    // 어린이 보호구역: 붉은 미끄럼방지 포장(작은 벽돌 무늬)
+    g.fillStyle = "#8e3a32";
+    g.fillRect(0, 0, 256, 256);
+    const cols = ["#b5473d", "#a94238", "#bd5146", "#a03d34", "#b24a40"];
+    const bw = 32, bh = 16;
+    for (let r = 0; r < 256 / bh; r++) {
+      const off = r % 2 ? bw / 2 : 0;
+      for (let x = -off; x < 256; x += bw) {
+        g.fillStyle = cols[Math.floor(rnd() * cols.length)];
+        g.fillRect(x + 1, r * bh + 1, bw - 2, bh - 2);
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  pavingTextures[kind] = tex;
+  return tex;
+}
+// 도로 표면 재질은 종류별로 하나씩만 만들어 같이 쓴다
+const roadSurfaceMats = {};
+function roadSurfaceMaterial(surface) {
+  if (roadSurfaceMats[surface]) return roadSurfaceMats[surface];
+  const mat = surface === "walk" || surface === "school"
+    ? new THREE.MeshStandardMaterial({ map: getPavingTexture(surface), roughness: 1, side: THREE.DoubleSide })
+    : new THREE.MeshStandardMaterial({ color: surface === "alley" ? ROAD_SURFACE_ALLEY : ROAD_SURFACE, side: THREE.DoubleSide });
+  roadSurfaceMats[surface] = mat;
+  return mat;
+}
+// 평면 좌표로 무늬 좌표(uv)를 입힌다 — 무늬 한 장이 tile(월드 단위)만큼 덮게
+function addPlanarUV(geo, tile) {
+  const pos = geo.attributes.position;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    uv[i * 2] = pos.getX(i) / tile;
+    uv[i * 2 + 1] = pos.getZ(i) / tile;
+  }
+  geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
 }
 
 // 보도(인도): 도로 양옆에 깔리는 별도 띠. 건물에셋(기본 -0.01, 예외 +0.02) > 도로(0.005~0.0135)
@@ -611,6 +662,8 @@ function polylineTangents(pts) {
   });
 }
 
+const yellowLineMat = new THREE.MeshBasicMaterial({ color: LANE_YELLOW });
+let schoolDecals = []; // 어린이 보호구역 글씨 자리 { x, z(가운데, 월드), fx, fz(차가 달리는 방향), w, l(월드), y }
 function buildRoadRibbon(seg, segIndex) {
   const rawPts = roadPolyline(seg);
   const pts = rawPts.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
@@ -623,27 +676,30 @@ function buildRoadRibbon(seg, segIndex) {
   for (let i = 1; i < rawPts.length; i++) rawLen += Math.hypot(rawPts[i][0] - rawPts[i - 1][0], rawPts[i][1] - rawPts[i - 1][1]);
   const ranges = markedRanges(rawLen, gaps);
 
-  const style = roadStyleFor(seg.width);
-  const surfaceY = surfaceYFor(seg.width);
-  const road = new THREE.Mesh(
-    buildRibbonGeometry(pts, tangents, roadW, 0),
-    new THREE.MeshStandardMaterial({ color: style.surface, side: THREE.DoubleSide })
-  );
+  const look = roadLook(seg);
+  const surfaceY = surfaceYFor(seg);
+  const geo = buildRibbonGeometry(pts, tangents, roadW, 0);
+  if (PAVING_TILE_RAW[look.surface]) addPlanarUV(geo, PAVING_TILE_RAW[look.surface] * WORLD_SCALE);
+  const road = new THREE.Mesh(geo, roadSurfaceMaterial(look.surface));
   road.position.y = surfaceY;
   road.receiveShadow = true;
   scene.add(road);
 
-  if (style.center === "solid") {
-    const lineW = Math.max(0.25 * WORLD_SCALE, roadW * 0.015);
-    const lineMat = new THREE.MeshBasicMaterial({ color: LANE_YELLOW });
+  if (look.center === "double") {
+    // 왕복 4차로 이상: 노란 겹실선(가는 실선 두 줄)
+    const lineW = 0.16 * WORLD_SCALE, off = 0.17 * WORLD_SCALE;
     for (const [s0, s1] of ranges) {
       const sub = slicePolyline(rawPts, s0, s1).map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
-      const line = new THREE.Mesh(buildRibbonGeometry(sub, polylineTangents(sub), lineW, 0), lineMat);
-      line.position.y = surfaceY + 0.002;
-      scene.add(line);
+      const subT = polylineTangents(sub);
+      [-off, off].forEach((o) => {
+        const line = new THREE.Mesh(buildRibbonGeometry(sub, subT, lineW, o), yellowLineMat);
+        line.position.y = surfaceY + 0.002;
+        scene.add(line);
+      });
     }
   }
-  if (!style.center && !style.sides) return; // 골목길·단지내도로는 점선도 없다
+  if (look.kind === "school") collectSchoolDecals(rawPts, ranges, look, surfaceY);
+  if (!look.center && look.perDir < 2) return; // 골목길·보행용 도로는 점선도 없다
 
   // 점선은 전체 폴리라인을 따라 누적 거리로 간격을 재서 찍는다 — 직선/곡선 구분 없이 같은
   // 방식이라 곡선 구간에서도 점선 간격이 고르게 이어진다.
@@ -674,12 +730,95 @@ function buildRoadRibbon(seg, segIndex) {
       }
     }
   }
-  if (style.center === "dashed") pushDashes(0, yellowDashTransforms);
-  if (style.sides) {
-    const sideOffset = roadW * 0.25;
-    pushDashes(-sideOffset, whiteDashTransforms);
-    pushDashes(sideOffset, whiteDashTransforms);
+  if (look.center === "dashed") pushDashes(0, yellowDashTransforms);
+  // 방향별 차로 사이 흰 점선(왕복 4차로면 양쪽 한 줄씩, 6차로면 두 줄씩…)
+  for (let k = 1; k < look.perDir; k++) {
+    const o = k * look.laneW * WORLD_SCALE;
+    pushDashes(-o, whiteDashTransforms);
+    pushDashes(o, whiteDashTransforms);
   }
+}
+
+// ── 어린이 보호구역 글씨: 방향마다 한 번씩, 그쪽으로 달리는 차로 위에 "어린이 / 보호구역 / ⓷⓪" ──
+// 글씨 그림은 한 장(캔버스)이고 자리마다 네모를 하나씩 모아 메시 하나로 그린다(드로우콜 1개)
+let schoolZoneTexture = null;
+function getSchoolZoneTexture() {
+  if (schoolZoneTexture) return schoolZoneTexture;
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 512;
+  const g = c.getContext("2d");
+  g.fillStyle = "#ffffff";
+  g.strokeStyle = "#ffffff";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  // 위(차가 달려가는 쪽 = 멀리)부터: 30 원 → 보호구역 → 어린이(가까이) — 가까운 줄부터 읽힌다
+  g.lineWidth = 13;
+  g.beginPath();
+  g.arc(128, 104, 92, 0, Math.PI * 2);
+  g.stroke();
+  g.font = "bold 104px sans-serif";
+  g.fillText("30", 128, 110);
+  const stretched = (text, y, size) => {
+    g.save();
+    g.translate(128, y);
+    g.scale(1, 1.55); // 도로 글씨처럼 진행 방향으로 길쭉하게
+    g.font = `bold ${size}px sans-serif`;
+    g.fillText(text, 0, 0);
+    g.restore();
+  };
+  stretched("보호구역", 300, 58);
+  stretched("어린이", 430, 70);
+  schoolZoneTexture = new THREE.CanvasTexture(c);
+  schoolZoneTexture.colorSpace = THREE.SRGBColorSpace;
+  schoolZoneTexture.anisotropy = 4;
+  return schoolZoneTexture;
+}
+function collectSchoolDecals(rawPts, ranges, look, surfaceY) {
+  if (!ranges.length) return;
+  // 교차로 사이에서 가장 긴 구간에 놓는다
+  const [r0, r1] = ranges.reduce((a, b) => (b[1] - b[0] > a[1] - a[0] ? b : a));
+  const span = r1 - r0;
+  const laneSpan = look.perDir ? look.perDir * look.laneW : look.laneW; // 한 방향 차로 폭 합(raw)
+  const w = Math.min(laneSpan * 0.9, 7.5);
+  const l = w * 1.95;
+  if (span < l + 4) return;
+  const cum = [0];
+  for (let i = 1; i < rawPts.length; i++) cum.push(cum[i - 1] + Math.hypot(rawPts[i][0] - rawPts[i - 1][0], rawPts[i][1] - rawPts[i - 1][1]));
+  const dirs = look.perDir ? [1, -1] : [1];
+  dirs.forEach((dirSign) => {
+    const sRaw = dirSign > 0 ? r0 + Math.max(l / 2 + 2, span * 0.25) : r1 - Math.max(l / 2 + 2, span * 0.25);
+    const q = pointAlongPolyline(rawPts, sRaw);
+    const fx = q.dirX * dirSign, fz = q.dirZ * dirSign;
+    const side = look.perDir ? laneSpan / 2 : 0; // 그 방향 차로들 가운데(진행 방향 오른쪽)
+    const cx = q.x + -fz * side, cz = q.z + fx * side;
+    schoolDecals.push({ x: cx * WORLD_SCALE, z: cz * WORLD_SCALE, fx, fz, w: w * WORLD_SCALE, l: l * WORLD_SCALE, y: surfaceY });
+  });
+}
+function buildSchoolDecals() {
+  if (!schoolDecals.length) return;
+  const pos = [], uv = [], idx = [];
+  schoolDecals.forEach((d, k) => {
+    const rx = -d.fz, rz = d.fx; // 진행 방향 오른쪽
+    const hw = d.w / 2, hl = d.l / 2;
+    const corner = (a, b) => [d.x + d.fx * a + rx * b, d.z + d.fz * a + rz * b];
+    // 캔버스 위쪽(v=1)이 진행 방향 앞(멀리), 왼쪽(u=0)이 운전자 왼쪽
+    [[corner(-hl, -hw), 0, 0], [corner(-hl, hw), 1, 0], [corner(hl, hw), 1, 1], [corner(hl, -hw), 0, 1]].forEach(([p, u, v]) => {
+      pos.push(p[0], 0, p[1]);
+      uv.push(u, v);
+    });
+    const b = k * 4;
+    idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: getSchoolZoneTexture(), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  mesh.position.y = ROAD_LAYER_BASE_Y + 4 * ROAD_LAYER_STEP + 0.0028;
+  mesh.renderOrder = 1;
+  scene.add(mesh);
 }
 
 // ── 보도(인도) ──
@@ -701,30 +840,59 @@ const RAILING_INSET_RAW = 0.25; // 연석에서 보도 안쪽으로 이만큼
 const RAILING_POST_SPACING_RAW = 2.5;
 const RAILING_H = 0.1; // 울타리 높이(월드 단위, 보도 윗면 기준)
 const RAILING_COLOR = 0x5b6068;
-let sidewalkTexture = null;
-// 회색 보도블록 — 0.3m 정사각 블록에 군데군데 진한 블록이 섞인 무늬(사진 속 인도처럼)
-function getSidewalkTexture() {
-  if (sidewalkTexture) return sidewalkTexture;
+// 보도블록 무늬(map_data.js의 swStyle — 맵 에디터에서 고른다): 0.3m 블록 8×8 한 장을 캔버스로 그린다
+//   gray(기본): 회색 정사각 블록에 군데군데 진한 블록 · red: 붉은 벽돌을 엇갈려 쌓은 무늬
+//   beige: 베이지 정사각 블록 · twotone: 회색 블록 사이사이 붉은 블록(2×2)
+const sidewalkTextures = {};
+function getSidewalkTexture(style = "gray") {
+  if (!["gray", "red", "beige", "twotone"].includes(style)) style = "gray";
+  if (sidewalkTextures[style]) return sidewalkTextures[style];
   const c = document.createElement("canvas");
   c.width = c.height = 256;
   const g = c.getContext("2d");
-  g.fillStyle = "#bdbdba";
-  g.fillRect(0, 0, 256, 256);
   let seed = 12345;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const n = 8, cs = 256 / n;
-  for (let r = 0; r < n; r++) {
-    for (let k = 0; k < n; k++) {
-      const v = rnd();
-      g.fillStyle = v < 0.16 ? "#8b8c8e" : v < 0.3 ? "#acadaf" : v < 0.62 ? "#d2d2cf" : "#dcdcd9";
-      g.fillRect(k * cs + 1, r * cs + 1, cs - 2, cs - 2);
+  if (style === "red") {
+    g.fillStyle = "#7d3d34";
+    g.fillRect(0, 0, 256, 256);
+    const cols = ["#b5574a", "#a84c40", "#c06253", "#9b4338", "#b9604f"];
+    const bw = 64, bh = 32;
+    for (let r = 0; r < 256 / bh; r++) {
+      const off = r % 2 ? bw / 2 : 0;
+      for (let x = -off; x < 256; x += bw) {
+        g.fillStyle = cols[Math.floor(rnd() * cols.length)];
+        g.fillRect(x + 2, r * bh + 2, bw - 4, bh - 4);
+      }
+    }
+  } else {
+    const base = style === "beige" ? "#c9b88f" : "#bdbdba";
+    g.fillStyle = base;
+    g.fillRect(0, 0, 256, 256);
+    for (let r = 0; r < n; r++) {
+      for (let k = 0; k < n; k++) {
+        const v = rnd();
+        let col;
+        if (style === "beige") col = v < 0.16 ? "#b39f74" : v < 0.3 ? "#c4b087" : v < 0.62 ? "#dccdab" : "#e4d7b9";
+        else if (style === "twotone" && r % 4 < 2 && k % 4 < 2) col = v < 0.5 ? "#b5574a" : "#a84c40"; // 2×2 붉은 블록이 고르게(방향 상관없이 같은 무늬)
+        else col = v < 0.16 ? "#8b8c8e" : v < 0.3 ? "#acadaf" : v < 0.62 ? "#d2d2cf" : "#dcdcd9";
+        g.fillStyle = col;
+        g.fillRect(k * cs + 1, r * cs + 1, cs - 2, cs - 2);
+      }
     }
   }
-  sidewalkTexture = new THREE.CanvasTexture(c);
-  sidewalkTexture.colorSpace = THREE.SRGBColorSpace;
-  sidewalkTexture.wrapS = sidewalkTexture.wrapT = THREE.RepeatWrapping;
-  sidewalkTexture.anisotropy = 4;
-  return sidewalkTexture;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  sidewalkTextures[style] = tex;
+  return tex;
+}
+const swStyleOf = (seg) => (seg && seg.swStyle) || "gray";
+// 보도 띠는 무늬별로 따로 모은다(무늬마다 메시 하나)
+function sideStore(stores, style) {
+  if (!stores.side[style]) stores.side[style] = newRibbonStore();
+  return stores.side[style];
 }
 
 // 여러 도로의 띠를 한 묶음(positions/uvs/indices)으로 모은다
@@ -826,7 +994,7 @@ function buildRoadConnections() {
 // 연석·경계선이 엇갈리거나 겹치지 않고 곡선처럼 매끈하게 이어진다.
 function sidewalkCompatible(i, j) {
   const a = ROAD_SEGMENTS[i], b = ROAD_SEGMENTS[j];
-  return !!a.sidewalk && !!b.sidewalk && a.width === b.width && a.sidewalk === b.sidewalk && !!a.railing === !!b.railing;
+  return !!a.sidewalk && !!b.sidewalk && a.width === b.width && a.sidewalk === b.sidewalk && !!a.railing === !!b.railing && swStyleOf(a) === swStyleOf(b);
 }
 function buildSidewalkChains(conns) {
   const link = (i, end) => {
@@ -950,7 +1118,7 @@ function collectChainSidewalk(members, stores, conns) {
       const flush = () => {
         if (run.length >= 2) {
           const A = run.map((r) => r.inner), B = run.map((r) => r.outer);
-          pushStrip(stores.side, A, B);
+          pushStrip(sideStore(stores, swStyleOf(first)), A, B);
           if (run.length >= 6) {
             // 행인이 걸을 보도 중앙선(월드 좌표)
             const mid = run.map((r) => r.at(roadW / 2 + sideW * 0.62));
@@ -1038,7 +1206,7 @@ function buildSidewalkJoints(conns, chainOf, stores) {
         return out;
       };
       const inner = arc(ri);
-      pushStrip(stores.side, inner, arc(ro));
+      pushStrip(sideStore(stores, swStyleOf(seg)), inner, arc(ro));
       pushVerticalQuadStrip(stores.curb, inner);
       pushStrip(stores.line, arc(ri + inset), arc(ri + inset + lineW));
     });
@@ -1139,7 +1307,7 @@ function buildSidewalkCorners(stores) {
       // 모서리가 다른(이 교차로에 속하지 않은) 도로 위로 넘어가면 그 모서리는 만들지 않는다
       const mids = at(W / 2);
       if (mids.some(([x, z]) => pointOnRoad(x, z, ignore))) continue;
-      pushStrip(stores.side, Q, outer);
+      pushStrip(sideStore(stores, swStyleOf(A.seg)), Q, outer);
       pushVerticalQuadStrip(stores.curb, Q);
       pushStrip(stores.line, at(inset), at(inset + lineW));
       addPolyPlatform([...Q, ...outer.slice().reverse()], SIDEWALK_TOP_Y);
@@ -1150,7 +1318,7 @@ function buildSidewalkCorners(stores) {
 function buildRoadSidewalks() {
   walkBands.length = 0;
   pedPaths.length = 0;
-  const stores = { side: newRibbonStore(), line: newRibbonStore(), curb: newRibbonStore(), rail: newRibbonStore(), posts: [] };
+  const stores = { side: {}, line: newRibbonStore(), curb: newRibbonStore(), rail: newRibbonStore(), posts: [] };
   const conns = buildRoadConnections();
   const chains = buildSidewalkChains(conns);
   const chainOf = new Map();
@@ -1158,15 +1326,16 @@ function buildRoadSidewalks() {
   chains.forEach((members) => collectChainSidewalk(members, stores, conns));
   buildSidewalkJoints(conns, chainOf, stores);
   buildSidewalkCorners(stores);
-  if (stores.side.idx.length) {
+  Object.entries(stores.side).forEach(([style, store]) => {
+    if (!store.idx.length) return;
     const mesh = new THREE.Mesh(
-      storeToGeometry(stores.side),
-      new THREE.MeshStandardMaterial({ map: getSidewalkTexture(), roughness: 1, side: THREE.DoubleSide })
+      storeToGeometry(store),
+      new THREE.MeshStandardMaterial({ map: getSidewalkTexture(style), roughness: 1, side: THREE.DoubleSide })
     );
     mesh.position.y = SIDEWALK_TOP_Y;
     mesh.receiveShadow = true;
     scene.add(mesh);
-  }
+  });
   if (stores.line.idx.length) {
     const mesh = new THREE.Mesh(storeToGeometry(stores.line), new THREE.MeshBasicMaterial({ color: LANE_YELLOW, side: THREE.DoubleSide }));
     mesh.position.y = SIDEWALK_YELLOW_Y;
@@ -1296,10 +1465,12 @@ function buildJunctionFillers() {
     geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geo.setIndex(indices);
     geo.computeVertexNormals();
-    // 메움판 자체도 우선순위를 따른다 — 만나는 도로 중 rank가 가장 높은 쪽의 색·높이를 쓴다.
-    const topSeg = group.reduce((best, p) => (roadStyleFor(p.seg.width).rank > roadStyleFor(best.seg.width).rank ? p : best)).seg;
-    const filler = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: roadStyleFor(topSeg.width).surface, side: THREE.DoubleSide }));
-    filler.position.y = surfaceYFor(topSeg.width) + 0.0005;
+    // 메움판 자체도 우선순위를 따른다 — 만나는 도로 중 rank가 가장 높은 쪽의 표면·높이를 쓴다.
+    const topSeg = group.reduce((best, p) => (roadLook(p.seg).rank > roadLook(best.seg).rank ? p : best)).seg;
+    const topLook = roadLook(topSeg);
+    if (PAVING_TILE_RAW[topLook.surface]) addPlanarUV(geo, PAVING_TILE_RAW[topLook.surface] * WORLD_SCALE);
+    const filler = new THREE.Mesh(geo, roadSurfaceMaterial(topLook.surface));
+    filler.position.y = surfaceYFor(topSeg) + 0.0005;
     filler.receiveShadow = true;
     scene.add(filler);
   }
@@ -1328,12 +1499,14 @@ function buildRoadMarks() {
 function buildRoads() {
   yellowDashTransforms = [];
   whiteDashTransforms = [];
+  schoolDecals = [];
   roadMarkings = computeRoadMarkings(ROAD_SEGMENTS, CROSSWALKS);
   ROAD_SEGMENTS.forEach(buildRoadRibbon);
   buildRoadSidewalks();
   buildLaneDashes();
   buildJunctionFillers();
   buildRoadMarks();
+  buildSchoolDecals();
   buildTrafficSignals();
 }
 
@@ -3070,7 +3243,9 @@ function buildCarNetwork() {
     for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
     const L = cum[cum.length - 1];
     const w = seg.width;
-    const drivable = L > 4 && w >= 8 && !(w >= 11 && w < 13);
+    const look = roadLook(seg);
+    // 8m 이상 자동차 도로(보행용 도로는 차가 안 다님)
+    const drivable = L > 4 && w >= 8 && look.kind !== "walk" && look.perDir >= 1;
     // 양 끝 교차로 구간 길이(차가 그 앞에서 꺾기 시작)
     let gapA = 0, gapB = 0;
     ((roadMarkings.junctionGaps || roadMarkings.gaps)[i] || []).forEach(([g0, g1]) => {
@@ -3078,8 +3253,11 @@ function buildCarNetwork() {
       if (g1 >= L - 0.01) gapB = Math.max(gapB, L - Math.max(0, g0));
     });
     if (gapA + gapB > L * 0.9) { gapA = Math.min(gapA, L * 0.45); gapB = Math.min(gapB, L * 0.45); }
-    const lanes = w >= 22 ? [w * 0.125, w * 0.375] : [w * 0.25]; // 진행 방향 오른쪽 차로 중심(raw)
-    return { i, pts, cum, L, w, drivable, gapA, gapB, lanes };
+    // 진행 방향 오른쪽 차로들의 중심(raw) — 왕복 차로 수(lanes)를 반으로 나눠 한 방향 차로마다 하나
+    const lanes = [];
+    for (let k = 0; k < Math.max(1, look.perDir); k++) lanes.push((k + 0.5) * look.laneW);
+    // 어린이 보호구역에서는 천천히(시속 30km 느낌)
+    return { i, pts, cum, L, w, drivable, gapA, gapB, lanes, speedFactor: look.kind === "school" ? 0.55 : 1 };
   });
   // 도로 끝 → 교차로(노드)
   const ends = [];
@@ -3355,7 +3533,7 @@ function updateCars(dt) {
   }
   cars.forEach((car) => {
     if (!car.active) return;
-    let limit = car.maxSpeed;
+    let limit = car.maxSpeed * (car.mode === "road" ? carRoads[car.seg].speedFactor : 1);
     // 앞에 사람(캐릭터)이 있으면 멈춘다
     const ax = cp.x - car.x, az = cp.z - car.z;
     const ahead = ax * car.fx + az * car.fz;

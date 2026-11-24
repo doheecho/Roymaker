@@ -4,7 +4,7 @@
 //     중앙선·차선을 긋지 않는다.
 //   · 교차로로 "들어오는" 방향 차로(우측통행이라 진행 방향의 오른쪽 절반)에 흰 정지선을 긋는다.
 //   · 13m 이상 도로는 정지선과 교차로 사이에 횡단보도(얼룩무늬)를 둔다.
-//   · 8m 미만 골목길이 붙는 건 교차로로 치지 않는다(큰길 차선이 골목 입구마다 끊기면 이상해서).
+//   · 8m 미만 골목길·보행용 도로가 붙는 건 교차로로 치지 않는다(큰길 차선이 골목 입구마다 끊기면 이상해서).
 // 모든 값은 raw 단위(= map_data.js 좌표, 대략 m). 입력은 ROAD_SEGMENTS와 같은 {a, b, width, curve?} 배열.
 //
 // 반환값:
@@ -41,6 +41,52 @@ const STOP_LINE_WIDTH = 0.45;
 const CLEAR_MARGIN = 1; // 교차로 모서리에서 조금 더 물러나서 시작
 const MIN_SIN = 0.26; // 이보다 각도 차가 작으면(약 15° 이내) 같은 방향으로 이어지는 길로 본다
 const MID_SNAP_EXTRA = 3; // 길 중간 횡단보도: 도로 가장자리에서 이만큼 벗어난 점까지는 그 도로에 붙인다
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 도로 종류·차로 수(게임과 맵 에디터가 같이 쓴다) ──
+// kind  : 없거나 "car" = 일반 자동차 도로 / "walk" = 보행용 도로(아파트 단지 안 길처럼 사람이 다니는 길 —
+//         차선·차 없음, 보도와는 다른 포장) / "school" = 어린이 보호구역(붉은 포장 + "어린이 보호구역"·"30"
+//         글씨, 차가 천천히 다님)
+// lanes : 왕복 차로 수(1·2·4·6·8). 없으면 폭으로 정한다 — 실제 도시 도로의 차로 하나 폭(3.0~3.5m,
+//         「도로의 구조·시설 기준에 관한 규칙」: 설계속도 60km/h 이하 3.0m, 70 3.25m, 80 이상 3.5m)과 길가
+//         여유를 생각해서: 6m 미만 1(골목) · 6~12m 2(왕복 2차로, 8m 미만은 중앙선 없음) · 12~17m 4 ·
+//         17~23m 6 · 23m 이상 8
+// swStyle: 보도블록 무늬 — 없으면 "gray"(회색 블록), "red"(붉은 벽돌), "beige"(베이지 블록), "twotone"(회색·붉은 투톤)
+// ════════════════════════════════════════════════════════════════════════════
+export const SIDEWALK_STYLES = ["gray", "red", "beige", "twotone"];
+export function roadKind(seg) {
+  return seg.kind === "walk" || seg.kind === "school" ? seg.kind : "car";
+}
+export function autoLaneCount(width) {
+  if (width < 6) return 1;
+  if (width < 12) return 2;
+  if (width < 17) return 4;
+  if (width < 23) return 6;
+  return 8;
+}
+export function roadLaneCount(seg) {
+  if (roadKind(seg) === "walk") return 0;
+  const n = Math.round(Number(seg.lanes));
+  return Number.isFinite(n) && n >= 1 ? n : autoLaneCount(seg.width);
+}
+// 노면 모양 — surface: "asphalt"|"alley"|"walk"|"school", center: null|"dashed"(노란 점선)|"double"(노란 겹실선),
+// perDir: 방향별 차로 수(그 사이에 흰 점선), laneW: 차로 하나 폭(raw), rank: 겹칠 때 위에 그릴 순서(클수록 위)
+export function roadLook(seg) {
+  const kind = roadKind(seg);
+  const w = seg.width;
+  if (kind === "walk") return { kind, surface: "walk", center: null, lanes: 0, perDir: 0, laneW: w, rank: 0 };
+  const explicit = seg.lanes != null && Number.isFinite(Number(seg.lanes));
+  const lanes = roadLaneCount(seg);
+  const narrow = w < 8 && !explicit; // 좁은 골목·이면도로(차로 수를 따로 정하지 않았으면 선 없음)
+  const center = narrow || lanes < 2 ? null : lanes >= 4 ? "double" : "dashed";
+  const perDir = narrow || lanes < 2 ? 0 : Math.floor(lanes / 2);
+  const rank = narrow ? 1 : lanes <= 2 ? 2 : lanes <= 4 ? 3 : 4;
+  return { kind, surface: kind === "school" ? "school" : narrow ? "alley" : "asphalt", center, lanes, perDir, laneW: lanes ? w / lanes : w, rank };
+}
+// 교차로 노면표시(정지선·차선 비우기)를 하는 길 — 8m 미만 골목길과 보행용 도로는 아니다
+export function isMarkedRoad(seg) {
+  return roadKind(seg) !== "walk" && seg.width >= MARKED_MIN_WIDTH;
+}
 
 function quadPoint(a, c, b, t) {
   const u = 1 - t;
@@ -173,7 +219,7 @@ export function computeRoadMarkings(segs, midList = []) {
       const ri = info[e.i];
       let best = 0, crossing = false;
       for (const o of g) {
-        if (o === e || info[o.i].seg.width < MARKED_MIN_WIDTH) continue;
+        if (o === e || !isMarkedRoad(info[o.i].seg)) continue;
         const c = clearAgainst(e, ri.half, o.dx, o.dz, info[o.i].half);
         if (c == null) continue;
         crossing = true;
@@ -199,13 +245,13 @@ export function computeRoadMarkings(segs, midList = []) {
       const sin = Math.abs(e.dx * near.dz - e.dz * near.dx);
       if (sin < MIN_SIN) continue;
       const cosAbs = Math.abs(e.dx * near.dx + e.dz * near.dz);
-      if (rk.seg.width >= MARKED_MIN_WIDTH) {
+      if (isMarkedRoad(rk.seg)) {
         const proj = (e.x - near.x) * e.dx + (e.z - near.z) * e.dz;
         const c = Math.max(0, (rk.half + ri.half * cosAbs) / sin - proj) + CLEAR_MARGIN;
         noteEnd(e, c, true);
       }
       // 큰 길(13m 이상)이 와서 붙으면 지나가는 길의 차선도 그 자리에서 끊는다(신호 교차로처럼)
-      if (ri.seg.width >= CROSSWALK_MIN_WIDTH) {
+      if (isMarkedRoad(ri.seg) && ri.seg.width >= CROSSWALK_MIN_WIDTH) {
         const g = (ri.half + rk.half * cosAbs) / sin + CLEAR_MARGIN;
         gaps[k].push([near.s - g, near.s + g]);
       }
@@ -225,11 +271,12 @@ export function computeRoadMarkings(segs, midList = []) {
     const fromA = (s) => (e.which === "a" ? s : r.L - s); // "그 끝에서 잰 거리" → "a 끝에서 잰 거리"
     const maxGap = r.L * 0.45;
     let c = Math.min(clear, maxGap);
-    if (!crossing || w < MARKED_MIN_WIDTH) {
+    if (!crossing || !isMarkedRoad(r.seg)) {
       gaps[e.i].push(e.which === "a" ? [-1, fromA(c)] : [fromA(c), r.L + 1]);
       continue;
     }
-    const autoCw = w >= CROSSWALK_MIN_WIDTH;
+    // 13m 이상이거나 왕복 4차로 이상, 또는 어린이 보호구역이면 횡단보도가 기본
+    const autoCw = w >= CROSSWALK_MIN_WIDTH || roadLaneCount(r.seg) >= 4 || roadKind(r.seg) === "school";
     const cwOverride = e.which === "a" ? r.seg.crosswalkA : r.seg.crosswalkB;
     let cw = cwOverride === true ? true : cwOverride === false ? false : autoCw;
     junctionEnds.push({ seg: e.i, which: e.which, auto: autoCw, zone: Math.min(maxGap, c + CROSSWALK_DEPTH + STOP_LINE_GAP + STOP_LINE_WIDTH) });
