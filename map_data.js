@@ -52,7 +52,7 @@ export const PLACES = [
   { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -164.6, z: 120.5, model: "models/place_금파힐111.glb", rotationDeg: -1.2, scaleRatio: 1.3 },
   { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -70.2, z: 57.5, model: "models/place_금파힐112.glb", rotationDeg: -6.2, scaleRatio: 1.3 },
   { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 11.2, z: -96, model: "models/place_금파힐114.glb", rotationDeg: 0, scaleRatio: 1.3 },
-  { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -25.1, z: -146, model: "models/place_금파힐115.glb", rotationDeg: 0, scaleRatio: 1.3 },
+  { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: 17, z: -22.7, model: "models/place_금파힐115.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -45.7, z: 121.3, model: "models/place_금파힐116.glb", rotationDeg: -4.2, scaleRatio: 1.3 },
   { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 35.7, z: -155.8, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: -4, scaleRatio: 1.5 },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -240.1, z: -120.3, church: true, model: "models/place_대현교회.glb", rotationDeg: 20.8 },
@@ -182,6 +182,7 @@ export const PLACES = [
   { id: 234, name: "버스정류장", floors: 15, type: "버스정류장", x: -43.6, z: -779.8, model: "models/asset_버스정류장.glb", rotationDeg: -93.9 },
   { id: 235, name: "버스정류장", floors: 15, type: "버스정류장", x: -75.9, z: -768.1, model: "models/asset_버스정류장.glb", rotationDeg: 87.3 },
   { id: 236, name: "버스정류장", floors: 15, type: "버스정류장", x: -94.5, z: -168.8, model: "models/asset_버스정류장.glb", rotationDeg: -179.4 },
+  { id: 237, name: "성동구보건소 금호분소", floors: 5, type: "보건소", x: -192.7, z: -317.6, model: "models/place_성동구보건소금호분소.glb" },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
