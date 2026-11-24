@@ -7,8 +7,13 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261123c";
-import { computeRoadMarkings, markedRanges, slicePolyline } from "./road_markings.js?v=20261124e";
+import * as MAP_DATA from "./map_data.js?v=20261124a";
+import { computeRoadMarkings, markedRanges, slicePolyline } from "./road_markings.js?v=20261124f";
+
+const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
+// 길 중간 횡단보도·신호등(맵 에디터 "🚦 신호등 추가"로 찍은 곳) — 예전 map_data.js에는 이 목록이 없을 수 있어서
+// 이름을 골라 가져오지 않고(없으면 모듈 전체가 깨진다) 통째로 받아서 있으면 쓴다
+const CROSSWALKS = Array.isArray(MAP_DATA.CROSSWALKS) ? MAP_DATA.CROSSWALKS : [];
 
 const ASSET_VERSION = "20261124e";
 
@@ -877,7 +882,7 @@ function chainGeometry(members) {
       else offset += jump; // 끝점이 딱 붙지 않은 이음매는 그 틈만큼 거리를 더한다
     }
     pts.push(...p);
-    (roadMarkings.gaps[m.idx] || []).forEach(([g0, g1]) => {
+    ((roadMarkings.junctionGaps || roadMarkings.gaps)[m.idx] || []).forEach(([g0, g1]) => { // 길 중간 횡단보도에선 보도를 끊지 않는다
       let a = Math.max(0, g0), b = Math.min(L, g1);
       if (b <= a) return;
       if (m.reversed) [a, b] = [L - b, L - a];
@@ -1323,7 +1328,7 @@ function buildRoadMarks() {
 function buildRoads() {
   yellowDashTransforms = [];
   whiteDashTransforms = [];
-  roadMarkings = computeRoadMarkings(ROAD_SEGMENTS);
+  roadMarkings = computeRoadMarkings(ROAD_SEGMENTS, CROSSWALKS);
   ROAD_SEGMENTS.forEach(buildRoadRibbon);
   buildRoadSidewalks();
   buildLaneDashes();
@@ -1902,17 +1907,16 @@ function makeCoin() {
   return mesh;
 }
 
-// 불량배: 이제 서 있지 않고 행인처럼 보도를 어슬렁거린다. 캐릭터가 가까이(BULLY_CHASE_RANGE 안) 오면 다가오고,
-// 닿으면 예전처럼 "혼내줬다" 보상(updatePickups). 모습은 행인보다 조금 큰 검은 후드티·빨간 모자·청바지.
+// 불량배: 서 있지 않고 행인처럼 보도를 어슬렁거린다(이름표 없음 — 모습으로 알아보게). 닿으면 예전처럼
+// "혼내줬다" 보상(updatePickups). 쫓아오기 같은 이벤트는 나중에 따로 만든다. 모습은 행인보다 조금 큰
+// 검은 후드티·빨간 모자·청바지.
 const BULLY_SCALE = 1.2;
 const BULLY_WANDER_SPEED = 0.55;
-const BULLY_CHASE_SPEED = 1.3; // 캐릭터 걷기(3)보다 느리게 — 피할 수도, 혼내 줄 수도 있게
-const BULLY_CHASE_RANGE = 6;
 function makeThug() {
   const group = new THREE.Group();
   const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
   const hoodie = mat(0x1d1f24), jeans = mat(0x2f3b52), skin = mat(0xe0b088), capMat = mat(0xb3262c), shoe = mat(0xf2f2f2);
-  const body = new THREE.Group(); // 몸 방향·팔다리 흔들기용(이름표는 group에 따로 붙여서 돌지 않게)
+  const body = new THREE.Group(); // 몸 방향·팔다리 흔들기용(나중에 이름표·말풍선을 붙이면 group에 따로 붙여서 돌지 않게)
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, 0.08), hoodie);
   torso.position.y = 0.25;
   const hood = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), hoodie);
@@ -1945,30 +1949,87 @@ function makeThug() {
   body.scale.setScalar(BULLY_SCALE);
   body.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   group.add(body);
-  const label = makeLabelSprite("불량배");
-  label.position.y = 0.72;
+  group.userData = { body, legs, arms };
+  return group;
+}
+
+// 친구: 이로이 또래 아이 — 어른 행인보다 작고 머리가 크며, 노랑 줄무늬 티·파란 반바지·빨간 책가방·
+// 노란 모자로 행인·불량배와 한눈에 구별된다. 팔다리는 불량배처럼 따로 움직일 수 있게(userData) 만들어 둬서
+// 나중에 "같이 걸어가기" 같은 이벤트에서 걷는 모습을 그대로 쓸 수 있다.
+const FRIEND_LOOK_RANGE = 6; // 캐릭터가 이 안으로 오면 그쪽을 바라본다
+function makeFriend() {
+  const group = new THREE.Group();
+  const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 });
+  const shirt = mat(0xffd23f), stripe = mat(0x3a86ff), shorts = mat(0x2b59c3), skin = mat(0xf1c9a5);
+  const hair = mat(0x3b2a20), bag = mat(0xe8483b), capMat = mat(0xffc21a), shoe = mat(0xf5f5f5), sock = mat(0xffffff);
+  const body = new THREE.Group();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.12, 0.07), shirt);
+  torso.position.y = 0.19;
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.114, 0.025, 0.074), stripe);
+  band.position.y = 0.2;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.052, 14, 12), skin);
+  head.position.y = 0.3;
+  const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), hair);
+  hairCap.position.set(0, 0.302, -0.006);
+  const capCrown = new THREE.Mesh(new THREE.SphereGeometry(0.056, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.32), capMat);
+  capCrown.position.y = 0.318;
+  const capBrim = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.006, 0.045), capMat);
+  capBrim.position.set(0, 0.338, 0.05);
+  const pack = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.045), bag);
+  pack.position.set(0, 0.2, -0.055);
+  const flap = new THREE.Mesh(new THREE.BoxGeometry(0.092, 0.035, 0.048), mat(0xc23328));
+  flap.position.set(0, 0.235, -0.056);
+  const legs = [-1, 1].map((sx) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(sx * 0.026, 0.13, 0);
+    const short = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.05, 0.05), shorts);
+    short.position.y = -0.02;
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.08, 0.032), skin);
+    leg.position.y = -0.075;
+    const sk = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.02, 0.034), sock);
+    sk.position.y = -0.11;
+    const sneaker = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.02, 0.06), shoe);
+    sneaker.position.set(0, -0.122, 0.008);
+    pivot.add(short, leg, sk, sneaker);
+    return pivot;
+  });
+  const arms = [-1, 1].map((sx) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(sx * 0.07, 0.24, 0);
+    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.04, 0.036), shirt);
+    sleeve.position.y = -0.015;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.08, 0.028), skin);
+    arm.position.y = -0.065;
+    pivot.add(sleeve, arm);
+    return pivot;
+  });
+  body.add(torso, band, head, hairCap, capCrown, capBrim, pack, flap, ...legs, ...arms);
+  body.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  group.add(body);
+  const label = makeLabelSprite("친구");
+  label.position.y = 0.52;
   group.add(label);
   group.userData = { body, legs, arms };
   return group;
 }
 
-// 불량배와 같은 뼈대(원기둥 몸+공 머리)를 쓰되, 밝은 색으로 구분해서 "반가운 존재"처럼 보이게 한다.
-function makeFriend() {
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.4, 0.45, 1.3, 10),
-    new THREE.MeshStandardMaterial({ color: 0xf2a63e })
-  );
-  body.position.y = 0.85;
-  body.castShadow = true;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.33, 12, 12), new THREE.MeshStandardMaterial({ color: 0xe0b088 }));
-  head.position.y = 1.65;
-  head.castShadow = true;
-  group.add(body, head);
-  const label = makeLabelSprite("친구");
-  label.position.y = 2.5;
-  group.add(label);
-  return group;
+// 친구는 가만히 서 있되 숨 쉬듯 살짝 들썩이고, 캐릭터가 가까이 오면 그쪽을 본다
+function updateFriend(dt) {
+  if (!friend || friend.met) return;
+  const m = friend.mesh;
+  const ud = m.userData;
+  if (!ud.body) return;
+  friend.t = (friend.t || 0) + dt;
+  ud.body.position.y = Math.abs(Math.sin(friend.t * 2.2)) * 0.006;
+  if (character) {
+    const dx = character.position.x - m.position.x, dz = character.position.z - m.position.z;
+    if (dx * dx + dz * dz < FRIEND_LOOK_RANGE * FRIEND_LOOK_RANGE) {
+      const want = Math.atan2(dx, dz);
+      let diff = want - ud.body.rotation.y;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      ud.body.rotation.y += diff * Math.min(1, dt * 5);
+    }
+  }
 }
 
 function spawnItems() {
@@ -1988,7 +2049,7 @@ function spawnEnemies(count) {
   enemies = [];
   for (let i = 0; i < count; i++) {
     const mesh = makeThug();
-    const en = { mesh, defeated: false, phase: Math.random() * 6, chasing: false };
+    const en = { mesh, defeated: false, phase: Math.random() * 6 };
     if (pedPaths.length) {
       // 보도 아무 데나 — 동네 곳곳의 보도를 어슬렁거린다
       en.path = pedPaths[Math.floor(Math.random() * pedPaths.length)];
@@ -2007,37 +2068,19 @@ function spawnEnemies(count) {
 }
 
 function updateEnemies(dt) {
-  if (!character || !enemies.length) return;
-  const cp = character.position;
+  if (!enemies.length) return;
   enemies.forEach((en) => {
     if (en.defeated) return;
     const m = en.mesh;
-    const dx = cp.x - m.position.x, dz = cp.z - m.position.z;
-    const dist = Math.hypot(dx, dz);
     let fx = 0, fz = 1, speed = 0;
-    if (dist < BULLY_CHASE_RANGE && dist > 0.05 && !currentErrand) {
-      // 캐릭터 쪽으로 다가온다(보도를 벗어나도 됨)
-      fx = dx / dist; fz = dz / dist;
-      speed = BULLY_CHASE_SPEED;
-      m.position.x += fx * speed * dt;
-      m.position.z += fz * speed * dt;
-      en.chasing = true;
-    } else if (en.path) {
-      if (en.chasing) {
-        // 쫓기를 그만두면 가장 가까운 보도 지점으로 돌아가서 다시 어슬렁
-        const near = nearestOnPath(en.path, m.position.x, m.position.z);
-        en.d = near.d;
-        en.k = near.k || 0;
-        en.chasing = false;
-      }
+    if (en.path) {
       en.d += en.dir * BULLY_WANDER_SPEED * dt;
       if (en.d >= en.path.len) { en.d = en.path.len; en.dir = -1; }
       if (en.d <= 0) { en.d = 0; en.dir = 1; }
       const q = pathPose(en.path, en.d, en.k);
       en.k = q.k;
-      // 보도로 돌아가는 동안 순간이동하지 않게 조금씩 다가간다
-      m.position.x += (q.x - m.position.x) * Math.min(1, dt * 4);
-      m.position.z += (q.z - m.position.z) * Math.min(1, dt * 4);
+      m.position.x = q.x;
+      m.position.z = q.z;
       fx = q.tx * en.dir; fz = q.tz * en.dir;
       speed = BULLY_WANDER_SPEED;
     }
@@ -2061,11 +2104,23 @@ function spawnFriend(ctx) {
     friend = null;
   }
   if (ctx.insa < FRIEND_INSA_THRESHOLD) return;
-  const [x, z] = randomStreetSpot();
   const mesh = makeFriend();
-  mesh.position.set(x, 0, z);
+  // 보도 위 아무 데나 — 되도록 캐릭터에게서 너무 가깝지도 멀지도 않은 곳
+  let spot = null;
+  if (pedPaths.length) {
+    const cp = character ? character.position : new THREE.Vector3();
+    for (let attempt = 0; attempt < 60 && !spot; attempt++) {
+      const path = pedPaths[Math.floor(Math.random() * pedPaths.length)];
+      const q = pointAlongPolyline(path.pts, Math.random() * path.len);
+      const d = Math.hypot(q.x - cp.x, q.z - cp.z);
+      if ((d > 8 && d < 40) || attempt === 59) spot = [q.x, q.z];
+    }
+  }
+  const [x, z] = spot || randomStreetSpot();
+  mesh.position.set(x, groundHeightAt(x, z), z);
+  mesh.userData.body.rotation.y = Math.random() * Math.PI * 2;
   scene.add(mesh);
-  friend = { mesh, met: false };
+  friend = { mesh, met: false, t: Math.random() * 3 };
 }
 
 function startAdventure() {
@@ -2563,6 +2618,7 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   updateMovement(dt);
   updateEnemies(dt);
+  updateFriend(dt);
   updatePickups(dt);
   updateErrand();
   updateErrandHighlights();
@@ -2754,7 +2810,8 @@ const LAMP_OFF = new THREE.Color(0x30343a);
 const LAMP_RED = new THREE.Color(0xff3b30);
 const LAMP_YELLOW = new THREE.Color(0xffc21a);
 const LAMP_GREEN = new THREE.Color(0x27e36a);
-const signalArms = new Map(); // "도로번호:a|b" → 그 끝 횡단보도(신호 있음)
+const signalArms = new Map(); // "도로번호:a|b" → 그 끝 횡단보도(신호 있음), 길 중간은 "도로번호:m번호:±1"
+const midSignalsBySeg = new Map(); // 도로번호 → 그 도로 중간 횡단보도의 신호(다가오는 방향별) — 차가 길 중간에서도 서게
 let signalJunctions = [];
 let signalLamps = null; // { mesh, slots: [{ arm, kind }], last: [] }
 let signalClock = 0;
@@ -2784,8 +2841,11 @@ function signalStateFor(segIndex, which) {
   return arm ? armVehicleState(arm) : null;
 }
 
+const armKey = (a) => (a.mid ? `${a.seg}:m${a.midIndex}:${a.dirSign}` : `${a.seg}:${a.which}`);
+
 function buildTrafficSignals() {
   signalArms.clear();
+  midSignalsBySeg.clear();
   signalJunctions = [];
   signalLamps = null;
   const list = (roadMarkings.crossings || []).filter((c) => c.signal).map((c) => ({ ...c }));
@@ -2810,7 +2870,14 @@ function buildTrafficSignals() {
     nPhases = Math.max(2, nPhases); // 신호 있는 길이 한 방향뿐이어도 다른 쪽(보행·교차 차량) 차례를 둔다
     const cycle = nPhases * (SIGNAL_GREEN_S + SIGNAL_YELLOW_S + SIGNAL_ALLRED_S);
     const j = { key, arms, cycle, offset: ((Math.abs(hashSeed(key)) % 1000) / 1000) * cycle };
-    arms.forEach((a) => { a.junctionRef = j; signalArms.set(`${a.seg}:${a.which}`, a); });
+    arms.forEach((a) => {
+      a.junctionRef = j;
+      signalArms.set(armKey(a), a);
+      if (a.mid) {
+        if (!midSignalsBySeg.has(a.seg)) midSignalsBySeg.set(a.seg, []);
+        midSignalsBySeg.get(a.seg).push(a);
+      }
+    });
     signalJunctions.push(j);
   });
 
@@ -2841,7 +2908,8 @@ function buildTrafficSignals() {
       });
     });
     // 보행 신호등: 횡단보도 양끝(도로 양쪽 길가), 길 건너편을 바라봄. 위 빨강(서 있는 사람), 아래 초록
-    [1, -1].forEach((side) => {
+    // (길 중간 횡단보도는 방향마다 기록이 둘이라 보행 신호등은 첫 기록에만 — pedSignals)
+    if (c.pedSignals !== false) [1, -1].forEach((side) => {
       const E = [(c.x + r[0] * side * (c.half + 0.7)) * W, (c.z + r[1] * side * (c.half + 0.7)) * W];
       poles.push({ x: E[0], z: E[1], h: PED_SIGNAL_POLE_H });
       const face = [-r[0] * side, -r[1] * side];
@@ -3005,7 +3073,7 @@ function buildCarNetwork() {
     const drivable = L > 4 && w >= 8 && !(w >= 11 && w < 13);
     // 양 끝 교차로 구간 길이(차가 그 앞에서 꺾기 시작)
     let gapA = 0, gapB = 0;
-    (roadMarkings.gaps[i] || []).forEach(([g0, g1]) => {
+    ((roadMarkings.junctionGaps || roadMarkings.gaps)[i] || []).forEach(([g0, g1]) => {
       if (g0 <= 0.01) gapA = Math.max(gapA, Math.min(L, g1));
       if (g1 >= L - 0.01) gapB = Math.max(gapB, L - Math.max(0, g0));
     });
@@ -3308,6 +3376,19 @@ function updateCars(dt) {
           limit = Math.min(limit, speedToStopWithin((toStop - 0.4) * W - car.len * 0.5));
         }
       }
+      // 길 중간 횡단보도 신호(이 차가 달리는 방향에서 다가오는 쪽 정지선)
+      const midArms = midSignalsBySeg.get(car.seg);
+      if (midArms) {
+        for (const arm of midArms) {
+          if (arm.dirSign !== car.dir) continue;
+          const st = armVehicleState(arm);
+          if (st === "G") continue;
+          const toStop = (arm.sStop - car.s) * car.dir;
+          if (toStop > -0.3 && !(st === "Y" && toStop < 3)) {
+            limit = Math.min(limit, speedToStopWithin((toStop - 0.4) * W - car.len * 0.5));
+          }
+        }
+      }
       // 앞차(같은 도로·방향·차로에서 가장 가까운 앞차)
       let lead = null, gapRaw = Infinity;
       cars.forEach((o) => {
@@ -3386,15 +3467,14 @@ function updateCars(dt) {
 // ════════════════════════════════════════════════════════════════════════════
 // ── 걷는 행인: 캐릭터 주변 보도 위를 오가는 사람들(몸통·머리·팔다리를 종류별 인스턴스 하나로) ──
 // 보도를 만들 때 남겨 둔 보도 중앙선(pedPaths)을 따라 걷다가 끝에서 돌아서고, 멀어지면 캐릭터 근처 보도로
-// 다시 보낸다. 그중 몇 명은 "수상한 사람"(검은 코트·모자·선글라스) — 캐릭터가 다가가면 멈춰 서서 쳐다보고,
-// 아주 가까워지면 안전 안내가 뜬다. 부담이 크면 PED_COUNT를 줄이거나 0으로 두면 된다.
+// 다시 보낸다. 그중 몇 명은 "수상한 사람"(검은 코트·모자·선글라스) — 캐릭터가 다가가면 멈춰 서서 쳐다본다
+// (안내·이벤트는 나중에 따로 만든다). 부담이 크면 PED_COUNT를 줄이거나 0으로 두면 된다.
 // ════════════════════════════════════════════════════════════════════════════
 const PED_COUNT = 24;
 const PED_SUSPICIOUS = 2; // 위 인원 중 수상한 사람 수
 const PED_SPAWN_MAX = 30;
 const PED_DESPAWN = 42;
 const SUSPICIOUS_WATCH_RANGE = 3.2; // 이 안으로 오면 멈춰 서서 캐릭터를 쳐다본다
-const SUSPICIOUS_WARN_RANGE = 1.8; // 이 안이면 안전 안내
 const PED_SHIRTS = [0x2f6db5, 0xd94d4d, 0xf2c14e, 0x3a9d5d, 0xf2f2f2, 0x6b4fa3, 0xe58b3a, 0x222831, 0x8fb8de];
 const PED_PANTS = [0x2b3442, 0x3b4f7a, 0x1d1f22, 0x6b5b4b, 0x5a6470];
 const PED_SKIN = [0xf1c9a5, 0xe0b088, 0xd29b74];
@@ -3404,7 +3484,6 @@ const pedPaths = []; // { pts: [[x,z]...], cum, len } — 월드 좌표
 let peds = [];
 let pedMeshes = null;
 let pedRespawnTimer = 0;
-let suspiciousToastCooldown = 0;
 
 function pedColors(ped) {
   const slot = ped.slot;
@@ -3425,19 +3504,6 @@ function pathPose(path, d, hint) {
   const segLen = cum[k + 1] - cum[k] || 1e-6;
   const t = (d - cum[k]) / segLen;
   return { k, x: a[0] + (b[0] - a[0]) * t, z: a[1] + (b[1] - a[1]) * t, tx: (b[0] - a[0]) / segLen, tz: (b[1] - a[1]) / segLen };
-}
-// 점에서 가장 가까운 길 위 위치(d) — 쫓아가다가 길로 돌아올 때 쓴다
-function nearestOnPath(path, x, z) {
-  let best = { dist: Infinity, d: 0 };
-  for (let k = 0; k < path.pts.length - 1; k++) {
-    const [ax, az] = path.pts[k], [bx, bz] = path.pts[k + 1];
-    const vx = bx - ax, vz = bz - az;
-    const len2 = vx * vx + vz * vz || 1e-9;
-    const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / len2));
-    const dist = Math.hypot(x - (ax + vx * t), z - (az + vz * t));
-    if (dist < best.dist) best = { dist, d: path.cum[k] + Math.sqrt(len2) * t, k };
-  }
-  return best;
 }
 
 function buildPedestrians() {
@@ -3518,7 +3584,6 @@ function spawnPed(ped) {
 function updatePedestrians(dt) {
   if (!pedMeshes || !character) return;
   const cp = character.position;
-  suspiciousToastCooldown = Math.max(0, suspiciousToastCooldown - dt);
   pedRespawnTimer += dt;
   if (pedRespawnTimer > 0.6) {
     pedRespawnTimer = 0;
@@ -3540,10 +3605,6 @@ function updatePedestrians(dt) {
     const charDist = Math.hypot(toCharX, toCharZ);
     // 수상한 사람: 캐릭터가 다가오면 멈춰 서서 쳐다본다
     const watching = ped.type === "suspicious" && charDist < SUSPICIOUS_WATCH_RANGE && !currentErrand;
-    if (watching && charDist < SUSPICIOUS_WARN_RANGE && suspiciousToastCooldown <= 0) {
-      showToast("😨 수상한 사람이 쳐다봐요! 따라가지 말고 사람 많은 곳으로 가요");
-      suspiciousToastCooldown = 12;
-    }
     if (!watching) {
       ped.d += ped.dir * ped.speed * dt;
       if (ped.d >= path.len) { ped.d = path.len; ped.dir = -1; }

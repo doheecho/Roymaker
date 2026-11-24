@@ -9,14 +9,23 @@
 //
 // 반환값:
 //   gaps[i]    : i번째 도로에서 노면표시(중앙선·차선)를 긋지 않을 구간들 — a 끝에서 잰 거리 [s0, s1]
+//   junctionGaps[i]: 위에서 길 중간 횡단보도 자리만 뺀 것(교차로 자리만) — 보도·차가 꺾는 지점은 이걸 쓴다
 //   whiteQuads : 정지선·횡단보도 줄무늬 사각형들 — 네 꼭짓점 [[x,z]×4]
 //   crossings  : 횡단보도마다 { seg, which, junction, x, z(횡단보도 가운데), hx, hz(교차로 쪽 방향), rx, rz(들어오는
 //                차로 쪽 = 오른쪽), half(도로 반폭), depth, stopX, stopZ(정지선 가운데), stopFromEnd, signal }
-//   junctionEnds: 교차로에 닿아 횡단보도를 둘 수 있는 도로 끝 { seg, which, auto(폭 규칙상 기본으로 생기는지) }
+//   junctionEnds: 교차로에 닿아 횡단보도를 둘 수 있는 도로 끝 { seg, which, auto(폭 규칙상 기본으로 생기는지),
+//                zone(그 끝에서 이 거리 안쪽이 교차로·횡단보도·정지선 자리) }
+//   mids       : 길 중간 횡단보도(두 번째 인자 midList, map_data.js의 CROSSWALKS)를 도로에 붙인 결과 —
+//                midList와 같은 순서로 { ok, seg, s(a 끝에서 잰 위치), x, z(도로 중심선 위 자리), dx, dz, half }
+//                (근처에 도로가 없으면 ok: false)
 //
 // 도로마다 끝별로 덮어쓸 수 있다(맵 에디터의 "횡단보도·신호등" 설정):
 //   crosswalkA / crosswalkB : true면 폭과 상관없이 만들고, false면 안 만든다(없으면 13m 이상일 때 자동)
 //   signalA / signalB       : false면 그 횡단보도에 신호등을 세우지 않는다(없으면 신호등 있음)
+// 길 중간(교차로가 아닌 곳)의 횡단보도는 midList로 받는다 — { x, z, signal? } 배열(맵 에디터의 "🚦 신호등 추가").
+//   도로 폭 전체를 가로지르는 얼룩무늬 + 양쪽 방향 정지선을 긋고, crossings에는 다가오는 방향마다 하나씩
+//   { mid: true, dirSign(+1: a→b로 달리는 차, -1: b→a), sStop(그 차가 서는 정지선, a 끝에서 잰 거리),
+//     pedSignals(보행 신호등은 두 기록 중 첫 번째에만) } 를 넣는다(교차로 끝 기록의 which/stopFromEnd 대신).
 
 export const ROAD_CURVE_STEPS = 20;
 const JOIN_THRESH = 14; // 같은 교차로로 보는 끝점 사이 거리(neighborhood3d.js의 교차로 메움판과 같은 값)
@@ -29,6 +38,7 @@ const STOP_LINE_GAP = 1; // 횡단보도와 정지선 사이
 const STOP_LINE_WIDTH = 0.45;
 const CLEAR_MARGIN = 1; // 교차로 모서리에서 조금 더 물러나서 시작
 const MIN_SIN = 0.26; // 이보다 각도 차가 작으면(약 15° 이내) 같은 방향으로 이어지는 길로 본다
+const MID_SNAP_EXTRA = 3; // 길 중간 횡단보도: 도로 가장자리에서 이만큼 벗어난 점까지는 그 도로에 붙인다
 
 function quadPoint(a, c, b, t) {
   const u = 1 - t;
@@ -71,18 +81,41 @@ function nearestOnPolyline(pts, cum, p) {
     const d = Math.hypot(p[0] - x, p[1] - z);
     if (d < best.dist) {
       const len = Math.sqrt(len2);
-      best = { dist: d, s: cum[i] + len * t, dx: vx / len, dz: vz / len, x, z };
+      best = { dist: d, s: cum[i] + len * t, dx: vx / len, dz: vz / len, x, z, piece: i, t };
     }
   }
   return best;
 }
 
-export function computeRoadMarkings(segs) {
-  const info = segs.map((seg) => {
-    const pts = roadPolylineRaw(seg);
-    const cum = cumulative(pts);
-    return { seg, pts, cum, L: cum[cum.length - 1], half: seg.width / 2 };
+function roadInfo(seg) {
+  const pts = roadPolylineRaw(seg);
+  const cum = cumulative(pts);
+  return { seg, pts, cum, L: cum[cum.length - 1], half: seg.width / 2 };
+}
+// (x,z)에서 가장 가까운 도로 — 도로 가장자리에서 extra만큼 바깥까지 찾는다. 여러 도로가 겹치는 곳에서는
+// "도로 안쪽으로 더 깊이 들어가 있는" 도로를 고른다. 없으면 null.
+//   { seg(번호), s(a 끝에서 잰 위치), L(도로 길이), x, z(중심선 위 가장 가까운 점), dx, dz(a→b 방향), dist, half,
+//     t(곡선 매개변수 0~1 — 곡선 도로를 둘로 자를 때 쓴다) }
+function nearestOf(info, x, z, extra) {
+  let best = null;
+  info.forEach((r, i) => {
+    if (r.L < 1e-3) return;
+    const near = nearestOnPolyline(r.pts, r.cum, [x, z]);
+    if (near.dist > r.half + extra) return;
+    const score = near.dist - r.half;
+    if (!best || score < best.score) {
+      const t = r.pts.length > 2 ? (near.piece + near.t) / (r.pts.length - 1) : near.t;
+      best = { seg: i, s: near.s, L: r.L, x: near.x, z: near.z, dx: near.dx, dz: near.dz, dist: near.dist, half: r.half, t, score };
+    }
   });
+  return best;
+}
+export function nearestRoadPoint(segs, x, z, extra = MID_SNAP_EXTRA) {
+  return nearestOf(segs.map(roadInfo), x, z, extra);
+}
+
+export function computeRoadMarkings(segs, midList = []) {
+  const info = segs.map(roadInfo);
   const gaps = segs.map(() => []);
   const whiteQuads = [];
 
@@ -197,7 +230,7 @@ export function computeRoadMarkings(segs) {
     const autoCw = w >= CROSSWALK_MIN_WIDTH;
     const cwOverride = e.which === "a" ? r.seg.crosswalkA : r.seg.crosswalkB;
     let cw = cwOverride === true ? true : cwOverride === false ? false : autoCw;
-    junctionEnds.push({ seg: e.i, which: e.which, auto: autoCw });
+    junctionEnds.push({ seg: e.i, which: e.which, auto: autoCw, zone: Math.min(maxGap, c + CROSSWALK_DEPTH + STOP_LINE_GAP + STOP_LINE_WIDTH) });
     let stopAt = cw ? c + CROSSWALK_DEPTH + STOP_LINE_GAP : c + 0.3;
     if (stopAt + STOP_LINE_WIDTH > maxGap) { cw = false; stopAt = c + 0.3; }
     const drawStop = stopAt + STOP_LINE_WIDTH <= maxGap;
@@ -235,17 +268,62 @@ export function computeRoadMarkings(segs) {
     }
   }
 
+  // ④ 길 중간 횡단보도(교차로가 아닌 곳 — 맵 에디터에서 찍은 CROSSWALKS)
+  //    차선만 끊고 보도는 끊지 않는다 — 그래서 여기까지의(교차로만 반영한) 구간을 junctionGaps로 따로 남긴다
+  const junctionGaps = gaps.map((list) => list.slice());
+  const mids = [];
+  const MID_HALF = CROSSWALK_DEPTH / 2 + STOP_LINE_GAP + STOP_LINE_WIDTH; // 횡단보도 가운데에서 바깥 정지선 끝까지
+  // a→b 방향 기준: a 끝에서 잰 s0~s1 구간, 옆으로 o0~o1(+ = a→b로 달릴 때 오른쪽) 사각형
+  const quadA = (r, s0, s1, o0, o1) => {
+    const mid = (s0 + s1) / 2;
+    const p = pointAt(r.pts, r.cum, mid);
+    const nx = -p.dz, nz = p.dx;
+    const P = (s, o) => [p.x + p.dx * (s - mid) + nx * o, p.z + p.dz * (s - mid) + nz * o];
+    whiteQuads.push([P(s0, o0), P(s0, o1), P(s1, o1), P(s1, o0)]);
+  };
+  (midList || []).forEach((m, k) => {
+    const hit = m && Number.isFinite(m.x) && Number.isFinite(m.z) ? nearestOf(info, m.x, m.z, MID_SNAP_EXTRA) : null;
+    const r = hit ? info[hit.seg] : null;
+    if (!hit || r.L < MID_HALF * 2 + 1) {
+      mids.push({ ok: false, x: m ? m.x : 0, z: m ? m.z : 0 });
+      return;
+    }
+    const s = Math.max(MID_HALF + 0.5, Math.min(r.L - MID_HALF - 0.5, hit.s));
+    const pc = pointAt(r.pts, r.cum, s);
+    mids.push({ ok: true, seg: hit.seg, s, x: pc.x, z: pc.z, dx: pc.dx, dz: pc.dz, half: r.half });
+    gaps[hit.seg].push([s - MID_HALF, s + MID_HALF]);
+    const usable = r.half - 0.5;
+    for (let o = -usable; o + CROSSWALK_STRIPE <= usable + 1e-6; o += CROSSWALK_STRIPE + CROSSWALK_GAP) {
+      quadA(r, s - CROSSWALK_DEPTH / 2, s + CROSSWALK_DEPTH / 2, o, o + CROSSWALK_STRIPE);
+    }
+    const signal = m.signal !== false;
+    [1, -1].forEach((dirSign, j) => {
+      // 이쪽에서 다가오는 차가 서는 정지선(진행 방향 오른쪽 절반) — sStop은 횡단보도 쪽 가장자리
+      const sStop = s - dirSign * (CROSSWALK_DEPTH / 2 + STOP_LINE_GAP);
+      const sFar = sStop - dirSign * STOP_LINE_WIDTH;
+      if (dirSign > 0) quadA(r, sFar, sStop, 0.2, r.half - 0.3);
+      else quadA(r, sStop, sFar, -(r.half - 0.3), -0.2);
+      const ps = pointAt(r.pts, r.cum, sStop);
+      const hx = pc.dx * dirSign, hz = pc.dz * dirSign;
+      crossings.push({
+        seg: hit.seg, which: null, mid: true, midIndex: k, dirSign, sStop, junction: `m${k}`,
+        x: pc.x, z: pc.z, hx, hz, rx: -hz, rz: hx, half: r.half, depth: CROSSWALK_DEPTH,
+        stopX: ps.x, stopZ: ps.z, stopFromEnd: null, signal, pedSignals: j === 0,
+      });
+    });
+  });
+
   // 구간 정리(겹치는 것 합치기)
-  gaps.forEach((list, i) => {
+  const mergeAll = (all) => all.map((list) => {
     list.sort((p, q) => p[0] - q[0]);
     const merged = [];
     for (const [s0, s1] of list) {
       if (merged.length && s0 <= merged[merged.length - 1][1]) merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], s1);
       else merged.push([s0, s1]);
     }
-    gaps[i] = merged;
+    return merged;
   });
-  return { gaps, whiteQuads, crossings, junctionEnds };
+  return { gaps: mergeAll(gaps), junctionGaps: mergeAll(junctionGaps), whiteQuads, crossings, junctionEnds, mids };
 }
 
 // 길이 L인 도로에서 gaps를 뺀 "노면표시를 그을 구간"들
@@ -271,4 +349,199 @@ export function slicePolyline(pts, s0, s1) {
   const p1 = pointAt(pts, cum, s1);
   out.push([p1.x, p1.z]);
   return out;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 도로 잇기(맵 에디터): 다른 길의 "중간"에 닿거나 가로지르는 길을 진짜 교차로로 만든다 ──
+// 게임·노면표시는 도로 "끝점"이 서로 가까이(14 안) 모인 곳만 교차로로 친다. 그래서 길 끝이 다른 길 중간에
+// 닿거나(T자) 두 길이 서로 가로지르면(X자) 이어진 길로 인식되지 않는다 — 여기서 그 자리에서 지나가는 길을
+// 둘로 잘라(곡선이면 곡선 모양 그대로 둘로) 끝점들을 한 점에 모아 준다.
+//   connectRoads(segs, focus) : segs(ROAD_SEGMENTS와 같은 배열)를 그 자리에서 고친다. 잘린 길의 앞쪽 반은
+//     원래 객체를 그대로 쓰고, 뒤쪽 반은 segs 끝에 새로 붙인다. focus(도로 번호 배열)를 주면 그 길들이 닿는 곳만,
+//     없으면 지도 전체를 본다. 반환 { changed: Set(바뀐 도로 번호), added: [새로 생긴 도로 번호], joins(이은 곳 수) }
+// ════════════════════════════════════════════════════════════════════════════
+const CONNECT_EXTRA = 3; // 길 끝이 다른 길 가장자리에서 이만큼 못 미쳐도 닿은 걸로 본다(교차로 계산 ②와 같은 값)
+const r1 = (v) => Math.round(v * 10) / 10;
+function lerp2(p, q, t) { return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]; }
+
+// segs[k]를 곡선 매개변수 t(직선이면 길이 비율) 자리에서 둘로 — 자르는 점은 P(이미 반올림된 [x,z])로 맞춘다
+function splitSegAt(segs, k, t, P) {
+  const seg = segs[k];
+  const second = { ...seg };
+  const A = seg.a, B = seg.b;
+  if (seg.curve) {
+    const C = seg.curve;
+    const q0 = lerp2(A, C, t), q1 = lerp2(C, B, t);
+    const fix = (s, q) => {
+      const mx = (s.a[0] + s.b[0]) / 2, mz = (s.a[1] + s.b[1]) / 2;
+      if (Math.hypot(q[0] - mx, q[1] - mz) < 0.5) delete s.curve; // 거의 직선이면 곡선 표시를 지운다
+      else s.curve = [r1(q[0]), r1(q[1])];
+    };
+    seg.b = [P[0], P[1]];
+    second.a = [P[0], P[1]];
+    second.b = [B[0], B[1]];
+    fix(seg, q0);
+    fix(second, q1);
+  } else {
+    seg.b = [P[0], P[1]];
+    second.a = [P[0], P[1]];
+    second.b = [B[0], B[1]];
+    delete second.curve;
+  }
+  // 끝(A/B)별 횡단보도·신호등 설정은 원래 그 끝을 가진 쪽에만 남긴다(새로 생긴 가운데 끝은 자동)
+  delete second.crosswalkA;
+  delete second.signalA;
+  delete seg.crosswalkB;
+  delete seg.signalB;
+  segs.push(second);
+  return segs.length - 1;
+}
+
+// 두 폴리라인이 진짜로 가로지르는 점들 { x, z, si, ti, sk, tk, sin }
+function polylineCrossings(ri, rk) {
+  const out = [];
+  const ni = ri.pts.length, nk = rk.pts.length;
+  for (let a = 0; a < ni - 1; a++) {
+    const p1 = ri.pts[a], p2 = ri.pts[a + 1];
+    const ux = p2[0] - p1[0], uz = p2[1] - p1[1];
+    const lu = Math.hypot(ux, uz);
+    if (lu < 1e-6) continue;
+    for (let b = 0; b < nk - 1; b++) {
+      const q1 = rk.pts[b], q2 = rk.pts[b + 1];
+      const vx = q2[0] - q1[0], vz = q2[1] - q1[1];
+      const lv = Math.hypot(vx, vz);
+      if (lv < 1e-6) continue;
+      const d = ux * vz - uz * vx;
+      if (Math.abs(d) < 1e-9) continue;
+      const wx = q1[0] - p1[0], wz = q1[1] - p1[1];
+      const u = (wx * vz - wz * vx) / d;
+      const v = (wx * uz - wz * ux) / d;
+      if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+      out.push({
+        x: p1[0] + ux * u, z: p1[1] + uz * u,
+        si: ri.cum[a] + lu * u, ti: (a + u) / (ni - 1),
+        sk: rk.cum[b] + lv * v, tk: (b + v) / (nk - 1),
+        sin: Math.abs(d) / (lu * lv),
+      });
+    }
+  }
+  return out;
+}
+
+export function connectRoads(segs, focus) {
+  const changed = new Set();
+  const added = [];
+  const work = new Set(focus ? focus.filter((i) => i >= 0 && i < segs.length) : segs.map((_, i) => i));
+  const all = !focus;
+  let joins = 0;
+  // (x,z)와 14 안에 있는 모든 도로 끝 — 길이가 1이면 아무 데도 안 이어진 "빈 끝"
+  const groupAt = (x, z) => {
+    const g = [];
+    segs.forEach((sg, j) => ["a", "b"].forEach((w) => { if (Math.hypot(sg[w][0] - x, sg[w][1] - z) < JOIN_THRESH) g.push([j, w]); }));
+    return g;
+  };
+  const moveEnds = (group, P) => group.forEach(([j, w]) => { segs[j][w] = [P[0], P[1]]; changed.add(j); });
+  const interior = (s, L) => s >= JOIN_THRESH && s <= L - JOIN_THRESH;
+  const tOf = (r, near) => (r.pts.length > 2 ? (near.piece + near.t) / (r.pts.length - 1) : near.t);
+  const box = (r, pad) => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    r.pts.forEach(([x, z]) => { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); });
+    return [x0 - pad, z0 - pad, x1 + pad, z1 + pad];
+  };
+  const overlap = (A, B) => A[0] <= B[2] && B[0] <= A[2] && A[1] <= B[3] && B[1] <= A[3];
+  const endDir = (r, which) => pointAt(r.pts, r.cum, which === "a" ? 0 : r.L);
+  const split = (k, t, P, from) => {
+    const n = splitSegAt(segs, k, t, P);
+    changed.add(k);
+    added.push(n);
+    if (work.has(k) || (from != null && work.has(from))) work.add(n);
+    return n;
+  };
+
+  // 한 번에 한 곳씩 잇고 처음부터 다시 본다(잘린 길이 또 다른 길과 만날 수 있어서)
+  function step() {
+    const info = segs.map(roadInfo);
+    const boxes = info.map((r) => box(r, r.half + CONNECT_EXTRA));
+    // ① 길 끝이 다른 길 중간에 닿음(T자)
+    //    · 아무 데도 안 이어진 "빈 끝"이면: 그 길 가장자리 근처(3m)까지 닿은 것도 이어 준다
+    //    · 이미 다른 길과 모여 있는 끝(교차로 점)이면: 그 점이 지나가는 길 한가운데(3m 안)에 있을 때만
+    for (let i = 0; i < segs.length; i++) {
+      const ri = info[i];
+      if (ri.L < 1e-3) continue;
+      for (const which of ["a", "b"]) {
+        const E = segs[i][which];
+        const group = groupAt(E[0], E[1]);
+        const free = group.length === 1;
+        for (let k = 0; k < segs.length; k++) {
+          if (k === i || (!all && !work.has(i) && !work.has(k))) continue;
+          const bk = boxes[k];
+          if (E[0] < bk[0] || E[0] > bk[2] || E[1] < bk[1] || E[1] > bk[3]) continue;
+          const rk = info[k];
+          if (rk.L < 1e-3 || group.some(([j]) => j === k)) continue; // 이미 그 길 끝과 같은 교차로
+          const near = nearestOnPolyline(rk.pts, rk.cum, E);
+          if (near.dist > (free ? rk.half + CONNECT_EXTRA : CONNECT_EXTRA)) continue;
+          // 지나가는 길과 거의 나란히 겹쳐 그린 길이면 건드리지 않는다
+          const crossesAtAngle = group.some(([j, w]) => {
+            const d = endDir(info[j], w);
+            return Math.abs(d.dx * near.dz - d.dz * near.dx) >= MIN_SIN;
+          });
+          if (!crossesAtAngle) continue;
+          if (interior(near.s, rk.L)) {
+            const P = [r1(near.x), r1(near.z)];
+            moveEnds(group, P);
+            split(k, tOf(rk, near), P, i);
+          } else if (free) {
+            // 지나가는 길의 끝 가까이에 닿았으면 그 끝으로 모은다(ㄱ자·ㅏ자)
+            const kw = near.s < rk.L / 2 ? "a" : "b";
+            moveEnds(group, [segs[k][kw][0], segs[k][kw][1]]);
+          } else {
+            continue;
+          }
+          joins++;
+          return true;
+        }
+      }
+    }
+    // ② 두 길이 서로 가로지름(X자) — 둘 다 중간이면 둘 다 자르고, 한쪽이 "빈 끝" 근처에서 살짝 넘어간
+    //    거면 그 끝을 교차점으로 당겨서 T자로 잇는다
+    const cboxes = info.map((r) => box(r, 0));
+    for (let i = 0; i < segs.length; i++) {
+      for (let k = i + 1; k < segs.length; k++) {
+        if (!all && !work.has(i) && !work.has(k)) continue;
+        if (!overlap(cboxes[i], cboxes[k])) continue;
+        const ri = info[i], rk = info[k];
+        if (ri.L < 1e-3 || rk.L < 1e-3) continue;
+        for (const c of polylineCrossings(ri, rk)) {
+          if (c.sin < MIN_SIN) continue;
+          const inI = interior(c.si, ri.L), inK = interior(c.sk, rk.L);
+          const P = [r1(c.x), r1(c.z)];
+          const endI = c.si < ri.L / 2 ? "a" : "b", endK = c.sk < rk.L / 2 ? "a" : "b";
+          if (inI && inK) {
+            split(i, c.ti, P);
+            split(k, c.tk, P);
+            joins++;
+            return true;
+          }
+          const gI = inI ? null : groupAt(segs[i][endI][0], segs[i][endI][1]);
+          const gK = inK ? null : groupAt(segs[k][endK][0], segs[k][endK][1]);
+          if (gI && gK) {
+            // 둘 다 끝 근처: 둘 다 빈 끝일 때만(ㄱ자 모서리를 살짝 넘겨 그린 것) 교차점에서 만나게
+            if (gI.length !== 1 || gK.length !== 1) continue;
+            moveEnds([...gI, ...gK], P);
+            joins++;
+            return true;
+          }
+          const [g, o, ot] = gI ? [gI, k, c.tk] : [gK, i, c.ti];
+          if (g.length !== 1) continue; // 이미 교차로에 모여 있는 끝(넓은 길끼리 겹친 자리 등)은 그대로
+          moveEnds(g, P);
+          split(o, ot, P, g[0][0]);
+          joins++;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  for (let guard = 0; guard < 400 && step(); guard++);
+  return { changed, added, joins };
 }

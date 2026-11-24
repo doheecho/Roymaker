@@ -1,6 +1,6 @@
 // python optimize_glb.py models/Community_north.glb
 
-// ── 동네 데이터: 건물(PLACES)·도로(ROAD_SEGMENTS)·가로수(TREES)·공원(PARKS) ──
+// ── 동네 데이터: 건물(PLACES)·도로(ROAD_SEGMENTS)·가로수(TREES)·공원(PARKS)·길 중간 신호등(CROSSWALKS) ──
 // 이 파일은 map_editor.html에서 통째로 고쳐 쓰라고 일부러 따로 뺀 파일이다. map_editor에서
 // "내보내기"를 누르면 이 파일 전체를 대체할 수 있는 텍스트가 나오니, 그걸 복사해서 이 파일
 // 내용을 전부 지우고 그대로 붙여넣으면 된다(GitHub 웹 편집기 기준: 이 파일을 열고 Ctrl+A로
@@ -344,4 +344,10 @@ export const TREES = [[-428.9, -212.3], [-429.2, -186.8], [-421.4, -169.9], [-42
 // 건물과 같은 방식(월드 기준, 0이면 가로=x축·세로=z축 그대로)으로 돌아간다. map_editor.html에서
 // "공원 추가/삭제"로 다룬다.
 export const PARKS = [
+];
+
+// 길 중간 횡단보도·신호등 — x,z(raw)는 도로 위 자리(가장 가까운 도로에 붙는다), signal: false면 신호등 없이 횡단보도만.
+// 교차로 끝의 횡단보도·신호등은 여기가 아니라 ROAD_SEGMENTS의 crosswalkA/B·signalA/B로 켜고 끈다.
+// map_editor.html의 "🚦 신호등 추가"로 다룬다.
+export const CROSSWALKS = [
 ];
