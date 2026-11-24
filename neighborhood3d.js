@@ -739,7 +739,7 @@ function buildRoadRibbon(seg, segIndex) {
   }
 }
 
-// ── 어린이 보호구역 글씨: 방향마다 한 번씩, 그쪽으로 달리는 차로 위에 "어린이 / 보호구역 / ⓷⓪" ──
+// ── 어린이 보호구역 글씨: 방향마다 한 번씩, 그쪽으로 달리는 차로 위에 위에서부터 "어린이 / 보호구역 / ⓷⓪" ──
 // 글씨 그림은 한 장(캔버스)이고 자리마다 네모를 하나씩 모아 메시 하나로 그린다(드로우콜 1개)
 let schoolZoneTexture = null;
 function getSchoolZoneTexture() {
@@ -752,13 +752,8 @@ function getSchoolZoneTexture() {
   g.strokeStyle = "#ffffff";
   g.textAlign = "center";
   g.textBaseline = "middle";
-  // 위(차가 달려가는 쪽 = 멀리)부터: 30 원 → 보호구역 → 어린이(가까이) — 가까운 줄부터 읽힌다
-  g.lineWidth = 13;
-  g.beginPath();
-  g.arc(128, 104, 92, 0, Math.PI * 2);
-  g.stroke();
-  g.font = "bold 104px sans-serif";
-  g.fillText("30", 128, 110);
+  // 위(차가 달려가는 쪽 = 멀리)부터 아래로: 어린이 → 보호구역 → 30 원(가까이) — 차에서 보면 위에서부터
+  // "어린이 보호구역 30" 순서로 읽힌다(사용자 지정)
   const stretched = (text, y, size) => {
     g.save();
     g.translate(128, y);
@@ -767,8 +762,14 @@ function getSchoolZoneTexture() {
     g.fillText(text, 0, 0);
     g.restore();
   };
-  stretched("보호구역", 300, 58);
-  stretched("어린이", 430, 70);
+  stretched("어린이", 78, 70);
+  stretched("보호구역", 205, 58);
+  g.lineWidth = 13;
+  g.beginPath();
+  g.arc(128, 400, 92, 0, Math.PI * 2);
+  g.stroke();
+  g.font = "bold 104px sans-serif";
+  g.fillText("30", 128, 406);
   schoolZoneTexture = new THREE.CanvasTexture(c);
   schoolZoneTexture.colorSpace = THREE.SRGBColorSpace;
   schoolZoneTexture.anisotropy = 4;
