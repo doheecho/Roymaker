@@ -170,6 +170,7 @@ export const PLACES = [
   { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -592.7, z: 100.4, model: "models/place_골드축산.glb", rotationDeg: -4.5 },
   { id: 223, name: "행복한교회", floors: 5, type: "기타", x: 109.9, z: -503.8, model: "models/place_행복한교회.glb", scaleRatio: 1.3 },
   { id: 224, name: "대림상가", floors: 5, type: "기타", x: 53.4, z: -562.6, model: "models/place_대림독서실.glb", rotationDeg: -15.6, scaleRatio: 1.3 },
+  { id: 225, name: "금호초등학교", floors: 5, type: "학교", x: -546.8, z: 361.1, model: "models/place_금호초등학교.glb", rotationDeg: 19.3, scaleRatio: 2 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
@@ -350,4 +351,6 @@ export const PARKS = [
 // 교차로 끝의 횡단보도·신호등은 여기가 아니라 ROAD_SEGMENTS의 crosswalkA/B·signalA/B로 켜고 끈다.
 // map_editor.html의 "🚦 신호등 추가"로 다룬다.
 export const CROSSWALKS = [
+  { x: -44, z: -192.7 },
+  { x: -60.3, z: -739 },
 ];
