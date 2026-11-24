@@ -173,12 +173,12 @@ export const PLACES = [
   { id: 225, name: "금호초등학교", floors: 5, type: "학교", x: -546.8, z: 361.1, model: "models/place_금호초등학교.glb", rotationDeg: 19.3, scaleRatio: 2 },
   { id: 226, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: -42.9, z: 223.5 },
   { id: 227, name: "성동중앙교회", floors: 5, type: "기타", x: 52.7, z: 223.2, model: "models/place_성동중앙교회.glb", rotationDeg: 4.7, scaleRatio: 1.5 },
-  { id: 228, name: "버스정류장", floors: 1, type: "버스정류장", x: 49.5, z: -111.8, model: "models/asset_버스정류장.glb" },
+  { id: 228, name: "버스정류장", floors: 1, type: "버스정류장", x: 49.8, z: -113.7, model: "models/asset_버스정류장.glb", rotationDeg: 84.2 },
   { id: 229, name: "신금호역 인근상가", floors: 5, type: "기타", x: -517.3, z: 124.4, model: "models/place_우리농산물직판장.glb" },
-  { id: 230, name: "버스정류장", floors: 15, type: "버스정류장", x: 98.1, z: -138.1, model: "models/asset_버스정류장.glb" },
-  { id: 231, name: "버스정류장", floors: 15, type: "버스정류장", x: 100.5, z: -244.7, model: "models/asset_버스정류장.glb" },
-  { id: 232, name: "버스정류장", floors: 15, type: "버스정류장", x: 62.8, z: -280.3, model: "models/asset_버스정류장.glb" },
-  { id: 233, name: "버스정류장", floors: 15, type: "버스정류장", x: -34.1, z: -605.8, model: "models/asset_버스정류장.glb" },
+  { id: 230, name: "버스정류장", floors: 15, type: "버스정류장", x: 94.5, z: -139.6, model: "models/asset_버스정류장.glb", rotationDeg: -95.1 },
+  { id: 231, name: "버스정류장", floors: 15, type: "버스정류장", x: 100.5, z: -244.7, model: "models/asset_버스정류장.glb", rotationDeg: -86.6 },
+  { id: 232, name: "버스정류장", floors: 15, type: "버스정류장", x: 60.9, z: -279.5, model: "models/asset_버스정류장.glb", rotationDeg: 89.2 },
+  { id: 233, name: "버스정류장", floors: 15, type: "버스정류장", x: -34.1, z: -605.8, model: "models/asset_버스정류장.glb", rotationDeg: 124.4 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
