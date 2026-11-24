@@ -356,9 +356,13 @@ export function slicePolyline(pts, s0, s1) {
 // 게임·노면표시는 도로 "끝점"이 서로 가까이(14 안) 모인 곳만 교차로로 친다. 그래서 길 끝이 다른 길 중간에
 // 닿거나(T자) 두 길이 서로 가로지르면(X자) 이어진 길로 인식되지 않는다 — 여기서 그 자리에서 지나가는 길을
 // 둘로 잘라(곡선이면 곡선 모양 그대로 둘로) 끝점들을 한 점에 모아 준다.
-//   connectRoads(segs, focus) : segs(ROAD_SEGMENTS와 같은 배열)를 그 자리에서 고친다. 잘린 길의 앞쪽 반은
+//   connectRoads(segs, focus, opts) : segs(ROAD_SEGMENTS와 같은 배열)를 그 자리에서 고친다. 잘린 길의 앞쪽 반은
 //     원래 객체를 그대로 쓰고, 뒤쪽 반은 segs 끝에 새로 붙인다. focus(도로 번호 배열)를 주면 그 길들이 닿는 곳만,
-//     없으면 지도 전체를 본다. 반환 { changed: Set(바뀐 도로 번호), added: [새로 생긴 도로 번호], joins(이은 곳 수) }
+//     없으면 지도 전체를 본다.
+//     opts.at = [x, z]이면(맵 에디터 "🔗 교차로 추가"로 누른 자리) 그 점에서 opts.radius 안의 가장 가까운 한 곳만
+//     잇고, 같은 교차로를 마저 완성하는 것(그 점 14 안)까지만 한다. opts.lenient면 사람이 직접 고른 자리라
+//     닿았다고 보는 거리를 조금 넉넉하게 잡는다.
+//     반환 { changed: Set(바뀐 도로 번호), added: [새로 생긴 도로 번호], joins(이은 곳 수), points(교차로가 된 점들) }
 // ════════════════════════════════════════════════════════════════════════════
 const CONNECT_EXTRA = 3; // 길 끝이 다른 길 가장자리에서 이만큼 못 미쳐도 닿은 걸로 본다(교차로 계산 ②와 같은 값)
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -428,11 +432,13 @@ function polylineCrossings(ri, rk) {
   return out;
 }
 
-export function connectRoads(segs, focus) {
+export function connectRoads(segs, focus, opts = {}) {
   const changed = new Set();
   const added = [];
+  const points = [];
   const work = new Set(focus ? focus.filter((i) => i >= 0 && i < segs.length) : segs.map((_, i) => i));
   const all = !focus;
+  const lenient = !!opts.lenient;
   let joins = 0;
   // (x,z)와 14 안에 있는 모든 도로 끝 — 길이가 1이면 아무 데도 안 이어진 "빈 끝"
   const groupAt = (x, z) => {
@@ -449,6 +455,7 @@ export function connectRoads(segs, focus) {
     return [x0 - pad, z0 - pad, x1 + pad, z1 + pad];
   };
   const overlap = (A, B) => A[0] <= B[2] && B[0] <= A[2] && A[1] <= B[3] && B[1] <= A[3];
+  const inBox = (b, p) => p[0] >= b[0] && p[0] <= b[2] && p[1] >= b[1] && p[1] <= b[3];
   const endDir = (r, which) => pointAt(r.pts, r.cum, which === "a" ? 0 : r.L);
   const split = (k, t, P, from) => {
     const n = splitSegAt(segs, k, t, P);
@@ -457,29 +464,40 @@ export function connectRoads(segs, focus) {
     if (work.has(k) || (from != null && work.has(from))) work.add(n);
     return n;
   };
+  const freeReach = (rk) => rk.half + CONNECT_EXTRA + (lenient ? 3 : 0);
+  const nodeReach = (rk) => (lenient ? Math.max(CONNECT_EXTRA, rk.half * 0.5) : CONNECT_EXTRA);
 
-  // 한 번에 한 곳씩 잇고 처음부터 다시 본다(잘린 길이 또 다른 길과 만날 수 있어서)
-  function step() {
+  // 지금 모양에서 이을 수 있는 곳 하나를 고른다 — target이 없으면 처음 찾은 곳, 있으면 target에서 limit 안의
+  // 가장 가까운 곳. 고른 곳은 { P(교차로가 될 점), apply(실제로 잇기) } — 고른 바로 다음에 apply해야 한다.
+  function scan(target, limit) {
     const info = segs.map(roadInfo);
-    const boxes = info.map((r) => box(r, r.half + CONNECT_EXTRA));
+    // 누른 자리에서 먼 길은 아예 보지 않는다(빠르게)
+    const reach = info.map((r) => !target || inBox(box(r, r.half + CONNECT_EXTRA + 6 + limit), target));
+    let best = null, bestD = Infinity;
+    const offer = (P, apply) => {
+      if (!target) { best = { P, apply }; return true; }
+      const d = Math.hypot(P[0] - target[0], P[1] - target[1]);
+      if (d <= limit && d < bestD) { bestD = d; best = { P, apply }; }
+      return false;
+    };
+    const boxes = info.map((r) => box(r, freeReach(r)));
     // ① 길 끝이 다른 길 중간에 닿음(T자)
     //    · 아무 데도 안 이어진 "빈 끝"이면: 그 길 가장자리 근처(3m)까지 닿은 것도 이어 준다
     //    · 이미 다른 길과 모여 있는 끝(교차로 점)이면: 그 점이 지나가는 길 한가운데(3m 안)에 있을 때만
     for (let i = 0; i < segs.length; i++) {
       const ri = info[i];
-      if (ri.L < 1e-3) continue;
+      if (ri.L < 1e-3 || !reach[i]) continue;
       for (const which of ["a", "b"]) {
         const E = segs[i][which];
         const group = groupAt(E[0], E[1]);
         const free = group.length === 1;
         for (let k = 0; k < segs.length; k++) {
-          if (k === i || (!all && !work.has(i) && !work.has(k))) continue;
-          const bk = boxes[k];
-          if (E[0] < bk[0] || E[0] > bk[2] || E[1] < bk[1] || E[1] > bk[3]) continue;
+          if (k === i || !reach[k] || (!all && !work.has(i) && !work.has(k))) continue;
+          if (!inBox(boxes[k], E)) continue;
           const rk = info[k];
           if (rk.L < 1e-3 || group.some(([j]) => j === k)) continue; // 이미 그 길 끝과 같은 교차로
           const near = nearestOnPolyline(rk.pts, rk.cum, E);
-          if (near.dist > (free ? rk.half + CONNECT_EXTRA : CONNECT_EXTRA)) continue;
+          if (near.dist > (free ? freeReach(rk) : nodeReach(rk))) continue;
           // 지나가는 길과 거의 나란히 겹쳐 그린 길이면 건드리지 않는다
           const crossesAtAngle = group.some(([j, w]) => {
             const d = endDir(info[j], w);
@@ -488,17 +506,14 @@ export function connectRoads(segs, focus) {
           if (!crossesAtAngle) continue;
           if (interior(near.s, rk.L)) {
             const P = [r1(near.x), r1(near.z)];
-            moveEnds(group, P);
-            split(k, tOf(rk, near), P, i);
+            const t = tOf(rk, near);
+            if (offer(P, () => { moveEnds(group, P); split(k, t, P, i); })) return best;
           } else if (free) {
             // 지나가는 길의 끝 가까이에 닿았으면 그 끝으로 모은다(ㄱ자·ㅏ자)
             const kw = near.s < rk.L / 2 ? "a" : "b";
-            moveEnds(group, [segs[k][kw][0], segs[k][kw][1]]);
-          } else {
-            continue;
+            const P = [segs[k][kw][0], segs[k][kw][1]];
+            if (offer(P, () => moveEnds(group, P))) return best;
           }
-          joins++;
-          return true;
         }
       }
     }
@@ -506,8 +521,9 @@ export function connectRoads(segs, focus) {
     //    거면 그 끝을 교차점으로 당겨서 T자로 잇는다
     const cboxes = info.map((r) => box(r, 0));
     for (let i = 0; i < segs.length; i++) {
+      if (!reach[i]) continue;
       for (let k = i + 1; k < segs.length; k++) {
-        if (!all && !work.has(i) && !work.has(k)) continue;
+        if (!reach[k] || (!all && !work.has(i) && !work.has(k))) continue;
         if (!overlap(cboxes[i], cboxes[k])) continue;
         const ri = info[i], rk = info[k];
         if (ri.L < 1e-3 || rk.L < 1e-3) continue;
@@ -517,31 +533,38 @@ export function connectRoads(segs, focus) {
           const P = [r1(c.x), r1(c.z)];
           const endI = c.si < ri.L / 2 ? "a" : "b", endK = c.sk < rk.L / 2 ? "a" : "b";
           if (inI && inK) {
-            split(i, c.ti, P);
-            split(k, c.tk, P);
-            joins++;
-            return true;
+            if (offer(P, () => { split(i, c.ti, P); split(k, c.tk, P); })) return best;
+            continue;
           }
           const gI = inI ? null : groupAt(segs[i][endI][0], segs[i][endI][1]);
           const gK = inK ? null : groupAt(segs[k][endK][0], segs[k][endK][1]);
           if (gI && gK) {
             // 둘 다 끝 근처: 둘 다 빈 끝일 때만(ㄱ자 모서리를 살짝 넘겨 그린 것) 교차점에서 만나게
             if (gI.length !== 1 || gK.length !== 1) continue;
-            moveEnds([...gI, ...gK], P);
-            joins++;
-            return true;
+            if (offer(P, () => moveEnds([...gI, ...gK], P))) return best;
+            continue;
           }
           const [g, o, ot] = gI ? [gI, k, c.tk] : [gK, i, c.ti];
           if (g.length !== 1) continue; // 이미 교차로에 모여 있는 끝(넓은 길끼리 겹친 자리 등)은 그대로
-          moveEnds(g, P);
-          split(o, ot, P, g[0][0]);
-          joins++;
-          return true;
+          if (offer(P, () => { moveEnds(g, P); split(o, ot, P, g[0][0]); })) return best;
         }
       }
     }
-    return false;
+    return best;
   }
-  for (let guard = 0; guard < 400 && step(); guard++);
-  return { changed, added, joins };
+
+  // 한 번에 한 곳씩 잇고 처음부터 다시 본다(잘린 길이 또 다른 길과 만날 수 있어서). 누른 자리(opts.at)가 있으면
+  // 첫 번째로 이은 점을 기준으로 그 교차로를 마저 완성하는 것까지만.
+  let anchor = null;
+  for (let guard = 0; guard < 400; guard++) {
+    const target = anchor || opts.at || null;
+    const limit = anchor ? JOIN_THRESH : opts.radius || JOIN_THRESH * 2;
+    const c = scan(target, limit);
+    if (!c) break;
+    c.apply();
+    joins++;
+    points.push(c.P);
+    if (opts.at && !anchor) anchor = c.P;
+  }
+  return { changed, added, joins, points };
 }

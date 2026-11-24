@@ -8,7 +8,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import * as MAP_DATA from "./map_data.js?v=20261124a";
-import { computeRoadMarkings, markedRanges, slicePolyline } from "./road_markings.js?v=20261124f";
+import { computeRoadMarkings, markedRanges, slicePolyline } from "./road_markings.js?v=20261124g";
 
 const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
 // 길 중간 횡단보도·신호등(맵 에디터 "🚦 신호등 추가"로 찍은 곳) — 예전 map_data.js에는 이 목록이 없을 수 있어서
