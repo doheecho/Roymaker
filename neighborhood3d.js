@@ -745,9 +745,9 @@ function buildRoadFootprints() {
     };
   });
 }
-function pointOnOtherRoad(x, z, selfIndex, footprints) {
+function pointOnOtherRoad(x, z, selfIndex, footprints, ignore) {
   for (const f of footprints) {
-    if (f.index === selfIndex) continue;
+    if (f.index === selfIndex || (ignore && ignore.has(f.index))) continue;
     const m = f.half + 0.1;
     if (x < f.minx - m || x > f.maxx + m || z < f.minz - m || z > f.maxz + m) continue;
     for (let i = 0; i < f.pts.length - 1; i++) {
@@ -759,7 +759,8 @@ function pointOnOtherRoad(x, z, selfIndex, footprints) {
 }
 
 // 보도 한 구간(sub, 월드 좌표): 0.6m 간격 단면을 만들고, 양 끝 바깥 모서리를 깎고, 다른 도로 위 단면은 뺀다
-function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore, footprints) {
+// conn: { a, b } — 그 끝이 다른 도로 하나와 그냥 이어지는(교차로가 아닌) 경우 그 도로 번호, 아니면 null
+function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore, footprints, conn) {
   if (!seg.sidewalk) return;
   const rawPts = roadPolyline(seg);
   let rawLen = 0;
@@ -770,9 +771,14 @@ function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore, foo
   const R = Math.min(SIDEWALK_CORNER_RAW * WORLD_SCALE, sideW);
   const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
   const inset = SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE;
+  // 그냥 이어지는 옆 도로(같은 길의 다음 구간)는 "다른 도로"로 치지 않는다 — 안 그러면 곡선·이음매에서 보도가 지워진다
+  const ignore = new Set([conn.a, conn.b].filter((v) => v != null));
   for (const [s0, s1] of markedRanges(rawLen, gaps)) {
     const sub = slicePolyline(rawPts, s0, s1);
     if (sub.length < 2) continue;
+    // 이 구간 끝이 도로 끝이면서 보도 있는 옆 도로와 그냥 이어지면 둥글게 깎지 않는다(교차로 쪽만 깎음)
+    const roundStart = !(s0 <= 1e-6 && conn.a != null && conn.aHasSidewalk);
+    const roundEnd = !(s1 >= rawLen - 1e-6 && conn.b != null && conn.bHasSidewalk);
     const pts = sub.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
     for (let i = 0; i < pts.length - 1; i++) {
       walkBands.push({ ax: pts[i][0], az: pts[i][1], bx: pts[i + 1][0], bz: pts[i + 1][1], inner: roadW / 2, outer: roadW / 2 + sideW });
@@ -789,13 +795,13 @@ function collectRoadSidewalk(seg, segIndex, sideStore, lineStore, curbStore, foo
     [-1, 1].forEach((dir) => {
       // 각 단면: 안쪽(도로 가장자리)은 고정, 바깥은 끝에서 R 안쪽부터 둥글게 줄어든다
       const secs = samples.map((q, k) => {
-        const d = Math.min(stations[k], L - stations[k]);
+        const d = Math.min(roundStart ? stations[k] : Infinity, roundEnd ? L - stations[k] : Infinity);
         const vOff = d >= R ? sideW : sideW - R + Math.sqrt(Math.max(0, R * R - (R - d) * (R - d)));
         const nx = -q.tz * dir, nz = q.tx * dir; // 도로 바깥쪽 법선
         const inner = [q.x + nx * (roadW / 2), q.z + nz * (roadW / 2)];
         const outer = [q.x + nx * (roadW / 2 + vOff), q.z + nz * (roadW / 2 + vOff)];
         const mid = [q.x + nx * (roadW / 2 + vOff / 2), q.z + nz * (roadW / 2 + vOff / 2)];
-        const blocked = pointOnOtherRoad(mid[0], mid[1], segIndex, footprints);
+        const blocked = pointOnOtherRoad(mid[0], mid[1], segIndex, footprints, ignore);
         return { inner, outer, nx, nz, q, blocked };
       });
       // 다른 도로에 안 덮인 연속 구간끼리 묶어서 띠를 만든다
@@ -830,13 +836,92 @@ function pushVerticalQuadStrip(store, pts2d) {
   }
 }
 
+// 도로 끝마다, 거기서 "그냥 이어지는" 도로가 하나만 있으면(끝점 2개가 모이는 곳 = 교차로 아님) 그 번호를 적어 둔다
+const JOIN_RAW = 14; // road_markings.js의 교차로 묶음 거리와 같은 값
+function buildRoadConnections() {
+  const ends = [];
+  ROAD_SEGMENTS.forEach((seg, i) => {
+    ends.push({ i, which: "a", x: seg.a[0], z: seg.a[1] });
+    ends.push({ i, which: "b", x: seg.b[0], z: seg.b[1] });
+  });
+  const conns = ROAD_SEGMENTS.map(() => ({ a: null, b: null, aWhich: null, bWhich: null, aHasSidewalk: false, bHasSidewalk: false }));
+  for (const e of ends) {
+    const near = ends.filter((o) => o !== e && o.i !== e.i && Math.hypot(o.x - e.x, o.z - e.z) < JOIN_RAW);
+    if (near.length !== 1) continue; // 혼자(막다른 길)거나 셋 이상(교차로)
+    const o = near[0];
+    conns[e.i][e.which] = o.i;
+    conns[e.i][e.which + "Which"] = o.which;
+    conns[e.i][e.which + "HasSidewalk"] = !!ROAD_SEGMENTS[o.i].sidewalk;
+  }
+  return conns;
+}
+
+// 같은 길의 두 구간이 꺾여서 이어지는 자리: 바깥쪽에 부채꼴 보도를 채워 보도가 끊기지 않게 한다
+// (안쪽은 두 구간 보도가 이미 겹치므로 채우지 않는다 — 채우면 도로 위로 넘어온다)
+function buildSidewalkJoints(conns, sideStore, lineStore, curbStore) {
+  const endDir = (seg, which, outward) => {
+    // outward=true면 이음매에서 도로 안쪽으로 들어가는 방향, false면 도로에서 이음매로 나오는 방향
+    const pts = roadPolyline(seg);
+    const n = pts.length;
+    let dx, dz;
+    if (which === "a") { dx = pts[1][0] - pts[0][0]; dz = pts[1][1] - pts[0][1]; }
+    else { dx = pts[n - 2][0] - pts[n - 1][0]; dz = pts[n - 2][1] - pts[n - 1][1]; }
+    const len = Math.hypot(dx, dz) || 1;
+    return outward ? [dx / len, dz / len] : [-dx / len, -dz / len];
+  };
+  const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
+  const inset = SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE;
+  ROAD_SEGMENTS.forEach((seg, i) => {
+    ["a", "b"].forEach((which) => {
+      const j = conns[i][which];
+      if (j == null || j < i) return; // 한 이음매는 한 번만
+      const segJ = ROAD_SEGMENTS[j];
+      if (!seg.sidewalk || !segJ.sidewalk) return;
+      const whichJ = conns[i][which + "Which"];
+      const u = endDir(seg, which, false); // i에서 이음매로 들어오는 방향
+      const v = endDir(segJ, whichJ, true); // 이음매에서 j로 나가는 방향
+      const turn = u[0] * v[1] - u[1] * v[0];
+      const angle = Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1])));
+      if (angle < (2 * Math.PI) / 180) return; // 거의 일직선이면 채울 필요 없음
+      const pi = which === "a" ? seg.a : seg.b;
+      const pj = whichJ === "a" ? segJ.a : segJ.b;
+      const P = [((pi[0] + pj[0]) / 2) * WORLD_SCALE, ((pi[1] + pj[1]) / 2) * WORLD_SCALE];
+      const ri = (Math.max(seg.width, segJ.width) / 2) * WORLD_SCALE;
+      const ro = ri + Math.min(seg.sidewalk, segJ.sidewalk) * WORLD_SCALE;
+      // 바깥쪽 법선: 꺾이는 방향의 반대편
+      const side = turn > 0 ? -1 : 1;
+      const n1 = [-u[1] * side, u[0] * side];
+      const n2 = [-v[1] * side, v[0] * side];
+      const a1 = Math.atan2(n1[1], n1[0]);
+      let da = Math.atan2(n2[1], n2[0]) - a1;
+      while (da > Math.PI) da -= 2 * Math.PI;
+      while (da < -Math.PI) da += 2 * Math.PI;
+      const steps = Math.max(2, Math.ceil(Math.abs(da) / ((8 * Math.PI) / 180)));
+      const arc = (r) => {
+        const out = [];
+        for (let k = 0; k <= steps; k++) {
+          const t = a1 + (da * k) / steps;
+          out.push([P[0] + Math.cos(t) * r, P[1] + Math.sin(t) * r]);
+        }
+        return out;
+      };
+      const inner = arc(ri);
+      pushStrip(sideStore, inner, arc(ro));
+      pushVerticalQuadStrip(curbStore, inner);
+      pushStrip(lineStore, arc(ri + inset), arc(ri + inset + lineW));
+    });
+  });
+}
+
 function buildRoadSidewalks() {
   walkBands.length = 0;
   const sideStore = newRibbonStore();
   const lineStore = newRibbonStore();
   const curbStore = newRibbonStore();
   const footprints = buildRoadFootprints();
-  ROAD_SEGMENTS.forEach((seg, i) => collectRoadSidewalk(seg, i, sideStore, lineStore, curbStore, footprints));
+  const conns = buildRoadConnections();
+  ROAD_SEGMENTS.forEach((seg, i) => collectRoadSidewalk(seg, i, sideStore, lineStore, curbStore, footprints, conns[i]));
+  buildSidewalkJoints(conns, sideStore, lineStore, curbStore);
   if (sideStore.idx.length) {
     const mesh = new THREE.Mesh(
       storeToGeometry(sideStore),
