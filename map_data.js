@@ -170,7 +170,7 @@ export const PLACES = [
   { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -595.1, z: 100, model: "models/place_골드축산.glb", rotationDeg: -4.5 },
   { id: 223, name: "행복한교회", floors: 5, type: "기타", x: 107.8, z: -495.1, model: "models/place_행복한교회.glb", rotationDeg: 5.5, scaleRatio: 1.5 },
   { id: 224, name: "대림상가", floors: 5, type: "기타", x: 53.4, z: -562.6, model: "models/place_대림독서실.glb", rotationDeg: -15.6, scaleRatio: 1.3 },
-  { id: 225, name: "금호초등학교", floors: 5, type: "학교", x: -546.8, z: 361.1, model: "models/place_금호초등학교.glb", rotationDeg: 19.3, scaleRatio: 2 },
+  { id: 225, name: "금호초등학교", floors: 5, type: "학교", x: -546.8, z: 361.1, model: "models/place_금호초등학교1.glb", rotationDeg: 19.3, scaleRatio: 2 },
   { id: 226, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: -42.9, z: 223.5 },
   { id: 227, name: "성동중앙교회", floors: 5, type: "기타", x: 52.7, z: 223.2, model: "models/place_성동중앙교회.glb", rotationDeg: 4.7, scaleRatio: 1.5 },
   { id: 228, name: "버스정류장", floors: 1, type: "버스정류장", x: 55.8, z: -113.2, model: "models/asset_버스정류장.glb", rotationDeg: 84.2 },
