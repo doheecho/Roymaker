@@ -418,6 +418,9 @@ function buildStaticScene() {
   buildSky();
   buildCars();
   buildPedestrians();
+  buildShopSigns();
+  buildSchoolZoneBoards();
+  buildAlleyMouths();
 }
 
 // ── 지도 바닥: img/base_naver_map.png(3288×2134)를 실제 위치에 맞춰 깐다 ──
@@ -1182,7 +1185,7 @@ function emitSidewalkBand(stores, secs, opts) {
     const mid = secs.map((sc) => sc.at(opts.width * 0.62));
     const pcum = [0];
     for (let i = 1; i < mid.length; i++) pcum.push(pcum[i - 1] + Math.hypot(mid[i][0] - mid[i - 1][0], mid[i][1] - mid[i - 1][1]));
-    pedPaths.push({ pts: mid, ys: secs.map((sc) => sc.y), cum: pcum, len: pcum[pcum.length - 1] });
+    pedPaths.push({ pts: mid, ys: secs.map((sc) => sc.y), cum: pcum, len: pcum[pcum.length - 1], w: opts.width });
   }
   if (opts.railing) {
     // 울타리는 보도 높이 그대로인 구간에만(내려앉은 곳 = 길이 지나가는 곳은 비운다)
@@ -2084,6 +2087,7 @@ function loadPlaceModelInto(entry) {
       entry.group.add(model);
       entry.loadedModel = model;
       registerBuildingGlass(entry, model); // 밤에 창문 불빛
+      fitShopToModel(entry); // 입간판이 건물 안에 들어갔으면 옮기고, 문 닫은 시간엔 셔터
       if (entry.placeholder) entry.placeholder.visible = false;
     },
     undefined,
@@ -2113,6 +2117,7 @@ function updateModelStreaming(dt) {
       disposeObject3D(entry.loadedModel);
       entry.loadedModel = null;
       buildingGlass.delete(entry);
+      removeShopShutter(entry);
       if (entry.placeholder) entry.placeholder.visible = true;
     }
   });
@@ -2484,14 +2489,14 @@ function startAdventure() {
   updateHud();
 }
 
-function showToast(text) {
+function showToast(text, ms = 1600) {
   if (!toastEl) return;
   toastEl.textContent = text;
   toastEl.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     toastEl.hidden = true;
-  }, 1600);
+  }, ms);
 }
 
 function remainingCounts() {
@@ -2515,9 +2520,9 @@ function updateHud() {
   }
 }
 
-function grantReward(amount, label) {
+function grantReward(amount, label, ms) {
   if (typeof window.grantAdventureReward === "function") window.grantAdventureReward(amount);
-  showToast(`${label} · 용돈 +${amount}원`);
+  showToast(`${label} · 용돈 +${amount}원`, ms);
 }
 
 function grantFriendHangout() {
@@ -2828,11 +2833,13 @@ function spawnErrandMom() {
 // 움직인다 — 카메라를 오른쪽으로 돌렸으면 위쪽 키가 그 돌린 방향으로 가도록, camYaw를 매 프레임
 // 그대로 반영한다.
 function updateMovement(dt) {
+  characterMoving = false;
   if (!character || dancing) return;
   if (currentErrand?.phase === "awaitingDialog") return; // 편의점 대화 중엔 멈춰 선다
   const inputForward = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
   const inputRight = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
   const moving = inputForward !== 0 || inputRight !== 0;
+  characterMoving = moving;
   if (moving) {
     const fx = -Math.sin(camYaw);
     const fz = -Math.cos(camYaw);
@@ -2971,8 +2978,11 @@ function animate() {
   updateSunFollow();
   updateSky(dt);
   updateSignals(dt);
+  updateAlleyEvent(dt);
   updateCars(dt);
   updatePedestrians(dt);
+  updateSchoolZone(dt);
+  updateSound(dt);
   updateLabelScales();
   // 라벨·건물 보이기/숨기기는 캐릭터가 움직여야만 바뀌니 0.2초마다만 확인한다
   visibilityTimer += dt;
@@ -3644,15 +3654,26 @@ function updateSignals(dt) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ── 달리는 차·버스: 캐릭터 주변에서만 차 18대 + 서울 시내버스 4대(파란 간선·초록 지선)가 차로를 따라 달린다 ──
+// ── 달리는 차·버스·오토바이: 캐릭터 주변에서만 차 18대 + 서울 시내버스 4대(파란 간선·초록 지선) + 배달 오토바이
+//    4대가 차로를 따라 달린다 (한밤·새벽엔 차가 줄고 버스는 쉰다 — carDensity) ──
 // · 8m 이상 도로(단지 안 베이지 도로 제외)의 오른쪽 차로를 달리고, 도로 끝(교차로)에서 이어진 길 중 하나로
 //   꺾어 들어간다(곧은 길을 더 자주 고름). 막다른 길에선 돌아 나온다. 버스는 13m 이상 큰길을 골라 다닌다.
-// · 신호등이 있는 끝에서는 빨강·노랑이면 정지선 앞에 선다. 앞차와 거리를 두고, 앞에 사람이 있으면 멈춘다.
-// · 차는 몸통·유리, 버스는 색깔별 몸통 하나(텍스처 한 장에 옆면·앞뒤·지붕을 모아 그림), 바퀴·그림자는 같이 써서
-//   종류별 인스턴스 6개뿐이다. 멀어진 차는 캐릭터 근처로 다시 보낸다.
+// · 신호등이 있는 끝에서는 빨강·노랑이면 정지선 앞에 선다. 앞차와 거리를 두고, 앞에 사람이 있으면 멈춘다
+//   (차도에 서서 오래 막고 있으면 경적). 어린이 보호구역에선 절반 속도.
+// · 차는 몸통·유리, 버스는 색깔별 몸통 하나(텍스처 한 장에 옆면·앞뒤·지붕을 모아 그림), 오토바이는 몸통·배달원·
+//   헬멧·배달통, 바퀴·그림자는 같이 써서 종류별 인스턴스 몇 개뿐이다. 밤엔 전조등·미등과 앞 도로 불빛이 켜진다.
+//   멀어진 차는 캐릭터 근처로 다시 보낸다. 차 한 대 자리는 "골목에서 나오는 차" 이벤트 전용이다.
 // ════════════════════════════════════════════════════════════════════════════
 const CAR_COUNT = 18;
 const BUS_COUNT = 4; // 반은 파란 간선버스, 반은 초록 지선버스
+// 배달 오토바이: 스쿠터 + 헬멧 쓴 배달원 + 뒤에 배달통. 차처럼 차로·신호를 따르되 더 빠르고 바깥 차로 쪽으로 달리며,
+// 꺾을 때 몸을 기울인다.
+const MOTO_COUNT = 4;
+const MOTO_LEN = 0.36, MOTO_WID = 0.13;
+const MOTO_MAX_SPEED = 4.7;
+const MOTO_COLORS = [0xd8262e, 0xf2f2ef, 0x2a2c31, 0xf2b705];
+const MOTO_JACKETS = [0x2a3a5c, 0x1f7a64, 0xd9482b, 0x3b3f46];
+const MOTO_HELMETS = [0xffffff, 0xe03a3a, 0x26282c, 0xffcf3a];
 const VEHICLE_SPAWN_MIN = 14; // 월드 단위 — 캐릭터 바로 앞에서 불쑥 생기지 않게
 const VEHICLE_SPAWN_MAX = 38;
 const VEHICLE_DESPAWN = 48;
@@ -3706,7 +3727,7 @@ function buildCarNetwork() {
     const lanes = [];
     for (let k = 0; k < Math.max(1, look.perDir); k++) lanes.push((k + 0.5) * look.laneW);
     // 어린이 보호구역에서는 천천히(시속 30km 느낌)
-    return { i, pts, cum, L, w, drivable, gapA, gapB, lanes, speedFactor: look.kind === "school" ? 0.55 : 1 };
+    return { i, pts, cum, L, w, drivable, gapA, gapB, lanes, speedFactor: look.kind === "school" ? SCHOOL_SPEED_FACTOR : 1 };
   });
   // 도로 끝 → 교차로(노드)
   const ends = [];
@@ -3736,9 +3757,10 @@ function carRoadPose(r, s, dir, lane) {
   return { x: (q.x + rx * lane) * WORLD_SCALE, z: (q.z + rz * lane) * WORLD_SCALE, fx, fz };
 }
 
-// 버스는 오른쪽 끝 차로(정류장 쪽), 차는 아무 차로나
+// 버스는 오른쪽 끝 차로(정류장 쪽), 오토바이는 대개 바깥 차로, 차는 아무 차로나
 function laneFor(car, r) {
-  return car.type === "bus" ? r.lanes[r.lanes.length - 1] : r.lanes[Math.floor(Math.random() * r.lanes.length)];
+  if (car.type === "bus" || (car.type === "moto" && Math.random() < 0.75)) return r.lanes[r.lanes.length - 1];
+  return r.lanes[Math.floor(Math.random() * r.lanes.length)];
 }
 
 function spawnCar(car) {
@@ -3758,8 +3780,8 @@ function spawnCar(car) {
     if (d < VEHICLE_SPAWN_MIN || d > VEHICLE_SPAWN_MAX) continue;
     const clearRaw = (car.len * 1.6) / WORLD_SCALE + 4;
     if (cars.some((o) => o !== car && o.active && o.mode === "road" && o.seg === r.i && o.dir === dir && Math.abs(o.lane - lane) < 0.5 && Math.abs(o.s - s) < clearRaw)) continue;
-    Object.assign(car, { active: true, mode: "road", seg: r.i, s, dir, lane, turn: null, x: pose.x, z: pose.z, fx: pose.fx, fz: pose.fz });
-    car.maxSpeed = (isBus ? BUS_MAX_SPEED : CAR_MAX_SPEED) * (0.85 + Math.random() * 0.3);
+    Object.assign(car, { active: true, mode: "road", seg: r.i, s, dir, lane, turn: null, x: pose.x, z: pose.z, fx: pose.fx, fz: pose.fz, lean: 0, prevYaw: undefined });
+    car.maxSpeed = (isBus ? BUS_MAX_SPEED : car.type === "moto" ? MOTO_MAX_SPEED : CAR_MAX_SPEED) * (0.85 + Math.random() * 0.3);
     car.speed = car.maxSpeed * 0.6;
     return true;
   }
@@ -3870,36 +3892,113 @@ function makeBusGeometry() {
   return geo;
 }
 
+// 배달 오토바이 모양(몸통·안장·앞 기둥·핸들을 한 덩어리로)
+function makeMotoBodyGeometry() {
+  const parts = [];
+  const box = (w, h, d, x, y, z) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); parts.push(g); };
+  box(0.085, 0.07, 0.24, 0, 0.1, -0.01); // 몸통·발판
+  box(0.078, 0.05, 0.13, 0, 0.155, -0.05); // 안장
+  box(0.07, 0.17, 0.045, 0, 0.165, 0.115); // 앞 기둥·앞 덮개
+  box(0.16, 0.014, 0.014, 0, 0.25, 0.11); // 핸들
+  return mergeGeometries(parts);
+}
+// 배달원(앉은 자세): 윗옷(인스턴스 색 그대로)·바지(어둡게)를 정점 색으로 나눠 한 덩어리로
+function makeRiderGeometry() {
+  const parts = [];
+  const add = (g, shade) => {
+    const n = g.attributes.position.count;
+    const col = new Float32Array(n * 3).fill(shade);
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    parts.push(g);
+  };
+  const torso = new THREE.BoxGeometry(0.11, 0.14, 0.07);
+  torso.rotateX(0.2); // 앞으로 살짝 숙임
+  torso.translate(0, 0.255, -0.04);
+  add(torso, 1);
+  [-1, 1].forEach((sx) => {
+    const arm = new THREE.BoxGeometry(0.03, 0.03, 0.15);
+    arm.rotateX(0.4); // 어깨에서 핸들 쪽으로 내려감
+    arm.translate(sx * 0.066, 0.28, 0.04);
+    add(arm, 1);
+    const thigh = new THREE.BoxGeometry(0.038, 0.04, 0.11);
+    thigh.translate(sx * 0.03, 0.195, 0.01);
+    add(thigh, 0.2);
+    const shin = new THREE.BoxGeometry(0.036, 0.075, 0.036);
+    shin.translate(sx * 0.034, 0.16, 0.065);
+    add(shin, 0.2);
+  });
+  return mergeGeometries(parts);
+}
+function makeDeliveryBoxTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = "#d63b2f";
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 86, 128, 12);
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = "bold 44px sans-serif";
+  g.fillText("배달", 64, 48);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function buildCars() {
   buildCarNetwork();
   cars = [];
-  const total = CAR_COUNT + BUS_COUNT;
+  const nCarSlots = CAR_COUNT + 1; // 마지막 한 대는 "골목에서 나오는 차" 이벤트 전용
+  const total = nCarSlots + BUS_COUNT + MOTO_COUNT;
   const bodyGeo = new THREE.BoxGeometry(CAR_WID, 0.11, CAR_LEN);
   const cabinGeo = new THREE.BoxGeometry(CAR_WID * 0.86, 0.085, CAR_LEN * 0.5);
   const wheelGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.045, 10);
   wheelGeo.rotateZ(Math.PI / 2);
   const shadowGeo = new THREE.CircleGeometry(1, 16);
   shadowGeo.rotateX(-Math.PI / 2);
-  const body = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.35 }), CAR_COUNT);
-  const cabin = new THREE.InstancedMesh(cabinGeo, new THREE.MeshStandardMaterial({ color: 0x24313d, roughness: 0.2, metalness: 0.6 }), CAR_COUNT);
+  const body = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.35 }), nCarSlots);
+  const cabin = new THREE.InstancedMesh(cabinGeo, new THREE.MeshStandardMaterial({ color: 0x24313d, roughness: 0.2, metalness: 0.6 }), nCarSlots);
   const wheels = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ color: 0x151618, roughness: 0.9 }), total * 4);
   const shadow = new THREE.InstancedMesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }), total);
   const busGeo = makeBusGeometry();
   const buses = BUS_TYPES.map((t) => new THREE.InstancedMesh(busGeo, new THREE.MeshStandardMaterial({ map: makeBusTexture(t), roughness: 0.55, metalness: 0.15 }), BUS_COUNT));
-  for (let k = 0; k < CAR_COUNT; k++) {
+  const motoBody = new THREE.InstancedMesh(makeMotoBodyGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.25 }), MOTO_COUNT);
+  const rider = new THREE.InstancedMesh(makeRiderGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true }), MOTO_COUNT);
+  const helmetGeo = new THREE.SphereGeometry(0.05, 10, 8);
+  helmetGeo.scale(1, 0.95, 1.1);
+  helmetGeo.translate(0, 0.39, -0.01);
+  const helmet = new THREE.InstancedMesh(helmetGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.1 }), MOTO_COUNT);
+  const boxGeo = new THREE.BoxGeometry(0.12, 0.1, 0.11);
+  boxGeo.translate(0, 0.225, -0.16);
+  const deliveryBox = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ map: makeDeliveryBoxTexture(), roughness: 0.7 }), MOTO_COUNT);
+  // 밤에만: 전조등(흰빛)·미등(빨강) 작은 판, 차 앞 도로에 깔리는 불빛(가로등 불빛처럼 더해 그리는 판)
+  const lampGeo = new THREE.BoxGeometry(0.055, 0.026, 0.008);
+  const headLamps = new THREE.InstancedMesh(lampGeo, new THREE.MeshBasicMaterial({ color: 0xfff6d8 }), total * 2);
+  const tailLamps = new THREE.InstancedMesh(lampGeo, new THREE.MeshBasicMaterial({ color: 0xff2a1f }), total * 2);
+  const beamGeo = new THREE.CircleGeometry(1, 20);
+  beamGeo.rotateX(-Math.PI / 2);
+  const beams = new THREE.InstancedMesh(beamGeo, new THREE.MeshBasicMaterial({ map: getLightPoolTexture(), color: 0xfff4dc, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5 }), total);
+  beams.renderOrder = 2;
+  for (let k = 0; k < nCarSlots; k++) {
     body.setColorAt(k, new THREE.Color(CAR_COLORS[k % CAR_COLORS.length]));
-    cars.push({ active: false, index: k, type: "car", len: CAR_LEN, wid: CAR_WID });
+    cars.push({ active: false, index: k, type: "car", len: CAR_LEN, wid: CAR_WID, scripted: k === CAR_COUNT });
   }
   for (let k = 0; k < BUS_COUNT; k++) {
     cars.push({ active: false, index: k, type: "bus", busType: k % BUS_TYPES.length, len: BUS_LEN, wid: BUS_WID });
   }
-  [body, cabin, wheels, shadow, ...buses].forEach((m) => {
+  for (let k = 0; k < MOTO_COUNT; k++) {
+    cars.push({ active: false, index: k, type: "moto", len: MOTO_LEN, wid: MOTO_WID, lean: 0, latOff: 0.5 + Math.random() * 0.5 });
+  }
+  const all = [body, cabin, wheels, shadow, ...buses, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams];
+  all.forEach((m) => {
     m.frustumCulled = false; // 인스턴스가 계속 움직여서 미리 잡은 경계로 자르면 안 된다
     m.count = 0;
     scene.add(m);
   });
+  [motoBody, rider, helmet].forEach((m) => m.setColorAt(0, new THREE.Color(0xffffff))); // instanceColor 버퍼를 미리 만든다
   if (body.instanceColor) body.instanceColor.needsUpdate = true;
-  carMeshes = { body, cabin, wheels, shadow, buses };
+  carMeshes = { body, cabin, wheels, shadow, buses, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams, all };
 }
 
 function chooseNextRoad(car) {
@@ -3941,7 +4040,11 @@ function startCarTurn(car) {
     const idx = carRoads[car.seg].lanes.indexOf(car.lane);
     lane = nr.lanes[Math.min(nr.lanes.length - 1, Math.max(0, idx))];
   }
-  const p1 = carRoadPose(nr, s, dir, lane);
+  beginTurn(car, carRoadPose(nr, s, dir, lane), { seg: m.i, dir, s, lane });
+}
+
+// 지금 자리·방향에서 p1(다음 도로 위 자리·방향)까지 2차 곡선으로 돌아 들어간다
+function beginTurn(car, p1, next) {
   const p0 = { x: car.x, z: car.z };
   // 제어점: 들어오는 방향 직선과 나가는 방향 직선이 만나는 점(없으면 두 점의 중간)
   let cx = (p0.x + p1.x) / 2, cz = (p0.z + p1.z) / 2;
@@ -3959,22 +4062,32 @@ function startCarTurn(car) {
     px = qx; pz = qz;
   }
   car.mode = "turn";
-  car.turn = { p0, c: { x: cx, z: cz }, p1, len: Math.max(0.05, len), t: 0, next: { seg: m.i, dir, s, lane } };
+  car.turn = { p0, c: { x: cx, z: cz }, p1, len: Math.max(0.05, len), t: 0, next };
 }
 
 function speedToStopWithin(distWorld) {
   return distWorld <= 0 ? 0 : Math.sqrt(2 * CAR_DECEL * distWorld);
 }
 
+let honkCooldown = 0;
 function updateCars(dt) {
   if (!carMeshes || !character) return;
+  honkCooldown = Math.max(0, honkCooldown - dt);
   const W = WORLD_SCALE;
   const cp = character.position;
   carRespawnTimer += dt;
   if (carRespawnTimer > 0.5) {
     carRespawnTimer = 0;
+    const allowedCars = Math.round(CAR_COUNT * carDensity(worldHour));
+    const busesRun = worldHour >= 5;
     cars.forEach((car) => {
-      if (!car.active || Math.hypot(car.x - cp.x, car.z - cp.z) > VEHICLE_DESPAWN) {
+      const far = !car.active || Math.hypot(car.x - cp.x, car.z - cp.z) > VEHICLE_DESPAWN;
+      if (car.scripted) { if (far) car.active = false; return; } // 골목 이벤트 차는 이벤트 때만 나온다
+      if ((car.type === "car" && car.index >= allowedCars) || (car.type === "bus" && !busesRun)) {
+        if (car.active && safeToHide(car.x, car.z)) car.active = false; // 지금 시간엔 쉬는 차
+        return;
+      }
+      if (far) {
         car.active = false;
         spawnCar(car);
       }
@@ -3982,6 +4095,7 @@ function updateCars(dt) {
   }
   cars.forEach((car) => {
     if (!car.active) return;
+    const accel = car.type === "moto" ? CAR_ACCEL * 1.7 : CAR_ACCEL;
     let limit = car.maxSpeed * (car.mode === "road" ? carRoads[car.seg].speedFactor : 1);
     // 앞에 사람(캐릭터)이 있으면 멈춘다
     const ax = cp.x - car.x, az = cp.z - car.z;
@@ -3989,7 +4103,15 @@ function updateCars(dt) {
     const side = Math.abs(ax * -car.fz + az * car.fx);
     if (ahead > 0 && ahead < car.len * 0.5 + 1.8 && side < car.wid * 0.5 + 0.25) {
       limit = Math.min(limit, speedToStopWithin(ahead - car.len * 0.5 - 0.35));
-    }
+      // 차도에 서서 차를 오래 막고 있으면 "빵!"
+      car.blockedT = car.speed < 0.3 ? (car.blockedT || 0) + dt : 0;
+      if (car.blockedT > 1.6 && honkCooldown <= 0 && !car.scripted && !characterOnCrossing()) {
+        honkCooldown = 7;
+        car.blockedT = 0;
+        playHorn(0.8);
+        showToast("🚗 빵! 차도에 서 있으면 위험해요 — 보도로 비켜요", 2400);
+      }
+    } else car.blockedT = 0;
     if (car.mode === "road") {
       const r = carRoads[car.seg];
       const endWhich = car.dir > 0 ? "b" : "a";
@@ -4024,16 +4146,25 @@ function updateCars(dt) {
         if (d > 0 && d < gapRaw) { gapRaw = d; lead = o; }
       });
       if (lead) limit = Math.min(limit, speedToStopWithin(gapRaw * W - (car.len + lead.len) * 0.5 - 0.25));
-      car.speed += Math.max(-CAR_DECEL * dt, Math.min(CAR_ACCEL * dt, limit - car.speed));
+      car.speed += Math.max(-CAR_DECEL * dt, Math.min(accel * dt, limit - car.speed));
       car.speed = Math.max(0, car.speed);
       car.s += (car.dir * car.speed * dt) / W;
-      const pose = carRoadPose(r, car.s, car.dir, car.lane);
+      const pose = carRoadPose(r, car.s, car.dir, car.lane + (car.type === "moto" ? car.latOff : 0));
       car.x = pose.x; car.z = pose.z; car.fx = pose.fx; car.fz = pose.fz;
       const turnAt = car.dir > 0 ? r.L - r.gapB : r.gapA;
       if ((car.dir > 0 && car.s >= turnAt) || (car.dir < 0 && car.s <= turnAt)) startCarTurn(car);
+    } else if (car.mode === "alley") {
+      // 골목 이벤트 차: 골목 가운데를 따라 큰길 쪽으로 나온다(멈춤·급정거는 updateAlleyEvent가 speedCap으로 정한다)
+      const al = car.alley;
+      car.speed += Math.max(-CAR_DECEL * 1.8 * dt, Math.min(accel * dt, Math.min(limit, al.speedCap) - car.speed));
+      car.speed = Math.max(0, car.speed);
+      car.s += (al.dir * car.speed * dt) / W;
+      const pose = carRoadPose(al.r, car.s, al.dir, al.lane);
+      car.x = pose.x; car.z = pose.z; car.fx = pose.fx; car.fz = pose.fz;
+      if ((al.dir > 0 && car.s >= al.sTurn) || (al.dir < 0 && car.s <= al.sTurn)) startAlleyExitTurn(car);
     } else {
       const tn = car.turn;
-      car.speed += Math.max(-CAR_DECEL * dt, Math.min(CAR_ACCEL * dt, Math.min(limit, car.maxSpeed * 0.75) - car.speed));
+      car.speed += Math.max(-CAR_DECEL * dt, Math.min(accel * dt, Math.min(limit, car.maxSpeed * 0.75) - car.speed));
       car.speed = Math.max(0, car.speed);
       tn.t = Math.min(1, tn.t + (car.speed * dt) / tn.len);
       const t = tn.t, w = 1 - t;
@@ -4047,26 +4178,71 @@ function updateCars(dt) {
         Object.assign(car, { mode: "road", seg: tn.next.seg, dir: tn.next.dir, s: tn.next.s, lane: tn.next.lane, turn: null });
       }
     }
+    if (car.type === "moto") {
+      // 꺾을 때 도는 쪽으로 몸을 기울인다(빠르게 돌수록 더)
+      const yaw = Math.atan2(car.fx, car.fz);
+      let dy = car.prevYaw === undefined ? 0 : yaw - car.prevYaw;
+      if (dy > Math.PI) dy -= 2 * Math.PI;
+      else if (dy < -Math.PI) dy += 2 * Math.PI;
+      car.prevYaw = yaw;
+      const target = Math.max(-0.42, Math.min(0.42, (-dy / Math.max(dt, 1e-3)) * car.speed / 20));
+      car.lean += (target - car.lean) * Math.min(1, dt * 5);
+    }
   });
   // 그리기(종류별로 활성인 것만 앞쪽 칸에 모아서)
-  const { body, cabin, wheels, shadow, buses } = carMeshes;
+  const { body, cabin, wheels, shadow, buses, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams } = carMeshes;
   const m = new THREE.Matrix4(), part = new THREE.Matrix4(), base = new THREE.Matrix4(), sc = new THREE.Matrix4();
   const y0 = 0.012;
-  let nCar = 0, nAll = 0;
+  let nCar = 0, nAll = 0, nW = 0, nMoto = 0, nHead = 0, nTail = 0;
   const nBus = BUS_TYPES.map(() => 0);
+  // 밤엔 전조등·미등을 켜고 차 앞 도로를 비춘다(낮에는 아예 그리지 않는다)
+  const lampsOn = nightLevel > 0.3;
+  headLamps.visible = tailLamps.visible = beams.visible = lampsOn;
+  beams.material.opacity = 0.5 * Math.min(1, (nightLevel - 0.3) / 0.4);
+  const lamp = (mesh, idx, x, y, z) => { mesh.setMatrixAt(idx, m.multiplyMatrices(base, part.makeTranslation(x, y, z))); };
   cars.forEach((car) => {
     if (!car.active) return;
     base.makeRotationY(Math.atan2(car.fx, car.fz)).setPosition(car.x, y0, car.z);
     shadow.setMatrixAt(nAll, m.multiplyMatrices(base, part.makeScale(car.wid * 0.75, 1, car.len * 0.62)));
+    if (lampsOn) {
+      const ahead = car.type === "bus" ? BUS_LEN / 2 + 0.6 : car.type === "moto" ? 0.55 : CAR_LEN / 2 + 0.55;
+      const bw = car.type === "bus" ? 0.36 : car.type === "moto" ? 0.2 : 0.32;
+      const bl = car.type === "bus" ? 0.72 : car.type === "moto" ? 0.42 : 0.64;
+      beams.setMatrixAt(nAll, m.multiplyMatrices(base, part.makeTranslation(0, 0.017 - y0, ahead)).multiply(sc.makeScale(bw, 1, bl)));
+    }
     if (car.type === "bus") {
       const mesh = buses[car.busType];
       mesh.setMatrixAt(nBus[car.busType]++, m.multiplyMatrices(base, part.makeTranslation(0, BUS_CLEARANCE + BUS_H / 2, 0)));
-      let w = 0;
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
         m.multiplyMatrices(base, part.makeTranslation(sx * (BUS_WID / 2 - 0.015), 0.06, sz * 0.56));
-        wheels.setMatrixAt(nAll * 4 + w, m.multiply(sc.makeScale(1.35, 1.35, 1.35)));
-        w++;
+        wheels.setMatrixAt(nW++, m.multiply(sc.makeScale(1.35, 1.35, 1.35)));
       }
+      if (lampsOn) for (const sx of [-1, 1]) {
+        lamp(headLamps, nHead++, sx * 0.13, 0.13, BUS_LEN / 2 + 0.004);
+        lamp(tailLamps, nTail++, sx * 0.15, 0.16, -BUS_LEN / 2 - 0.004);
+      }
+    } else if (car.type === "moto") {
+      base.multiply(part.makeRotationZ(car.lean || 0)); // 기울기는 바퀴 닿는 땅을 축으로
+      motoBody.setMatrixAt(nMoto, base);
+      rider.setMatrixAt(nMoto, base);
+      helmet.setMatrixAt(nMoto, base);
+      deliveryBox.setMatrixAt(nMoto, base);
+      if (car.colorSlot !== nMoto) {
+        motoBody.setColorAt(nMoto, new THREE.Color(MOTO_COLORS[car.index % MOTO_COLORS.length]));
+        rider.setColorAt(nMoto, new THREE.Color(MOTO_JACKETS[car.index % MOTO_JACKETS.length]));
+        helmet.setColorAt(nMoto, new THREE.Color(MOTO_HELMETS[car.index % MOTO_HELMETS.length]));
+        [motoBody, rider, helmet].forEach((mesh) => { mesh.instanceColor.needsUpdate = true; });
+        car.colorSlot = nMoto;
+      }
+      for (const wz of [0.125, -0.11]) {
+        m.multiplyMatrices(base, part.makeTranslation(0, 0.05, wz));
+        wheels.setMatrixAt(nW++, m.multiply(sc.makeScale(0.6, 1.1, 1.1)));
+      }
+      if (lampsOn) {
+        lamp(headLamps, nHead++, 0, 0.2, 0.142);
+        lamp(tailLamps, nTail++, 0, 0.2, -0.218);
+      }
+      nMoto++;
     } else {
       body.setMatrixAt(nCar, m.multiplyMatrices(base, part.makeTranslation(0, 0.1, 0)));
       cabin.setMatrixAt(nCar, m.multiplyMatrices(base, part.makeTranslation(0, 0.195, -0.04)));
@@ -4075,10 +4251,12 @@ function updateCars(dt) {
         car.colorSlot = nCar;
         body.instanceColor.needsUpdate = true;
       }
-      let w = 0;
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-        wheels.setMatrixAt(nAll * 4 + w, m.multiplyMatrices(base, part.makeTranslation(sx * (CAR_WID / 2 - 0.01), 0.045, sz * 0.26)));
-        w++;
+        wheels.setMatrixAt(nW++, m.multiplyMatrices(base, part.makeTranslation(sx * (CAR_WID / 2 - 0.01), 0.045, sz * 0.26)));
+      }
+      if (lampsOn) for (const sx of [-1, 1]) {
+        lamp(headLamps, nHead++, sx * 0.11, 0.105, CAR_LEN / 2 + 0.004);
+        lamp(tailLamps, nTail++, sx * 0.12, 0.115, -CAR_LEN / 2 - 0.004);
       }
       nCar++;
     }
@@ -4086,9 +4264,13 @@ function updateCars(dt) {
   });
   body.count = cabin.count = nCar;
   shadow.count = nAll;
-  wheels.count = nAll * 4;
+  wheels.count = nW;
   buses.forEach((mesh, k) => { mesh.count = nBus[k]; });
-  [body, cabin, wheels, shadow, ...buses].forEach((mesh) => { mesh.instanceMatrix.needsUpdate = true; });
+  motoBody.count = rider.count = helmet.count = deliveryBox.count = nMoto;
+  headLamps.count = nHead;
+  tailLamps.count = nTail;
+  beams.count = lampsOn ? nAll : 0;
+  carMeshes.all.forEach((mesh) => { mesh.instanceMatrix.needsUpdate = true; });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -4107,6 +4289,49 @@ const PED_PANTS = [0x2b3442, 0x3b4f7a, 0x1d1f22, 0x6b5b4b, 0x5a6470];
 const PED_SKIN = [0xf1c9a5, 0xe0b088, 0xd29b74];
 const SUSPICIOUS_COAT = 0x2e2a27;
 const SUSPICIOUS_PANTS = 0x18191b;
+// 아이 행인(등하교 시간에 학교 근처): 조금 작고 밝은 옷, 책가방
+const KID_SCALE = 0.78;
+const KID_SHIRTS = [0xffd23f, 0xff7aa8, 0x6cc4ff, 0x7bd389, 0xffa24c, 0xb08cff];
+const KID_PANTS = [0x2b59c3, 0x34495e, 0x8e44ad, 0x1f6f8b];
+const KID_PACKS = [0xe8483b, 0x2f80ed, 0xf2c94c, 0x27ae60, 0xff6f91];
+// 시간대가 바뀌어 사람·차를 줄일 때 눈앞에서 갑자기 사라지지 않게: 카메라 뒤쪽이거나 충분히 멀 때만 치운다
+function safeToHide(x, z) {
+  const cp = character.position;
+  const dx = x - cp.x, dz = z - cp.z;
+  const d = Math.hypot(dx, dz);
+  if (d > 24) return true;
+  return d > 4 && dx * -Math.sin(camYaw) + dz * -Math.cos(camYaw) < 0;
+}
+// 시간대별 차 수(최대 대비) — 한밤·새벽엔 한산하고 버스는 0~5시에 안 다닌다(배달 오토바이는 밤에도 다닌다)
+function carDensity(h) {
+  if (h < 5) return 0.35;
+  if (h < 6.5) return 0.6;
+  if (h >= 22) return 0.7;
+  return 1;
+}
+// 시간대별 행인 수(최대 인원 대비) — 출근·등교(7~9시)와 저녁(17~20시)이 가장 붐비고 새벽엔 드물다
+function pedDensity(h) {
+  if (h < 5) return 0.12;
+  if (h < 7) return 0.35;
+  if (h < 9) return 1;
+  if (h < 12) return 0.7;
+  if (h < 14) return 0.85;
+  if (h < 17) return 0.75;
+  if (h < 20) return 1;
+  if (h < 22) return 0.55;
+  return 0.3;
+}
+// 시간대별로 사람이 몰리는 곳: 등하교 시간엔 학교, 저녁엔 마트·편의점 — { pts: [[x,z]...](월드), kids }
+let pedHotspots = null;
+function pedSpawnTargets(h) {
+  if (!pedHotspots) {
+    const at = (types) => PLACES.filter((p) => types.includes(p.type)).map((p) => [p.x * WORLD_SCALE, p.z * WORLD_SCALE]);
+    pedHotspots = { school: at(["학교"]), mart: at(["중형마트", "대형마트", "마트", "편의점"]) };
+  }
+  if ((h >= 7 && h < 9.5) || (h >= 13 && h < 16.5)) return { pts: pedHotspots.school, kids: true };
+  if (h >= 16.5 && h < 20.5) return { pts: pedHotspots.mart, kids: false };
+  return null;
+}
 const pedPaths = []; // { pts: [[x,z]...], cum, len } — 월드 좌표
 let peds = [];
 let pedMeshes = null;
@@ -4117,6 +4342,10 @@ function pedColors(ped) {
   const skin = new THREE.Color(PED_SKIN[(slot * 7) % PED_SKIN.length]);
   if (ped.type === "suspicious") {
     return { shirt: new THREE.Color(SUSPICIOUS_COAT), pants: new THREE.Color(SUSPICIOUS_PANTS), skin };
+  }
+  if (ped.kid) {
+    const v = ped.look || 0;
+    return { shirt: new THREE.Color(KID_SHIRTS[v % KID_SHIRTS.length]), pants: new THREE.Color(KID_PANTS[(v * 3) % KID_PANTS.length]), skin, pack: new THREE.Color(KID_PACKS[(v * 5) % KID_PACKS.length]) };
   }
   return { shirt: new THREE.Color(PED_SHIRTS[slot % PED_SHIRTS.length]), pants: new THREE.Color(PED_PANTS[(slot * 3) % PED_PANTS.length]), skin };
 }
@@ -4137,6 +4366,7 @@ function pathPose(path, d, hint) {
 function buildPedestrians() {
   peds = [];
   pedMeshes = null;
+  pedNearCache.clear();
   if (!PED_COUNT || !pedPaths.length) return;
   const nSus = Math.min(PED_SUSPICIOUS, PED_COUNT);
   const mk = (geo, color, count) => {
@@ -4159,6 +4389,8 @@ function buildPedestrians() {
   const brimGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.008, 14);
   const coatGeo = new THREE.BoxGeometry(0.13, 0.12, 0.08);
   const shadesGeo = new THREE.BoxGeometry(0.075, 0.016, 0.012);
+  // 아이 행인의 책가방(등 뒤)
+  const packGeo = new THREE.BoxGeometry(0.1, 0.12, 0.05);
   pedMeshes = {
     torso: mk(torsoGeo, 0xffffff, PED_COUNT),
     head: mk(headGeo, 0xffffff, PED_COUNT),
@@ -4168,6 +4400,7 @@ function buildPedestrians() {
     brim: mk(brimGeo, 0x1b1c1f, nSus),
     coat: mk(coatGeo, SUSPICIOUS_COAT, nSus),
     shades: mk(shadesGeo, 0x050505, nSus),
+    pack: mk(packGeo, 0xffffff, PED_COUNT),
     shadow: (() => {
       const s = new THREE.InstancedMesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }), PED_COUNT);
       s.frustumCulled = false;
@@ -4192,17 +4425,48 @@ function buildPedestrians() {
   });
 }
 
+// 보도 중앙선 하나의 경계 상자(빠른 거리 판정용)
+function pathBBox(path) {
+  if (!path.bb) {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    path.pts.forEach(([px, pz]) => { x0 = Math.min(x0, px); x1 = Math.max(x1, px); z0 = Math.min(z0, pz); z1 = Math.max(z1, pz); });
+    path.bb = [x0, z0, x1, z1];
+  }
+  return path.bb;
+}
+const pedNearCache = new Map();
+function pedPathsNear(x, z, r) {
+  const key = `${x.toFixed(2)},${z.toFixed(2)},${r}`;
+  if (!pedNearCache.has(key)) {
+    pedNearCache.set(key, pedPaths.filter((path) => {
+      const [x0, z0, x1, z1] = pathBBox(path);
+      return x >= x0 - r && x <= x1 + r && z >= z0 - r && z <= z1 + r;
+    }));
+  }
+  return pedNearCache.get(key);
+}
+
 function spawnPed(ped) {
   const cp = character.position;
-  for (let attempt = 0; attempt < 25; attempt++) {
-    const path = pedPaths[Math.floor(Math.random() * pedPaths.length)];
+  // 지금 시간에 사람이 몰리는 곳(학교·마트)이 가까이 있으면 절반 넘게는 그 근처 보도에 내보낸다
+  const targets = ped.type === "suspicious" ? null : pedSpawnTargets(worldHour);
+  const near = targets ? targets.pts.filter(([x, z]) => Math.hypot(x - cp.x, z - cp.z) < PED_SPAWN_MAX * 1.4) : [];
+  const hot = near.length && Math.random() < 0.6 ? near[Math.floor(Math.random() * near.length)] : null;
+  const hotPaths = hot ? pedPathsNear(hot[0], hot[1], 9) : null;
+  const pool = hotPaths && hotPaths.length ? hotPaths : pedPaths;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const path = pool[Math.floor(Math.random() * pool.length)];
     const d = Math.random() * path.len;
     const q = pointAlongPolyline(path.pts, d);
-    if (Math.hypot(q.x - cp.x, q.z - cp.z) > PED_SPAWN_MAX) continue;
+    if (Math.hypot(q.x - cp.x, q.z - cp.z) > PED_SPAWN_MAX * (hot ? 1.3 : 1)) continue;
+    if (hot && attempt < 20 && Math.hypot(q.x - hot[0], q.z - hot[1]) > 9) continue;
+    // 아이: 등하교 시간 학교 근처면 대부분, 낮 시간 다른 곳에도 가끔
+    const h = worldHour;
+    const kid = ped.type !== "suspicious" && ((hot && targets.kids && Math.random() < 0.75) || (h >= 9 && h < 19 && Math.random() < 0.12));
     Object.assign(ped, {
       active: true, path, d, dir: Math.random() < 0.5 ? 1 : -1, x: q.x, z: q.z,
-      speed: ped.type === "suspicious" ? 0.4 + Math.random() * 0.2 : 0.55 + Math.random() * 0.45,
-      lateral: (Math.random() - 0.5) * 0.24, k: 0,
+      speed: ped.type === "suspicious" ? 0.4 + Math.random() * 0.2 : kid ? 0.5 + Math.random() * 0.35 : 0.55 + Math.random() * 0.45,
+      lateral: (Math.random() - 0.5) * 0.24, k: 0, kid, look: Math.floor(Math.random() * 60), colorSlot: -1, packSlot: -1,
     });
     return true;
   }
@@ -4215,15 +4479,25 @@ function updatePedestrians(dt) {
   pedRespawnTimer += dt;
   if (pedRespawnTimer > 0.6) {
     pedRespawnTimer = 0;
+    const normalSlots = peds.filter((q) => q.type !== "suspicious").length;
+    const allowed = Math.round(normalSlots * pedDensity(worldHour));
     peds.forEach((ped) => {
-      if (!ped.active || Math.hypot(ped.x - cp.x, ped.z - cp.z) > PED_DESPAWN) {
+      const dist = Math.hypot(ped.x - cp.x, ped.z - cp.z);
+      if (ped.type !== "suspicious" && ped.slot >= allowed) {
+        // 지금 시간엔 이만큼 다니지 않는다 — 안 보이는 사람부터 조용히 사라진다(눈앞에서 갑자기 없어지지 않게)
+        if (ped.active && safeToHide(ped.x, ped.z)) ped.active = false;
+        return;
+      }
+      if (!ped.active || dist > PED_DESPAWN) {
         ped.active = false;
         spawnPed(ped);
       }
     });
   }
-  const { torso, head, legs, arms, hat, brim, coat, shades, shadow } = pedMeshes;
+  const { torso, head, legs, arms, hat, brim, coat, shades, shadow, pack } = pedMeshes;
   const m = new THREE.Matrix4(), base = new THREE.Matrix4(), part = new THREE.Matrix4(), rot = new THREE.Matrix4();
+  const kidScale = new THREE.Matrix4().makeScale(KID_SCALE, KID_SCALE, KID_SCALE);
+  let nk = 0;
   const y0 = SIDEWALK_TOP_Y;
   let n = 0, ns = 0;
   peds.forEach((ped) => {
@@ -4248,6 +4522,7 @@ function updatePedestrians(dt) {
     const swing = watching ? 0 : Math.sin(ped.phase) * 0.5;
     const bob = watching ? 0 : Math.abs(Math.cos(ped.phase)) * 0.008;
     base.makeRotationY(Math.atan2(fx, fz)).setPosition(ped.x, (q.y != null ? q.y : y0) + bob, ped.z);
+    if (ped.kid) base.multiply(kidScale);
     torso.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.245, 0)));
     head.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.37, 0)));
     shadow.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.003 - bob, 0)));
@@ -4260,6 +4535,15 @@ function updatePedestrians(dt) {
       m.multiply(rot.makeRotationX(-legSwing * 0.8));
       arms.setMatrixAt(n * 2 + li, m);
     });
+    if (ped.kid) {
+      pack.setMatrixAt(nk, m.multiplyMatrices(base, part.makeTranslation(0, 0.255, -0.06)));
+      if (ped.packSlot !== nk) {
+        pack.setColorAt(nk, pedColors(ped).pack);
+        if (pack.instanceColor) pack.instanceColor.needsUpdate = true;
+        ped.packSlot = nk;
+      }
+      nk++;
+    }
     if (ped.type === "suspicious") {
       hat.setMatrixAt(ns, m.multiplyMatrices(base, part.makeTranslation(0, 0.425, 0)));
       brim.setMatrixAt(ns, m.multiplyMatrices(base, part.makeTranslation(0, 0.405, 0)));
@@ -4282,7 +4566,838 @@ function updatePedestrians(dt) {
   torso.count = head.count = shadow.count = n;
   legs.count = arms.count = n * 2;
   hat.count = brim.count = coat.count = shades.count = ns;
-  [torso, head, legs, arms, hat, brim, coat, shades, shadow].forEach((mesh) => { mesh.instanceMatrix.needsUpdate = true; });
+  pack.count = nk;
+  [torso, head, legs, arms, hat, brim, coat, shades, shadow, pack].forEach((mesh) => { mesh.instanceMatrix.needsUpdate = true; });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 가게 입간판: 편의점·카페·식당·마트·학원 앞 보도에 "영업 중 / 준비 중" ──
+// 가게 자리에서 가장 가까운 보도(행인이 걷는 보도 중앙선)를 찾아 가게 쪽 가장자리에 A자 입간판을 세운다.
+// 영업시간(OPEN_HOURS)에 맞춰 초록 "영업 중"(밤에도 환하게 빛남) / 회색 "준비 중"으로 바뀐다 — 모양은 하나라
+// 인스턴스 두 개(드로우콜 2)뿐이다.
+// ════════════════════════════════════════════════════════════════════════════
+const SHOP_SIGN_W = 0.15, SHOP_SIGN_H = 0.23, SHOP_SIGN_TILT = 0.2; // 월드 단위 / 라디안(A자로 벌어진 각)
+let shopSigns = null; // { open, closed, list: [{ place, matrix }] }
+let shopSignsListening = false;
+
+function makeShopSignTexture(open) {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 192;
+  const g = c.getContext("2d");
+  g.fillStyle = "#4a3b30"; // 나무 테두리
+  g.fillRect(0, 0, 128, 192);
+  g.fillStyle = open ? "#1f9d55" : "#7b828a";
+  g.fillRect(9, 9, 110, 174);
+  g.fillStyle = "#ffffff";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = "bold 40px sans-serif";
+  g.fillText(open ? "영업" : "준비", 64, 56);
+  g.fillText("중", 64, 102);
+  g.fillRect(26, 130, 76, 3);
+  g.font = "bold 22px sans-serif";
+  g.fillText(open ? "OPEN" : "CLOSED", 64, 157);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+function shopSignGeometry() {
+  const parts = [];
+  [1, -1].forEach((side) => {
+    const g = new THREE.BoxGeometry(SHOP_SIGN_W, SHOP_SIGN_H, 0.008);
+    g.translate(0, SHOP_SIGN_H / 2, 0);
+    g.rotateX(-side * SHOP_SIGN_TILT); // 위끝이 가운데로 모여 A자가 되게
+    g.translate(0, 0, side * SHOP_SIGN_H * Math.sin(SHOP_SIGN_TILT));
+    parts.push(g);
+  });
+  return mergeGeometries(parts);
+}
+// 보도 중앙선(pedPaths) 위에서 (x, z)에 가장 가까운 점 — maxDist(월드)보다 멀면 null.
+// reject(x, z)가 참인 자리(예: 건물 바닥 안)는 건너뛰고 그 구간에서 가장 가까운 다른 자리를 고른다.
+function nearestPedPathPoint(x, z, maxDist, reject = null) {
+  let best = null, bd = maxDist;
+  for (const path of pedPaths) {
+    const [x0, z0, x1, z1] = pathBBox(path);
+    if (x < x0 - bd || x > x1 + bd || z < z0 - bd || z > z1 + bd) continue;
+    const pts = path.pts;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const ax = pts[i][0], az = pts[i][1];
+      const dx = pts[i + 1][0] - ax, dz = pts[i + 1][1] - az;
+      const L2 = dx * dx + dz * dz;
+      if (L2 < 1e-10) continue;
+      const t0 = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+      for (const t of reject ? [t0, 0, 0.25, 0.5, 0.75, 1] : [t0]) {
+        const px = ax + dx * t, pz = az + dz * t;
+        const d = Math.hypot(x - px, z - pz);
+        if (d >= bd || (reject && reject(px, pz))) continue;
+        const L = Math.sqrt(L2);
+        bd = d;
+        best = { x: px, z: pz, tx: dx / L, tz: dz / L, w: path.w || 0.3, dist: d };
+      }
+    }
+  }
+  return best;
+}
+function buildShopSigns() {
+  shopSigns = null;
+  const list = [];
+  PLACES.forEach((place) => {
+    if (!SHOP_TYPES.has(place.type)) return;
+    const px = place.x * WORLD_SCALE, pz = place.z * WORLD_SCALE;
+    // 건물 바닥(대략의 가로·세로·회전) 안에 놓이지 않게 — 보도와 건물이 겹쳐 있는 곳도 있다
+    const style = TYPE_STYLE[place.type] || TYPE_STYLE["기타"];
+    const fo = BUILDING_FOOTPRINT_OVERRIDE[place.id];
+    const halfW = ((fo ? fo[0] : style.w) * WORLD_SCALE) / 2 + 0.06;
+    const halfD = ((fo ? fo[1] : style.d) * WORLD_SCALE) / 2 + 0.06;
+    const rot = place.rotationDeg != null ? THREE.MathUtils.degToRad(place.rotationDeg) : place.diagonal ? Math.PI / 4 : 0;
+    const cos = Math.cos(rot), sin = Math.sin(rot);
+    const inside = (qx, qz) => insideRect(qx, qz, px, pz, cos, sin, halfW, halfD);
+    // 길이 지나가서 보도가 내려앉은 자리(횡단 구간)도 피한다
+    const q = nearestPedPathPoint(px, pz, 9, (qx, qz) => inside(qx, qz) || groundHeightAt(qx, qz) < SIDEWALK_TOP_Y - 0.01);
+    if (!q) return;
+    // 가게 쪽(보도 바깥 가장자리)으로 비켜 세우고, 앞뒤 판이 보도를 오가는 사람을 보게 한다
+    let nx = -q.tz, nz = q.tx;
+    if (nx * (px - q.x) + nz * (pz - q.z) < 0) { nx = -nx; nz = -nz; }
+    let off = Math.min(q.w * 0.26, q.dist * 0.8);
+    if (inside(q.x + nx * off, q.z + nz * off)) off = 0;
+    const x = q.x + nx * off, z = q.z + nz * off;
+    const sg = { place, matrix: new THREE.Matrix4(), fitted: false };
+    setSignPose(sg, x, z, q.tx, q.tz);
+    list.push(sg);
+  });
+  if (!list.length) return;
+  const geo = shopSignGeometry();
+  const mk = (mat) => {
+    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    mesh.count = 0;
+    mesh.frustumCulled = false;
+    mesh.castShadow = true;
+    scene.add(mesh);
+    return mesh;
+  };
+  shopSigns = {
+    open: mk(new THREE.MeshBasicMaterial({ map: makeShopSignTexture(true) })), // 조명과 상관없이 환하게(밤에 켜진 간판처럼)
+    closed: mk(new THREE.MeshStandardMaterial({ map: makeShopSignTexture(false), roughness: 0.8 })),
+    list,
+  };
+  updateShopSigns(worldHour);
+  if (!shopSignsListening) {
+    shopSignsListening = true;
+    timeListeners.push((h) => updateShopSigns(h));
+  }
+}
+// ── 가게 셔터: 문 닫은 시간엔 가게 1층 앞면(입간판이 있는 쪽)에 셔터가 내려와 있다 ──
+// 건물 모델이 불러와질 때 입간판 자리에서 건물 쪽으로 광선을 쏴서 1층 벽(가게 앞면)을 찾고, 그 벽이 좌우로
+// 이어지는 만큼(최대 약 8m) 셔터 판을 붙인다. 큰 마트·학원은 셔터를 달지 않는다.
+const SHUTTER_TYPES = new Set(["편의점", "카페", "식당", "중형마트", "마트"]);
+const SHUTTER_H = 0.42; // 월드(약 2.8m) — 1층 가게 앞
+let shutterMaterial = null;
+let shuttersListening = false;
+const shopShutters = new Map(); // entry → 셔터 메시
+function getShutterMaterial() {
+  if (shutterMaterial) return shutterMaterial;
+  const c = document.createElement("canvas");
+  c.width = 64;
+  c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = "#9aa0a6";
+  g.fillRect(0, 0, 64, 128);
+  for (let y = 0; y < 128; y += 8) { // 가로 골(셔터 살)
+    g.fillStyle = "#bfc4c9";
+    g.fillRect(0, y, 64, 3);
+    g.fillStyle = "#767c83";
+    g.fillRect(0, y + 6, 64, 2);
+  }
+  g.fillStyle = "#5d6268";
+  g.fillRect(0, 122, 64, 6); // 아래 손잡이 띠
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  shutterMaterial = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: 0.4, side: THREE.DoubleSide });
+  return shutterMaterial;
+}
+const _shutterRay = new THREE.Raycaster();
+const _rayO = new THREE.Vector3(), _rayD = new THREE.Vector3(), _rayDown = new THREE.Vector3(0, -1, 0);
+// 가게 건물 모델이 불러와지면: ① 입간판이 실제 건물 안·밑에 들어가 있으면 가장 가까운 열린 보도로 옮기고
+// (건물 크기를 모델을 받기 전엔 몰라서 처음엔 대략의 크기로 정해 둔다) ② 문 닫은 시간에 내려올 셔터를 붙인다.
+function fitShopToModel(entry) {
+  const model = entry.loadedModel;
+  if (!model || !shopSigns || !SHOP_TYPES.has(entry.place.type)) return;
+  const sg = shopSigns.list.find((q) => q.place === entry.place);
+  if (!sg) return;
+  entry.group.updateMatrixWorld(true);
+  const baseY = entry.group.position.y;
+  const box = new THREE.Box3().setFromObject(model);
+  // 위에서 내려다봐서 바닥보다 높은 면(지붕·벽 위)이 있으면 건물 안·밑이다
+  let rays = 0;
+  const blocked = (x, z) => {
+    if (x < box.min.x || x > box.max.x || z < box.min.z || z > box.max.z) return false;
+    rays++;
+    _shutterRay.set(_rayO.set(x, box.max.y + 0.5, z), _rayDown);
+    _shutterRay.far = box.max.y - baseY + 1;
+    return _shutterRay.intersectObject(model, true).some((hh) => hh.point.y > baseY + 0.25);
+  };
+  if (!sg.fitted) {
+    sg.fitted = true;
+    if (blocked(sg.x, sg.z)) {
+      const cands = [];
+      pedPathsNear(entry.px, entry.pz, 9).forEach((path) => {
+        const pts = path.pts;
+        for (let i = 0; i < pts.length - 1; i += 2) {
+          if (path.ys && path.ys[i] < SIDEWALK_TOP_Y - 0.01) continue; // 내려앉은 보도(길 건너는 자리)는 빼고
+          const a = pts[i], b = pts[i + 1];
+          const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+          const d = Math.hypot(a[0] - entry.px, a[1] - entry.pz);
+          if (d < 9) cands.push({ x: a[0], z: a[1], d, tx: (b[0] - a[0]) / L, tz: (b[1] - a[1]) / L, w: path.w || 0.3 });
+        }
+      });
+      cands.sort((p, q) => p.d - q.d);
+      for (const c of cands) {
+        if (rays > 40) break; // 광선은 몇십 개까지만(불러올 때 끊기지 않게)
+        if (blocked(c.x, c.z)) continue;
+        let nx = -c.tz, nz = c.tx;
+        if (nx * (entry.px - c.x) + nz * (entry.pz - c.z) < 0) { nx = -nx; nz = -nz; }
+        let off = c.w * 0.26;
+        if (blocked(c.x + nx * off, c.z + nz * off)) off = 0;
+        setSignPose(sg, c.x + nx * off, c.z + nz * off, c.tx, c.tz);
+        updateShopSigns(worldHour);
+        break;
+      }
+    }
+  }
+  addShopShutter(entry, sg, baseY);
+}
+function addShopShutter(entry, sg, baseY) {
+  const place = entry.place;
+  const model = entry.loadedModel;
+  if (entry.shutter || !SHUTTER_TYPES.has(place.type)) return;
+  // 입간판에서 보도를 가로질러 건물 쪽으로 광선을 쏴서 1층 벽(가게 앞면)을 찾는다
+  let dx = -sg.tz, dz = sg.tx;
+  if (dx * (entry.px - sg.x) + dz * (entry.pz - sg.z) < 0) { dx = -dx; dz = -dz; }
+  const y = baseY + 0.2; // 1층 눈높이쯤(약 1.3m)
+  const cast = (ox, oz, far) => {
+    _shutterRay.set(_rayO.set(ox, y, oz), _rayD.set(dx, 0, dz));
+    _shutterRay.far = far;
+    return _shutterRay.intersectObject(model, true)[0] || null;
+  };
+  // 가게 앞면은 입간판 바로 뒤(보도 가장자리)에 있어야 한다 — 멀리 있는 벽이면 다른 면이라 셔터를 달지 않는다
+  const main = cast(sg.x, sg.z, 1);
+  if (!main || !main.face) return;
+  // 벽의 바깥 방향(수평) — 광선과 마주 보게
+  const n = main.face.normal.clone().transformDirection(main.object.matrixWorld);
+  n.y = 0;
+  if (n.lengthSq() < 0.25) return; // 바닥·지붕처럼 누운 면이면 그만
+  n.normalize();
+  if (n.x * dx + n.z * dz > 0) n.multiplyScalar(-1);
+  const tx = -n.z, tz = n.x; // 벽을 따라가는 방향
+  // 좌우로 같은 벽이 이어지는 만큼만(광선 길이가 비슷하면 같은 벽)
+  const reach = (sign) => {
+    let ok = 0;
+    for (let k = 1; k <= 4; k++) {
+      const o = k * 0.15 * sign;
+      const hh = cast(sg.x + tx * o, sg.z + tz * o, main.distance + 0.3);
+      if (!hh || Math.abs(hh.distance - main.distance) > 0.08) break;
+      ok = k * 0.15;
+    }
+    return ok;
+  };
+  const left = reach(-1), right = reach(1);
+  const w = Math.min(1.2, left + right + 0.3);
+  if (w < 0.3) return;
+  const mid = (right - left) / 2; // 가운데를 이어지는 쪽으로 옮긴다
+  const p = main.point;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, SHUTTER_H), getShutterMaterial());
+  // group은 높이만 옮겨져 있어서(가로 위치 0) 월드 XZ를 그대로 쓴다. 바닥(0)부터 1층 높이까지, 벽에서 살짝 띄워서
+  mesh.position.set(p.x + tx * mid + n.x * 0.012, SHUTTER_H / 2, p.z + tz * mid + n.z * 0.012);
+  mesh.rotation.y = Math.atan2(n.x, n.z);
+  mesh.receiveShadow = true;
+  mesh.visible = !placeIsOpen(place, worldHour);
+  entry.group.add(mesh);
+  entry.shutter = mesh;
+  shopShutters.set(entry, mesh);
+  if (!shuttersListening) {
+    shuttersListening = true;
+    timeListeners.push((h) => shopShutters.forEach((m, e) => { m.visible = !placeIsOpen(e.place, h); }));
+  }
+}
+function removeShopShutter(entry) {
+  if (!entry.shutter) return;
+  entry.group.remove(entry.shutter);
+  entry.shutter.geometry.dispose();
+  entry.shutter = null;
+  shopShutters.delete(entry);
+}
+// 입간판 자리·방향(보도 진행 방향 tx, tz) — 앞뒤 판이 보도를 오가는 사람을 보게
+function setSignPose(sg, x, z, tx, tz) {
+  Object.assign(sg, { x, z, tx, tz });
+  sg.matrix.makeRotationY(Math.atan2(tx, tz)).setPosition(x, groundHeightAt(x, z), z);
+}
+function updateShopSigns(h) {
+  if (!shopSigns) return;
+  let no = 0, nc = 0;
+  shopSigns.list.forEach((sg) => {
+    if (placeIsOpen(sg.place, h)) shopSigns.open.setMatrixAt(no++, sg.matrix);
+    else shopSigns.closed.setMatrixAt(nc++, sg.matrix);
+  });
+  shopSigns.open.count = no;
+  shopSigns.closed.count = nc;
+  shopSigns.open.instanceMatrix.needsUpdate = true;
+  shopSigns.closed.instanceMatrix.needsUpdate = true;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 어린이 보호구역: 차는 평소의 절반 속도(시속 30km 아래)로 달린다 ──
+// · 보호구역에 들어서면 안내 한마디
+// · 보호구역 입구마다 "어린이 보호구역 + 지금 속도" 전광판 — 다가오는 차의 속도를 km/h로 보여 주고,
+//   30 이하면 초록 "감사합니다", 넘으면 빨강 "천천히!"(차는 보호구역에 들어서며 속도를 줄인다)
+// ════════════════════════════════════════════════════════════════════════════
+const SCHOOL_SPEED_FACTOR = 0.5;
+const kmhOf = (speed) => Math.round((speed / CAR_MAX_SPEED) * 50); // 평소 최고 속도 = 시속 50km로 보고 환산
+const SCHOOL_BOARD_W = 0.26, SCHOOL_BOARD_H = 0.26, SCHOOL_BOARD_POLE_H = 0.74;
+let schoolZoneRoads = []; // { i, pts(월드), half(월드) }
+let schoolBoards = []; // { x, z, fin: [x, z](들어오는 차 방향), ctx, tex, shown }
+let inSchoolZone = false, schoolToastCooldown = 0, schoolBoardTimer = 0;
+
+function distToPolyline2(pts, x, z) {
+  let bd = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) bd = Math.min(bd, distToSegment(x, z, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]));
+  return bd;
+}
+function drawSchoolBoard(b, kmh) {
+  const g = b.ctx;
+  g.fillStyle = "#ffd200";
+  g.fillRect(0, 0, 256, 74);
+  g.fillStyle = "#151515";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = "bold 33px sans-serif";
+  g.fillText("어린이 보호구역", 128, 39);
+  g.fillStyle = "#0b0b0d";
+  g.fillRect(0, 74, 256, 182);
+  if (kmh == null) {
+    // 다가오는 차가 없으면 제한 속도 30 표지
+    g.fillStyle = "#ffffff";
+    g.beginPath(); g.arc(128, 162, 64, 0, Math.PI * 2); g.fill();
+    g.lineWidth = 13; g.strokeStyle = "#e0262b";
+    g.beginPath(); g.arc(128, 162, 57, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = "#151515";
+    g.font = "bold 62px sans-serif";
+    g.fillText("30", 128, 166);
+  } else {
+    const ok = kmh <= 30;
+    g.fillStyle = ok ? "#3dff73" : "#ff3b30";
+    g.font = "bold 96px monospace";
+    g.fillText(String(kmh), 112, 146);
+    g.font = "bold 24px sans-serif";
+    g.fillText("km/h", 212, 168);
+    g.font = "bold 30px sans-serif";
+    g.fillText(ok ? "감사합니다" : "천천히!", 128, 224);
+  }
+  b.tex.needsUpdate = true;
+}
+function buildSchoolZoneBoards() {
+  schoolZoneRoads = [];
+  schoolBoards = [];
+  const W = WORLD_SCALE;
+  ROAD_SEGMENTS.forEach((seg, i) => {
+    if (roadLook(seg).kind !== "school") return;
+    schoolZoneRoads.push({ i, seg, raw: roadPolyline(seg), pts: roadPolyline(seg).map(([x, z]) => [x * W, z * W]), half: (seg.width / 2 + (seg.sidewalk || 0) + 1) * W });
+  });
+  if (!schoolZoneRoads.length) return;
+  const poleGeo = new THREE.CylinderGeometry(0.011, 0.013, SCHOOL_BOARD_POLE_H, 8);
+  poleGeo.translate(0, SCHOOL_BOARD_POLE_H / 2, 0);
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 0.5, metalness: 0.5 });
+  const backMat = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.7 });
+  const boardGeo = new THREE.BoxGeometry(SCHOOL_BOARD_W, SCHOOL_BOARD_H, 0.02);
+  schoolZoneRoads.forEach((zr) => {
+    const seg = zr.seg;
+    ["a", "b"].forEach((which) => {
+      const p = seg[which];
+      // 다른 보호구역 도로와 이어진 끝은 입구가 아니다
+      const shared = schoolZoneRoads.some((o) => o !== zr && ["a", "b"].some((w2) => Math.hypot(o.seg[w2][0] - p[0], o.seg[w2][1] - p[1]) < JOIN_RAW));
+      if (shared) return;
+      const L = polylineLength(zr.raw);
+      if (L < 24) return;
+      const q = pointAlongPolyline(zr.raw, which === "a" ? 14 : L - 14); // 입구에서 14m 안쪽
+      const fin = which === "a" ? [q.dirX, q.dirZ] : [-q.dirX, -q.dirZ]; // 보호구역으로 들어오는 차의 방향
+      const r = [-fin[1], fin[0]]; // 그 차의 오른쪽
+      const side = seg.width / 2 + Math.min(seg.sidewalk || 1.5, 4) * 0.55;
+      const x = (q.x + r[0] * side) * W, z = (q.z + r[1] * side) * W;
+      const y = groundHeightAt(x, z);
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 256;
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      const b = { x, z, fin, ctx: canvas.getContext("2d"), tex, shown: undefined };
+      drawSchoolBoard(b, null);
+      b.shown = null;
+      const yaw = Math.atan2(-fin[0], -fin[1]); // 판 앞면(+Z)이 다가오는 차를 보게
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.set(x, y, z);
+      // 앞면(+Z)만 전광판 그림, 나머지 면은 어두운 뒷판
+      const board = new THREE.Mesh(boardGeo, [backMat, backMat, backMat, backMat, new THREE.MeshBasicMaterial({ map: tex }), backMat]);
+      board.position.set(x - fin[0] * 0.016, y + SCHOOL_BOARD_POLE_H - SCHOOL_BOARD_H / 2 - 0.01, z - fin[1] * 0.016);
+      board.rotation.y = yaw;
+      pole.castShadow = board.castShadow = true;
+      scene.add(pole, board);
+      schoolBoards.push(b);
+    });
+  });
+}
+function updateSchoolZone(dt) {
+  if (!schoolZoneRoads.length || !character) return;
+  schoolToastCooldown = Math.max(0, schoolToastCooldown - dt);
+  schoolBoardTimer += dt;
+  if (schoolBoardTimer < 0.25) return;
+  schoolBoardTimer = 0;
+  const cp = character.position;
+  const inside = schoolZoneRoads.some((zr) => distToPolyline2(zr.pts, cp.x, cp.z) < zr.half);
+  if (inside && !inSchoolZone && schoolToastCooldown <= 0) {
+    showToast("🏫 어린이 보호구역이에요! 여기선 차들이 시속 30km 아래로 천천히 달려요", 3400);
+    schoolToastCooldown = 45;
+  }
+  inSchoolZone = inside;
+  schoolBoards.forEach((b) => {
+    if (Math.hypot(b.x - cp.x, b.z - cp.z) > 30) return; // 멀리 있는 전광판은 다시 그리지 않는다
+    let best = null, bd = 7;
+    cars.forEach((car) => {
+      if (!car.active) return;
+      const dx = b.x - car.x, dz = b.z - car.z;
+      const d = Math.hypot(dx, dz);
+      if (d > bd || dx * car.fx + dz * car.fz <= 0 || car.fx * b.fin[0] + car.fz * b.fin[1] < 0.5) return; // 전광판 쪽으로 들어오는 차만
+      best = car;
+      bd = d;
+    });
+    const kmh = best ? Math.max(3, kmhOf(best.speed)) : null;
+    if (kmh !== b.shown) {
+      b.shown = kmh;
+      drawSchoolBoard(b, kmh);
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 골목에서 갑자기 나오는 차(미니 이벤트) ──
+// 큰길 보도를 걷다가 골목(폭 10m 이하 길)이 큰길과 만나는 입구로 다가가면, 가끔 골목 안에서 차가 나온다.
+// "멈춰서 좌우를 살펴요!" 안내가 뜨고 — 멈춰 서서 차가 지나가길 기다리면 칭찬(+용돈), 그대로 걸어 들어가면 차가
+// "빵!" 하고 급정거한다. 나온 차는 큰길로 우회전해서 다른 차들 사이에 섞여 달려간다(차 한 대 자리를 이 이벤트용으로
+// 따로 둔다). 신호등이 있는 입구는 빼고, 한 번 차가 나온 입구는 3분 동안 쉰다.
+// ════════════════════════════════════════════════════════════════════════════
+const ALLEY_TRIGGER_DIST = 4.6; // 월드 — 입구(아이가 지나는 자리)에서 이만큼 안으로 다가오면
+const ALLEY_CAR_START_RAW = 24; // 차가 출발하는 자리: 큰길 보도에서 골목 안쪽으로 이만큼(raw m)
+let alleyMouths = [];
+let alleyEvent = null;
+let alleyCooldown = 15; // 거리 모험에 들어와서 처음 얼마 동안은 쉰다(초)
+let alleyCheckTimer = 0;
+let characterMoving = false;
+
+function nearestOnRawPolyline(pts, cum, x, z) {
+  let best = { dist: Infinity, s: 0, x: 0, z: 0, dx: 1, dz: 0 };
+  for (let i = 0; i < pts.length - 1; i++) {
+    const ax = pts[i][0], az = pts[i][1];
+    const dx = pts[i + 1][0] - ax, dz = pts[i + 1][1] - az;
+    const L2 = dx * dx + dz * dz;
+    if (L2 < 1e-9) continue;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+    const px = ax + dx * t, pz = az + dz * t;
+    const d = Math.hypot(x - px, z - pz);
+    if (d < best.dist) {
+      const L = Math.sqrt(L2);
+      best = { dist: d, s: cum[i] + L * t, x: px, z: pz, dx: dx / L, dz: dz / L };
+    }
+  }
+  return best;
+}
+// 캐릭터가 횡단보도 위에 있는지(신호 유무 상관없이) — 그 위에서 차를 막고 있어도 경적을 울리지 않게
+function characterOnCrossing() {
+  if (!character) return false;
+  const px = character.position.x / WORLD_SCALE, pz = character.position.z / WORLD_SCALE;
+  return (roadMarkings?.crossings || []).some((c) => {
+    const dx = px - c.x, dz = pz - c.z;
+    return Math.abs(dx * c.hx + dz * c.hz) <= c.depth / 2 + 1 && Math.abs(dx * c.rx + dz * c.rz) <= c.half + 1;
+  });
+}
+function buildAlleyMouths() {
+  alleyMouths = [];
+  if (!carRoads) return;
+  carRoads.forEach((r) => {
+    const seg = ROAD_SEGMENTS[r.i];
+    if (roadLook(seg).kind === "walk" || r.w > 10 || r.L < ALLEY_CAR_START_RAW + 14) return;
+    ["a", "b"].forEach((which) => {
+      if (signalArms.has(`${r.i}:${which}`)) return; // 신호등 있는 입구는 빼기
+      const E = which === "a" ? r.pts[0] : r.pts[r.pts.length - 1];
+      let main = null;
+      carRoads.forEach((o) => {
+        if (!o.drivable || o.i === r.i || o.w < Math.max(15, r.w + 5)) return;
+        const edge = nearestOnRawPolyline(o.pts, o.cum, E[0], E[1]).dist - o.w / 2;
+        if (edge < 3 && (!main || edge < main.edge)) main = { r: o, edge };
+      });
+      if (!main) return;
+      const inward = which === "a" ? 1 : -1; // s가 커지는 쪽이 골목 안쪽이면 +1
+      const sE = which === "a" ? 0 : r.L;
+      // 큰길 차도를 벗어나는 지점(골목 쪽으로 가며 큰길 중심선에서 반폭보다 멀어지는 곳)
+      let sEdge = null;
+      for (let k = 0; k <= 80; k++) {
+        const sv = sE + inward * k * 0.5;
+        if (sv < 0 || sv > r.L) break;
+        const q = polyPointAt(r.pts, r.cum, sv);
+        if (nearestOnRawPolyline(main.r.pts, main.r.cum, q.x, q.z).dist > main.r.w / 2) { sEdge = sv; break; }
+      }
+      if (sEdge == null) return;
+      const swRaw = ROAD_SEGMENTS[main.r.i].sidewalk || 2.5;
+      const sCross = sEdge + inward * swRaw * 0.5; // 큰길 보도가 골목을 가로지르는 자리(아이가 지나가는 곳)
+      const sStart = sEdge + inward * (swRaw + ALLEY_CAR_START_RAW);
+      if (sStart < 0 || sStart > r.L) return;
+      const c = polyPointAt(r.pts, r.cum, sCross);
+      alleyMouths.push({
+        r, which, inward, main: main.r, sEdge, sCross, sStart, swRaw,
+        lane: roadLook(seg).perDir >= 1 ? r.lanes[0] : 0, // 양방향 길이면 나가는 쪽 차로, 좁은 골목은 가운데
+        cx: c.x * WORLD_SCALE, cz: c.z * WORLD_SCALE,
+        ax: c.dx * inward, az: c.dz * inward, // 골목 안쪽 방향(단위 벡터)
+        halfW: (r.w / 2 + 0.8) * WORLD_SCALE, halfL: (swRaw / 2 + 1) * WORLD_SCALE,
+        nextOk: 0,
+      });
+    });
+  });
+}
+function startAlleyEvent(mo, car) {
+  const r = mo.r;
+  const dir = -mo.inward; // 큰길 쪽으로
+  const pose = carRoadPose(r, mo.sStart, dir, mo.lane);
+  Object.assign(car, {
+    active: true, mode: "alley", seg: r.i, s: mo.sStart, dir, lane: mo.lane, turn: null,
+    x: pose.x, z: pose.z, fx: pose.fx, fz: pose.fz, colorSlot: -1,
+    maxSpeed: CAR_MAX_SPEED * 0.85, speed: CAR_MAX_SPEED * 0.4,
+    alley: { r, dir, lane: mo.lane, sTurn: mo.sEdge + mo.inward * 0.3, speedCap: CAR_MAX_SPEED * 0.62, mouth: mo },
+  });
+  alleyEvent = { mo, car, t: 0, still: 0, danger: false, waitT: 0 };
+  mo.nextOk = clock.elapsedTime + 180;
+  showToast("⚠️ 골목에서 차가 나와요! 멈춰서 좌우를 살펴요", 2800);
+  playEngineRev();
+}
+// 골목 끝(큰길 가장자리)에 닿으면 큰길로 우회전해서 보통 차처럼 달린다
+function startAlleyExitTurn(car) {
+  const mo = car.alley.mouth;
+  const mr = mo.main;
+  const q = nearestOnRawPolyline(mr.pts, mr.cum, car.x / WORLD_SCALE, car.z / WORLD_SCALE);
+  const rx = -car.fz, rz = car.fx; // 지금 진행 방향의 오른쪽
+  const dir = q.dx * rx + q.dz * rz >= 0 ? 1 : -1;
+  const lane = mr.lanes[mr.lanes.length - 1];
+  const s1 = Math.max(0, Math.min(mr.L, q.s + dir * (lane + 3)));
+  car.alley = null;
+  beginTurn(car, carRoadPose(mr, s1, dir, lane), { seg: mr.i, dir, s: s1, lane });
+}
+function updateAlleyEvent(dt) {
+  if (!alleyMouths.length || !character || !carMeshes) return;
+  if (alleyEvent) { runAlleyEvent(dt); return; }
+  alleyCooldown -= dt;
+  alleyCheckTimer += dt;
+  if (alleyCooldown > 0 || alleyCheckTimer < 0.3 || !characterMoving || currentErrand?.phase === "awaitingDialog") return;
+  alleyCheckTimer = 0;
+  const cp = character.position;
+  const car = cars.find((c) => c.scripted);
+  if (!car || (car.active && Math.hypot(car.x - cp.x, car.z - cp.z) < 16)) return; // 지난번 차가 아직 근처면 기다린다
+  const now = clock.elapsedTime;
+  const fx = Math.sin(character.rotation.y), fz = Math.cos(character.rotation.y);
+  for (const mo of alleyMouths) {
+    if (now < mo.nextOk) continue;
+    const dx = mo.cx - cp.x, dz = mo.cz - cp.z;
+    const d = Math.hypot(dx, dz);
+    if (d > ALLEY_TRIGGER_DIST || d < 1.1) continue;
+    if ((dx * fx + dz * fz) / d < 0.55) continue; // 입구 쪽으로 걸어가는 중이어야
+    const along = -(dx * mo.ax + dz * mo.az); // 아이 자리의 "골목 안쪽" 성분(입구 기준)
+    if (along > mo.halfL || along < -(mo.halfL + 0.5)) continue; // 이미 골목 안이거나 큰길 건너편이면 아니다
+    mo.nextOk = now + 25; // 이번에 안 나와도 25초 동안은 이 입구를 다시 보지 않는다
+    if (Math.random() > 0.7) continue;
+    startAlleyEvent(mo, car);
+    return;
+  }
+}
+function runAlleyEvent(dt) {
+  const ev = alleyEvent, car = ev.car, mo = ev.mo;
+  ev.t += dt;
+  const cp = character.position;
+  if (!characterMoving) ev.still += dt;
+  const rx = cp.x - mo.cx, rz = cp.z - mo.cz;
+  const along = rx * mo.ax + rz * mo.az, across = -rx * mo.az + rz * mo.ax;
+  const kidInZone = Math.abs(along) <= mo.halfL && Math.abs(across) <= mo.halfW;
+  if (car.active && car.mode === "alley") {
+    // 차 앞범퍼에서 아이가 지나는 자리(건널목)까지 남은 거리(월드)
+    const toZone = ((mo.sCross - car.s) * car.alley.dir - (mo.swRaw / 2 + 1)) * WORLD_SCALE - car.len / 2;
+    if (kidInZone && toZone < 2.3 && toZone > -car.len) {
+      if (!ev.danger) {
+        ev.danger = true;
+        playHorn(1);
+        showToast("😰 빵! 위험했어요 — 골목 앞에서는 꼭 멈춰서 좌우를 살펴요", 3200);
+      }
+      car.alley.speedCap = 0; // 급정거, 아이가 비킬 때까지 기다린다
+      ev.waitT = 0;
+    } else if (car.alley.speedCap === 0) {
+      ev.waitT += dt;
+      if (ev.waitT > 0.9) car.alley.speedCap = CAR_MAX_SPEED * 0.45;
+    }
+  } else {
+    // 큰길로 나왔다(= 아이 앞을 지나갔다) — 결과
+    if (!ev.danger && car.active) {
+      const d = Math.hypot(cp.x - mo.cx, cp.z - mo.cz);
+      if (ev.still >= 0.7 && d < 6) grantReward(500, "👍 잘 멈췄어요! 골목 앞에선 멈추고 좌우 살피기", 3000);
+      else if (d < 6) showToast("골목 앞에서는 잠깐 멈춰서 차가 오는지 살펴봐요", 2800);
+    }
+    alleyEvent = null;
+    alleyCooldown = 45;
+    return;
+  }
+  if (ev.t > 25) { // 아이가 길을 계속 막고 서 있는 등 너무 오래 걸리면 끝낸다
+    car.alley.speedCap = CAR_MAX_SPEED * 0.45;
+    alleyEvent = null;
+    alleyCooldown = 30;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 동네 소리: 소리 파일 없이 Web Audio로 그때그때 만든다 ──
+// · 차 소리: 낮게 웅웅거리는 소음 — 가까이 달리는 차·버스가 많고 빠를수록 커지고 밝아진다
+// · 배달 오토바이: 가까이 지나가면 "부릉" 엔진 소리(속도 따라 높낮이)
+// · 낮엔 새소리, 밤엔 풀벌레 소리
+// · 학교 가까이: 수업 시간(8~17시)엔 가끔 "딩동댕동" 종소리
+// · 신호등 있는 횡단보도 앞: 초록불이면 "삐요삐요" 안내음, 빨간불이면 "똑…똑" 대기음
+// · 경적(골목 이벤트·차도를 막고 서 있을 때)
+// 상단 🔊 버튼으로 켜고 끈다(기본 켬, 이 기기에 저장). 거리 모험 화면을 떠나면 멈춘다.
+// ════════════════════════════════════════════════════════════════════════════
+let audioCtx = null, audioMaster = null, soundOn = true;
+let trafficGain = null, trafficFilter = null, motoOsc = null, motoGain = null, motoFilter = null;
+let ambientTimer = 1.5, bellTimer = 4, signalBeepTimer = 0, soundUpdateTimer = 0;
+let soundBtnEl = null, soundWired = false;
+const SCHOOL_BELL_NOTES = [659.25, 523.25, 587.33, 392.0, 392.0, 587.33, 659.25, 523.25]; // 미도레솔 솔레미도(딩동댕동)
+
+function loadSoundPref() {
+  try { soundOn = localStorage.getItem("roymaker-nb-sound") !== "0"; } catch (err) { soundOn = true; }
+}
+function audioReady() {
+  return !!(audioCtx && soundOn && audioCtx.state === "running");
+}
+function ensureAudio() {
+  if (audioCtx || !soundOn) return audioCtx;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  try { audioCtx = new AC(); } catch (err) { audioCtx = null; return null; }
+  const ac = audioCtx;
+  audioMaster = ac.createGain();
+  audioMaster.gain.value = 0.8;
+  audioMaster.connect(ac.destination);
+  // 차 소리: 갈색 소음(낮은 소리가 많은 소음) 2초짜리를 되풀이 → 저역 필터 → 음량(차가 가까울수록 크게)
+  const len = Math.floor(ac.sampleRate * 2);
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < len; i++) {
+    last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+    data[i] = last * 3.5;
+  }
+  const drift = data[len - 1] - data[0]; // 끝과 처음 값을 맞춰서 되풀이할 때 "딱" 소리가 안 나게
+  for (let i = 0; i < len; i++) data[i] -= drift * (i / (len - 1));
+  const noise = ac.createBufferSource();
+  noise.buffer = buf;
+  noise.loop = true;
+  trafficFilter = ac.createBiquadFilter();
+  trafficFilter.type = "lowpass";
+  trafficFilter.frequency.value = 320;
+  trafficGain = ac.createGain();
+  trafficGain.gain.value = 0;
+  noise.connect(trafficFilter).connect(trafficGain).connect(audioMaster);
+  noise.start();
+  // 오토바이 엔진: 톱니파 + 빠른 떨림 → 저역 필터 → 음량(가장 가까운 오토바이 거리·속도 따라)
+  motoOsc = ac.createOscillator();
+  motoOsc.type = "sawtooth";
+  motoOsc.frequency.value = 80;
+  const lfo = ac.createOscillator();
+  lfo.frequency.value = 24;
+  const lfoGain = ac.createGain();
+  lfoGain.gain.value = 10;
+  lfo.connect(lfoGain).connect(motoOsc.frequency);
+  motoFilter = ac.createBiquadFilter();
+  motoFilter.type = "lowpass";
+  motoFilter.frequency.value = 650;
+  motoGain = ac.createGain();
+  motoGain.gain.value = 0;
+  motoOsc.connect(motoFilter).connect(motoGain).connect(audioMaster);
+  motoOsc.start();
+  lfo.start();
+  return audioCtx;
+}
+// 짧은 소리 하나: 주파수(끝 주파수로 미끄러짐), 파형, 시작 지연, 길이, 크기
+function playTone({ freq, freqEnd = 0, type = "sine", start = 0, dur = 0.2, gain = 0.2, attack = 0.005, filter = 0 }) {
+  if (!audioReady()) return;
+  const ac = audioCtx;
+  const t0 = ac.currentTime + start;
+  const osc = ac.createOscillator();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, t0 + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t0 + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  let node = osc;
+  if (filter) {
+    const f = ac.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = filter;
+    node = node.connect(f);
+  }
+  node.connect(g).connect(audioMaster);
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.05);
+}
+function playBird(vol) {
+  const base = 2300 + Math.random() * 1500;
+  const n = 2 + Math.floor(Math.random() * 3);
+  for (let k = 0; k < n; k++) {
+    const f = base * (0.92 + Math.random() * 0.16);
+    playTone({ freq: f, freqEnd: f * (1.25 + Math.random() * 0.3), start: k * (0.12 + Math.random() * 0.05), dur: 0.07 + Math.random() * 0.04, gain: 0.045 * vol, attack: 0.01 });
+  }
+}
+function playCricket(vol) {
+  const f = 4300 + Math.random() * 500;
+  const chirps = 2 + Math.floor(Math.random() * 2);
+  for (let c = 0; c < chirps; c++) {
+    for (let p = 0; p < 3; p++) playTone({ freq: f, start: c * 0.34 + p * 0.045, dur: 0.035, gain: 0.025 * vol, attack: 0.004 });
+  }
+}
+function playSchoolBell(vol) {
+  SCHOOL_BELL_NOTES.forEach((f, k) => {
+    const st = k * 0.6 + (k >= 4 ? 0.45 : 0);
+    // 실로폰처럼: 기본음 + 위쪽 배음(2.76배·5.4배)이 빨리 사라진다
+    playTone({ freq: f, start: st, dur: 1.5, gain: 0.11 * vol, attack: 0.004 });
+    playTone({ freq: f * 2.76, start: st, dur: 0.5, gain: 0.03 * vol, attack: 0.002 });
+    playTone({ freq: f * 5.4, start: st, dur: 0.2, gain: 0.012 * vol, attack: 0.002 });
+  });
+}
+function playCrossBeep() {
+  playTone({ freq: 1180, start: 0, dur: 0.08, gain: 0.06, type: "square", filter: 2600 });
+  playTone({ freq: 880, start: 0.12, dur: 0.1, gain: 0.06, type: "square", filter: 2600 });
+}
+function playCrossTick() {
+  playTone({ freq: 1500, start: 0, dur: 0.025, gain: 0.035, type: "square", filter: 3000 });
+}
+function playHorn(vol = 1) {
+  [392, 494].forEach((f) => playTone({ freq: f, type: "square", dur: 0.5, gain: 0.07 * vol, attack: 0.012, filter: 1600 }));
+}
+function playEngineRev() {
+  playTone({ freq: 70, freqEnd: 150, type: "sawtooth", dur: 0.7, gain: 0.07, attack: 0.05, filter: 500 });
+}
+function nearestPlaceDist(types, x, z) {
+  let bd = Infinity;
+  PLACES.forEach((p) => {
+    if (types.includes(p.type)) bd = Math.min(bd, Math.hypot(p.x * WORLD_SCALE - x, p.z * WORLD_SCALE - z));
+  });
+  return bd;
+}
+// 캐릭터 가까이(횡단보도 앞에서 기다리거나 건너는 중) 신호 있는 횡단보도
+function nearestSignalArm() {
+  const px = character.position.x / WORLD_SCALE, pz = character.position.z / WORLD_SCALE;
+  for (const arm of signalArms.values()) {
+    if (arm.mid && arm.pedSignals === false) continue;
+    const dx = px - arm.x, dz = pz - arm.z;
+    if (Math.abs(dx * arm.hx + dz * arm.hz) <= arm.depth / 2 + 3 && Math.abs(dx * arm.rx + dz * arm.rz) <= arm.half + 5) return arm;
+  }
+  return null;
+}
+function updateSound(dt) {
+  if (!audioReady() || !character) return;
+  const cp = character.position;
+  soundUpdateTimer += dt;
+  ambientTimer -= dt;
+  bellTimer -= dt;
+  signalBeepTimer -= dt;
+  if (soundUpdateTimer >= 0.1) {
+    soundUpdateTimer = 0;
+    let level = 0, motoBest = Infinity, motoSpeed = 0;
+    cars.forEach((car) => {
+      if (!car.active) return;
+      const d = Math.hypot(car.x - cp.x, car.z - cp.z);
+      if (car.type === "moto") {
+        if (d < motoBest) { motoBest = d; motoSpeed = car.speed; }
+        return;
+      }
+      const k = Math.max(0, 1 - d / 9);
+      level += k * k * (0.35 + 0.65 * Math.min(1, car.speed / CAR_MAX_SPEED)) * (car.type === "bus" ? 1.5 : 1);
+    });
+    level = Math.min(1, level);
+    const t = audioCtx.currentTime;
+    trafficGain.gain.setTargetAtTime(0.025 + 0.3 * level, t, 0.25);
+    trafficFilter.frequency.setTargetAtTime(240 + 520 * level, t, 0.25);
+    const mk = motoBest < 11 ? Math.pow(1 - motoBest / 11, 2) : 0;
+    motoGain.gain.setTargetAtTime(0.09 * mk, t, 0.15);
+    motoOsc.frequency.setTargetAtTime(62 + 50 * Math.min(1, motoSpeed / MOTO_MAX_SPEED), t, 0.2);
+  }
+  if (ambientTimer <= 0) {
+    const h = worldHour;
+    if (h >= 5.5 && h < 18.5) { playBird(nightLevel > 0.5 ? 0.5 : 1); ambientTimer = 1.6 + Math.random() * 4.5; }
+    else if (h >= 19.5 || h < 4.5) { playCricket(1); ambientTimer = 0.8 + Math.random() * 2.4; }
+    else ambientTimer = 3;
+  }
+  if (bellTimer <= 0) {
+    bellTimer = 5;
+    if (worldHour >= 8 && worldHour < 17) {
+      const d = nearestPlaceDist(["학교"], cp.x, cp.z);
+      if (d < 24) { playSchoolBell(Math.max(0.25, 1 - d / 24)); bellTimer = 80 + Math.random() * 60; }
+    }
+  }
+  if (signalBeepTimer <= 0) {
+    const arm = nearestSignalArm();
+    if (arm && armPedState(arm) === "G") { playCrossBeep(); signalBeepTimer = 0.7; }
+    else if (arm) { playCrossTick(); signalBeepTimer = 1.15; }
+    else signalBeepTimer = 0.4;
+  }
+}
+function updateSoundBtn() {
+  if (!soundBtnEl) return;
+  soundBtnEl.textContent = soundOn ? "🔊 소리" : "🔇 소리";
+  soundBtnEl.setAttribute("aria-pressed", soundOn ? "true" : "false");
+  soundBtnEl.title = soundOn ? "동네 소리 끄기" : "동네 소리 켜기";
+}
+function setSoundOn(on) {
+  soundOn = on;
+  try { localStorage.setItem("roymaker-nb-sound", on ? "1" : "0"); } catch (err) { /* 저장 못 해도 괜찮다 */ }
+  if (on) {
+    ensureAudio();
+    audioCtx?.resume?.();
+  } else {
+    audioCtx?.suspend?.();
+  }
+  updateSoundBtn();
+}
+function resumeSoundIfOn() {
+  if (!soundOn || document.hidden) return;
+  ensureAudio();
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+}
+function wireSoundControls() {
+  soundBtnEl = document.getElementById("neighborhood3d-sound-btn");
+  if (soundWired) return;
+  soundWired = true;
+  loadSoundPref();
+  if (soundBtnEl) {
+    soundBtnEl.hidden = false;
+    soundBtnEl.addEventListener("click", () => {
+      setSoundOn(!soundOn);
+      soundBtnEl.blur();
+    });
+    updateSoundBtn();
+  }
+  // 브라우저는 화면을 한 번 눌러야 소리를 낼 수 있게 한다 — 거리 모험에서 누르거나 키를 누를 때 깨운다
+  const wake = () => { if (rafId && isNeighborhoodViewActive()) resumeSoundIfOn(); };
+  wrapEl?.addEventListener("pointerdown", wake);
+  window.addEventListener("keydown", wake);
+  document.addEventListener("visibilitychange", () => {
+    if (!audioCtx) return;
+    if (document.hidden) audioCtx.suspend().catch(() => {});
+    else if (rafId && isNeighborhoodViewActive()) resumeSoundIfOn();
+  });
+  resumeSoundIfOn();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -4376,7 +5491,10 @@ async function initNeighborhood3D() {
   topZoneEl = document.getElementById("neighborhood3d-top-zone");
   if (!canvasEl || ready || loading) {
     resize();
-    if (ready && !rafId) animate();
+    if (ready && !rafId) {
+      animate();
+      resumeSoundIfOn();
+    }
     return;
   }
   loading = true;
@@ -4417,6 +5535,7 @@ async function initNeighborhood3D() {
     loadSavedHour();
     wireTimeControls();
     applyTimeOfDay();
+    wireSoundControls();
     startAdventure();
     [danceBtnEl, walkBtnEl, runBtnEl, jumpBtnEl, momBtnEl, hudEl, dpadEl].forEach((el) => {
       if (el) el.hidden = false;
@@ -4436,6 +5555,7 @@ async function initNeighborhood3D() {
 function pauseNeighborhood3D() {
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
+  if (audioCtx && audioCtx.state === "running") audioCtx.suspend().catch(() => {});
 }
 
 window.initNeighborhood3D = initNeighborhood3D;

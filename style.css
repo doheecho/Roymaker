@@ -1666,15 +1666,20 @@ li:last-child { border-bottom: none; }
 .neighborhood3d-toast {
   position: absolute;
   left: 50%;
-  top: 14px;
+  top: 58px; /* 위쪽 줄(동전·불량배 표시, 엄마 부르기 버튼) 아래 — 긴 안내가 가려지지 않게 */
+  z-index: 3;
+  pointer-events: none;
   transform: translateX(-50%);
   margin: 0;
   padding: 8px 16px;
   background: rgba(255, 214, 77, 0.95);
   color: #403000;
-  border-radius: 999px;
+  border-radius: 18px;
   font-weight: 700;
-  white-space: nowrap;
+  /* 긴 안내(골목 차·보호구역)는 화면 폭 안에서 줄을 바꾼다 */
+  width: max-content;
+  max-width: calc(100% - 24px);
+  text-align: center;
 }
 .neighborhood3d-reset-btn {
   position: absolute;
