@@ -575,6 +575,14 @@
   "width": 32,
   "depth": 15.167
  },
+ "models/place_금호센트럴자이101.glb": {
+  "file": "img/skyview/place_금호센트럴자이101.webp",
+  "hash": "312b5da2bc",
+  "minX": -40.024,
+  "minZ": -40.49,
+  "width": 71.35,
+  "depth": 68.284
+ },
  "models/place_금호센트럴자이102.glb": {
   "file": "img/skyview/place_금호센트럴자이102.webp",
   "hash": "8d4782492f",
