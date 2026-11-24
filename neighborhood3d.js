@@ -9,7 +9,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import * as MAP_DATA from "./map_data.js?v=20261124b";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
-import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125a";
+import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 
 const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
 // 길 중간 횡단보도·신호등(맵 에디터 "🚦 신호등 추가"로 찍은 곳) — 예전 map_data.js에는 이 목록이 없을 수 있어서
@@ -492,7 +492,7 @@ function buildFences() {
     // 바닥 높이: 토막 가운데의 지면(보도 위면 보도 높이)
     const mx = (f.a[0] + f.b[0]) / 2 * W, mz = (f.a[1] + f.b[1]) / 2 * W;
     const gy = groundHeightAt(mx, mz);
-    const push = (part, cx, len) => {
+    const push = (part, cx, len, matName) => {
       const y0 = Math.max(0, part.y0 - (part.onBase ? 0 : drop)), y1 = part.y1 - (part.onBase ? 0 : drop);
       if (y1 - y0 <= 0) return;
       const off = part.z || 0;
@@ -500,7 +500,7 @@ function buildFences() {
       tmp.rotation.set(0, yaw, 0);
       tmp.scale.set(len * W, (y1 - y0) * W, (part.d || 0.05) * W);
       tmp.updateMatrix();
-      const key = `${typeKey}:${part.mat}`;
+      const key = `${typeKey}:${matName || part.mat}`;
       if (!boxes.has(key)) boxes.set(key, []);
       boxes.get(key).push(tmp.matrix.clone());
     };
@@ -510,7 +510,10 @@ function buildFences() {
         for (let k = 0; k <= n; k++) push(part, k * bay, part.w || 0.08);
       } else {
         const inset = part.inset || 0;
-        for (let k = 0; k < n; k++) push(part, (k + 0.5) * bay, Math.max(0.05, bay - inset * 2));
+        for (let k = 0; k < n; k++) {
+          const len = part.w ? part.w : Math.max(0.05, bay - inset * 2);
+          push(part, (k + 0.5) * bay, len, part.matAlt ? part.matAlt[k % part.matAlt.length] : null);
+        }
       }
     });
   });
@@ -519,7 +522,7 @@ function buildFences() {
     const def = FENCE_TYPES[typeKey].mats[matName] || { color: 0x888888 };
     const glass = def.opacity != null && def.opacity < 1;
     const mat = new THREE.MeshStandardMaterial({
-      color: def.color, roughness: def.roughness ?? 0.7, metalness: def.metalness ?? 0,
+      color: def.color, roughness: def.roughness ?? 0.7, metalness: def.metalness ?? 0, map: def.tex ? fenceTexture(def.tex) : null,
       transparent: glass, opacity: def.opacity ?? 1, depthWrite: !glass, side: glass ? THREE.DoubleSide : THREE.FrontSide,
     });
     const mesh = new THREE.InstancedMesh(unit, mat, mats.length);
@@ -531,6 +534,68 @@ function buildFences() {
     if (glass) mesh.renderOrder = 1;
     scene.add(mesh);
   });
+}
+
+// 울타리 무늬(칸 하나 면 = 가로 2m × 그 부품 높이에 딱 맞게 한 장) — 종류마다 한 번만 그려 둔다
+const fenceTexCache = {};
+function fenceTexture(kind) {
+  if (fenceTexCache[kind]) return fenceTexCache[kind];
+  const c = document.createElement("canvas");
+  const g = c.getContext("2d");
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  if (kind === "brick") {
+    // 갈색 쪼갠면 벽돌: 2m에 4장(0.5m), 1.65m에 8단, 단마다 반 장씩 엇갈림
+    c.width = 256; c.height = 212;
+    g.fillStyle = "#382118"; g.fillRect(0, 0, c.width, c.height);
+    const pal = ["#8D533C", "#9F644B", "#7A4632", "#A96F55"];
+    const rows = 8, rh = c.height / rows, bw = c.width / 4;
+    for (let r = 0; r < rows; r++) {
+      const off = r % 2 ? bw / 2 : 0;
+      for (let k = -1; k < 5; k++) {
+        const x = k * bw + off;
+        g.fillStyle = pal[Math.floor(rnd() * pal.length)];
+        g.fillRect(x + 2, r * rh + 2, bw - 4, rh - 4);
+        for (let d = 0; d < 14; d++) { // 쪼갠면 얼룩
+          g.fillStyle = rnd() < 0.5 ? "rgba(0,0,0,0.12)" : "rgba(255,230,210,0.10)";
+          g.fillRect(x + 2 + rnd() * (bw - 8), r * rh + 2 + rnd() * (rh - 6), 2 + rnd() * 6, 2 + rnd() * 3);
+        }
+      }
+    }
+  } else if (kind === "stone") {
+    // 문양 콘크리트 옹벽: 따뜻한 회색 바탕에 크고 작은 돌 모양, 어두운 줄눈
+    c.width = 256; c.height = 244;
+    g.fillStyle = "#5E5B52"; g.fillRect(0, 0, c.width, c.height);
+    const cols = 7, rows = 7, cw = c.width / cols, ch = c.height / rows;
+    for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
+      const cx = (k + 0.5 + (rnd() - 0.5) * 0.3) * cw, cy = (r + 0.5 + (rnd() - 0.5) * 0.3) * ch;
+      const sides = 5 + Math.floor(rnd() * 3);
+      g.beginPath();
+      for (let v = 0; v < sides; v++) {
+        const a = (v / sides) * Math.PI * 2 + rnd() * 0.5;
+        const rr = (0.5 + rnd() * 0.18) * Math.min(cw, ch) * 0.98;
+        const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+        v ? g.lineTo(px, py) : g.moveTo(px, py);
+      }
+      g.closePath();
+      const l = 160 + Math.floor(rnd() * 34);
+      g.fillStyle = `rgb(${l + 8},${l + 4},${l - 8})`;
+      g.fill();
+    }
+  } else {
+    // 타공 흡음판: 흰 바탕(재질 색이 곱해짐)에 작은 구멍 격자와 가로 골
+    c.width = 128; c.height = 64;
+    g.fillStyle = "#ffffff"; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = "rgba(0,0,0,0.28)";
+    for (let y = 3; y < c.height; y += 5) for (let x = 3 + ((y / 5) % 2) * 2; x < c.width; x += 5) g.fillRect(x, y, 1.5, 1.5);
+    g.fillStyle = "rgba(0,0,0,0.18)";
+    for (let y = 0; y < c.height; y += 16) g.fillRect(0, y, c.width, 1.5);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  fenceTexCache[kind] = tex;
+  return tex;
 }
 
 function buildTrees() {
