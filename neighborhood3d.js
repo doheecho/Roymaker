@@ -6,10 +6,11 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PLACES, ROAD_SEGMENTS, TREES, PARKS } from "./map_data.js?v=20261123c";
-import { computeRoadMarkings, markedRanges, slicePolyline } from "./road_markings.js?v=20261123c";
+import { computeRoadMarkings, markedRanges, slicePolyline } from "./road_markings.js?v=20261124e";
 
-const ASSET_VERSION = "20261123e";
+const ASSET_VERSION = "20261124e";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -363,9 +364,11 @@ function buildStaticScene() {
   const sun = new THREE.DirectionalLight(0xffffff, 1.3);
   sun.position.set(20, 30, 15);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(512, 512); // 그림자 맵을 1024→512로: 그림자 계산량을 4분의 1로 줄임
-  Object.assign(sun.shadow.camera, { left: -120, right: 120, top: 120, bottom: -120, far: 200 });
+  sun.shadow.mapSize.set(512, 512); // 그림자 맵 512 — 대신 캐릭터 주변만 덮게 좁혀서(updateSunFollow) 선명하다
+  Object.assign(sun.shadow.camera, { left: -SHADOW_HALF, right: SHADOW_HALF, top: SHADOW_HALF, bottom: -SHADOW_HALF, near: 0.5, far: 120 });
   scene.add(sun);
+  scene.add(sun.target);
+  sunLight = sun;
 
   // 동네 전체를 덮는 잔디 바닥 — 건물들이 차지하는 영역(AREA_MIN/MAX)보다 넉넉하게 깐다
   const groundW = AREA_MAX_X - AREA_MIN_X;
@@ -393,11 +396,20 @@ function buildStaticScene() {
   plaza.visible = false;
   scene.add(plaza);
 
+  // 움직이지 않는 것들(도로·보도·신호등·가로등·나무·바닥)은 만든 뒤 위치 계산을 고정해 매 프레임 비용을 줄인다
+  let before = new Set(scene.children);
   buildParks();
   buildRoads();
   buildRoadsideProps();
+  freezeStaticObjects([bg, ...scene.children.filter((o) => !before.has(o))]);
   buildPlaces();
+  before = new Set(scene.children);
   buildTrees();
+  freezeStaticObjects(scene.children.filter((o) => !before.has(o)));
+  // 하늘·차·행인(움직임)은 고정하지 않는다
+  buildSky();
+  buildCars();
+  buildPedestrians();
 }
 
 // ── 지도 바닥: img/base_naver_map.png(3288×2134)를 실제 위치에 맞춰 깐다 ──
@@ -931,6 +943,13 @@ function collectChainSidewalk(members, stores, conns) {
         if (run.length >= 2) {
           const A = run.map((r) => r.inner), B = run.map((r) => r.outer);
           pushStrip(stores.side, A, B);
+          if (run.length >= 6) {
+            // 행인이 걸을 보도 중앙선(월드 좌표)
+            const mid = run.map((r) => r.at(roadW / 2 + sideW * 0.62));
+            const pcum = [0];
+            for (let i = 1; i < mid.length; i++) pcum.push(pcum[i - 1] + Math.hypot(mid[i][0] - mid[i - 1][0], mid[i][1] - mid[i - 1][1]));
+            pedPaths.push({ pts: mid, cum: pcum, len: pcum[pcum.length - 1] });
+          }
           pushVerticalQuadStrip(stores.curb, A); // 도로 쪽 연석 면
           [run[0], run[run.length - 1]].forEach((r) => pushVerticalQuadStrip(stores.curb, [r.inner, r.outer])); // 구간 끝 단면
           pushStrip(stores.line, run.map((r) => r.at(roadW / 2 + inset)), run.map((r) => r.at(roadW / 2 + inset + lineW)));
@@ -1115,13 +1134,14 @@ function buildSidewalkCorners(stores) {
       pushStrip(stores.side, Q, outer);
       pushVerticalQuadStrip(stores.curb, Q);
       pushStrip(stores.line, at(inset), at(inset + lineW));
-      groundPlatforms.push({ poly: [...Q, ...outer.slice().reverse()], y: SIDEWALK_TOP_Y });
+      addPolyPlatform([...Q, ...outer.slice().reverse()], SIDEWALK_TOP_Y);
     }
   }
 }
 
 function buildRoadSidewalks() {
   walkBands.length = 0;
+  pedPaths.length = 0;
   const stores = { side: newRibbonStore(), line: newRibbonStore(), curb: newRibbonStore(), rail: newRibbonStore(), posts: [] };
   const conns = buildRoadConnections();
   const chains = buildSidewalkChains(conns);
@@ -1147,8 +1167,7 @@ function buildRoadSidewalks() {
   if (stores.curb.idx.length) {
     stores.curb.uv.length = 0;
     const mesh = new THREE.Mesh(storeToGeometry(stores.curb), new THREE.MeshStandardMaterial({ color: CURB_COLOR, roughness: 1, side: THREE.DoubleSide }));
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    mesh.receiveShadow = true; // 연석은 아주 낮아서 그림자를 드리울 필요가 없다(그림자 계산 절약)
     scene.add(mesh);
   }
   if (stores.rail.idx.length) {
@@ -1307,6 +1326,7 @@ function buildRoads() {
   buildLaneDashes();
   buildJunctionFillers();
   buildRoadMarks();
+  buildTrafficSignals();
 }
 
 // ── 가로등: 도로를 따라 일정 간격으로 세운다 ──
@@ -1511,9 +1531,17 @@ function insideRect(x, z, cx, cz, cos, sin, halfW, halfD) {
   return Math.abs(lx) <= halfW && Math.abs(lz) <= halfD;
 }
 // 캐릭터가 서 있는 자리의 지면 높이 — 단차가 있는 건물의 발판 위면 그 높이, 아니면 기본(0)
+// 다각형 발판(교차로 모서리 보도, 건물 바닥 외곽) — 겉 사각형(bbox)을 같이 둬서 멀리 있는 건 바로 건너뛴다
+function addPolyPlatform(poly, y) {
+  const xs = poly.map((q) => q[0]), zs = poly.map((q) => q[1]);
+  groundPlatforms.push({ poly, y, minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs) });
+}
 function groundHeightAt(x, z) {
   for (const p of groundPlatforms) {
-    if (p.poly ? pointInPolygon(x, z, p.poly) : insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return p.y;
+    if (p.poly) {
+      if (x < p.minx || x > p.maxx || z < p.minz || z > p.maxz) continue;
+      if (pointInPolygon(x, z, p.poly)) return p.y;
+    } else if (insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return p.y;
   }
   // 보도 위면 턱만큼 높다(도로에서 보도로 올라서면 캐릭터도 같이 올라간다)
   for (const s of walkBands) {
@@ -1624,7 +1652,57 @@ function settleBuildingBase(entry, model) {
   const skirt = new THREE.Mesh(storeToGeometry(store), buildingSkirtMaterial);
   skirt.receiveShadow = true;
   entry.group.add(skirt);
-  groundPlatforms.push({ poly: hull, y: baseY });
+  addPolyPlatform(hull, baseY);
+}
+
+// 건물 모델은 작은 조각(메시)이 수십~수백 개라 조각마다 그리기 명령이 하나씩 나간다(멀리 보면 1000번 넘게).
+// 불러올 때 같은 재질을 쓰는 조각들을 하나로 합쳐서 그리기 명령 수를 크게 줄인다. 압축(quantize)된
+// 정점은 그대로 합치면 범위가 잘리므로, 먼저 보통 숫자(Float32)로 풀고 조각 위치를 정점에 구워 넣는다.
+const ATTR_GETTERS = ["getX", "getY", "getZ", "getW"];
+function toFloatGeometry(geo) {
+  const g = new THREE.BufferGeometry();
+  for (const name of Object.keys(geo.attributes)) {
+    const a = geo.attributes[name];
+    const n = a.itemSize;
+    const arr = new Float32Array(a.count * n);
+    for (let i = 0; i < a.count; i++) for (let c = 0; c < n; c++) arr[i * n + c] = a[ATTR_GETTERS[c]](i);
+    g.setAttribute(name, new THREE.BufferAttribute(arr, n));
+  }
+  if (geo.index) g.setIndex(new THREE.BufferAttribute(Uint32Array.from(geo.index.array), 1));
+  return g;
+}
+function mergeModelMeshes(model) {
+  model.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
+  const groups = new Map();
+  model.traverse((o) => {
+    if (!o.isMesh || !o.visible || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || !o.geometry?.attributes?.position) return;
+    // 거울처럼 뒤집힌 조각은 합치면 면 방향이 뒤집혀 안 보일 수 있어서 그대로 둔다
+    if (new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld).determinant() < 0) return;
+    if (Object.keys(o.geometry.morphAttributes || {}).length) return;
+    const geo = o.geometry;
+    const key = `${o.material.uuid}|${Object.keys(geo.attributes).sort().join(",")}|${geo.index ? "i" : "n"}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(o);
+  });
+  let before = 0, after = 0;
+  groups.forEach((meshes) => {
+    before += meshes.length;
+    if (meshes.length < 2) { after += meshes.length; return; }
+    const geos = meshes.map((m) => {
+      const g = toFloatGeometry(m.geometry);
+      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
+      return g;
+    });
+    const merged = mergeGeometries(geos, false);
+    geos.forEach((g) => g.dispose());
+    if (!merged) { after += meshes.length; return; }
+    const mesh = new THREE.Mesh(merged, meshes[0].material);
+    model.add(mesh);
+    meshes.forEach((m) => m.parent && m.parent.remove(m));
+    after += 1;
+  });
+  return { before, after };
 }
 
 function loadPlaceModelInto(entry) {
@@ -1637,6 +1715,7 @@ function loadPlaceModelInto(entry) {
       const curDist = character ? Math.hypot(character.position.x - entry.px, character.position.z - entry.pz) : Infinity;
       if (curDist > modelUnloadRangeFor(entry.place.id)) return;
       const model = gltf.scene;
+      mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(회전·크기 넣기 전, 모델 기준 좌표로)
       const modelScale = WORLD_SCALE * (entry.place.scaleRatio ?? 1);
       model.scale.setScalar(modelScale);
       model.position.set(entry.px, 0, entry.pz);
@@ -1671,10 +1750,14 @@ function updateModelStreaming(dt) {
   if (modelStreamTimer < MODEL_STREAM_CHECK_INTERVAL) return;
   modelStreamTimer = 0;
   const cp = character.position;
+  // 한꺼번에 여러 모델을 받기 시작하면 다운로드·해석이 몰려 화면이 끊긴다 — 가까운 것부터 동시에 최대 2개씩
+  let loadingNow = modelStreamEntries.filter((e) => e.loading).length;
+  const want = [];
   modelStreamEntries.forEach((entry) => {
     const dist = Math.hypot(cp.x - entry.px, cp.z - entry.pz);
+    entry.streamDist = dist;
     if (dist <= modelLoadRangeFor(entry.place.id)) {
-      if (!entry.loadedModel && !entry.loading) loadPlaceModelInto(entry);
+      if (!entry.loadedModel && !entry.loading) want.push(entry);
     } else if (dist > modelUnloadRangeFor(entry.place.id) && entry.loadedModel) {
       entry.group.remove(entry.loadedModel);
       disposeObject3D(entry.loadedModel);
@@ -1682,7 +1765,14 @@ function updateModelStreaming(dt) {
       if (entry.placeholder) entry.placeholder.visible = true;
     }
   });
+  want.sort((a, b) => a.streamDist - b.streamDist);
+  for (const entry of want) {
+    if (loadingNow >= MAX_CONCURRENT_MODEL_LOADS) break;
+    loadPlaceModelInto(entry);
+    loadingNow++;
+  }
 }
+const MAX_CONCURRENT_MODEL_LOADS = 2;
 
 function buildPlaces() {
   PLACES.forEach((place) => {
@@ -2383,12 +2473,24 @@ function animate() {
   if (mixer) mixer.update(dt);
   if (momMixer) momMixer.update(dt);
   updateCamera();
+  updateSunFollow();
+  updateSky(dt);
+  updateSignals(dt);
+  updateCars(dt);
+  updatePedestrians(dt);
   updateLabelScales();
-  updateLabelVisibility();
-  updatePlaceVisibility();
+  // 라벨·건물 보이기/숨기기는 캐릭터가 움직여야만 바뀌니 0.2초마다만 확인한다
+  visibilityTimer += dt;
+  if (visibilityTimer >= 0.2) {
+    visibilityTimer = 0;
+    updateLabelVisibility();
+    updatePlaceVisibility();
+  }
   updateModelStreaming(dt);
   renderer.render(scene, camera);
+  updatePerformance(dt);
 }
+let visibilityTimer = 1;
 
 function resize() {
   if (!renderer || !canvasEl) return;
@@ -2448,6 +2550,822 @@ function onFullscreenChange() {
 document.addEventListener("fullscreenchange", onFullscreenChange);
 document.addEventListener("webkitfullscreenchange", onFullscreenChange);
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 하늘: 그라데이션 + 천천히 흘러가는 구름 (구 하나 + 셰이더, 드로우콜 1) ──
+// 구름은 처음에 한 번 캔버스로 만든 반복 무늬(노이즈) 텍스처를 하늘 위에 펼쳐서 시간에 따라 밀어 준다.
+// ════════════════════════════════════════════════════════════════════════════
+const SKY_TOP_COLOR = new THREE.Color(0x4f9fe6);
+const SKY_HORIZON_COLOR = new THREE.Color(0xd8ecfa);
+let skyMesh = null;
+function makeCloudTexture() {
+  const N = 256;
+  const lattice = (size, seed) => {
+    const a = new Float32Array(size * size);
+    let s = seed;
+    for (let i = 0; i < a.length; i++) { s = (s * 16807) % 2147483647; a[i] = s / 2147483647; }
+    return a;
+  };
+  const layers = [[6, 0.5, 11], [12, 0.27, 23], [24, 0.15, 37], [48, 0.08, 51]].map(([size, amp, seed]) => ({ size, amp, g: lattice(size, seed) }));
+  const smooth = (t) => t * t * (3 - 2 * t);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = N;
+  const ctx = canvas.getContext("2d");
+  const img = ctx.createImageData(N, N);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      let v = 0;
+      for (const L of layers) {
+        const fx = (x / N) * L.size, fy = (y / N) * L.size;
+        const x0 = Math.floor(fx), y0 = Math.floor(fy);
+        const tx = smooth(fx - x0), ty = smooth(fy - y0);
+        const g = (i, j) => L.g[(j % L.size) * L.size + (i % L.size)]; // 끝과 처음이 이어지게(타일링)
+        const a = g(x0, y0), b = g(x0 + 1, y0), c = g(x0, y0 + 1), d = g(x0 + 1, y0 + 1);
+        v += L.amp * ((a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty);
+      }
+      const cover = Math.max(0, Math.min(1, (v - 0.55) * 3.4)); // 맑은 하늘 사이로 뭉게구름이 드문드문
+      const k = (y * N + x) * 4;
+      img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+      img.data[k + 3] = Math.round(cover * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+function buildSky() {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      topColor: { value: SKY_TOP_COLOR },
+      horizonColor: { value: SKY_HORIZON_COLOR },
+      clouds: { value: makeCloudTexture() },
+      time: { value: 0 },
+    },
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 topColor;
+      uniform vec3 horizonColor;
+      uniform sampler2D clouds;
+      uniform float time;
+      varying vec3 vDir;
+      void main() {
+        vec3 d = normalize(vDir);
+        float h = d.y;
+        vec3 col = mix(horizonColor, topColor, smoothstep(0.0, 0.55, max(h, 0.0)));
+        if (h > 0.01) {
+          vec2 uv = d.xz / (h + 0.12) * 0.16 + vec2(time * 0.0035, time * 0.0012);
+          float c = texture2D(clouds, uv).a * smoothstep(0.01, 0.2, h);
+          col = mix(col, vec3(1.0), c * 0.9);
+        }
+        gl_FragColor = vec4(col, 1.0);
+        #include <colorspace_fragment>
+      }`,
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+  });
+  skyMesh = new THREE.Mesh(new THREE.SphereGeometry(250, 32, 16), mat);
+  skyMesh.renderOrder = -1;
+  skyMesh.frustumCulled = false;
+  scene.add(skyMesh);
+  scene.background = SKY_HORIZON_COLOR.clone();
+  if (scene.fog) scene.fog.color.copy(SKY_HORIZON_COLOR);
+}
+function updateSky(dt) {
+  if (!skyMesh) return;
+  skyMesh.position.copy(camera.position);
+  skyMesh.material.uniforms.time.value += dt;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 신호등: 횡단보도마다 차량 신호등(정지선 오른쪽, 팔이 차로 위로) + 보행 신호등(횡단보도 양끝) ──
+// 교차로마다 마주 보는 길끼리 같은 단계로 묶어서 초록 → 노랑 → 전부 빨강 순서로 돈다. 보행 신호는
+// 자기가 건너는 길의 차가 빨간불인 동안(다른 단계의 초록 시간) 초록이 된다. 기둥·팔·몸통·불빛은 종류별로
+// 인스턴스 하나씩이라 신호등이 많아도 드로우콜은 몇 개뿐이고, 불빛 색은 바뀔 때만 다시 쓴다.
+// ════════════════════════════════════════════════════════════════════════════
+const SIGNAL_GREEN_S = 8;
+const SIGNAL_YELLOW_S = 2;
+const SIGNAL_ALLRED_S = 1;
+const VEH_SIGNAL_POLE_H = 0.85;
+const PED_SIGNAL_POLE_H = 0.42;
+const LAMP_OFF = new THREE.Color(0x30343a);
+const LAMP_RED = new THREE.Color(0xff3b30);
+const LAMP_YELLOW = new THREE.Color(0xffc21a);
+const LAMP_GREEN = new THREE.Color(0x27e36a);
+const signalArms = new Map(); // "도로번호:a|b" → 그 끝 횡단보도(신호 있음)
+let signalJunctions = [];
+let signalLamps = null; // { mesh, slots: [{ arm, kind }], last: [] }
+let signalClock = 0;
+let signalUpdateTimer = 0;
+
+// 한 횡단보도(arm)의 지금 신호: 차량 "G"|"Y"|"R", 보행 "G"|"R"
+function armVehicleState(arm) {
+  const j = arm.junctionRef;
+  const slot = SIGNAL_GREEN_S + SIGNAL_YELLOW_S + SIGNAL_ALLRED_S;
+  const t = (signalClock + j.offset) % j.cycle;
+  const p = Math.floor(t / slot);
+  const within = t - p * slot;
+  if (arm.phase !== p) return "R";
+  return within < SIGNAL_GREEN_S ? "G" : within < SIGNAL_GREEN_S + SIGNAL_YELLOW_S ? "Y" : "R";
+}
+function armPedState(arm) {
+  const j = arm.junctionRef;
+  const slot = SIGNAL_GREEN_S + SIGNAL_YELLOW_S + SIGNAL_ALLRED_S;
+  const t = (signalClock + j.offset) % j.cycle;
+  const p = Math.floor(t / slot);
+  const within = t - p * slot;
+  return arm.phase !== p && within < SIGNAL_GREEN_S ? "G" : "R";
+}
+// 차가 쓰는 질문: 그 도로 끝(which)에 신호가 있으면 지금 색, 없으면 null
+function signalStateFor(segIndex, which) {
+  const arm = signalArms.get(`${segIndex}:${which}`);
+  return arm ? armVehicleState(arm) : null;
+}
+
+function buildTrafficSignals() {
+  signalArms.clear();
+  signalJunctions = [];
+  signalLamps = null;
+  const list = (roadMarkings.crossings || []).filter((c) => c.signal).map((c) => ({ ...c }));
+  if (!list.length) return;
+  const W = WORLD_SCALE;
+  // 교차로별로 묶고, 마주 보는 길끼리 같은 단계(phase)로
+  const byJ = new Map();
+  list.forEach((c) => {
+    if (!byJ.has(c.junction)) byJ.set(c.junction, []);
+    byJ.get(c.junction).push(c);
+  });
+  byJ.forEach((arms, key) => {
+    let nPhases = 0;
+    arms.forEach((a) => {
+      if (a.phase != null) return;
+      a.phase = nPhases;
+      arms.forEach((b) => {
+        if (b.phase == null && a.hx * b.hx + a.hz * b.hz < -0.6) b.phase = a.phase;
+      });
+      nPhases++;
+    });
+    nPhases = Math.max(2, nPhases); // 신호 있는 길이 한 방향뿐이어도 다른 쪽(보행·교차 차량) 차례를 둔다
+    const cycle = nPhases * (SIGNAL_GREEN_S + SIGNAL_YELLOW_S + SIGNAL_ALLRED_S);
+    const j = { key, arms, cycle, offset: ((Math.abs(hashSeed(key)) % 1000) / 1000) * cycle };
+    arms.forEach((a) => { a.junctionRef = j; signalArms.set(`${a.seg}:${a.which}`, a); });
+    signalJunctions.push(j);
+  });
+
+  // 인스턴스 배치 계산
+  const poles = []; // { x, z, h }
+  const arms = []; // { x, z, y, len, yaw }
+  const heads = []; // { x, y, z, sx, sy, sz, yaw }
+  const lamps = []; // { x, y, z, yaw, r, arm, kind }
+  const yawFacing = (dx, dz) => Math.atan2(dx, dz); // 로컬 +Z가 (dx,dz)를 보게
+  list.forEach((c) => {
+    const h = [c.hx, c.hz], r = [c.rx, c.rz];
+    // 차량 신호등: 정지선 오른쪽 길가 기둥 + 차로 위로 뻗은 팔 + 다가오는 차를 보는 몸통(가로형 3구)
+    const baseRaw = [c.stopX + r[0] * (c.half + 0.9), c.stopZ + r[1] * (c.half + 0.9)];
+    const armLenRaw = c.half * 0.75 + 0.9;
+    const B = [baseRaw[0] * W, baseRaw[1] * W];
+    poles.push({ x: B[0], z: B[1], h: VEH_SIGNAL_POLE_H });
+    const armMid = [B[0] - r[0] * (armLenRaw * W) / 2, B[1] - r[1] * (armLenRaw * W) / 2];
+    arms.push({ x: armMid[0], z: armMid[1], y: VEH_SIGNAL_POLE_H - 0.02, len: armLenRaw * W, yaw: yawFacing(-h[0], -h[1]) });
+    const headPos = [B[0] - r[0] * (armLenRaw - 0.5) * W, B[1] - r[1] * (armLenRaw - 0.5) * W];
+    const headY = VEH_SIGNAL_POLE_H - 0.07;
+    const faceYaw = yawFacing(-h[0], -h[1]);
+    heads.push({ x: headPos[0], y: headY, z: headPos[1], sx: 0.17, sy: 0.055, sz: 0.04, yaw: faceYaw });
+    // 운전자 기준 왼쪽부터 빨강·노랑·초록(가로형)
+    [["vR", -0.052], ["vY", 0], ["vG", 0.052]].forEach(([kind, o]) => {
+      lamps.push({
+        x: headPos[0] + r[0] * o - h[0] * 0.021, y: headY, z: headPos[1] + r[1] * o - h[1] * 0.021,
+        yaw: faceYaw, r: 0.018, arm: c, kind,
+      });
+    });
+    // 보행 신호등: 횡단보도 양끝(도로 양쪽 길가), 길 건너편을 바라봄. 위 빨강(서 있는 사람), 아래 초록
+    [1, -1].forEach((side) => {
+      const E = [(c.x + r[0] * side * (c.half + 0.7)) * W, (c.z + r[1] * side * (c.half + 0.7)) * W];
+      poles.push({ x: E[0], z: E[1], h: PED_SIGNAL_POLE_H });
+      const face = [-r[0] * side, -r[1] * side];
+      const fy = yawFacing(face[0], face[1]);
+      const hy = PED_SIGNAL_POLE_H + 0.02;
+      heads.push({ x: E[0], y: hy, z: E[1], sx: 0.05, sy: 0.085, sz: 0.035, yaw: fy });
+      [["pR", 0.021], ["pG", -0.021]].forEach(([kind, dy]) => {
+        lamps.push({ x: E[0] + face[0] * 0.019, y: hy + dy, z: E[1] + face[1] * 0.019, yaw: fy, r: 0.016, arm: c, kind });
+      });
+    });
+  });
+
+  const dummy = new THREE.Object3D();
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.6, metalness: 0.3 });
+  const poleMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.012, 0.014, 1, 6), darkMat, poles.length);
+  poles.forEach((p, i) => {
+    dummy.position.set(p.x, SIDEWALK_TOP_Y + p.h / 2, p.z);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(1, p.h, 1);
+    dummy.updateMatrix();
+    poleMesh.setMatrixAt(i, dummy.matrix);
+  });
+  const armMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), darkMat, arms.length);
+  arms.forEach((a, i) => {
+    dummy.position.set(a.x, SIDEWALK_TOP_Y + a.y, a.z);
+    dummy.rotation.set(0, a.yaw, 0);
+    dummy.scale.set(a.len, 0.018, 0.018); // 로컬 X(=오른쪽 r 방향)로 길게
+    dummy.updateMatrix();
+    armMesh.setMatrixAt(i, dummy.matrix);
+  });
+  const headMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x1d2024, roughness: 0.7 }), heads.length);
+  heads.forEach((hh, i) => {
+    dummy.position.set(hh.x, SIDEWALK_TOP_Y + hh.y, hh.z);
+    dummy.rotation.set(0, hh.yaw, 0);
+    dummy.scale.set(hh.sx, hh.sy, hh.sz);
+    dummy.updateMatrix();
+    headMesh.setMatrixAt(i, dummy.matrix);
+  });
+  const lampMesh = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 10), new THREE.MeshBasicMaterial({ color: 0xffffff }), lamps.length);
+  lamps.forEach((l, i) => {
+    dummy.position.set(l.x, SIDEWALK_TOP_Y + l.y, l.z);
+    dummy.rotation.set(0, l.yaw, 0);
+    dummy.scale.set(l.r, l.r, 1);
+    dummy.updateMatrix();
+    lampMesh.setMatrixAt(i, dummy.matrix);
+    lampMesh.setColorAt(i, LAMP_OFF);
+  });
+  [poleMesh, armMesh, headMesh, lampMesh].forEach((m) => {
+    m.instanceMatrix.needsUpdate = true;
+    m.castShadow = m !== lampMesh;
+    scene.add(m);
+  });
+  if (lampMesh.instanceColor) lampMesh.instanceColor.needsUpdate = true;
+  signalLamps = { mesh: lampMesh, slots: lamps.map((l) => ({ arm: l.arm, kind: l.kind })), last: new Array(lamps.length).fill(null) };
+  updateSignalLamps(true);
+}
+
+function updateSignalLamps(force = false) {
+  if (!signalLamps) return;
+  let changed = false;
+  signalLamps.slots.forEach((slot, i) => {
+    let col = LAMP_OFF;
+    if (slot.kind[0] === "v") {
+      const st = armVehicleState(slot.arm);
+      if ((slot.kind === "vR" && st === "R") || (slot.kind === "vY" && st === "Y") || (slot.kind === "vG" && st === "G")) {
+        col = slot.kind === "vR" ? LAMP_RED : slot.kind === "vY" ? LAMP_YELLOW : LAMP_GREEN;
+      }
+    } else {
+      const st = armPedState(slot.arm);
+      if (slot.kind === "pR" && st === "R") col = LAMP_RED;
+      if (slot.kind === "pG" && st === "G") col = LAMP_GREEN;
+    }
+    if (force || signalLamps.last[i] !== col) {
+      signalLamps.mesh.setColorAt(i, col);
+      signalLamps.last[i] = col;
+      changed = true;
+    }
+  });
+  if (changed && signalLamps.mesh.instanceColor) signalLamps.mesh.instanceColor.needsUpdate = true;
+}
+
+// 캐릭터가 빨간불에 횡단보도를 건너면 한마디(교통안전)
+let redLightToastCooldown = 0;
+function checkCharacterRedLight(dt) {
+  redLightToastCooldown = Math.max(0, redLightToastCooldown - dt);
+  if (!character || redLightToastCooldown > 0 || !signalArms.size) return;
+  const W = WORLD_SCALE;
+  const px = character.position.x / W, pz = character.position.z / W;
+  for (const arm of signalArms.values()) {
+    const dx = px - arm.x, dz = pz - arm.z;
+    const along = dx * arm.hx + dz * arm.hz;
+    const across = dx * arm.rx + dz * arm.rz;
+    if (Math.abs(along) <= arm.depth / 2 + 0.5 && Math.abs(across) <= arm.half && armPedState(arm) === "R") {
+      showToast("🚦 빨간불이에요! 초록불에 건너요");
+      redLightToastCooldown = 6;
+      return;
+    }
+  }
+}
+
+function updateSignals(dt) {
+  if (!signalJunctions.length) return;
+  signalClock += dt;
+  signalUpdateTimer += dt;
+  if (signalUpdateTimer >= 0.2) {
+    signalUpdateTimer = 0;
+    updateSignalLamps();
+    checkCharacterRedLight(0.2);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 달리는 차: 캐릭터 주변에서만 18대 정도가 차로를 따라 달린다 ──
+// · 8m 이상 도로(단지 안 베이지 도로 제외)의 오른쪽 차로를 달리고, 도로 끝(교차로)에서 이어진 길 중 하나로
+//   꺾어 들어간다(곧은 길을 더 자주 고름). 막다른 길에선 돌아 나온다.
+// · 신호등이 있는 끝에서는 빨강·노랑이면 정지선 앞에 선다. 앞차와 거리를 두고, 앞에 사람이 있으면 멈춘다.
+// · 몸통·유리·바퀴·그림자를 종류별 인스턴스 하나로 그려서 드로우콜 4개뿐이고, 멀어진 차는 캐릭터 근처로 다시 보낸다.
+// ════════════════════════════════════════════════════════════════════════════
+const CAR_COUNT = 18;
+const CAR_SPAWN_MIN = 14; // 월드 단위 — 캐릭터 바로 앞에서 불쑥 생기지 않게
+const CAR_SPAWN_MAX = 38;
+const CAR_DESPAWN = 48;
+const CAR_LEN = 0.8, CAR_WID = 0.34;
+const CAR_MAX_SPEED = 4.2; // 월드/초 (캐릭터 걷기 3, 뛰기 7.5)
+const CAR_ACCEL = 2.2, CAR_DECEL = 5.5;
+const CAR_COLORS = [0xf2f2f0, 0xc9ccd1, 0x2b2d31, 0xb8202a, 0x1f4e8c, 0x6b7076, 0x203247, 0xd8cdb0, 0x3c6e47];
+let carRoads = null; // 도로별 정보(차가 달릴 수 있는 도로만 drivable)
+let carNodes = null;
+let cars = [];
+let carMeshes = null;
+let carRespawnTimer = 0;
+
+function polyPointAt(pts, cum, s) {
+  const L = cum[cum.length - 1];
+  s = Math.max(0, Math.min(L, s));
+  let i = 0;
+  while (i < pts.length - 2 && cum[i + 1] < s) i++;
+  const len = cum[i + 1] - cum[i] || 1e-6;
+  const t = (s - cum[i]) / len;
+  const dx = (pts[i + 1][0] - pts[i][0]) / len, dz = (pts[i + 1][1] - pts[i][1]) / len;
+  return { x: pts[i][0] + dx * len * t, z: pts[i][1] + dz * len * t, dx, dz };
+}
+
+function buildCarNetwork() {
+  carRoads = ROAD_SEGMENTS.map((seg, i) => {
+    const pts = roadPolyline(seg);
+    const cum = [0];
+    for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
+    const L = cum[cum.length - 1];
+    const w = seg.width;
+    const drivable = L > 4 && w >= 8 && !(w >= 11 && w < 13);
+    // 양 끝 교차로 구간 길이(차가 그 앞에서 꺾기 시작)
+    let gapA = 0, gapB = 0;
+    (roadMarkings.gaps[i] || []).forEach(([g0, g1]) => {
+      if (g0 <= 0.01) gapA = Math.max(gapA, Math.min(L, g1));
+      if (g1 >= L - 0.01) gapB = Math.max(gapB, L - Math.max(0, g0));
+    });
+    if (gapA + gapB > L * 0.9) { gapA = Math.min(gapA, L * 0.45); gapB = Math.min(gapB, L * 0.45); }
+    const lanes = w >= 22 ? [w * 0.125, w * 0.375] : [w * 0.25]; // 진행 방향 오른쪽 차로 중심(raw)
+    return { i, pts, cum, L, w, drivable, gapA, gapB, lanes };
+  });
+  // 도로 끝 → 교차로(노드)
+  const ends = [];
+  carRoads.forEach((r) => {
+    if (!r.drivable) return;
+    ends.push({ i: r.i, which: "a", x: r.pts[0][0], z: r.pts[0][1] });
+    ends.push({ i: r.i, which: "b", x: r.pts[r.pts.length - 1][0], z: r.pts[r.pts.length - 1][1] });
+  });
+  carNodes = new Map();
+  const used = new Set();
+  ends.forEach((e, k) => {
+    if (used.has(k)) return;
+    const members = [e];
+    used.add(k);
+    ends.forEach((o, m) => {
+      if (!used.has(m) && Math.hypot(o.x - e.x, o.z - e.z) < JOIN_RAW) { members.push(o); used.add(m); }
+    });
+    const cx = members.reduce((s, m) => s + m.x, 0) / members.length;
+    const cz = members.reduce((s, m) => s + m.z, 0) / members.length;
+    const node = { members, cx, cz };
+    members.forEach((m) => carNodes.set(`${m.i}:${m.which}`, node));
+  });
+}
+
+function carRoadPose(r, s, dir, lane) {
+  const q = polyPointAt(r.pts, r.cum, s);
+  const fx = q.dx * dir, fz = q.dz * dir;
+  const rx = -fz, rz = fx; // 진행 방향 오른쪽(우측통행)
+  return { x: (q.x + rx * lane) * WORLD_SCALE, z: (q.z + rz * lane) * WORLD_SCALE, fx, fz };
+}
+
+function spawnCar(car) {
+  const cp = character.position;
+  const candidates = carRoads.filter((r) => r.drivable && r.L - r.gapA - r.gapB > 6);
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const r = candidates[Math.floor(Math.random() * candidates.length)];
+    if (!r) return false;
+    const s = r.gapA + 2 + Math.random() * Math.max(0.1, r.L - r.gapA - r.gapB - 4);
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const lane = r.lanes[Math.floor(Math.random() * r.lanes.length)];
+    const pose = carRoadPose(r, s, dir, lane);
+    const d = Math.hypot(pose.x - cp.x, pose.z - cp.z);
+    if (d < CAR_SPAWN_MIN || d > CAR_SPAWN_MAX) continue;
+    if (cars.some((o) => o !== car && o.active && o.mode === "road" && o.seg === r.i && o.dir === dir && Math.abs(o.lane - lane) < 0.5 && Math.abs(o.s - s) < 9)) continue;
+    Object.assign(car, { active: true, mode: "road", seg: r.i, s, dir, lane, speed: CAR_MAX_SPEED * 0.6, turn: null, x: pose.x, z: pose.z, fx: pose.fx, fz: pose.fz });
+    car.maxSpeed = CAR_MAX_SPEED * (0.8 + Math.random() * 0.35);
+    return true;
+  }
+  return false;
+}
+
+function buildCars() {
+  buildCarNetwork();
+  cars = [];
+  const bodyGeo = new THREE.BoxGeometry(CAR_WID, 0.11, CAR_LEN);
+  const cabinGeo = new THREE.BoxGeometry(CAR_WID * 0.86, 0.085, CAR_LEN * 0.5);
+  const wheelGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.045, 10);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const shadowGeo = new THREE.CircleGeometry(1, 16);
+  shadowGeo.rotateX(-Math.PI / 2);
+  const body = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.35 }), CAR_COUNT);
+  const cabin = new THREE.InstancedMesh(cabinGeo, new THREE.MeshStandardMaterial({ color: 0x24313d, roughness: 0.2, metalness: 0.6 }), CAR_COUNT);
+  const wheels = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ color: 0x151618, roughness: 0.9 }), CAR_COUNT * 4);
+  const shadow = new THREE.InstancedMesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }), CAR_COUNT);
+  for (let k = 0; k < CAR_COUNT; k++) {
+    body.setColorAt(k, new THREE.Color(CAR_COLORS[k % CAR_COLORS.length]));
+    cars.push({ active: false, index: k });
+  }
+  [body, cabin, wheels, shadow].forEach((m) => {
+    m.frustumCulled = false; // 인스턴스가 계속 움직여서 미리 잡은 경계로 자르면 안 된다
+    m.count = 0;
+    scene.add(m);
+  });
+  if (body.instanceColor) body.instanceColor.needsUpdate = true;
+  carMeshes = { body, cabin, wheels, shadow };
+}
+
+function chooseNextRoad(car) {
+  const r = carRoads[car.seg];
+  const endWhich = car.dir > 0 ? "b" : "a";
+  const node = carNodes.get(`${car.seg}:${endWhich}`);
+  const options = node ? node.members.filter((m) => m.i !== car.seg) : [];
+  if (!options.length) return null;
+  // 지금 진행 방향과 비슷한(곧게 가는) 길을 더 자주 고른다
+  const weights = options.map((m) => {
+    const nr = carRoads[m.i];
+    const q = m.which === "a" ? polyPointAt(nr.pts, nr.cum, 0) : polyPointAt(nr.pts, nr.cum, nr.L);
+    const ox = m.which === "a" ? q.dx : -q.dx, oz = m.which === "a" ? q.dz : -q.dz;
+    const dot = car.fx * ox + car.fz * oz;
+    return 0.25 + Math.max(0, dot) * 2;
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  let pick = Math.random() * total;
+  for (let k = 0; k < options.length; k++) {
+    pick -= weights[k];
+    if (pick <= 0) return { m: options[k], node };
+  }
+  return { m: options[options.length - 1], node };
+}
+
+function startCarTurn(car) {
+  const next = chooseNextRoad(car);
+  if (!next) {
+    // 막다른 길: 그 자리에서 돌아 나온다
+    car.dir = -car.dir;
+    return;
+  }
+  const nr = carRoads[next.m.i];
+  const dir = next.m.which === "a" ? 1 : -1;
+  const s = dir > 0 ? nr.gapA : nr.L - nr.gapB;
+  const lane = nr.lanes[Math.min(nr.lanes.length - 1, carRoads[car.seg].lanes.indexOf(car.lane) >= 0 ? carRoads[car.seg].lanes.indexOf(car.lane) : 0)];
+  const p1 = carRoadPose(nr, s, dir, lane);
+  const p0 = { x: car.x, z: car.z };
+  // 제어점: 들어오는 방향 직선과 나가는 방향 직선이 만나는 점(없으면 두 점의 중간)
+  let cx = (p0.x + p1.x) / 2, cz = (p0.z + p1.z) / 2;
+  const det = car.fx * -p1.fz - car.fz * -p1.fx;
+  if (Math.abs(det) > 0.15) {
+    const dx = p1.x - p0.x, dz = p1.z - p0.z;
+    const u = (dx * -p1.fz - dz * -p1.fx) / det;
+    if (u > 0 && u < 12) { cx = p0.x + car.fx * u; cz = p0.z + car.fz * u; }
+  }
+  let len = 0, px = p0.x, pz = p0.z;
+  for (let k = 1; k <= 8; k++) {
+    const t = k / 8, w = 1 - t;
+    const qx = w * w * p0.x + 2 * w * t * cx + t * t * p1.x, qz = w * w * p0.z + 2 * w * t * cz + t * t * p1.z;
+    len += Math.hypot(qx - px, qz - pz);
+    px = qx; pz = qz;
+  }
+  car.mode = "turn";
+  car.turn = { p0, c: { x: cx, z: cz }, p1, len: Math.max(0.05, len), t: 0, next: { seg: next.m.i, dir, s, lane } };
+}
+
+function speedToStopWithin(distWorld) {
+  return distWorld <= 0 ? 0 : Math.sqrt(2 * CAR_DECEL * distWorld);
+}
+
+function updateCars(dt) {
+  if (!carMeshes || !character) return;
+  const W = WORLD_SCALE;
+  const cp = character.position;
+  carRespawnTimer += dt;
+  if (carRespawnTimer > 0.5) {
+    carRespawnTimer = 0;
+    cars.forEach((car) => {
+      if (!car.active || Math.hypot(car.x - cp.x, car.z - cp.z) > CAR_DESPAWN) {
+        car.active = false;
+        spawnCar(car);
+      }
+    });
+  }
+  cars.forEach((car) => {
+    if (!car.active) return;
+    let limit = car.maxSpeed;
+    // 앞에 사람(캐릭터)이 있으면 멈춘다
+    const ax = cp.x - car.x, az = cp.z - car.z;
+    const ahead = ax * car.fx + az * car.fz;
+    const side = Math.abs(ax * -car.fz + az * car.fx);
+    if (ahead > 0 && ahead < 2.2 && side < 0.4) limit = Math.min(limit, speedToStopWithin(ahead - CAR_LEN * 0.5 - 0.35));
+    if (car.mode === "road") {
+      const r = carRoads[car.seg];
+      const endWhich = car.dir > 0 ? "b" : "a";
+      // 신호
+      const sig = signalStateFor(car.seg, endWhich);
+      if (sig && sig !== "G") {
+        const arm = signalArms.get(`${car.seg}:${endWhich}`);
+        const stopS = car.dir > 0 ? r.L - arm.stopFromEnd : arm.stopFromEnd;
+        const toStop = (stopS - car.s) * car.dir; // raw, 정지선까지
+        if (toStop > -0.3 && !(sig === "Y" && toStop < 3)) {
+          limit = Math.min(limit, speedToStopWithin((toStop - 0.4) * W - CAR_LEN * 0.5));
+        }
+      }
+      // 앞차
+      let gapRaw = Infinity;
+      cars.forEach((o) => {
+        if (o === car || !o.active || o.mode !== "road" || o.seg !== car.seg || o.dir !== car.dir || Math.abs(o.lane - car.lane) > 0.5) return;
+        const d = (o.s - car.s) * car.dir;
+        if (d > 0 && d < gapRaw) gapRaw = d;
+      });
+      if (gapRaw < Infinity) limit = Math.min(limit, speedToStopWithin(gapRaw * W - CAR_LEN - 0.25));
+      car.speed += Math.max(-CAR_DECEL * dt, Math.min(CAR_ACCEL * dt, limit - car.speed));
+      car.speed = Math.max(0, car.speed);
+      car.s += (car.dir * car.speed * dt) / W;
+      const pose = carRoadPose(r, car.s, car.dir, car.lane);
+      car.x = pose.x; car.z = pose.z; car.fx = pose.fx; car.fz = pose.fz;
+      const turnAt = car.dir > 0 ? r.L - r.gapB : r.gapA;
+      if ((car.dir > 0 && car.s >= turnAt) || (car.dir < 0 && car.s <= turnAt)) startCarTurn(car);
+    } else {
+      const tn = car.turn;
+      car.speed += Math.max(-CAR_DECEL * dt, Math.min(CAR_ACCEL * dt, Math.min(limit, car.maxSpeed * 0.75) - car.speed));
+      car.speed = Math.max(0, car.speed);
+      tn.t = Math.min(1, tn.t + (car.speed * dt) / tn.len);
+      const t = tn.t, w = 1 - t;
+      const x = w * w * tn.p0.x + 2 * w * t * tn.c.x + t * t * tn.p1.x;
+      const z = w * w * tn.p0.z + 2 * w * t * tn.c.z + t * t * tn.p1.z;
+      const dx = 2 * w * (tn.c.x - tn.p0.x) + 2 * t * (tn.p1.x - tn.c.x);
+      const dz = 2 * w * (tn.c.z - tn.p0.z) + 2 * t * (tn.p1.z - tn.c.z);
+      const dl = Math.hypot(dx, dz) || 1;
+      car.x = x; car.z = z; car.fx = dx / dl; car.fz = dz / dl;
+      if (tn.t >= 1) {
+        Object.assign(car, { mode: "road", seg: tn.next.seg, dir: tn.next.dir, s: tn.next.s, lane: tn.next.lane, turn: null });
+      }
+    }
+  });
+  // 그리기(활성 차만 앞쪽으로 모아서)
+  const { body, cabin, wheels, shadow } = carMeshes;
+  const m = new THREE.Matrix4(), part = new THREE.Matrix4(), base = new THREE.Matrix4();
+  const y0 = 0.012;
+  let n = 0;
+  cars.forEach((car) => {
+    if (!car.active) return;
+    const yaw = Math.atan2(car.fx, car.fz);
+    base.makeRotationY(yaw).setPosition(car.x, y0, car.z);
+    body.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.1, 0)));
+    cabin.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.195, -0.04)));
+    shadow.setMatrixAt(n, m.multiplyMatrices(base, part.makeScale(CAR_WID * 0.75, 1, CAR_LEN * 0.62)));
+    let w = 0;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      wheels.setMatrixAt(n * 4 + w, m.multiplyMatrices(base, part.makeTranslation(sx * (CAR_WID / 2 - 0.01), 0.045, sz * 0.26)));
+      w++;
+    }
+    if (body.instanceColor && car.colorSlot !== n) {
+      body.setColorAt(n, new THREE.Color(CAR_COLORS[car.index % CAR_COLORS.length]));
+      car.colorSlot = n;
+      body.instanceColor.needsUpdate = true;
+    }
+    n++;
+  });
+  body.count = cabin.count = shadow.count = n;
+  wheels.count = n * 4;
+  [body, cabin, wheels, shadow].forEach((mesh) => { mesh.instanceMatrix.needsUpdate = true; });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 걷는 행인: 캐릭터 주변 보도 위를 오가는 사람들(몸통·머리·팔다리를 종류별 인스턴스 하나로) ──
+// 보도를 만들 때 남겨 둔 보도 중앙선(pedPaths)을 따라 걷다가 끝에서 돌아서고, 멀어지면 캐릭터 근처 보도로
+// 다시 보낸다. 부담이 크면 PED_COUNT를 줄이거나 0으로 두면 된다.
+// ════════════════════════════════════════════════════════════════════════════
+const PED_COUNT = 24;
+const PED_SPAWN_MAX = 30;
+const PED_DESPAWN = 42;
+const PED_SHIRTS = [0x2f6db5, 0xd94d4d, 0xf2c14e, 0x3a9d5d, 0xf2f2f2, 0x6b4fa3, 0xe58b3a, 0x222831, 0x8fb8de];
+const PED_PANTS = [0x2b3442, 0x3b4f7a, 0x1d1f22, 0x6b5b4b, 0x5a6470];
+const PED_SKIN = [0xf1c9a5, 0xe0b088, 0xd29b74];
+const pedPaths = []; // { pts: [[x,z]...], cum, len } — 월드 좌표
+let peds = [];
+let pedMeshes = null;
+let pedRespawnTimer = 0;
+
+function buildPedestrians() {
+  peds = [];
+  pedMeshes = null;
+  if (!PED_COUNT || !pedPaths.length) return;
+  const mk = (geo, color) => {
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.8 }), PED_COUNT * (geo.userData.per || 1));
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    scene.add(mesh);
+    return mesh;
+  };
+  const torsoGeo = new THREE.BoxGeometry(0.12, 0.15, 0.07);
+  const headGeo = new THREE.SphereGeometry(0.045, 10, 8);
+  const legGeo = new THREE.BoxGeometry(0.042, 0.17, 0.045);
+  legGeo.translate(0, -0.085, 0); // 엉덩이를 축으로 흔들리게
+  legGeo.userData.per = 2;
+  const armGeo = new THREE.BoxGeometry(0.03, 0.14, 0.034);
+  armGeo.translate(0, -0.07, 0); // 어깨를 축으로
+  armGeo.userData.per = 2;
+  const shadowGeo = new THREE.CircleGeometry(0.075, 12);
+  shadowGeo.rotateX(-Math.PI / 2);
+  pedMeshes = {
+    torso: mk(torsoGeo, 0xffffff),
+    head: mk(headGeo, 0xffffff),
+    legs: mk(legGeo, 0xffffff),
+    arms: mk(armGeo, 0xffffff),
+    shadow: (() => {
+      const s = new THREE.InstancedMesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }), PED_COUNT);
+      s.frustumCulled = false;
+      s.count = 0;
+      scene.add(s);
+      return s;
+    })(),
+  };
+  for (let k = 0; k < PED_COUNT; k++) {
+    const shirt = new THREE.Color(PED_SHIRTS[k % PED_SHIRTS.length]);
+    const pants = new THREE.Color(PED_PANTS[(k * 3) % PED_PANTS.length]);
+    const skin = new THREE.Color(PED_SKIN[(k * 7) % PED_SKIN.length]);
+    pedMeshes.torso.setColorAt(k, shirt);
+    pedMeshes.head.setColorAt(k, skin);
+    pedMeshes.legs.setColorAt(k * 2, pants);
+    pedMeshes.legs.setColorAt(k * 2 + 1, pants);
+    pedMeshes.arms.setColorAt(k * 2, shirt);
+    pedMeshes.arms.setColorAt(k * 2 + 1, shirt);
+    peds.push({ active: false, slot: k, phase: Math.random() * 6 });
+  }
+  ["torso", "head", "legs", "arms"].forEach((key) => {
+    if (pedMeshes[key].instanceColor) pedMeshes[key].instanceColor.needsUpdate = true;
+  });
+}
+
+function spawnPed(ped) {
+  const cp = character.position;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const path = pedPaths[Math.floor(Math.random() * pedPaths.length)];
+    const d = Math.random() * path.len;
+    const q = pointAlongPolyline(path.pts, d);
+    if (Math.hypot(q.x - cp.x, q.z - cp.z) > PED_SPAWN_MAX) continue;
+    Object.assign(ped, {
+      active: true, path, d, dir: Math.random() < 0.5 ? 1 : -1,
+      speed: 0.55 + Math.random() * 0.45, lateral: (Math.random() - 0.5) * 0.24, k: 0,
+    });
+    return true;
+  }
+  return false;
+}
+
+function updatePedestrians(dt) {
+  if (!pedMeshes || !character) return;
+  const cp = character.position;
+  pedRespawnTimer += dt;
+  if (pedRespawnTimer > 0.6) {
+    pedRespawnTimer = 0;
+    peds.forEach((ped) => {
+      if (!ped.active || Math.hypot(ped.x - cp.x, ped.z - cp.z) > PED_DESPAWN) {
+        ped.active = false;
+        spawnPed(ped);
+      }
+    });
+  }
+  const { torso, head, legs, arms, shadow } = pedMeshes;
+  const m = new THREE.Matrix4(), base = new THREE.Matrix4(), part = new THREE.Matrix4(), rot = new THREE.Matrix4();
+  const y0 = SIDEWALK_TOP_Y;
+  let n = 0;
+  peds.forEach((ped) => {
+    if (!ped.active) return;
+    const path = ped.path;
+    ped.d += ped.dir * ped.speed * dt;
+    if (ped.d >= path.len) { ped.d = path.len; ped.dir = -1; }
+    if (ped.d <= 0) { ped.d = 0; ped.dir = 1; }
+    // 현재 구간 찾기(지난 위치에서 이어서)
+    const cum = path.cum;
+    let k = Math.min(ped.k || 0, cum.length - 2);
+    while (k < cum.length - 2 && cum[k + 1] < ped.d) k++;
+    while (k > 0 && cum[k] > ped.d) k--;
+    ped.k = k;
+    const a = path.pts[k], b = path.pts[k + 1];
+    const segLen = cum[k + 1] - cum[k] || 1e-6;
+    const t = (ped.d - cum[k]) / segLen;
+    const tx = (b[0] - a[0]) / segLen, tz = (b[1] - a[1]) / segLen;
+    const fx = tx * ped.dir, fz = tz * ped.dir;
+    ped.x = a[0] + (b[0] - a[0]) * t - tz * ped.lateral;
+    ped.z = a[1] + (b[1] - a[1]) * t + tx * ped.lateral;
+    ped.phase += ped.speed * dt * 11;
+    const swing = Math.sin(ped.phase) * 0.5;
+    const bob = Math.abs(Math.cos(ped.phase)) * 0.008;
+    base.makeRotationY(Math.atan2(fx, fz)).setPosition(ped.x, y0 + bob, ped.z);
+    torso.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.245, 0)));
+    head.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.37, 0)));
+    shadow.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.003 - bob, 0)));
+    [-1, 1].forEach((sideSign, li) => {
+      const legSwing = swing * sideSign;
+      m.multiplyMatrices(base, part.makeTranslation(sideSign * 0.03, 0.17, 0));
+      m.multiply(rot.makeRotationX(legSwing));
+      legs.setMatrixAt(n * 2 + li, m);
+      m.multiplyMatrices(base, part.makeTranslation(sideSign * 0.077, 0.31, 0));
+      m.multiply(rot.makeRotationX(-legSwing * 0.8));
+      arms.setMatrixAt(n * 2 + li, m);
+    });
+    if (ped.colorSlot !== n) {
+      // 활성 행인을 앞쪽 칸으로 모으므로, 칸이 바뀌면 그 칸의 색을 이 사람 옷 색으로 다시 칠한다
+      const slot = ped.slot;
+      const shirt = new THREE.Color(PED_SHIRTS[slot % PED_SHIRTS.length]);
+      const pants = new THREE.Color(PED_PANTS[(slot * 3) % PED_PANTS.length]);
+      const skin = new THREE.Color(PED_SKIN[(slot * 7) % PED_SKIN.length]);
+      torso.setColorAt(n, shirt);
+      head.setColorAt(n, skin);
+      legs.setColorAt(n * 2, pants); legs.setColorAt(n * 2 + 1, pants);
+      arms.setColorAt(n * 2, shirt); arms.setColorAt(n * 2 + 1, shirt);
+      [torso, head, legs, arms].forEach((mesh) => { if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; });
+      ped.colorSlot = n;
+    }
+    n++;
+  });
+  torso.count = head.count = shadow.count = n;
+  legs.count = arms.count = n * 2;
+  [torso, head, legs, arms, shadow].forEach((mesh) => { mesh.instanceMatrix.needsUpdate = true; });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 성능 도우미 ──
+// · 화면 해상도 자동 조절: 2초마다 FPS를 재서 40 아래면 해상도 배율을 0.25씩 낮추고(최저 1배),
+//   57 넘게 여유가 3번 이어지면 다시 올린다(최대 1.5배).
+// · FPS 표시: 주소 끝에 ?fps 를 붙이면(예: index.html?fps) 화면 구석에 FPS·드로우콜·삼각형 수가 뜬다.
+// ════════════════════════════════════════════════════════════════════════════
+const PERF_MAX_PIXEL_RATIO = 1.5;
+let perfFrames = 0, perfTime = 0, perfGoodStreak = 0, perfPixelRatio = 1;
+let fpsEl = null;
+function initPerformanceHelpers() {
+  perfPixelRatio = Math.min(window.devicePixelRatio || 1, PERF_MAX_PIXEL_RATIO);
+  const wantFps = /[?&]fps\b/.test(location.search) || (() => { try { return localStorage.getItem("roymaker-fps") === "1"; } catch (err) { return false; } })();
+  if (wantFps && wrapEl && !fpsEl) {
+    fpsEl = document.createElement("div");
+    fpsEl.style.cssText = "position:absolute; left:8px; bottom:8px; z-index:5; background:rgba(0,0,0,.6); color:#fff; font:12px/1.4 monospace; padding:4px 8px; border-radius:6px; pointer-events:none; white-space:pre;";
+    wrapEl.appendChild(fpsEl);
+  }
+}
+function updatePerformance(dt) {
+  perfFrames++;
+  perfTime += dt;
+  if (perfTime < 2) return;
+  const fps = perfFrames / perfTime;
+  perfFrames = 0;
+  perfTime = 0;
+  const maxPR = Math.min(window.devicePixelRatio || 1, PERF_MAX_PIXEL_RATIO);
+  if (fps < 40 && perfPixelRatio > 1) {
+    perfPixelRatio = Math.max(1, perfPixelRatio - 0.25);
+    renderer.setPixelRatio(perfPixelRatio);
+    resize();
+    perfGoodStreak = 0;
+  } else if (fps > 57 && perfPixelRatio < maxPR) {
+    perfGoodStreak++;
+    if (perfGoodStreak >= 3) {
+      perfPixelRatio = Math.min(maxPR, perfPixelRatio + 0.25);
+      renderer.setPixelRatio(perfPixelRatio);
+      resize();
+      perfGoodStreak = 0;
+    }
+  } else {
+    perfGoodStreak = 0;
+  }
+  if (fpsEl) {
+    const info = renderer.info.render;
+    const activeCars = cars.filter((c) => c.active).length;
+    const activePeds = peds.filter((p) => p.active).length;
+    fpsEl.textContent = `FPS ${fps.toFixed(0)} · 해상도 ${perfPixelRatio.toFixed(2)}x\n드로우콜 ${info.calls} · 삼각형 ${(info.triangles / 1000).toFixed(0)}k\n차 ${activeCars} · 행인 ${activePeds}`;
+  }
+}
+
+// 그림자: 태양 그림자 범위를 캐릭터 주변(±SHADOW_HALF)으로 좁혀서 따라다니게 한다 — 같은 512 맵으로 훨씬 선명.
+// 그림자 맵 한 칸 단위로 맞춰 움직여서 걸을 때 그림자 가장자리가 지글거리지 않게 한다.
+const SHADOW_HALF = 40;
+const SUN_OFFSET = new THREE.Vector3(20, 30, 15);
+let sunLight = null;
+function updateSunFollow() {
+  if (!sunLight || !character) return;
+  const texel = (SHADOW_HALF * 2) / sunLight.shadow.mapSize.x;
+  const tx = Math.round(character.position.x / texel) * texel;
+  const tz = Math.round(character.position.z / texel) * texel;
+  sunLight.target.position.set(tx, 0, tz);
+  sunLight.position.set(tx + SUN_OFFSET.x, SUN_OFFSET.y, tz + SUN_OFFSET.z);
+  sunLight.target.updateMatrixWorld();
+}
+
+// 한 번 만들고 움직이지 않는 것들(도로·보도·나무·가로등·신호등 등)은 매 프레임 위치 계산을 건너뛰게 고정한다
+function freezeStaticObjects(objects) {
+  objects.forEach((obj) => obj.traverse((o) => {
+    o.matrixAutoUpdate = false;
+    o.updateMatrix();
+  }));
+}
+
 async function initNeighborhood3D() {
   canvasEl = document.getElementById("neighborhood3d-canvas");
   loadingEl = document.getElementById("neighborhood3d-loading");
@@ -2475,6 +3393,7 @@ async function initNeighborhood3D() {
     // 화면 밀도가 큰 폰·폴드는 픽셀 수가 많아서 GPU가 힘들다 — 1.5배까지만 그리고 나머지는 늘려서 보여준다
     // (눈으로 보기엔 거의 차이가 없고, 픽셀 수는 크게 줄어든다)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    initPerformanceHelpers();
     renderer.shadowMap.enabled = true;
     clock = new THREE.Clock();
     buildStaticScene();

@@ -10,6 +10,13 @@
 // 반환값:
 //   gaps[i]    : i번째 도로에서 노면표시(중앙선·차선)를 긋지 않을 구간들 — a 끝에서 잰 거리 [s0, s1]
 //   whiteQuads : 정지선·횡단보도 줄무늬 사각형들 — 네 꼭짓점 [[x,z]×4]
+//   crossings  : 횡단보도마다 { seg, which, junction, x, z(횡단보도 가운데), hx, hz(교차로 쪽 방향), rx, rz(들어오는
+//                차로 쪽 = 오른쪽), half(도로 반폭), depth, stopX, stopZ(정지선 가운데), stopFromEnd, signal }
+//   junctionEnds: 교차로에 닿아 횡단보도를 둘 수 있는 도로 끝 { seg, which, auto(폭 규칙상 기본으로 생기는지) }
+//
+// 도로마다 끝별로 덮어쓸 수 있다(맵 에디터의 "횡단보도·신호등" 설정):
+//   crosswalkA / crosswalkB : true면 폭과 상관없이 만들고, false면 안 만든다(없으면 13m 이상일 때 자동)
+//   signalA / signalB       : false면 그 횡단보도에 신호등을 세우지 않는다(없으면 신호등 있음)
 
 export const ROAD_CURVE_STEPS = 20;
 const JOIN_THRESH = 14; // 같은 교차로로 보는 끝점 사이 거리(neighborhood3d.js의 교차로 메움판과 같은 값)
@@ -171,6 +178,12 @@ export function computeRoadMarkings(segs) {
   }
 
   // ③ 끝마다: 교차로 안쪽은 비우고, 정지선·횡단보도
+  const crossings = [];
+  const junctionEnds = [];
+  const junctionKeyOf = (e) => {
+    const gi = groups.findIndex((g) => g.includes(e));
+    return gi >= 0 && groups[gi].length >= 3 ? `g${gi}` : `t${e.i}${e.which}`;
+  };
   for (const { e, clear, crossing } of endClear.values()) {
     const r = info[e.i];
     const w = r.seg.width;
@@ -181,7 +194,10 @@ export function computeRoadMarkings(segs) {
       gaps[e.i].push(e.which === "a" ? [-1, fromA(c)] : [fromA(c), r.L + 1]);
       continue;
     }
-    let cw = w >= CROSSWALK_MIN_WIDTH;
+    const autoCw = w >= CROSSWALK_MIN_WIDTH;
+    const cwOverride = e.which === "a" ? r.seg.crosswalkA : r.seg.crosswalkB;
+    let cw = cwOverride === true ? true : cwOverride === false ? false : autoCw;
+    junctionEnds.push({ seg: e.i, which: e.which, auto: autoCw });
     let stopAt = cw ? c + CROSSWALK_DEPTH + STOP_LINE_GAP : c + 0.3;
     if (stopAt + STOP_LINE_WIDTH > maxGap) { cw = false; stopAt = c + 0.3; }
     const drawStop = stopAt + STOP_LINE_WIDTH <= maxGap;
@@ -207,6 +223,15 @@ export function computeRoadMarkings(segs) {
       for (let o = -usable; o + CROSSWALK_STRIPE <= usable + 1e-6; o += CROSSWALK_STRIPE + CROSSWALK_GAP) {
         quad(c, c + CROSSWALK_DEPTH, o, o + CROSSWALK_STRIPE);
       }
+      const pc = pointAt(r.pts, r.cum, fromA(c + CROSSWALK_DEPTH / 2));
+      const hx = e.which === "a" ? -pc.dx : pc.dx, hz = e.which === "a" ? -pc.dz : pc.dz;
+      const ps = pointAt(r.pts, r.cum, fromA(stopAt));
+      const sigOverride = e.which === "a" ? r.seg.signalA : r.seg.signalB;
+      crossings.push({
+        seg: e.i, which: e.which, junction: junctionKeyOf(e),
+        x: pc.x, z: pc.z, hx, hz, rx: -hz, rz: hx, half: r.half, depth: CROSSWALK_DEPTH,
+        stopX: ps.x, stopZ: ps.z, stopFromEnd: stopAt, signal: sigOverride !== false,
+      });
     }
   }
 
@@ -220,7 +245,7 @@ export function computeRoadMarkings(segs) {
     }
     gaps[i] = merged;
   });
-  return { gaps, whiteQuads };
+  return { gaps, whiteQuads, crossings, junctionEnds };
 }
 
 // 길이 L인 도로에서 gaps를 뺀 "노면표시를 그을 구간"들

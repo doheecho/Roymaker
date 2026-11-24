@@ -56,6 +56,8 @@
   .lane-yellow { stroke: #f2c438; }
   .lane-white { stroke: #f2f2f2; }
   .road-mark { fill: #f2f2f2; pointer-events: none; }
+  .signal-icon { pointer-events: none; }
+  .end-label { font: 700 18px sans-serif; fill: #fff; stroke: #e3482b; stroke-width: 5px; paint-order: stroke; pointer-events: none; }
   #overlay.lanes-hidden .lane-layer { display: none; }
   .road-hit { fill: none; stroke: transparent; stroke-width: 26; cursor: pointer; pointer-events: all; }
   .road-handle { fill: #e3482b; stroke: #fff; stroke-width: 2; cursor: grab; }
@@ -384,6 +386,11 @@
       const sm = line.match(/sidewalk:\s*([\d.]+)/);
       if (sm) seg.sidewalk = parseFloat(sm[1]);
       if (/\brailing:\s*true/.test(line)) seg.railing = true;
+      // 교차로 끝 설정(없으면 자동): 횡단보도·신호등을 끝(A/B)별로 켜고 끈 값
+      for (const key of ["crosswalkA", "crosswalkB", "signalA", "signalB"]) {
+        const km = line.match(new RegExp(`\\b${key}:\\s*(true|false)`));
+        if (km) seg[key] = km[1] === "true";
+      }
       roads.push(seg);
     }
     return roads;
@@ -724,7 +731,7 @@
   // 교차로 노면표시(교차로 안 차선 비우기·정지선·횡단보도)는 게임과 같은 road_markings.js로 계산한다
   let RM = null;
   try {
-    RM = await import("./road_markings.js?v=20261123c");
+    RM = await import("./road_markings.js?v=20261124e");
   } catch (err) {
     console.warn("road_markings.js를 못 불러와서 교차로 표시 없이 그려요", err);
   }
@@ -741,6 +748,15 @@
       roadMarkLayer.innerHTML = "";
       roadMarks.whiteQuads.forEach((q) => {
         roadMarkLayer.appendChild(el("polygon", { points: q.map(([x, z]) => rawToPx(x, z).map((v) => v.toFixed(2)).join(",")).join(" "), class: "road-mark" }));
+      });
+      // 신호등 위치(정지선 오른쪽 길가) — 작은 신호등 아이콘
+      (roadMarks.crossings || []).forEach((c) => {
+        if (!c.signal) return;
+        const [px, py] = rawToPx(c.stopX + c.rx * (c.half + 1.5), c.stopZ + c.rz * (c.half + 1.5));
+        const g = el("g", { class: "signal-icon", transform: `translate(${px.toFixed(1)}, ${py.toFixed(1)})` });
+        g.appendChild(el("rect", { x: -4.5, y: -11, width: 9, height: 22, rx: 2.5, fill: "#22252a", stroke: "#fff", "stroke-width": 1 }));
+        [["#ff3b30", -6], ["#ffc21a", 0], ["#27e36a", 6]].forEach(([col, dy]) => g.appendChild(el("circle", { cx: 0, cy: dy, r: 2.4, fill: col })));
+        roadMarkLayer.appendChild(g);
       });
     });
   }
@@ -933,6 +949,7 @@
     const [mx, my] = rawToPx(...roadMidpoint(node.seg));
     node.curveHandle.setAttribute("cx", mx); node.curveHandle.setAttribute("cy", my);
     node.curveHit.setAttribute("cx", mx); node.curveHit.setAttribute("cy", my);
+    if (selected && selected.kind === "road" && selected.ref === node && typeof updateEndLabels === "function") updateEndLabels();
   }
 
   function updateParkVisual(node) {
@@ -974,6 +991,7 @@
 
   function clearSelectionVisual() {
     if (!selected) return;
+    if (selected.kind === "road") [endLabelA, endLabelB].forEach((t) => t.setAttribute("visibility", "hidden"));
     if (selected.kind === "place") {
       const pn = placeNodes[selected.ref.id];
       if (pn) {
@@ -1007,6 +1025,23 @@
     renderPanel();
   }
 
+  // 선택한 도로 양 끝에 A·B 글자(패널의 "교차로 끝" 설정과 맞춰 보라고)
+  const endLabelA = el("text", { class: "end-label", visibility: "hidden" });
+  endLabelA.textContent = "A";
+  const endLabelB = el("text", { class: "end-label", visibility: "hidden" });
+  endLabelB.textContent = "B";
+  handleLayer.appendChild(endLabelA);
+  handleLayer.appendChild(endLabelB);
+  function updateEndLabels() {
+    const on = selected && selected.kind === "road";
+    [endLabelA, endLabelB].forEach((t) => t.setAttribute("visibility", on ? "visible" : "hidden"));
+    if (!on) return;
+    const seg = selected.ref.seg;
+    const [ax, ay] = rawToPx(seg.a[0], seg.a[1]);
+    const [bx, by] = rawToPx(seg.b[0], seg.b[1]);
+    endLabelA.setAttribute("x", ax + 9); endLabelA.setAttribute("y", ay - 9);
+    endLabelB.setAttribute("x", bx + 9); endLabelB.setAttribute("y", by - 9);
+  }
   function selectRoad(ev, node) {
     ev.stopPropagation();
     if (mode !== "select") return;
@@ -1018,6 +1053,7 @@
     node.curveHandle.setAttribute("visibility", "visible");
     node.curveHit.setAttribute("visibility", "visible");
     renderPanel();
+    updateEndLabels();
   }
 
   function selectParkNode(node) {
@@ -1172,6 +1208,62 @@
       railWrap.appendChild(railBox);
       railWrap.appendChild(railText);
       panelBody.appendChild(railWrap);
+      // ── 교차로 끝(A/B)별 횡단보도·신호등 ──
+      const segIdx = ROADS.indexOf(node.seg);
+      const endsBox = document.createElement("div");
+      endsBox.className = "field";
+      const endsTitle = document.createElement("label");
+      endsTitle.textContent = "🚦 교차로 끝 — 횡단보도·신호등 (지도의 A·B 표시)";
+      endsBox.appendChild(endsTitle);
+      ["a", "b"].forEach((which) => {
+        const W = which.toUpperCase();
+        const info = (roadMarks.junctionEnds || []).find((j) => j.seg === segIdx && j.which === which);
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex; align-items:center; gap:12px; margin:5px 0; font-size:13px; flex-wrap:wrap;";
+        const tag = document.createElement("b");
+        tag.textContent = W;
+        tag.style.cssText = "display:inline-block; min-width:20px; text-align:center; background:#e3482b; color:#fff; border-radius:4px; padding:1px 4px;";
+        row.appendChild(tag);
+        if (!info) {
+          const s = document.createElement("span");
+          s.style.color = "#8d93a0";
+          s.textContent = "교차로 끝이 아니에요";
+          row.appendChild(s);
+          endsBox.appendChild(row);
+          return;
+        }
+        const cwKey = "crosswalk" + W, sgKey = "signal" + W;
+        const cwOn = node.seg[cwKey] === true ? true : node.seg[cwKey] === false ? false : info.auto;
+        const check = (text, checked, disabled, onChange) => {
+          const lab = document.createElement("label");
+          lab.style.cssText = "display:flex; align-items:center; gap:5px; cursor:pointer;" + (disabled ? " opacity:0.45;" : "");
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = checked;
+          cb.disabled = disabled;
+          cb.style.cssText = "width:18px; height:18px;";
+          cb.addEventListener("change", () => onChange(cb.checked));
+          lab.appendChild(cb);
+          lab.appendChild(document.createTextNode(text));
+          return lab;
+        };
+        row.appendChild(check("횡단보도", cwOn, false, (v) => {
+          if (v === info.auto) delete node.seg[cwKey]; else node.seg[cwKey] = v; // 기본값과 같으면 "자동"으로 되돌림
+          updateRoadVisual(node);
+          renderPanel();
+        }));
+        row.appendChild(check("신호등", cwOn && node.seg[sgKey] !== false, !cwOn, (v) => {
+          if (v) delete node.seg[sgKey]; else node.seg[sgKey] = false;
+          updateRoadVisual(node);
+          renderPanel();
+        }));
+        endsBox.appendChild(row);
+      });
+      const endsNote = document.createElement("div");
+      endsNote.className = "note";
+      endsNote.textContent = "횡단보도는 폭 13m 이상 도로의 교차로 끝에 기본으로 생기고, 횡단보도마다 신호등이 기본으로 섭니다. 체크를 바꾸면 그 끝만 따로 켜고 끕니다.";
+      endsBox.appendChild(endsNote);
+      panelBody.appendChild(endsBox);
       const curveNote = document.createElement("p");
       curveNote.className = "note";
       curveNote.style.marginBottom = "10px";
@@ -1558,7 +1650,8 @@
     const curvePart = r.curve ? `, curve: [${fmtNum(r.curve[0])}, ${fmtNum(r.curve[1])}]` : "";
     const sidewalkPart = r.sidewalk ? `, sidewalk: ${fmtNum(r.sidewalk)}` : "";
     const railingPart = r.sidewalk && r.railing ? ", railing: true" : "";
-    return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)}${curvePart}${sidewalkPart}${railingPart} },`;
+    const endParts = ["crosswalkA", "crosswalkB", "signalA", "signalB"].filter((k) => typeof r[k] === "boolean").map((k) => `, ${k}: ${r[k]}`).join("");
+    return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)}${curvePart}${sidewalkPart}${railingPart}${endParts} },`;
   }
   function serializeTree(t) {
     return `[${fmtNum(t.x)}, ${fmtNum(t.z)}]`;
@@ -1841,8 +1934,13 @@
   function rebuildView() {
     selected = null;
     pendingRoadStart = null;
-    [parkLayer, sidewalkLayer, roadLayer, laneLayer, roadMarkLayer, skyLayer, treeLayer, placeLayer, pendingLayer, handleLayer].forEach((l) => { l.innerHTML = ""; });
+    [parkLayer, sidewalkLayer, laneLayer, roadMarkLayer, skyLayer, treeLayer, placeLayer, pendingLayer, handleLayer].forEach((l) => { l.innerHTML = ""; });
+    // roadLayer 안에는 도로 표면 묶음(roadSurfaceLayer)도 들어 있어서 통째로 비우면 안 된다 — 클릭 영역(hit)만 지운다
+    [...roadLayer.children].forEach((c) => { if (c !== roadSurfaceLayer) c.remove(); });
     roadRankGroups.forEach((g) => { g.innerHTML = ""; });
+    handleLayer.appendChild(endLabelA);
+    handleLayer.appendChild(endLabelB);
+    [endLabelA, endLabelB].forEach((t) => t.setAttribute("visibility", "hidden"));
     Object.keys(placeNodes).forEach((k) => delete placeNodes[k]);
     roadNodes.length = 0;
     parkNodes.length = 0;

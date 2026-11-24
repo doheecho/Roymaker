@@ -50,8 +50,9 @@ SAFE_OPTIMIZE_FLAGS = [
     "--compress", "meshopt",
 ]
 
-# 애니메이션이 들어 있는 캐릭터 모델은 건물 모델과 성격이 달라서(뼈대·스킨 등)
-# 기본적으로는 건드리지 않는다 — 필요하면 --force로 명시해서 처리할 수 있다.
+# 애니메이션이 들어 있는 캐릭터 모델은 건물 모델과 성격이 달라서(뼈대·스킨 등) 형상 압축(meshopt·quantize)을
+# 하면 몸이 [-1,1]로 눌려 망가진다(2026-11-23 확인). 그래서 이 파일들은 "텍스처만" 줄인다 —
+# 크기 제한(resize) + WebP 변환만 하고 정점·뼈대·동작은 그대로 둔다(용량 대부분이 PNG 텍스처였다).
 DEFAULT_SKIP = {"mom.glb", "walk.glb", "dance.glb"}
 
 
@@ -67,6 +68,29 @@ def check_gltf_transform_available():
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
+
+
+def optimize_textures_only(path, texture_size):
+    size_before = os.path.getsize(path)
+    with tempfile.TemporaryDirectory() as tmp:
+        mid = os.path.join(tmp, "resized.glb")
+        out_path = os.path.join(tmp, os.path.basename(path))
+        steps = [
+            ["resize", path, mid, "--width", str(texture_size), "--height", str(texture_size)],
+            ["webp", mid, out_path, "--quality", "88"],
+        ]
+        for args in steps:
+            result = run_npx(args, capture_output=True, **SUBPROCESS_TEXT_KWARGS)
+            if result.returncode != 0:
+                print(f"  실패: {result.stderr.strip()[-500:]}")
+                return False
+        size_after = os.path.getsize(out_path)
+        if size_after >= size_before:
+            print(f"  건너뜀(텍스처를 줄여도 안 줄어듦): {size_before:,} -> {size_after:,} bytes")
+            return False
+        shutil.copyfile(out_path, path)
+        print(f"  (텍스처만) {size_before:,} -> {size_after:,} bytes ({100 - size_after * 100 // size_before}% 감소)")
+        return True
 
 
 def optimize_one(path, texture_size):
@@ -117,15 +141,18 @@ def main():
     ok, skipped, failed = 0, 0, 0
     for path in targets:
         base = os.path.basename(path)
-        if not args.force and base in DEFAULT_SKIP:
-            print(f"{path}: 기본 제외 목록이라 건너뜀 (--force로 강제 가능)")
-            skipped += 1
-            continue
         if not os.path.exists(path):
             print(f"{path}: 파일이 없다")
             failed += 1
             continue
         print(f"{path}")
+        if base in DEFAULT_SKIP and not args.force:
+            # 캐릭터 모델: 텍스처만 줄인다(정점·뼈대·동작은 그대로)
+            if optimize_textures_only(path, args.texture_size):
+                ok += 1
+            else:
+                skipped += 1
+            continue
         if optimize_one(path, args.texture_size):
             ok += 1
         else:
