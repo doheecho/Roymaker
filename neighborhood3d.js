@@ -676,7 +676,7 @@ const SIDEWALK_YELLOW_W_RAW = 0.45; // 황색 점자블록 띠 폭(raw m)
 const SIDEWALK_YELLOW_INSET_RAW = 0.7; // 도로 가장자리에서 이만큼 보도 안쪽에 놓임
 const SIDEWALK_SAMPLE_RAW = 0.6; // 보도를 이 간격으로 잘게 나눠서 다른 도로와 겹치는지 판정한다
 const SIDEWALK_CORNER_MAX_RAW = 6; // 교차로 모서리 둥글기 최대 반지름(raw m)
-const SIDEWALK_RAILING = true; // 보도 도로 쪽 가장자리에 울타리
+// 울타리는 도로마다 맵 에디터에서 켠다(map_data.js의 railing: true) — 보도가 있는 도로에만 생긴다
 const RAILING_INSET_RAW = 0.25; // 연석에서 보도 안쪽으로 이만큼
 const RAILING_POST_SPACING_RAW = 2.5;
 const RAILING_H = 0.1; // 울타리 높이(월드 단위, 보도 윗면 기준)
@@ -806,7 +806,7 @@ function buildRoadConnections() {
 // 연석·경계선이 엇갈리거나 겹치지 않고 곡선처럼 매끈하게 이어진다.
 function sidewalkCompatible(i, j) {
   const a = ROAD_SEGMENTS[i], b = ROAD_SEGMENTS[j];
-  return !!a.sidewalk && !!b.sidewalk && a.width === b.width && a.sidewalk === b.sidewalk;
+  return !!a.sidewalk && !!b.sidewalk && a.width === b.width && a.sidewalk === b.sidewalk && !!a.railing === !!b.railing;
 }
 function buildSidewalkChains(conns) {
   const link = (i, end) => {
@@ -934,7 +934,7 @@ function collectChainSidewalk(members, stores, conns) {
           pushVerticalQuadStrip(stores.curb, A); // 도로 쪽 연석 면
           [run[0], run[run.length - 1]].forEach((r) => pushVerticalQuadStrip(stores.curb, [r.inner, r.outer])); // 구간 끝 단면
           pushStrip(stores.line, run.map((r) => r.at(roadW / 2 + inset)), run.map((r) => r.at(roadW / 2 + inset + lineW)));
-          if (SIDEWALK_RAILING) {
+          if (first.railing) {
             const o = roadW / 2 + railOff;
             const rw = 0.012;
             pushStrip(stores.rail, run.map((r) => r.at(o - rw)), run.map((r) => r.at(o + rw)), RAILING_H);

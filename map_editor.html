@@ -50,6 +50,7 @@
   .road-line { stroke: #4a4a4e; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; pointer-events: none; }
   .road-line.selected { stroke: #e3482b !important; stroke-opacity: 0.85; }
   .sidewalk-line { stroke: #c7c2b4; stroke-linecap: round; pointer-events: none; }
+  .railing-line { stroke: #4b5058; stroke-width: 1.6; stroke-dasharray: 3 2; pointer-events: none; }
   /* 차선: 실제 폭(--w, 지도 px)이 화면에서 너무 가늘면 최소 굵기(--lane-min, 확대 배율로 계산)로 */
   .lane { fill: none; pointer-events: none; stroke-width: max(calc(var(--w) * 1px), calc(var(--lane-min, 1) * 1px)); }
   .lane-yellow { stroke: #f2c438; }
@@ -382,6 +383,7 @@
       if (cm) seg.curve = cm[1].split(",").map((v) => parseFloat(v));
       const sm = line.match(/sidewalk:\s*([\d.]+)/);
       if (sm) seg.sidewalk = parseFloat(sm[1]);
+      if (/\brailing:\s*true/.test(line)) seg.railing = true;
       roads.push(seg);
     }
     return roads;
@@ -794,6 +796,13 @@
     [-off, off].forEach((o) => {
       node.sidewalk.appendChild(el("path", { d: offsetPolylineD(pts, o), class: "sidewalk-line", fill: "none", "stroke-width": sw }));
     });
+    if (seg.railing) {
+      // 울타리 미리보기: 보도 도로 쪽 가장자리를 따라 짙은 점선
+      const ro = (seg.width / 2 + 0.25) / SCALE;
+      [-ro, ro].forEach((o) => {
+        node.sidewalk.appendChild(el("path", { d: offsetPolylineD(pts, o), class: "railing-line", fill: "none" }));
+      });
+    }
   }
   function addRoadNode(seg) {
     const [ax, ay] = rawToPx(seg.a[0], seg.a[1]);
@@ -1146,6 +1155,23 @@
         if (v > 0) node.seg.sidewalk = v; else delete node.seg.sidewalk;
         updateRoadVisual(node);
       }, { step: "0.5", note: "0보다 크게 두면 이 도로 양옆에 보도가 생깁니다(건물에셋 > 도로 > 보도 순으로 보입니다)." }));
+      // 울타리: 보도가 있을 때만 의미가 있다(보도 도로 쪽 가장자리에 난간)
+      const railWrap = document.createElement("label");
+      railWrap.className = "field";
+      railWrap.style.cssText = "display:flex; align-items:center; gap:8px; cursor:pointer;";
+      const railBox = document.createElement("input");
+      railBox.type = "checkbox";
+      railBox.checked = !!node.seg.railing;
+      railBox.style.cssText = "width:18px; height:18px;";
+      railBox.addEventListener("change", () => {
+        if (railBox.checked) node.seg.railing = true; else delete node.seg.railing;
+        updateRoadVisual(node);
+      });
+      const railText = document.createElement("span");
+      railText.textContent = "🚧 울타리 (보도가 있을 때 보도 도로 쪽 가장자리에 생겨요)";
+      railWrap.appendChild(railBox);
+      railWrap.appendChild(railText);
+      panelBody.appendChild(railWrap);
       const curveNote = document.createElement("p");
       curveNote.className = "note";
       curveNote.style.marginBottom = "10px";
@@ -1531,7 +1557,8 @@
   function serializeRoad(r) {
     const curvePart = r.curve ? `, curve: [${fmtNum(r.curve[0])}, ${fmtNum(r.curve[1])}]` : "";
     const sidewalkPart = r.sidewalk ? `, sidewalk: ${fmtNum(r.sidewalk)}` : "";
-    return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)}${curvePart}${sidewalkPart} },`;
+    const railingPart = r.sidewalk && r.railing ? ", railing: true" : "";
+    return `  { a: [${fmtNum(r.a[0])}, ${fmtNum(r.a[1])}], b: [${fmtNum(r.b[0])}, ${fmtNum(r.b[1])}], width: ${fmtNum(r.width)}${curvePart}${sidewalkPart}${railingPart} },`;
   }
   function serializeTree(t) {
     return `[${fmtNum(t.x)}, ${fmtNum(t.z)}]`;
