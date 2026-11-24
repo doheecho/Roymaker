@@ -448,4 +448,5 @@ export const FENCES = [
   { a: [199.4, -220.5], b: [161.2, -215.1], type: "daelim_brick" },
   { a: [161.2, -215.1], b: [106.7, -213.6], type: "daelim_brick" },
   { a: [106.7, -213.6], b: [107.2, -323.9], type: "daelim_brick" },
+  { a: [-276.1, 174.1], b: [-353, 146.7], type: "parkhills_glass" },
 ];
