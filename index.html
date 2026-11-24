@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261115h">
+<link rel="stylesheet" href="style.css?v=20261125a">
 </head>
 <body>
   <header>
@@ -219,6 +219,16 @@
         <div class="view-head">
           <h2>⚔️ 거리 모험</h2>
           <span class="view-head-btns">
+            <button type="button" id="neighborhood3d-sound-btn" class="help-btn" title="동네 소리 켜고 끄기" hidden>🔊 소리</button>
+            <span class="nb-time-wrap">
+              <button type="button" id="neighborhood3d-time-btn" class="help-btn" title="시간대 바꾸기(아침·낮·저녁·밤·새벽)">☀️ 낮 13:00</button>
+              <div id="neighborhood3d-time-pop" class="nb-time-pop" hidden>
+                <div class="nb-time-title">🕐 시간 정하기</div>
+                <div class="nb-time-presets"></div>
+                <input type="range" id="neighborhood3d-time-range" min="0" max="23.5" step="0.5" value="13" aria-label="시간" />
+                <div class="nb-time-scale"><span>0시</span><span>6시</span><span>12시</span><span>18시</span><span>24시</span></div>
+              </div>
+            </span>
             <button type="button" id="neighborhood3d-fullscreen-btn" class="help-btn">⛶ 전체화면</button>
             <button type="button" class="help-btn" data-help="neighborhood3d" data-title="⚔️ 거리 모험">❓ 설명보기</button>
           </span>
@@ -352,7 +362,7 @@
       }
     }
   </script>
-  <script type="module" src="neighborhood3d.js?v=20261124k"></script>
+  <script type="module" src="neighborhood3d.js?v=20261125a"></script>
   <script src="main.js?v=20261122a"></script>
   <script>
     if ("serviceWorker" in navigator) {

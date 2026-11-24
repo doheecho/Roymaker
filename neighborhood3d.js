@@ -367,7 +367,8 @@ function buildStaticScene() {
 
   camera = new THREE.PerspectiveCamera(55, 1, 0.1, 300);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8d9a7a, 1.1));
+  hemiLight = new THREE.HemisphereLight(0xffffff, 0x8d9a7a, 1.1);
+  scene.add(hemiLight);
   const sun = new THREE.DirectionalLight(0xffffff, 1.3);
   sun.position.set(20, 30, 15);
   sun.castShadow = true;
@@ -947,6 +948,9 @@ function pointInPolygon(x, z, poly) {
 
 // 도로들의 중심선·반폭(월드) — 보도·건물이 도로 위로 넘어가지 않게 판정할 때 쓴다(도로 우선)
 let roadFootprintsCache = null;
+let roadFootprintGrid = null; // 칸(ROAD_GRID_CELL) → 그 칸에 걸치는 도로 발자국들 — 보도 판정이 수만 번이라 빠르게
+const ROAD_GRID_CELL = 1.5;
+const gridKey = (ix, iz) => ix * 100003 + iz;
 function buildRoadFootprints() {
   if (roadFootprintsCache) return roadFootprintsCache;
   roadFootprintsCache = ROAD_SEGMENTS.map((seg, i) => {
@@ -957,11 +961,25 @@ function buildRoadFootprints() {
       minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs),
     };
   });
+  roadFootprintGrid = new Map();
+  roadFootprintsCache.forEach((f) => {
+    const m = f.half + 0.05;
+    for (let ix = Math.floor((f.minx - m) / ROAD_GRID_CELL); ix <= Math.floor((f.maxx + m) / ROAD_GRID_CELL); ix++) {
+      for (let iz = Math.floor((f.minz - m) / ROAD_GRID_CELL); iz <= Math.floor((f.maxz + m) / ROAD_GRID_CELL); iz++) {
+        const k = gridKey(ix, iz);
+        if (!roadFootprintGrid.has(k)) roadFootprintGrid.set(k, []);
+        roadFootprintGrid.get(k).push(f);
+      }
+    }
+  });
   return roadFootprintsCache;
 }
 // (x,z)가 ignore에 없는 도로 위(반폭 + margin 안)인가
 function pointOnRoad(x, z, ignore, margin = 0.015) {
-  for (const f of buildRoadFootprints()) {
+  buildRoadFootprints();
+  const list = roadFootprintGrid.get(gridKey(Math.floor(x / ROAD_GRID_CELL), Math.floor(z / ROAD_GRID_CELL)));
+  if (!list) return false;
+  for (const f of list) {
     if (ignore && ignore.has(f.index)) continue;
     const m = f.half + margin;
     if (x < f.minx - m || x > f.maxx + m || z < f.minz - m || z > f.maxz + m) continue;
@@ -1069,15 +1087,135 @@ function chainGeometry(members) {
 }
 
 // 보도 한 체인: 0.6m 간격 단면을 만들고, 다른 도로 위에 걸친 단면은 빼고(도로 우선) 띠·연석·경계선·울타리를 만든다
+// ── 보도가 다른 도로에 걸리는 곳: 자르지 않고 도로 높이로 내려앉힌다(앞뒤로 완만한 경사) ──
+// 도로가 그 위를 덮으니 도로가 우선이고, 예전처럼 비스듬히 잘린 세로 단면이나 빈 구멍이 생기지 않는다.
+// 캐릭터·행인도 그 경사를 따라 내려갔다 올라온다(사용자 지정 2026-11-25).
+const SIDEWALK_RAMP_RAW = 2; // 보도가 도로 높이까지 내려가는 경사 길이(raw m)
+const SIDEWALK_LOW_Y = 0.003; // 내려앉은 보도 높이 — 가장 낮은 도로 표면(0.005)보다 조금 아래라 도로가 위에 보인다
+const SIDEWALK_PROBES = [0.12, 0.5, 0.88]; // 보도 폭에서 이 비율 자리 중 한 곳이라도 다른 도로 위면 내려앉힌다
+const walkDips = []; // 내려앉은·경사진 보도 조각(캐릭터 발밑 높이) — 나머지 보도는 walkBands가 보도 높이로 처리
+
+// 단면마다 높이(h: 0 = 도로 높이, 1 = 보도 높이)와 실제 y — 막힌 곳에서 멀어질수록 경사를 따라 올라간다
+function sidewalkHeights(secs) {
+  const n = secs.length;
+  const dist = new Array(n).fill(Infinity);
+  let last = -Infinity;
+  for (let i = 0; i < n; i++) { if (secs[i].blocked) last = secs[i].d; dist[i] = secs[i].d - last; }
+  last = Infinity;
+  for (let i = n - 1; i >= 0; i--) { if (secs[i].blocked) last = secs[i].d; dist[i] = Math.min(dist[i], last - secs[i].d); }
+  const ramp = SIDEWALK_RAMP_RAW * WORLD_SCALE;
+  secs.forEach((sc, i) => {
+    const t = Math.min(1, dist[i] / ramp);
+    sc.h = t * t * (3 - 2 * t);
+    sc.y = SIDEWALK_LOW_Y + sc.h * (SIDEWALK_TOP_Y - SIDEWALK_LOW_Y);
+  });
+}
+// 띠(안쪽 점들 A, 바깥 점들 B)를 단면별 높이 ys(메시 기준 높이에서 잰 값)로 추가
+function pushStripY(store, A, B, ys) {
+  const base = store.pos.length / 3;
+  const tileW = SIDEWALK_TILE_RAW * WORLD_SCALE;
+  for (let k = 0; k < A.length; k++) {
+    store.pos.push(A[k][0], ys[k], A[k][1], B[k][0], ys[k], B[k][1]);
+    store.uv.push(A[k][0] / tileW, A[k][1] / tileW, B[k][0] / tileW, B[k][1] / tileW);
+  }
+  for (let k = 0; k < A.length - 1; k++) {
+    const a0 = base + k * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
+    store.idx.push(a0, b0, a1, a1, b0, b1);
+  }
+}
+// 바닥(0)부터 점마다 다른 높이 ys(절대 높이)까지 세운 면(연석 — 내려앉은 곳은 높이가 0이라 안 보인다)
+function pushVerticalQuadStripY(store, pts2d, ys) {
+  const base = store.pos.length / 3;
+  pts2d.forEach(([x, z], k) => store.pos.push(x, 0, z, x, ys[k], z));
+  for (let i = 0; i < pts2d.length - 1; i++) {
+    const a0 = base + i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
+    store.idx.push(a0, b0, a1, a1, b0, b1);
+  }
+}
+function addWalkDip(poly, ax, az, bx, bz, y0, y1) {
+  const xs = poly.map((q) => q[0]), zs = poly.map((q) => q[1]);
+  const ux = bx - ax, uz = bz - az;
+  walkDips.push({ poly, ax, az, ux, uz, len2: ux * ux + uz * uz || 1e-9, y0, y1,
+    minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs) });
+}
+// 보도 띠 하나를 그린다 — secs: [{ d(띠를 따라 잰 거리), c: [x,z](높이 보간 기준점), at(o)(안쪽 가장자리에서 바깥으로 o),
+// inner, outer, blocked }]. opts: { style, width, platform(걷는 높이를 다각형으로), ped(행인 길), railing }
+function emitSidewalkBand(stores, secs, opts) {
+  if (secs.length < 2) return;
+  const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
+  const inset = SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE;
+  sidewalkHeights(secs);
+  const ys = secs.map((sc) => sc.y - SIDEWALK_TOP_Y);
+  const A = secs.map((sc) => sc.inner), B = secs.map((sc) => sc.outer);
+  pushStripY(sideStore(stores, opts.style), A, B, ys);
+  pushVerticalQuadStripY(stores.curb, A, secs.map((sc) => sc.y)); // 도로 쪽 연석 면
+  [secs[0], secs[secs.length - 1]].forEach((sc) => pushVerticalQuadStripY(stores.curb, [sc.inner, sc.outer], [sc.y, sc.y])); // 띠 끝 단면
+  pushStripY(stores.line, secs.map((sc) => sc.at(inset)), secs.map((sc) => sc.at(inset + lineW)), ys);
+  // 걷는 높이: 보도 높이 그대로인 구간은 다각형(platform) 또는 walkBands, 내려앉은·경사진 곳은 조각(walkDips)으로
+  const full = (sc) => sc.h >= 0.999;
+  let lowStart = -1;
+  for (let i = 0; i < secs.length - 1; i++) {
+    const s0 = secs[i], s1 = secs[i + 1];
+    if (full(s0) && full(s1)) continue;
+    if (s0.h < 0.001 && s1.h < 0.001) {
+      // 완전히 내려앉은 단면이 이어지면 한 조각으로 합친다(조각 수를 줄이려고)
+      if (lowStart < 0) lowStart = i;
+      if (i + 1 < secs.length - 1 && secs[i + 2].h < 0.001) continue;
+      const a = secs[lowStart], b = s1;
+      addWalkDip([a.inner, a.outer, b.outer, b.inner], a.c[0], a.c[1], b.c[0], b.c[1], SIDEWALK_LOW_Y, SIDEWALK_LOW_Y);
+      lowStart = -1;
+      continue;
+    }
+    addWalkDip([s0.inner, s0.outer, s1.outer, s1.inner], s0.c[0], s0.c[1], s1.c[0], s1.c[1], s0.y, s1.y);
+  }
+  if (opts.platform) {
+    let run = [];
+    const flushRun = () => {
+      if (run.length >= 2) addPolyPlatform([...run.map((sc) => sc.inner), ...run.map((sc) => sc.outer).reverse()], SIDEWALK_TOP_Y);
+      run = [];
+    };
+    secs.forEach((sc) => { if (full(sc)) run.push(sc); else flushRun(); });
+    flushRun();
+  }
+  if (opts.ped && secs.length >= 6) {
+    // 행인이 걸을 보도 중앙선(월드 좌표, 점마다 높이)
+    const mid = secs.map((sc) => sc.at(opts.width * 0.62));
+    const pcum = [0];
+    for (let i = 1; i < mid.length; i++) pcum.push(pcum[i - 1] + Math.hypot(mid[i][0] - mid[i - 1][0], mid[i][1] - mid[i - 1][1]));
+    pedPaths.push({ pts: mid, ys: secs.map((sc) => sc.y), cum: pcum, len: pcum[pcum.length - 1] });
+  }
+  if (opts.railing) {
+    // 울타리는 보도 높이 그대로인 구간에만(내려앉은 곳 = 길이 지나가는 곳은 비운다)
+    const o = RAILING_INSET_RAW * WORLD_SCALE;
+    const rw = 0.012;
+    const spacing = RAILING_POST_SPACING_RAW * WORLD_SCALE;
+    let run = [];
+    const flushRail = () => {
+      if (run.length >= 2) {
+        pushStrip(stores.rail, run.map((sc) => sc.at(o - rw)), run.map((sc) => sc.at(o + rw)), RAILING_H);
+        pushStrip(stores.rail, run.map((sc) => sc.at(o - rw * 0.7)), run.map((sc) => sc.at(o + rw * 0.7)), RAILING_H * 0.5);
+        let next = run[0].d;
+        for (const sc of run) {
+          if (sc.d + 1e-6 >= next) {
+            stores.posts.push(sc.at(o));
+            next = sc.d + spacing;
+          }
+        }
+        stores.posts.push(run[run.length - 1].at(o));
+      }
+      run = [];
+    };
+    secs.forEach((sc) => { if (full(sc)) run.push(sc); else flushRail(); });
+    flushRail();
+  }
+}
+
 function collectChainSidewalk(members, stores, conns) {
   const first = ROAD_SEGMENTS[members[0].idx];
   const { pts: rawPts, gaps, len: rawLen } = chainGeometry(members);
   if (rawPts.length < 2) return;
   const roadW = first.width * WORLD_SCALE;
   const sideW = first.sidewalk * WORLD_SCALE;
-  const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
-  const inset = SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE;
-  const railOff = RAILING_INSET_RAW * WORLD_SCALE;
   // 이 체인의 구간들과, 거기에 단순 이음매로 붙은 도로는 "다른 도로"로 치지 않는다
   const ignore = new Set();
   members.forEach((m) => {
@@ -1111,50 +1249,13 @@ function collectChainSidewalk(members, stores, conns) {
     [-1, 1].forEach((dir) => {
       const secs = samples.map((q) => {
         const nx = -q.tz * dir, nz = q.tx * dir; // 도로 바깥쪽 법선
-        const at = (o) => [q.x + nx * o, q.z + nz * o];
-        const mid = at(roadW / 2 + sideW / 2);
-        return { q, at, inner: at(roadW / 2), outer: at(roadW / 2 + sideW), blocked: pointOnRoad(mid[0], mid[1], ignore) };
+        const at = (o) => [q.x + nx * (roadW / 2 + o), q.z + nz * (roadW / 2 + o)];
+        // 보도 폭 안쪽·가운데·바깥 중 한 곳이라도 다른 도로 위면 그 자리는 도로 높이로(비스듬히 지나가는 길도 다 덮게)
+        const blocked = SIDEWALK_PROBES.some((f) => { const p = at(sideW * f); return pointOnRoad(p[0], p[1], ignore); });
+        const inner = at(0), outer = at(sideW);
+        return { d: q.d, c: [(inner[0] + outer[0]) / 2, (inner[1] + outer[1]) / 2], at, inner, outer, blocked };
       });
-      let run = [];
-      const flush = () => {
-        if (run.length >= 2) {
-          const A = run.map((r) => r.inner), B = run.map((r) => r.outer);
-          pushStrip(sideStore(stores, swStyleOf(first)), A, B);
-          if (run.length >= 6) {
-            // 행인이 걸을 보도 중앙선(월드 좌표)
-            const mid = run.map((r) => r.at(roadW / 2 + sideW * 0.62));
-            const pcum = [0];
-            for (let i = 1; i < mid.length; i++) pcum.push(pcum[i - 1] + Math.hypot(mid[i][0] - mid[i - 1][0], mid[i][1] - mid[i - 1][1]));
-            pedPaths.push({ pts: mid, cum: pcum, len: pcum[pcum.length - 1] });
-          }
-          pushVerticalQuadStrip(stores.curb, A); // 도로 쪽 연석 면
-          [run[0], run[run.length - 1]].forEach((r) => pushVerticalQuadStrip(stores.curb, [r.inner, r.outer])); // 구간 끝 단면
-          pushStrip(stores.line, run.map((r) => r.at(roadW / 2 + inset)), run.map((r) => r.at(roadW / 2 + inset + lineW)));
-          if (first.railing) {
-            const o = roadW / 2 + railOff;
-            const rw = 0.012;
-            pushStrip(stores.rail, run.map((r) => r.at(o - rw)), run.map((r) => r.at(o + rw)), RAILING_H);
-            pushStrip(stores.rail, run.map((r) => r.at(o - rw * 0.7)), run.map((r) => r.at(o + rw * 0.7)), RAILING_H * 0.5);
-            const spacing = RAILING_POST_SPACING_RAW * WORLD_SCALE;
-            let next = run[0].q.d;
-            for (const r of run) {
-              if (r.q.d + 1e-6 >= next) {
-                const p = r.at(o);
-                stores.posts.push(p);
-                next = r.q.d + spacing;
-              }
-            }
-            const lastP = run[run.length - 1].at(o);
-            stores.posts.push(lastP);
-          }
-        }
-        run = [];
-      };
-      for (const sec of secs) {
-        if (sec.blocked) flush();
-        else run.push(sec);
-      }
-      flush();
+      emitSidewalkBand(stores, secs, { style: swStyleOf(first), width: sideW, ped: true, railing: !!first.railing });
     });
   }
 }
@@ -1233,8 +1334,6 @@ function buildSidewalkCorners(stores) {
     });
     if (g.length >= 3) groups.push(g);
   });
-  const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
-  const inset = SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE;
   for (const g of groups) {
     const arms = g.map((e) => {
       const seg = ROAD_SEGMENTS[e.i];
@@ -1248,28 +1347,59 @@ function buildSidewalkCorners(stores) {
       if (e.which === "a") { dx = pts[1][0] - pts[0][0]; dz = pts[1][1] - pts[0][1]; }
       else { dx = pts[n - 2][0] - pts[n - 1][0]; dz = pts[n - 2][1] - pts[n - 1][1]; }
       const dl = Math.hypot(dx, dz) || 1;
-      const arm = { e, seg, angle: Math.atan2(dz / dl, dx / dl), has: false };
-      if (!seg.sidewalk) return arm;
-      const ranges = markedRanges(rawLen, roadMarkings.gaps[e.i] || []);
+      // has: 이 길에 보도가 있는지 — 보도가 없는 길도 모서리의 한쪽 끝(도로 가장자리)은 알아야 해서 자리(P)는 구한다
+      const arm = { e, seg, angle: Math.atan2(dz / dl, dx / dl), has: !!seg.sidewalk, sw: (seg.sidewalk || 0) * WORLD_SCALE };
+      const ranges = markedRanges(rawLen, (roadMarkings.junctionGaps || roadMarkings.gaps)[e.i] || []);
       if (!ranges.length) return arm;
       const sEnd = e.which === "a" ? ranges[0][0] : ranges[ranges.length - 1][1];
       const q = pointAlongPolyline(pts, sEnd * WORLD_SCALE);
       const away = e.which === "a" ? [q.dirX, q.dirZ] : [-q.dirX, -q.dirZ];
-      Object.assign(arm, { has: true, P: [q.x, q.z], away, half: (seg.width * WORLD_SCALE) / 2, sw: seg.sidewalk * WORLD_SCALE });
+      Object.assign(arm, { P: [q.x, q.z], away, half: (seg.width * WORLD_SCALE) / 2 });
       return arm;
     });
     arms.sort((p, q) => p.angle - q.angle);
     const ignore = new Set(g.map((e) => e.i));
+    const probe = (pt) => pointOnRoad(pt[0], pt[1], ignore);
+    // 띠의 안쪽 점들 Q와 바깥 법선 N으로 단면 목록을 만들어 그린다(다른 도로가 지나가면 그 자리는 도로 높이로)
+    const band = (Q, N, W, style) => {
+      let d = 0;
+      const secs = Q.map((pt, idx) => {
+        if (idx) d += Math.hypot(pt[0] - Q[idx - 1][0], pt[1] - Q[idx - 1][1]);
+        const n = N[idx];
+        const at = (o) => [pt[0] + n[0] * o, pt[1] + n[1] * o];
+        const outer = at(W);
+        return { d, c: [(pt[0] + outer[0]) / 2, (pt[1] + outer[1]) / 2], at, inner: pt, outer, blocked: SIDEWALK_PROBES.some((f) => probe(at(W * f))) };
+      });
+      emitSidewalkBand(stores, secs, { style, width: W, platform: true });
+    };
     for (let k = 0; k < arms.length; k++) {
       const A = arms[k], B = arms[(k + 1) % arms.length];
-      if (!A.has || !B.has) continue;
+      if (!A.P || !B.P) continue;
       let delta = B.angle - A.angle;
       if (delta <= 0) delta += 2 * Math.PI;
-      if (delta > (170 * Math.PI) / 180) continue; // 거의 일직선(또는 그 이상) 사이는 모서리가 아니다
       const nA = [-A.away[1], A.away[0]]; // A의 반시계 쪽(=B 쪽 블록)
       const nB = [B.away[1], -B.away[0]]; // B의 시계 쪽(=A 쪽 블록)
       const IA = [A.P[0] + nA[0] * A.half, A.P[1] + nA[1] * A.half];
       const IB = [B.P[0] + nB[0] * B.half, B.P[1] + nB[1] * B.half];
+      if (delta >= (170 * Math.PI) / 180 && delta <= (190 * Math.PI) / 180) {
+        // 거의 일직선으로 마주 보는 두 길 사이(ㅏ자의 막힌 쪽 등): 그 사이로 들어오는 길이 없으니 보도를 곧게 이어 준다
+        if (!A.has || !B.has) continue;
+        const len = Math.hypot(IB[0] - IA[0], IB[1] - IA[1]);
+        if (len < 1e-4) continue;
+        const steps = Math.max(1, Math.ceil(len / (SIDEWALK_SAMPLE_RAW * WORLD_SCALE)));
+        const Q = [], N = [];
+        for (let st = 0; st <= steps; st++) {
+          const t = st / steps;
+          Q.push([IA[0] + (IB[0] - IA[0]) * t, IA[1] + (IB[1] - IA[1]) * t]);
+          let nx = nA[0] * (1 - t) + nB[0] * t, nz = nA[1] * (1 - t) + nB[1] * t;
+          const nl = Math.hypot(nx, nz) || 1;
+          N.push([nx / nl, nz / nl]);
+        }
+        band(Q, N, Math.min(A.sw, B.sw), swStyleOf(A.seg));
+        continue;
+      }
+      if (delta > (190 * Math.PI) / 180) continue; // 그보다 더 벌어진 쪽은 모서리가 아니다
+      if (!A.has && !B.has) continue; // 둘 중 한 길에만 보도가 있어도 모서리를 둥글게 돌려 준다
       const gA = [-A.away[0], -A.away[1]], gB = [-B.away[0], -B.away[1]]; // 교차로 쪽으로
       const dxy = [IB[0] - IA[0], IB[1] - IA[1]];
       const det = -gA[0] * gB[1] + gA[1] * gB[0];
@@ -1291,7 +1421,7 @@ function buildSidewalkCorners(stores) {
       if (v - rf > 1e-4) Q.push(TB);
       Q.push(IB);
       // 각 점에서 블록 쪽(바깥) 법선
-      const W = Math.min(A.sw, B.sw);
+      const W = A.has && B.has ? Math.min(A.sw, B.sw) : Math.max(A.sw, B.sw);
       const normals = Q.map((p, idx) => {
         const a = Q[Math.max(0, idx - 1)], b = Q[Math.min(Q.length - 1, idx + 1)];
         let tx = b[0] - a[0], tz = b[1] - a[1];
@@ -1303,21 +1433,15 @@ function buildSidewalkCorners(stores) {
         if (nx * hx + nz * hz < 0) { nx = -nx; nz = -nz; }
         return [nx, nz];
       });
-      const at = (o) => Q.map((p, idx) => [p[0] + normals[idx][0] * o, p[1] + normals[idx][1] * o]);
-      const outer = at(W);
-      // 모서리가 다른(이 교차로에 속하지 않은) 도로 위로 넘어가면 그 모서리는 만들지 않는다
-      const mids = at(W / 2);
-      if (mids.some(([x, z]) => pointOnRoad(x, z, ignore))) continue;
-      pushStrip(sideStore(stores, swStyleOf(A.seg)), Q, outer);
-      pushVerticalQuadStrip(stores.curb, Q);
-      pushStrip(stores.line, at(inset), at(inset + lineW));
-      addPolyPlatform([...Q, ...outer.slice().reverse()], SIDEWALK_TOP_Y);
+      // 모서리가 다른(이 교차로에 속하지 않은) 도로 위로 넘어가는 부분은 도로 높이로 내려앉힌다
+      band(Q, normals, W, swStyleOf(A.has ? A.seg : B.seg));
     }
   }
 }
 
 function buildRoadSidewalks() {
   walkBands.length = 0;
+  walkDips.length = 0;
   pedPaths.length = 0;
   const stores = { side: {}, line: newRibbonStore(), curb: newRibbonStore(), rail: newRibbonStore(), posts: [] };
   const conns = buildRoadConnections();
@@ -1580,7 +1704,17 @@ function buildStreetlights() {
   const poleInst = new THREE.InstancedMesh(poleGeo, poleMat, streetlightTransforms.length);
   const headGeo = new THREE.SphereGeometry(0.28 * WORLD_SCALE, 8, 6);
   const headMat = new THREE.MeshBasicMaterial({ color: 0xfff1c2 }); // 조명 없이도 켜진 것처럼 보이게 unlit 재질
+  streetlightHeadMat = headMat;
   const headInst = new THREE.InstancedMesh(headGeo, headMat, streetlightTransforms.length);
+  // 밤에 가로등 밑에 깔리는 불빛(진짜 조명 대신 둥근 빛 무늬를 더해 그리는 판 — 수백 개여도 드로우콜 1)
+  const poolGeo = new THREE.CircleGeometry(1, 28);
+  poolGeo.rotateX(-Math.PI / 2);
+  const poolMat = new THREE.MeshBasicMaterial({ map: getLightPoolTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 });
+  const poolInst = new THREE.InstancedMesh(poolGeo, poolMat, streetlightTransforms.length);
+  poolInst.frustumCulled = false;
+  poolInst.renderOrder = 2;
+  poolInst.visible = false;
+  streetlightPools = poolInst;
   const dummy = new THREE.Object3D();
   streetlightTransforms.forEach((t, i) => {
     dummy.position.set(t.x, STREETLIGHT_POLE_HEIGHT / 2, t.z); // 기둥 밑동이 땅(y=0)에 닿도록
@@ -1590,11 +1724,37 @@ function buildStreetlights() {
     dummy.position.y = STREETLIGHT_POLE_HEIGHT + 0.15 * WORLD_SCALE; // 기둥 꼭대기 위에 등 얹기
     dummy.updateMatrix();
     headInst.setMatrixAt(i, dummy.matrix);
+    dummy.position.set(t.x, SIDEWALK_TOP_Y + 0.006, t.z);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.setScalar(STREETLIGHT_POOL_RADIUS);
+    dummy.updateMatrix();
+    poolInst.setMatrixAt(i, dummy.matrix);
+    dummy.scale.setScalar(1);
   });
   poleInst.instanceMatrix.needsUpdate = true;
   headInst.instanceMatrix.needsUpdate = true;
+  poolInst.instanceMatrix.needsUpdate = true;
   poleInst.castShadow = true;
-  scene.add(poleInst, headInst);
+  scene.add(poleInst, headInst, poolInst);
+}
+const STREETLIGHT_POOL_RADIUS = 9 * WORLD_SCALE;
+let streetlightHeadMat = null;
+let streetlightPools = null;
+let lightPoolTexture = null;
+function getLightPoolTexture() {
+  if (lightPoolTexture) return lightPoolTexture;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0, "rgba(255,214,150,1)");
+  grd.addColorStop(0.45, "rgba(255,196,120,0.45)");
+  grd.addColorStop(1, "rgba(255,180,100,0)");
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 128, 128);
+  lightPoolTexture = new THREE.CanvasTexture(c);
+  lightPoolTexture.colorSpace = THREE.SRGBColorSpace;
+  return lightPoolTexture;
 }
 
 function buildRoadsideProps() {
@@ -1724,6 +1884,13 @@ function groundHeightAt(x, z) {
       if (x < p.minx || x > p.maxx || z < p.minz || z > p.maxz) continue;
       if (pointInPolygon(x, z, p.poly)) return p.y;
     } else if (insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return p.y;
+  }
+  // 다른 도로가 지나가서 내려앉았거나 경사진 보도
+  for (const d of walkDips) {
+    if (x < d.minx || x > d.maxx || z < d.minz || z > d.maxz) continue;
+    if (!pointInPolygon(x, z, d.poly)) continue;
+    const t = Math.max(0, Math.min(1, ((x - d.ax) * d.ux + (z - d.az) * d.uz) / d.len2));
+    return d.y0 + (d.y1 - d.y0) * t;
   }
   // 보도 위면 턱만큼 높다(도로에서 보도로 올라서면 캐릭터도 같이 올라간다)
   for (const s of walkBands) {
@@ -1916,6 +2083,7 @@ function loadPlaceModelInto(entry) {
       settleBuildingBase(entry, model);
       entry.group.add(model);
       entry.loadedModel = model;
+      registerBuildingGlass(entry, model); // 밤에 창문 불빛
       if (entry.placeholder) entry.placeholder.visible = false;
     },
     undefined,
@@ -1944,6 +2112,7 @@ function updateModelStreaming(dt) {
       entry.group.remove(entry.loadedModel);
       disposeObject3D(entry.loadedModel);
       entry.loadedModel = null;
+      buildingGlass.delete(entry);
       if (entry.placeholder) entry.placeholder.visible = true;
     }
   });
@@ -2927,6 +3096,9 @@ function buildSky() {
       horizonColor: { value: SKY_HORIZON_COLOR },
       clouds: { value: makeCloudTexture() },
       time: { value: 0 },
+      cloudTint: { value: new THREE.Color(1, 1, 1) },
+      night: { value: 0 },
+      moonDir: { value: new THREE.Vector3(-0.35, 0.75, 0.55).normalize() },
     },
     vertexShader: `
       varying vec3 vDir;
@@ -2939,16 +3111,32 @@ function buildSky() {
       uniform vec3 horizonColor;
       uniform sampler2D clouds;
       uniform float time;
+      uniform vec3 cloudTint;
+      uniform float night;
+      uniform vec3 moonDir;
       varying vec3 vDir;
+      float hash3(vec3 p) {
+        p = fract(p * 0.3183099 + 0.1);
+        p *= 17.0;
+        return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+      }
       void main() {
         vec3 d = normalize(vDir);
         float h = d.y;
         vec3 col = mix(horizonColor, topColor, smoothstep(0.0, 0.55, max(h, 0.0)));
+        float c = 0.0;
         if (h > 0.01) {
           vec2 uv = d.xz / (h + 0.12) * 0.16 + vec2(time * 0.0035, time * 0.0012);
-          float c = texture2D(clouds, uv).a * smoothstep(0.01, 0.2, h);
-          col = mix(col, vec3(1.0), c * 0.9);
+          c = texture2D(clouds, uv).a * smoothstep(0.01, 0.2, h);
         }
+        if (night > 0.01 && h > 0.04) {
+          // 밤하늘: 별(방향을 잘게 나눈 칸마다 드물게 반짝) + 달
+          float st = step(0.9968, hash3(floor(d * 300.0)));
+          col += vec3(st) * night * smoothstep(0.04, 0.3, h) * (1.0 - c);
+          float m = smoothstep(0.99935, 0.9997, dot(d, moonDir));
+          col = mix(col, vec3(1.0, 0.97, 0.88), m * night * (1.0 - c * 0.8));
+        }
+        col = mix(col, cloudTint, c * 0.9);
         gl_FragColor = vec4(col, 1.0);
         #include <colorspace_fragment>
       }`,
@@ -2967,6 +3155,266 @@ function updateSky(dt) {
   if (!skyMesh) return;
   skyMesh.position.copy(camera.position);
   skyMesh.material.uniforms.time.value += dt;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 시간대(밤·낮): 거리 모험 화면 위 "시간" 버튼(전체화면 버튼 왼쪽)으로 고른다 ──
+// 시간에 따라 하늘색·햇빛(방향·색·세기)·주변광·안개·구름색이 바뀌고, 밤에는 별·달이 뜬다. 저녁부터는 가로등이
+// 밝아지며 바닥에 불빛이 깔리고, 건물 창문(텍스처 없는 어두운 유리 재질)에 불이 켜진다 — 진짜 조명(점광원)은
+// 하나도 늘리지 않고 재질 색만 바꿔서 성능 부담이 거의 없다. 고른 시간은 이 기기에만 저장된다.
+// ════════════════════════════════════════════════════════════════════════════
+let hemiLight = null;
+let worldHour = 13; // 0~24시
+let nightLevel = 0; // 0 = 낮, 1 = 한밤 — 가로등·창문 불빛 세기
+const timeListeners = []; // 시간이 바뀌면 불릴 함수들(행인·가게·소리 등)
+const TIME_PRESETS = [
+  { h: 7, icon: "🌅", label: "아침" },
+  { h: 13, icon: "☀️", label: "낮" },
+  { h: 18.5, icon: "🌇", label: "저녁" },
+  { h: 21, icon: "🌙", label: "밤" },
+  { h: 2, icon: "🌌", label: "새벽" },
+];
+// 시각별 하늘·빛(사이 시각은 앞뒤 값을 섞는다): 하늘 위·지평선, 해(달)빛 색·세기, 주변광 하늘·땅 색·세기, 구름색, 밤 정도
+const TIME_KEYS = [
+  { h: 0, top: 0x050b1e, hor: 0x18264a, sun: 0x8fa6e8, sunI: 0.22, hs: 0x55669a, hg: 0x161a22, hI: 0.34, cloud: 0x262d40, night: 1 },
+  { h: 4.6, top: 0x081430, hor: 0x23345a, sun: 0x8fa6e8, sunI: 0.22, hs: 0x5a6b9e, hg: 0x181c25, hI: 0.36, cloud: 0x2a3247, night: 1 },
+  { h: 5.8, top: 0x3a5a9a, hor: 0xe8a07a, sun: 0xffa86a, sunI: 0.45, hs: 0xb0a0b8, hg: 0x4a4038, hI: 0.6, cloud: 0xf2b8a0, night: 0.55 },
+  { h: 7, top: 0x4f9fe6, hor: 0xcfe6f7, sun: 0xffecd2, sunI: 1.05, hs: 0xf2f6ff, hg: 0x7f8a6c, hI: 0.95, cloud: 0xffffff, night: 0 },
+  { h: 12, top: 0x4f9fe6, hor: 0xd8ecfa, sun: 0xffffff, sunI: 1.3, hs: 0xffffff, hg: 0x8d9a7a, hI: 1.1, cloud: 0xffffff, night: 0 },
+  { h: 16.5, top: 0x4b98e0, hor: 0xdcebf5, sun: 0xfff0d8, sunI: 1.2, hs: 0xfff8ee, hg: 0x8d9a7a, hI: 1.05, cloud: 0xffffff, night: 0 },
+  { h: 18.2, top: 0x3a5c9c, hor: 0xffa468, sun: 0xff9a52, sunI: 0.75, hs: 0xf0c8a8, hg: 0x5e5446, hI: 0.75, cloud: 0xffcfa8, night: 0.3 },
+  { h: 19.3, top: 0x1b2a58, hor: 0x8a5a7a, sun: 0xc0806e, sunI: 0.32, hs: 0x8a7ea6, hg: 0x2e2c33, hI: 0.48, cloud: 0x6a5a72, night: 0.8 },
+  { h: 20.5, top: 0x061029, hor: 0x1c2b50, sun: 0x8fa6e8, sunI: 0.22, hs: 0x55669a, hg: 0x161a22, hI: 0.34, cloud: 0x262d40, night: 1 },
+  { h: 24, top: 0x050b1e, hor: 0x18264a, sun: 0x8fa6e8, sunI: 0.22, hs: 0x55669a, hg: 0x161a22, hI: 0.34, cloud: 0x262d40, night: 1 },
+];
+const _tc1 = new THREE.Color(), _tc2 = new THREE.Color();
+function mixHex(a, b, t, out) { return out.copy(_tc1.setHex(a)).lerp(_tc2.setHex(b), t); }
+function timeLabel(h) {
+  const hh = Math.floor(h) % 24, mm = Math.round((h - Math.floor(h)) * 60);
+  const name = h >= 5 && h < 9 ? ["🌅", "아침"] : h >= 9 && h < 17 ? ["☀️", "낮"] : h >= 17 && h < 20 ? ["🌇", "저녁"] : h >= 20 || h < 1 ? ["🌙", "밤"] : ["🌌", "새벽"];
+  return `${name[0]} ${name[1]} ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+const _windowWarm = new THREE.Color(0xffcf73), _windowShop = new THREE.Color(0xfff0c8), _windowOther = new THREE.Color(0xffe2a6);
+const _headDay = new THREE.Color(0xe8e4d6), _headNight = new THREE.Color(0xfff0b8);
+function applyTimeOfDay() {
+  const h = ((worldHour % 24) + 24) % 24;
+  let i = 0;
+  while (i < TIME_KEYS.length - 2 && TIME_KEYS[i + 1].h <= h) i++;
+  const A = TIME_KEYS[i], B = TIME_KEYS[i + 1];
+  const t = Math.min(1, Math.max(0, (h - A.h) / (B.h - A.h || 1)));
+  mixHex(A.top, B.top, t, SKY_TOP_COLOR);
+  mixHex(A.hor, B.hor, t, SKY_HORIZON_COLOR);
+  nightLevel = A.night + (B.night - A.night) * t;
+  if (scene) {
+    if (scene.background && scene.background.isColor) scene.background.copy(SKY_HORIZON_COLOR);
+    if (scene.fog) scene.fog.color.copy(SKY_HORIZON_COLOR);
+  }
+  if (skyMesh) {
+    const u = skyMesh.material.uniforms;
+    mixHex(A.cloud, B.cloud, t, u.cloudTint.value);
+    u.night.value = nightLevel;
+  }
+  if (sunLight) {
+    mixHex(A.sun, B.sun, t, sunLight.color);
+    sunLight.intensity = A.sunI + (B.sunI - A.sunI) * t;
+    // 낮에는 해가 동쪽에서 남쪽 하늘을 지나 서쪽으로, 밤에는 달빛(남서쪽 높이)
+    if (h >= 5.6 && h <= 19.5) {
+      const a = Math.min(1, Math.max(0, (h - 5.8) / 13.4)) * Math.PI;
+      SUN_OFFSET.set(Math.cos(a), 0.3 + 1.1 * Math.sin(a), 0.55).normalize().multiplyScalar(42);
+    } else {
+      SUN_OFFSET.set(-0.35, 0.75, 0.55).normalize().multiplyScalar(42);
+    }
+    updateSunFollow();
+  }
+  if (hemiLight) {
+    mixHex(A.hs, B.hs, t, hemiLight.color);
+    mixHex(A.hg, B.hg, t, hemiLight.groundColor);
+    hemiLight.intensity = A.hI + (B.hI - A.hI) * t;
+  }
+  // 가로등: 해 질 녘부터 켜진다
+  const lamp = Math.max(0, Math.min(1, (nightLevel - 0.15) / 0.5));
+  if (streetlightHeadMat) streetlightHeadMat.color.copy(_headDay).lerp(_headNight, lamp);
+  if (streetlightPools) {
+    streetlightPools.visible = lamp > 0.01;
+    streetlightPools.material.opacity = 0.7 * lamp;
+  }
+  buildingGlass.forEach((_, entry) => applyGlassNight(entry));
+  timeListeners.forEach((fn) => fn(h, nightLevel));
+}
+function setWorldHour(h, save = true) {
+  worldHour = ((h % 24) + 24) % 24;
+  if (save) { try { localStorage.setItem("roymaker-nb-hour", String(worldHour)); } catch (err) { /* 저장 못 해도 괜찮다 */ } }
+  applyTimeOfDay();
+  updateTimeUI();
+}
+function loadSavedHour() {
+  try {
+    const v = parseFloat(localStorage.getItem("roymaker-nb-hour"));
+    if (Number.isFinite(v)) worldHour = ((v % 24) + 24) % 24;
+  } catch (err) { /* 저장소를 못 쓰면 기본(낮) */ }
+}
+
+// ── 가게 영업 시간(창문 불빛·가게 앞 영업 표시가 따른다) — 편의점은 24시간, 학교·보건소는 낮에만 ──
+const SHOP_TYPES = new Set(["편의점", "카페", "식당", "학원", "중형마트", "대형마트", "마트"]);
+const OPEN_HOURS = { 편의점: [0, 24], 카페: [8, 22], 식당: [10.5, 22], 학원: [14, 22], 중형마트: [9, 23], 대형마트: [10, 23], 마트: [9, 23], 보건소: [9, 18], 도서관: [9, 22], 학교: [8, 17] };
+function placeIsOpen(place, h) {
+  const r = OPEN_HOURS[place.type];
+  if (!r) return true;
+  return h >= r[0] && h < r[1];
+}
+
+// ── 창문 불빛: 건물 모델이 불러와질 때 창유리 재질을 골라 두고, 밤 정도에 따라 발광 세기를 바꾼다 ──
+// 모델 재질 이름이 비어 있어서 색으로 고른다: 텍스처 없이 파르스름하고 어두우면서 매끈한 면(창유리), 반투명한 면,
+// 어두운 금속성 면 — 그리고 창이 그려진 벽 텍스처는 어둡고 파르스름한 픽셀(창유리 부분)만 빛나게 한다.
+// 셰이더를 살짝 고쳐서 건물 기준 "창 하나·층 하나" 크기 칸마다 켜짐/꺼짐·밝기를 무작위로 정하고,
+// 위·아래를 보는 면(지붕·바닥)은 빛나지 않게 한다 — 실제 아파트처럼 집집마다 불 켜진 창이 다르다.
+const buildingGlass = new Map(); // 불러온 건물(entry) → { place, list: [{ mat, k, off, origEmissive, origIntensity }] }
+const WIN_CELL = new THREE.Vector3(2.6, 2.9, 2.6); // 모델 좌표(대략 m)에서 창 하나 · 층 하나 크기
+function isGlassyMaterial(m) {
+  if (!m || !m.isMeshStandardMaterial || m.map) return false;
+  const c = m.color;
+  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  if (m.opacity < 0.9) return true; // 반투명 유리
+  if (c.b >= c.r && lum < 0.15 && m.roughness <= 0.55) return true; // 어둡고 파르스름한 유리
+  if (c.b >= c.r && m.roughness <= 0.15) return true; // 아주 매끈한(비치는) 유리
+  return m.metalness >= 0.3 && lum < 0.2; // 어두운 금속성 유리
+}
+// 재질별 면적(월드 기준) — 건물 겉면의 큰 몫을 덮는 재질은 유리가 아니라 벽이라고 본다
+function materialAreas(model) {
+  const areas = new Map();
+  let total = 0;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  model.traverse((o) => {
+    if (!o.isMesh || Array.isArray(o.material) || !o.geometry?.attributes?.position) return;
+    const pos = o.geometry.attributes.position, idx = o.geometry.index;
+    const n = idx ? idx.count : pos.count;
+    let area = 0;
+    for (let i = 0; i + 2 < n; i += 3) {
+      a.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(o.matrixWorld);
+      b.fromBufferAttribute(pos, idx ? idx.getX(i + 1) : i + 1).applyMatrix4(o.matrixWorld);
+      c.fromBufferAttribute(pos, idx ? idx.getX(i + 2) : i + 2).applyMatrix4(o.matrixWorld);
+      area += b.sub(a).cross(c.sub(a)).length() * 0.5;
+    }
+    areas.set(o.material, (areas.get(o.material) || 0) + area);
+    total += area;
+  });
+  return { areas, total: total || 1 };
+}
+// texMode: 0 = 창유리 재질(면 전체가 유리), 1 = 텍스처에 창이 그려진 벽(어둡고 파르스름한 픽셀만 빛난다)
+function patchWindowMaterial(mat, invModel, off, texMode) {
+  if (mat.userData.nbWindow) return;
+  mat.userData.nbWindow = true;
+  mat.customProgramCacheKey = () => "nb-window-glow";
+  mat.onBeforeCompile = (shader) => {
+    if (!shader.vertexShader.includes("#include <worldpos_vertex>") || !shader.fragmentShader.includes("#include <emissivemap_fragment>")) return;
+    shader.uniforms.uWinInv = { value: invModel };
+    shader.uniforms.uWinCell = { value: WIN_CELL };
+    shader.uniforms.uWinOff = off;
+    shader.uniforms.uWinTex = { value: texMode };
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform mat4 uWinInv;\nvarying vec3 vWinPos;\nvarying vec3 vWinN;")
+      .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvWinPos = (uWinInv * modelMatrix * vec4(transformed, 1.0)).xyz;\nvWinN = normalize(mat3(modelMatrix) * objectNormal);");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform vec3 uWinCell;\nuniform float uWinOff;\nuniform float uWinTex;\nvarying vec3 vWinPos;\nvarying vec3 vWinN;")
+      .replace("#include <emissivemap_fragment>", [
+        "#include <emissivemap_fragment>",
+        "{",
+        "  vec3 wc = floor(vWinPos / uWinCell);",
+        "  float wr = fract(sin(dot(wc, vec3(12.9898, 78.233, 37.719))) * 43758.5453);",
+        "  float winLike = 1.0;",
+        "  if (uWinTex > 0.5) {",
+        "    float l = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));",
+        "    winLike = (1.0 - smoothstep(0.06, 0.2, l)) * step(diffuseColor.r, diffuseColor.b + 0.02);",
+        "  }",
+        "  totalEmissiveRadiance *= winLike * step(uWinOff, wr) * (0.7 + 0.6 * fract(wr * 7.13)) * (1.0 - smoothstep(0.4, 0.8, abs(vWinN.y)));",
+        "}",
+      ].join("\n"));
+  };
+  mat.needsUpdate = true;
+}
+function registerBuildingGlass(entry, model) {
+  const seen = new Set();
+  const list = [];
+  model.updateMatrixWorld(true);
+  const inv = model.matrixWorld.clone().invert();
+  const { areas, total } = materialAreas(model);
+  let seed = (Math.abs(hashSeed(entry.place.id, "glass")) % 2147483646) + 1;
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+      if (seen.has(m) || !m || !m.isMeshStandardMaterial) return;
+      seen.add(m);
+      const glass = isGlassyMaterial(m) && (areas.get(m) || 0) / total <= 0.3;
+      if (!glass && !m.map) return; // 텍스처도 없고 유리도 아닌 벽·지붕은 그대로
+      seed = (seed * 16807) % 2147483647;
+      const off = { value: 0.4 }; // 꺼진 창 비율(시간·영업에 따라 바뀐다)
+      patchWindowMaterial(m, inv, off, glass ? 0 : 1);
+      list.push({ mat: m, k: 0.6 + (seed / 2147483647) * 0.4, off, origEmissive: m.emissive.clone(), origIntensity: m.emissiveIntensity });
+    });
+  });
+  if (!list.length) return;
+  buildingGlass.set(entry, { place: entry.place, list });
+  applyGlassNight(entry);
+}
+function applyGlassNight(entry) {
+  const info = buildingGlass.get(entry);
+  if (!info) return;
+  const place = info.place;
+  const open = placeIsOpen(place, worldHour);
+  const shop = SHOP_TYPES.has(place.type) || OPEN_HOURS[place.type];
+  const color = place.type === "아파트" ? _windowWarm : shop ? _windowShop : _windowOther;
+  const level = Math.max(0, (nightLevel - 0.2) / 0.8);
+  // 꺼진 창 비율: 아파트는 밤이 깊을수록(새벽엔 대부분 잠) 더 많이, 가게는 문 열면 거의 다 켜지고 닫으면 거의 다 꺼짐
+  const h = worldHour;
+  const lateNight = h >= 0.5 && h < 5 ? 0.88 : h >= 23 || h < 0.5 ? 0.7 : 0.52;
+  const offFrac = shop ? (open ? 0.15 : 0.92) : place.type === "아파트" ? lateNight : 0.6;
+  info.list.forEach((g) => {
+    g.off.value = offFrac;
+    if (level <= 0) {
+      g.mat.emissive.copy(g.origEmissive);
+      g.mat.emissiveIntensity = g.origIntensity;
+      return;
+    }
+    g.mat.emissive.copy(color);
+    g.mat.emissiveIntensity = level * g.k * 0.8;
+  });
+}
+// 거리 모험 화면 위 시간 버튼 + 고르는 창(미리 정한 시간 5개 + 30분 단위 막대)
+let timeBtnEl = null, timePopEl = null, timeRangeEl = null;
+function updateTimeUI() {
+  if (timeBtnEl) timeBtnEl.textContent = timeLabel(worldHour);
+  if (timeRangeEl) timeRangeEl.value = String(worldHour);
+  timePopEl?.querySelectorAll(".nb-time-preset").forEach((b) => b.classList.toggle("on", Math.abs(parseFloat(b.dataset.h) - worldHour) < 0.01));
+}
+function wireTimeControls() {
+  timeBtnEl = document.getElementById("neighborhood3d-time-btn");
+  timePopEl = document.getElementById("neighborhood3d-time-pop");
+  timeRangeEl = document.getElementById("neighborhood3d-time-range");
+  if (!timeBtnEl || !timePopEl) return;
+  const presets = timePopEl.querySelector(".nb-time-presets");
+  if (presets) {
+    presets.innerHTML = "";
+    TIME_PRESETS.forEach((p) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "nb-time-preset";
+      b.dataset.h = String(p.h);
+      b.textContent = `${p.icon} ${p.label}`;
+      b.addEventListener("click", () => { setWorldHour(p.h); b.blur(); });
+      presets.appendChild(b);
+    });
+  }
+  timeRangeEl?.addEventListener("input", () => setWorldHour(parseFloat(timeRangeEl.value)));
+  timeRangeEl?.addEventListener("change", () => timeRangeEl.blur()); // 방향키가 막대 대신 캐릭터를 움직이게
+  timeBtnEl.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    timePopEl.hidden = !timePopEl.hidden;
+    timeBtnEl.blur();
+  });
+  document.addEventListener("pointerdown", (ev) => {
+    if (!timePopEl.hidden && !timePopEl.contains(ev.target) && ev.target !== timeBtnEl) timePopEl.hidden = true;
+  });
+  updateTimeUI();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -3682,7 +4130,8 @@ function pathPose(path, d, hint) {
   const a = path.pts[k], b = path.pts[k + 1];
   const segLen = cum[k + 1] - cum[k] || 1e-6;
   const t = (d - cum[k]) / segLen;
-  return { k, x: a[0] + (b[0] - a[0]) * t, z: a[1] + (b[1] - a[1]) * t, tx: (b[0] - a[0]) / segLen, tz: (b[1] - a[1]) / segLen };
+  const y = path.ys ? path.ys[k] + (path.ys[k + 1] - path.ys[k]) * t : SIDEWALK_TOP_Y; // 보도가 내려앉은 곳은 낮게
+  return { k, x: a[0] + (b[0] - a[0]) * t, z: a[1] + (b[1] - a[1]) * t, y, tx: (b[0] - a[0]) / segLen, tz: (b[1] - a[1]) / segLen };
 }
 
 function buildPedestrians() {
@@ -3798,7 +4247,7 @@ function updatePedestrians(dt) {
     if (!watching) ped.phase += ped.speed * dt * 11;
     const swing = watching ? 0 : Math.sin(ped.phase) * 0.5;
     const bob = watching ? 0 : Math.abs(Math.cos(ped.phase)) * 0.008;
-    base.makeRotationY(Math.atan2(fx, fz)).setPosition(ped.x, y0 + bob, ped.z);
+    base.makeRotationY(Math.atan2(fx, fz)).setPosition(ped.x, (q.y != null ? q.y : y0) + bob, ped.z);
     torso.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.245, 0)));
     head.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.37, 0)));
     shadow.setMatrixAt(n, m.multiplyMatrices(base, part.makeTranslation(0, 0.003 - bob, 0)));
@@ -3889,7 +4338,7 @@ function updatePerformance(dt) {
 // 그림자: 태양 그림자 범위를 캐릭터 주변(±SHADOW_HALF)으로 좁혀서 따라다니게 한다 — 같은 512 맵으로 훨씬 선명.
 // 그림자 맵 한 칸 단위로 맞춰 움직여서 걸을 때 그림자 가장자리가 지글거리지 않게 한다.
 const SHADOW_HALF = 40;
-const SUN_OFFSET = new THREE.Vector3(20, 30, 15);
+const SUN_OFFSET = new THREE.Vector3(20, 30, 15); // 시간대(applyTimeOfDay)에 따라 해·달 방향으로 바뀐다
 let sunLight = null;
 function updateSunFollow() {
   if (!sunLight || !character) return;
@@ -3965,6 +4414,9 @@ async function initNeighborhood3D() {
     topZoneEl?.addEventListener("pointerdown", () => {
       if (isWrapFullscreen()) showExitFullscreenBtnTemporarily();
     });
+    loadSavedHour();
+    wireTimeControls();
+    applyTimeOfDay();
     startAdventure();
     [danceBtnEl, walkBtnEl, runBtnEl, jumpBtnEl, momBtnEl, hudEl, dpadEl].forEach((el) => {
       if (el) el.hidden = false;

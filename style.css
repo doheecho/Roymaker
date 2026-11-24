@@ -1420,6 +1420,24 @@ li:last-child { border-bottom: none; }
 .gh-box [hidden] { display: none !important; }
 
 .view-head-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+/* 거리 모험: 시간대 고르기 창(시간 버튼 아래로 펼쳐진다) */
+.nb-time-wrap { position: relative; display: inline-flex; }
+.nb-time-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
+  width: 250px; padding: 10px 12px 8px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--paper); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+  font-family: "Gowun Dodum", sans-serif;
+}
+.nb-time-pop[hidden] { display: none; }
+.nb-time-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+.nb-time-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.nb-time-preset {
+  font: inherit; font-size: 12.5px; padding: 5px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: #fff; color: var(--ink);
+}
+.nb-time-preset.on { background: #4a8fd8; border-color: #4a8fd8; color: #fff; }
+#neighborhood3d-time-range { width: 100%; margin: 12px 0 2px; }
+.nb-time-scale { display: flex; justify-content: space-between; font-size: 11px; color: #8a8a8a; }
 .view-head .view-head-btns .help-btn { margin-left: 0; }
 .academy-apply-btn { background: #fff3d6; font-weight: 700; }
 
