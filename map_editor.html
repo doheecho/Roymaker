@@ -76,6 +76,10 @@
   .tree-hit { fill: transparent; cursor: grab; pointer-events: all; }
   /* 길 중간 횡단보도·신호등 표시(파란 점 = 신호등 있음, 회색 = 횡단보도만, 빨강 점선 = 근처에 도로가 없음) */
   .cw-node { transform-box: fill-box; transform-origin: center; transform: scale(var(--cw-k, 1)); }
+  .fence-line { fill: none; stroke-width: 4; stroke-linecap: round; pointer-events: none; }
+  .fence-posts { fill: none; stroke: #111; stroke-width: 7; pointer-events: none; }
+  .fence-line.selected { stroke-width: 7; filter: drop-shadow(0 0 3px #fff); }
+  .fence-hit { fill: none; stroke: transparent; stroke-width: 16; cursor: grab; pointer-events: stroke; touch-action: none; }
   .cw-dot { fill: #1f6feb; fill-opacity: 0.85; stroke: #fff; stroke-width: 2; }
   .cw-dot.off { fill: #6e7681; }
   .cw-dot.bad { fill: #d43d3d; stroke-dasharray: 3 2; }
@@ -251,6 +255,7 @@
   <button id="addRoadBtn">🛣️ 도로 추가</button>
   <button id="addParkBtn">🌳 공원 추가</button>
   <button id="addTreeBtn">🌲 나무 추가</button>
+  <button id="addFenceBtn" title="누른 뒤 지도를 차례로 누르면 그 점들을 따라 울타리가 이어집니다(Esc나 버튼을 다시 누르면 끝)">🧱 울타리 추가</button>
   <button id="addSignalBtn" title="도로 위를 누르면 그 자리에 횡단보도+신호등을 놓습니다(교차로 끝 근처를 누르면 그 끝의 횡단보도·신호등을 켭니다)">🚦 신호등 추가</button>
   <button id="addJunctionBtn" title="누른 뒤 지도에서 길끼리 닿거나 가로지르는 자리를 누르면 그 자리만 교차로로 이어 줍니다(이어지지 않은 곳은 주황 점선 원으로 보여요)">🔗 교차로 추가</button>
   <button id="deleteModeBtn" title="누른 뒤 지도에서 교차로(빨간 점선 원)나 신호등(빨간 원)을 누르면 지웁니다">🗑 교차로·신호등 삭제</button>
@@ -490,6 +495,22 @@
     return out;
   }
 
+  // 울타리: { a: [x, z], b: [x, z], type, base? } — 예전 map_data.js엔 이 목록이 없을 수 있다(없으면 빈 목록)
+  function parseFences(src) {
+    const out = [];
+    for (const raw of arrayBlock(src, "FENCES").split("\n")) {
+      const line = raw.trim();
+      if (!line.startsWith("{")) continue;
+      const a = line.match(/\ba:\s*\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/);
+      const b = line.match(/\bb:\s*\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/);
+      if (!a || !b) continue;
+      const f = { a: [parseFloat(a[1]), parseFloat(a[2])], b: [parseFloat(b[1]), parseFloat(b[2])], type: grab(line, /type:\s*"([^"]+)"/, String) || "parkhills_glass" };
+      if (/\bbase:\s*false/.test(line)) f.base = false;
+      out.push(f);
+    }
+    return out;
+  }
+
   const mapImage = parseMapImage(srcText);
   const roadConsts = parseRoadConstants(srcText);
   const PLACES = parsePlaces(dataText);
@@ -497,7 +518,8 @@
   const TREES = parseTrees(dataText);
   const PARKS = parseParks(dataText);
   const CROSSWALKS = parseCrosswalks(dataText);
-  statusText.textContent = `건물 ${PLACES.length}개 · 도로 ${ROADS.length}개 · 나무 ${TREES.length}그루 · 공원 ${PARKS.length}개${CROSSWALKS.length ? ` · 길 중간 신호등 ${CROSSWALKS.length}곳` : ""} 불러옴`;
+  const FENCES = parseFences(dataText);
+  statusText.textContent = `건물 ${PLACES.length}개 · 도로 ${ROADS.length}개 · 나무 ${TREES.length}그루 · 공원 ${PARKS.length}개${CROSSWALKS.length ? ` · 길 중간 신호등 ${CROSSWALKS.length}곳` : ""}${FENCES.length ? ` · 울타리 ${FENCES.length}토막` : ""} 불러옴`;
 
   const SCALE = mapImage.scale;
   const ANCHOR = mapImage.anchorPx;
@@ -656,6 +678,8 @@
   svg.appendChild(sidewalkLayer);
   svg.appendChild(roadLayer);
   svg.appendChild(skyLayer);
+  const fenceLayer = el("g", {}); // 울타리 — 스카이뷰 위(단지 둘레가 잘 보이게), 나무·건물 마커 아래
+  svg.appendChild(fenceLayer);
   svg.appendChild(treeLayer);
   svg.appendChild(placeLayer);
   const crossLayer = el("g", {}); // 길 중간 횡단보도·신호등 손잡이(건물 마커보다 위 — 작아서 가려지지 않게)
@@ -668,6 +692,10 @@
   const parkNodes = []; // { park, rect, handle, handleHit, rotLine }
   const treeNodes = []; // { tree, dot, hit }
   const crossNodes = []; // { cw, g, dot, text, hit, uid } — CROSSWALKS(길 중간 횡단보도·신호등)마다 하나
+  const fenceNodes = []; // { fence, line, posts, hit, handleA, handleB, uid }
+  let fenceUid = 0;
+  let pendingFenceStart = null; // add-fence 모드에서 마지막으로 찍은 점(raw [x,z]) — 다음 클릭까지 울타리가 이어진다
+  let fenceTypeForNew = "parkhills_glass"; // 새로 그리는 울타리 종류(패널에서 마지막으로 고른 종류)
   let crossUid = 0;
 
   let selected = null; // { kind: 'place'|'road'|'park'|'tree', ref }
@@ -1009,6 +1037,112 @@
   }
   CROSSWALKS.forEach(addCrossNode);
 
+  // ── 울타리(FENCES): 종류별 색 선 + 기둥 간격 눈금. 고르면 양 끝 손잡이로 늘이고, 선을 끌면 통째로 옮긴다 ──
+  let FT = null;
+  try {
+    FT = await import("./fence_types.js?v=20261125a");
+  } catch (err) {
+    console.warn("fence_types.js를 못 불러왔어요", err);
+  }
+  const FENCE_TYPES = (FT && FT.FENCE_TYPES) || { parkhills_glass: { name: "금파힐 투명유리 울타리", editorColor: "#4fc3f7", spacing: 2 } };
+  if (FT && FT.DEFAULT_FENCE_TYPE) fenceTypeForNew = FT.DEFAULT_FENCE_TYPE;
+  function fenceLen(f) { return Math.hypot(f.b[0] - f.a[0], f.b[1] - f.a[1]); }
+  function addFenceNode(fence) {
+    const line = el("line", { class: "fence-line" });
+    const posts = el("line", { class: "fence-posts" });
+    const hit = el("line", { class: "fence-hit" });
+    const handleA = el("circle", { r: 8, class: "road-handle fence-handle", visibility: "hidden" });
+    const handleB = el("circle", { r: 8, class: "road-handle fence-handle", visibility: "hidden" });
+    fenceLayer.appendChild(posts);
+    fenceLayer.appendChild(line);
+    fenceLayer.appendChild(hit);
+    handleLayer.appendChild(handleA);
+    handleLayer.appendChild(handleB);
+    const node = { fence, line, posts, hit, handleA, handleB, uid: ++fenceUid };
+    fenceNodes.push(node);
+    hit.addEventListener("pointerdown", (ev) => startFenceDrag(ev, node, null));
+    handleA.addEventListener("pointerdown", (ev) => startFenceDrag(ev, node, "a"));
+    handleB.addEventListener("pointerdown", (ev) => startFenceDrag(ev, node, "b"));
+    wireHoverTip(hit, () => `🧱 ${(FENCE_TYPES[node.fence.type] || {}).name || node.fence.type} · ${fenceLen(node.fence).toFixed(1)}m`);
+    updateFenceVisual(node);
+    return node;
+  }
+  function updateFenceVisual(node) {
+    const f = node.fence;
+    const T = FENCE_TYPES[f.type] || FENCE_TYPES[fenceTypeForNew] || { editorColor: "#4fc3f7", spacing: 2 };
+    const [ax, ay] = rawToPx(f.a[0], f.a[1]);
+    const [bx, by] = rawToPx(f.b[0], f.b[1]);
+    [node.line, node.posts, node.hit].forEach((l) => {
+      l.setAttribute("x1", ax.toFixed(1)); l.setAttribute("y1", ay.toFixed(1));
+      l.setAttribute("x2", bx.toFixed(1)); l.setAttribute("y2", by.toFixed(1));
+    });
+    node.line.setAttribute("stroke", T.editorColor || "#4fc3f7");
+    node.line.setAttribute("stroke-dasharray", f.base === false ? "6 4" : "none");
+    // 기둥 자리 눈금: 게임과 같은 규칙(길이를 기둥 간격에 가장 가까운 칸 수로 나눔)
+    const L = fenceLen(f);
+    const n = Math.max(1, Math.round(L / (T.spacing || 2)));
+    const bayPx = Math.hypot(bx - ax, by - ay) / n;
+    node.posts.setAttribute("stroke-dasharray", `1.6 ${Math.max(0.5, bayPx - 1.6).toFixed(2)}`);
+    node.posts.setAttribute("stroke-dashoffset", "0.8");
+    [[node.handleA, ax, ay], [node.handleB, bx, by]].forEach(([h, x, y]) => { h.setAttribute("cx", x.toFixed(1)); h.setAttribute("cy", y.toFixed(1)); });
+  }
+  FENCES.forEach(addFenceNode);
+  function selectFenceNode(node) {
+    clearSelectionVisual();
+    selected = { kind: "fence", ref: node };
+    node.line.classList.add("selected");
+    node.handleA.setAttribute("visibility", "visible");
+    node.handleB.setAttribute("visibility", "visible");
+    renderPanel();
+  }
+  // 울타리 끝점은 다른 울타리 끝점 가까이(3m)에 가면 거기에 딱 붙는다(꺾인 울타리를 이어 그리기 쉽게)
+  function snapFencePoint(x, z, skip) {
+    let best = null, bd = 3;
+    FENCES.forEach((f) => {
+      if (f === skip) return;
+      [f.a, f.b].forEach((p) => { const d = Math.hypot(p[0] - x, p[1] - z); if (d < bd) { bd = d; best = p; } });
+    });
+    return best ? [best[0], best[1]] : [Math.round(x * 10) / 10, Math.round(z * 10) / 10];
+  }
+  function startFenceDrag(ev, node, which) {
+    ev.stopPropagation();
+    if (mode !== "select") return;
+    selectFenceNode(node);
+    const f = node.fence;
+    const pt0 = svgPoint(ev);
+    const [r0x, r0z] = pxToRaw(pt0.x, pt0.y);
+    const a0 = [...f.a], b0 = [...f.b];
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const [rx, rz] = pxToRaw(pt.x, pt.y);
+      if (which) {
+        f[which] = snapFencePoint(rx, rz, f);
+      } else {
+        const dx = rx - r0x, dz = rz - r0z;
+        f.a = [Math.round((a0[0] + dx) * 10) / 10, Math.round((a0[1] + dz) * 10) / 10];
+        f.b = [Math.round((b0[0] + dx) * 10) / 10, Math.round((b0[1] + dz) * 10) / 10];
+      }
+      updateFenceVisual(node);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (selected && selected.kind === "fence" && selected.ref === node) renderPanel();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  function deleteFence(node) {
+    const idx = FENCES.indexOf(node.fence);
+    if (idx !== -1) FENCES.splice(idx, 1);
+    [node.line, node.posts, node.hit, node.handleA, node.handleB].forEach((x) => x.remove());
+    const ni = fenceNodes.indexOf(node);
+    if (ni !== -1) fenceNodes.splice(ni, 1);
+    selected = null;
+    renderPanel();
+    toast("울타리를 지웠어요.");
+  }
+
   function updatePlaceVisual(id) {
     const n = placeNodes[id];
     const [px, py] = rawToPx(n.place.x, n.place.z);
@@ -1127,6 +1261,11 @@
     if (selected.kind === "park") selected.ref.rect.classList.remove("selected");
     if (selected.kind === "tree") selected.ref.dot.classList.remove("selected");
     if (selected.kind === "crosswalk") selected.ref.dot.classList.remove("selected");
+    if (selected.kind === "fence") {
+      selected.ref.line.classList.remove("selected");
+      selected.ref.handleA.setAttribute("visibility", "hidden");
+      selected.ref.handleB.setAttribute("visibility", "hidden");
+    }
   }
 
   async function selectPlace(id) {
@@ -1264,10 +1403,10 @@
     const key = selected ? selected.kind + ":" + (selected.ref.id ?? selected.ref.index ?? selected.ref.uid ?? "") + ":" + (selected.ref.seg ? ROADS.indexOf(selected.ref.seg) : "") : null;
     if (key !== lastPanelKey) setPanelCollapsed(!selected);
     lastPanelKey = key;
-    panelTitle.textContent = !selected ? "편집 패널" : selected.kind === "place" ? `🏢 ${selected.ref.name}` : selected.kind === "road" ? "🛣️ 도로" : selected.kind === "park" ? "🌳 공원" : selected.kind === "crosswalk" ? "🚦 횡단보도·신호등" : "🌲 나무";
+    panelTitle.textContent = !selected ? "편집 패널" : selected.kind === "place" ? `🏢 ${selected.ref.name}` : selected.kind === "road" ? "🛣️ 도로" : selected.kind === "park" ? "🌳 공원" : selected.kind === "crosswalk" ? "🚦 횡단보도·신호등" : selected.kind === "fence" ? "🧱 울타리" : "🌲 나무";
     panelBody.innerHTML = "";
     if (!selected) {
-      panelBody.innerHTML = '<p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)·신호등(파란 점)을 클릭해서 선택하세요.</p>';
+      panelBody.innerHTML = '<p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)·신호등(파란 점)·울타리(하늘색 선)를 클릭해서 선택하세요.</p>';
       return;
     }
     if (selected.kind === "place") {
@@ -1527,6 +1666,63 @@
       panelBody.appendChild(fieldNum("x (raw)", node.tree.x, (v) => { node.tree.x = v; updateTreeVisual(node); }));
       panelBody.appendChild(fieldNum("z (raw)", node.tree.z, (v) => { node.tree.z = v; updateTreeVisual(node); }));
       panelBody.appendChild(deleteButton(() => deleteTree(node), "🗑 이 나무 삭제"));
+    } else if (selected.kind === "fence") {
+      const node = selected.ref;
+      const f = node.fence;
+      const T = FENCE_TYPES[f.type] || {};
+      const h2 = document.createElement("h2");
+      h2.textContent = T.name || f.type;
+      panelBody.appendChild(h2);
+      // 울타리 종류(나중에 fence_types.js에 종류를 더하면 여기 자동으로 늘어난다)
+      const typeWrap = document.createElement("div");
+      typeWrap.className = "field";
+      const typeLabel = document.createElement("label");
+      typeLabel.textContent = "울타리 종류";
+      const sel = document.createElement("select");
+      sel.style.cssText = "width:100%; padding:6px; font:inherit;";
+      Object.entries(FENCE_TYPES).forEach(([key, t]) => {
+        const o = document.createElement("option");
+        o.value = key;
+        o.textContent = t.name || key;
+        if (key === f.type) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener("change", () => { f.type = sel.value; fenceTypeForNew = sel.value; updateFenceVisual(node); renderPanel(); });
+      typeWrap.appendChild(typeLabel);
+      typeWrap.appendChild(sel);
+      panelBody.appendChild(typeWrap);
+      const L = fenceLen(f);
+      const n = Math.max(1, Math.round(L / (T.spacing || 2)));
+      const info = document.createElement("p");
+      info.className = "note";
+      info.style.marginBottom = "10px";
+      info.textContent = `길이 ${L.toFixed(1)}m · 기둥 간격 ${(L / n).toFixed(2)}m × ${n}칸` + (T.height ? ` · 높이 ${f.base === false ? (T.height - (T.baseH || 0)).toFixed(2) : T.height}m` : "");
+      panelBody.appendChild(info);
+      if (T.baseH) {
+        const baseWrap = document.createElement("label");
+        baseWrap.className = "field";
+        baseWrap.style.cssText = "display:flex; align-items:center; gap:8px; cursor:pointer;";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = f.base !== false;
+        box.style.cssText = "width:18px; height:18px;";
+        box.addEventListener("change", () => { if (box.checked) delete f.base; else f.base = false; updateFenceVisual(node); renderPanel(); });
+        const txt = document.createElement("span");
+        txt.textContent = `아래 돌 기단 포함 (${T.baseH}m) — 끄면 울타리만 바닥에 (점선으로 표시)`;
+        baseWrap.appendChild(box);
+        baseWrap.appendChild(txt);
+        panelBody.appendChild(baseWrap);
+      }
+      panelBody.appendChild(fieldNum("A x (raw)", f.a[0], (v) => { f.a[0] = v; updateFenceVisual(node); }));
+      panelBody.appendChild(fieldNum("A z (raw)", f.a[1], (v) => { f.a[1] = v; updateFenceVisual(node); }));
+      panelBody.appendChild(fieldNum("B x (raw)", f.b[0], (v) => { f.b[0] = v; updateFenceVisual(node); }));
+      panelBody.appendChild(fieldNum("B z (raw)", f.b[1], (v) => { f.b[1] = v; updateFenceVisual(node); }));
+      const note = document.createElement("p");
+      note.className = "note";
+      note.style.marginBottom = "10px";
+      note.textContent = "빨간 양 끝 점을 끌면 늘이고 줄여요(다른 울타리 끝 3m 안이면 딱 붙어요). 선 가운데를 끌면 통째로 옮겨요. 검은 눈금이 기둥 자리예요.";
+      panelBody.appendChild(note);
+      panelBody.appendChild(deleteButton(() => deleteFence(node), "🗑 이 울타리 삭제"));
     }
   }
 
@@ -1596,6 +1792,7 @@
     "add-park": document.getElementById("addParkBtn"),
     "add-tree": document.getElementById("addTreeBtn"),
     "add-signal": document.getElementById("addSignalBtn"),
+    "add-fence": document.getElementById("addFenceBtn"),
     "add-junction": document.getElementById("addJunctionBtn"),
     "delete": document.getElementById("deleteModeBtn"),
   };
@@ -1606,12 +1803,14 @@
     "add-park": "지도를 클릭하면 그 자리에 20×20m 공원이 생깁니다 — 크기는 옆 칸에서 조절하세요(다시 누르면 꺼집니다).",
     "add-tree": "지도를 클릭할 때마다 나무가 하나씩 심어집니다(다시 누르면 꺼집니다).",
     "add-signal": "도로 위를 누르면 그 자리에 횡단보도+신호등이 생깁니다. 교차로 끝 근처를 누르면 그 끝의 횡단보도·신호등을 켭니다(다시 누르면 꺼집니다).",
+    "add-fence": "지도를 차례로 누르면 그 점들을 따라 울타리가 이어져요 — 다 그렸으면 Esc나 🧱 버튼을 다시 누르세요(다른 울타리 끝 3m 안을 누르면 딱 붙어요).",
     "add-junction": "주황 원(이어지지 않은 곳)을 누르면 거기만 교차로로 이어져요 — 연달아 눌러도 돼요(다시 누르면 꺼짐)",
     "delete": "교차로(빨간 점선 원)나 신호등(빨간 원)·길 중간 횡단보도(파란 점)를 누르면 지워요 — 연달아 눌러도 돼요(다시 누르면 꺼짐)",
   };
   function setMode(next) {
     if (pendingLayer.firstChild) pendingLayer.innerHTML = "";
     pendingRoadStart = null;
+    pendingFenceStart = null;
     mode = mode === next ? "select" : next;
     Object.entries(addButtons).forEach(([key, btn]) => btn.classList.toggle("active", key === mode));
     svg.classList.toggle("mode-add", mode !== "select");
@@ -1630,6 +1829,7 @@
   addButtons["add-tree"].addEventListener("click", () => setMode("add-tree"));
   addButtons["add-signal"].addEventListener("click", () => setMode("add-signal"));
   addButtons["add-junction"].addEventListener("click", () => setMode("add-junction"));
+  addButtons["add-fence"].addEventListener("click", () => setMode("add-fence"));
   addButtons["delete"].addEventListener("click", () => setMode("delete"));
   window.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
@@ -1896,6 +2096,26 @@
       toast("횡단보도·신호등을 놓았어요 — 파란 점을 끌어 옮기고, 오른쪽에서 신호등을 끄거나 지울 수 있어요.");
       return;
     }
+    if (mode === "add-fence") {
+      const p = snapFencePoint(rx, rz, null);
+      const [px, py] = rawToPx(p[0], p[1]);
+      if (!pendingFenceStart) {
+        pendingFenceStart = p;
+        pendingLayer.innerHTML = "";
+        pendingLayer.appendChild(el("circle", { cx: px, cy: py, r: 7, class: "pending-point" }));
+        toast("다음 점을 누르세요 — 누를 때마다 울타리가 이어져요.");
+        return;
+      }
+      if (Math.hypot(p[0] - pendingFenceStart[0], p[1] - pendingFenceStart[1]) < 0.5) return;
+      const fence = { a: pendingFenceStart, b: p, type: fenceTypeForNew };
+      FENCES.push(fence);
+      addFenceNode(fence);
+      pendingFenceStart = p;
+      pendingLayer.innerHTML = "";
+      pendingLayer.appendChild(el("circle", { cx: px, cy: py, r: 7, class: "pending-point" }));
+      toast(`울타리 ${fenceLen(fence).toFixed(1)}m 추가 — 계속 누르면 이어지고, 끝내려면 Esc·🧱 버튼`);
+      return; // 모드는 켜 둔다(꺾인 울타리를 연달아 그리기)
+    }
     if (mode === "add-road") {
       if (!pendingRoadStart) {
         pendingRoadStart = snapRoadPoint(Math.round(rx * 10) / 10, Math.round(rz * 10) / 10, null, null);
@@ -2157,6 +2377,9 @@
   function serializeCrosswalk(c) {
     return `  { x: ${fmtNum(c.x)}, z: ${fmtNum(c.z)}${c.signal === false ? ", signal: false" : ""} },`;
   }
+  function serializeFence(f) {
+    return `  { a: [${fmtNum(f.a[0])}, ${fmtNum(f.a[1])}], b: [${fmtNum(f.b[0])}, ${fmtNum(f.b[1])}], type: ${JSON.stringify(f.type || "parkhills_glass")}${f.base === false ? ", base: false" : ""} },`;
+  }
   function serializePark(p) {
     return `  { id: ${p.id}, x: ${fmtNum(p.x)}, z: ${fmtNum(p.z)}, w: ${fmtNum(p.w)}, d: ${fmtNum(p.d)}, rotationDeg: ${fmtNum(p.rotationDeg || 0)} },`;
   }
@@ -2173,7 +2396,7 @@
   }
   function buildMapDataFile() {
     // 파일에 있는 목록만 그 자리에서 바꿔치기한다(CROSSWALKS는 예전 파일엔 없을 수 있어서 없으면 맨 뒤에 붙인다)
-    const sections = ["PLACES", "ROAD_SEGMENTS", "TREES", "PARKS", "CROSSWALKS"]
+    const sections = ["PLACES", "ROAD_SEGMENTS", "TREES", "PARKS", "CROSSWALKS", "FENCES"]
       .map((name) => ({ name, ...sliceArraySection(name) }))
       .filter((sec) => sec.start >= 0)
       .sort((p, q) => p.start - q.start);
@@ -2184,6 +2407,7 @@
       TREES: "export const TREES = [" + TREES.map(serializeTree).join(", ") + "];",
       PARKS: "export const PARKS = [\n" + PARKS.map(serializePark).join("\n") + (PARKS.length ? "\n" : "") + "];",
       CROSSWALKS: "export const CROSSWALKS = [\n" + CROSSWALKS.map(serializeCrosswalk).join("\n") + (CROSSWALKS.length ? "\n" : "") + "];",
+      FENCES: "export const FENCES = [\n" + FENCES.map(serializeFence).join("\n") + (FENCES.length ? "\n" : "") + "];",
     };
     for (let i = 0; i < sections.length; i++) {
       out += blocks[sections[i].name];
@@ -2194,6 +2418,11 @@
       out = out.replace(/\s*$/, "\n\n") +
         "// 길 중간 횡단보도·신호등 — x,z(raw)는 도로 위 자리(가장 가까운 도로에 붙는다), signal: false면 신호등 없이 횡단보도만.\n" +
         "// map_editor.html의 \"🚦 신호등 추가\"로 다룬다.\n" + blocks.CROSSWALKS + "\n";
+    }
+    if (!sections.some((sec) => sec.name === "FENCES") && FENCES.length) {
+      out = out.replace(/\s*$/, "\n\n") +
+        "// 울타리 — a·b(raw 좌표 m)를 잇는 토막, type은 fence_types.js의 종류, base: false면 아래 돌 기단 없이.\n" +
+        "// map_editor.html의 \"🧱 울타리 추가\"로 다룬다(종류는 fence_types.js에 계속 추가할 수 있다).\n" + blocks.FENCES + "\n";
     }
     return out;
   }
@@ -2247,7 +2476,7 @@
     window.dispatchEvent(new PointerEvent("pointerup", { pointerType: "touch" }));
   }
   // 끌 수 있는 걸 손가락으로 누르면 화면이 같이 스크롤되지 않게(iOS는 SVG의 touch-action을 잘 안 지켜서 한 번 더 막는다)
-  const DRAGGABLE = ".marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect, .cw-hit";
+  const DRAGGABLE = ".marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect, .cw-hit, .fence-hit";
   svg.addEventListener("touchstart", (ev) => {
     if (ev.touches.length === 1 && ev.target.closest && ev.target.closest(DRAGGABLE) && mode === "select") ev.preventDefault();
   }, { passive: false });
@@ -2416,7 +2645,7 @@
   const undoBtn = document.getElementById("undoBtn");
   const redoBtn = document.getElementById("redoBtn");
   function snapshotState() {
-    return JSON.stringify({ PLACES, ROADS, PARKS, TREES, CROSSWALKS });
+    return JSON.stringify({ PLACES, ROADS, PARKS, TREES, CROSSWALKS, FENCES });
   }
   function updateUndoButtons() {
     undoBtn.disabled = undoStack.length === 0;
@@ -2442,12 +2671,14 @@
     replaceAll(PARKS, st.PARKS);
     replaceAll(TREES, st.TREES);
     replaceAll(CROSSWALKS, st.CROSSWALKS || []);
+    replaceAll(FENCES, st.FENCES || []);
     rebuildView();
   }
   function rebuildView() {
     selected = null;
     pendingRoadStart = null;
-    [parkLayer, sidewalkLayer, laneLayer, roadMarkLayer, skyLayer, treeLayer, placeLayer, crossLayer, pendingLayer, handleLayer].forEach((l) => { l.innerHTML = ""; });
+    pendingFenceStart = null;
+    [parkLayer, sidewalkLayer, laneLayer, roadMarkLayer, skyLayer, fenceLayer, treeLayer, placeLayer, crossLayer, pendingLayer, handleLayer].forEach((l) => { l.innerHTML = ""; });
     // roadLayer 안에는 도로 표면 묶음(roadSurfaceLayer)도 들어 있어서 통째로 비우면 안 된다 — 클릭 영역(hit)만 지운다
     [...roadLayer.children].forEach((c) => { if (c !== roadSurfaceLayer) c.remove(); });
     roadRankGroups.forEach((g) => { g.innerHTML = ""; });
@@ -2459,11 +2690,13 @@
     parkNodes.length = 0;
     treeNodes.length = 0;
     crossNodes.length = 0;
+    fenceNodes.length = 0;
     PLACES.forEach(addPlaceNode);
     ROADS.forEach(addRoadNode);
     PARKS.forEach(addParkNode);
     TREES.forEach(addTreeNode);
     CROSSWALKS.forEach(addCrossNode);
+    FENCES.forEach(addFenceNode);
     scheduleRoadMarkings();
     renderPanel();
     if (mode === "add-junction") refreshJoinSpots(false);

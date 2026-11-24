@@ -9,11 +9,13 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import * as MAP_DATA from "./map_data.js?v=20261124b";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
+import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125a";
 
 const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
 // 길 중간 횡단보도·신호등(맵 에디터 "🚦 신호등 추가"로 찍은 곳) — 예전 map_data.js에는 이 목록이 없을 수 있어서
 // 이름을 골라 가져오지 않고(없으면 모듈 전체가 깨진다) 통째로 받아서 있으면 쓴다
 const CROSSWALKS = Array.isArray(MAP_DATA.CROSSWALKS) ? MAP_DATA.CROSSWALKS : [];
+const FENCES = Array.isArray(MAP_DATA.FENCES) ? MAP_DATA.FENCES : []; // 울타리 토막 { a, b, type, base? }
 
 const ASSET_VERSION = "20261125a";
 
@@ -409,6 +411,7 @@ function buildStaticScene() {
   buildParks();
   buildRoads();
   buildRoadsideProps();
+  buildFences();
   freezeStaticObjects([bg, ...scene.children.filter((o) => !before.has(o))]);
   buildPlaces();
   before = new Set(scene.children);
@@ -464,6 +467,72 @@ function buildMapGround(scene) {
 
 // 금호파크힐스 단지 내부 공터에 나무를 심는다 — 나무가 많아서(170여 그루) 개별 메시로 만들면
 // 도로 차선처럼 드로우콜이 급격히 늘어나니, 줄기·수관을 각각 InstancedMesh 하나씩으로 그린다.
+// ── 울타리: map_data.js의 FENCES(에디터 "🧱 울타리 추가"로 그림)를 fence_types.js의 종류별 모양대로 세운다 ──
+// 토막 길이에 맞춰 기둥 간격(spacing)에 가장 가까운 칸 수로 나누고, 칸·기둥마다 반복되는 부품 상자를 재질별
+// 인스턴스 하나에 모두 담는다 — 울타리가 아무리 길어도 그리기 명령은 재질 수(유리울타리 4개)뿐이다.
+function buildFences() {
+  if (!FENCES.length) return;
+  const W = WORLD_SCALE;
+  const boxes = new Map(); // "종류:재질" → [{ m: Matrix4 }]
+  const unit = new THREE.BoxGeometry(1, 1, 1);
+  const tmp = new THREE.Object3D();
+  FENCES.forEach((f) => {
+    const T = FENCE_TYPES[f.type] || FENCE_TYPES[DEFAULT_FENCE_TYPE];
+    const typeKey = FENCE_TYPES[f.type] ? f.type : DEFAULT_FENCE_TYPE;
+    if (!T || !f.a || !f.b) return;
+    const dx = f.b[0] - f.a[0], dz = f.b[1] - f.a[1];
+    const L = Math.hypot(dx, dz);
+    if (L < 0.3) return;
+    const ux = dx / L, uz = dz / L;
+    const yaw = Math.atan2(-uz, ux); // 로컬 +X가 진행 방향(a→b)
+    const n = Math.max(1, Math.round(L / T.spacing));
+    const bay = L / n;
+    const withBase = f.base !== false;
+    const drop = withBase ? 0 : T.baseH || 0;
+    // 바닥 높이: 토막 가운데의 지면(보도 위면 보도 높이)
+    const mx = (f.a[0] + f.b[0]) / 2 * W, mz = (f.a[1] + f.b[1]) / 2 * W;
+    const gy = groundHeightAt(mx, mz);
+    const push = (part, cx, len) => {
+      const y0 = Math.max(0, part.y0 - (part.onBase ? 0 : drop)), y1 = part.y1 - (part.onBase ? 0 : drop);
+      if (y1 - y0 <= 0) return;
+      const off = part.z || 0;
+      tmp.position.set((f.a[0] + ux * cx - uz * off) * W, gy + ((y0 + y1) / 2) * W, (f.a[1] + uz * cx + ux * off) * W);
+      tmp.rotation.set(0, yaw, 0);
+      tmp.scale.set(len * W, (y1 - y0) * W, (part.d || 0.05) * W);
+      tmp.updateMatrix();
+      const key = `${typeKey}:${part.mat}`;
+      if (!boxes.has(key)) boxes.set(key, []);
+      boxes.get(key).push(tmp.matrix.clone());
+    };
+    T.parts.forEach((part) => {
+      if (part.onBase && !withBase) return;
+      if (part.at === "post") {
+        for (let k = 0; k <= n; k++) push(part, k * bay, part.w || 0.08);
+      } else {
+        const inset = part.inset || 0;
+        for (let k = 0; k < n; k++) push(part, (k + 0.5) * bay, Math.max(0.05, bay - inset * 2));
+      }
+    });
+  });
+  boxes.forEach((mats, key) => {
+    const [typeKey, matName] = key.split(":");
+    const def = FENCE_TYPES[typeKey].mats[matName] || { color: 0x888888 };
+    const glass = def.opacity != null && def.opacity < 1;
+    const mat = new THREE.MeshStandardMaterial({
+      color: def.color, roughness: def.roughness ?? 0.7, metalness: def.metalness ?? 0,
+      transparent: glass, opacity: def.opacity ?? 1, depthWrite: !glass, side: glass ? THREE.DoubleSide : THREE.FrontSide,
+    });
+    const mesh = new THREE.InstancedMesh(unit, mat, mats.length);
+    mats.forEach((m, i) => mesh.setMatrixAt(i, m));
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    mesh.castShadow = !glass;
+    mesh.receiveShadow = true;
+    if (glass) mesh.renderOrder = 1;
+    scene.add(mesh);
+  });
+}
+
 function buildTrees() {
   if (!TREES.length) return;
   const trunkGeo = new THREE.CylinderGeometry(0.35 * WORLD_SCALE, 0.45 * WORLD_SCALE, 3 * WORLD_SCALE, 6);
