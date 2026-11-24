@@ -270,7 +270,7 @@ export const ROAD_SEGMENTS = [
   { a: [-400.5, 153.3], b: [-328.5, 102.6], width: 10, sidewalk: 15 },
   { a: [-328.5, 102.6], b: [-260, 85], width: 10, curve: [-304.6, 80.7], sidewalk: 15 },
   { a: [-224.6, 85.9], b: [-260, 85], width: 10, sidewalk: 15 },
-  { a: [-93.3, 13], b: [-18.8, -56.7], width: 10, sidewalk: 15, kind: "walk" },
+  { a: [-93.3, 13], b: [-18.8, -56.7], width: 10, curve: [-41.2, -36.7], sidewalk: 15, kind: "walk" },
   { a: [-18.8, -56.7], b: [-41.2, -126.5], width: 10, curve: [3.6, -71.1], sidewalk: 15, kind: "walk" },
   { a: [-41.2, -126.5], b: [-53.2, -149], width: 10, curve: [-50.8, -131], sidewalk: 5 },
   { a: [-232, 8.7], b: [-53.2, -149], width: 12, sidewalk: 5, kind: "walk" },
@@ -400,4 +400,38 @@ export const PARKS = [
 export const CROSSWALKS = [
   { x: -44, z: -192.7 },
   { x: -60.3, z: -739 },
+];
+
+// 울타리 — a·b(raw 좌표 m)를 잇는 토막, type은 fence_types.js의 종류, base: false면 아래 돌 기단 없이.
+// map_editor.html의 "🧱 울타리 추가"로 다룬다(종류는 fence_types.js에 계속 추가할 수 있다).
+export const FENCES = [
+  { a: [-365.7, -70.4], b: [-364.7, -71], type: "parkhills_glass" },
+  { a: [-79.4, -163.7], b: [-182.1, -164.9], type: "parkhills_glass" },
+  { a: [-182.1, -164.9], b: [-209.1, -162.2], type: "parkhills_glass" },
+  { a: [-209.1, -162.2], b: [-234, -147.9], type: "parkhills_glass" },
+  { a: [-234, -147.9], b: [-232.5, -140.2], type: "parkhills_glass" },
+  { a: [-245.3, -100.6], b: [-262, -108.5], type: "parkhills_glass" },
+  { a: [-262, -108.5], b: [-274.1, -68.9], type: "parkhills_glass" },
+  { a: [-274.1, -68.9], b: [-296, -37], type: "parkhills_glass" },
+  { a: [-296, -37], b: [-336.6, -4.4], type: "parkhills_glass" },
+  { a: [-336.6, -4.4], b: [-357, 17.8], type: "parkhills_glass" },
+  { a: [-357, 17.8], b: [-369, 42.4], type: "parkhills_glass" },
+  { a: [-369, 42.4], b: [-408, 43.9], type: "parkhills_glass" },
+  { a: [-408, 43.9], b: [-439.6, 77.7], type: "parkhills_glass" },
+  { a: [-439.6, 77.7], b: [-394, 119.3], type: "parkhills_glass" },
+  { a: [-394, 119.3], b: [-380, 116.7], type: "parkhills_glass" },
+  { a: [-352.6, 144.5], b: [-277.7, 150.3], type: "parkhills_glass" },
+  { a: [-277.7, 150.3], b: [-274.4, 127.3], type: "parkhills_glass" },
+  { a: [-136.6, 137.2], b: [-274.4, 127.3], type: "parkhills_glass" },
+  { a: [-136.6, 137.2], b: [-131.7, 122.8], type: "parkhills_glass" },
+  { a: [-131.7, 122.8], b: [-3.8, 133.3], type: "parkhills_glass" },
+  { a: [-3.8, 133.3], b: [-2.6, 61.7], type: "parkhills_glass" },
+  { a: [-2.6, 61.7], b: [29.6, 61.7], type: "parkhills_glass" },
+  { a: [29.6, 61.7], b: [41.6, -42.9], type: "parkhills_glass" },
+  { a: [41.6, -42.9], b: [1.3, -49], type: "parkhills_glass" },
+  { a: [7.4, -67], b: [48, -66.8], type: "parkhills_glass" },
+  { a: [48, -66.8], b: [48.5, -126], type: "parkhills_glass" },
+  { a: [48.5, -126], b: [12.8, -135.1], type: "parkhills_glass" },
+  { a: [12.8, -135.1], b: [15.4, -169.7], type: "parkhills_glass" },
+  { a: [15.4, -169.7], b: [-33.8, -166.7], type: "parkhills_glass" },
 ];
