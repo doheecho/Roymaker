@@ -15,7 +15,7 @@ const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
 // 이름을 골라 가져오지 않고(없으면 모듈 전체가 깨진다) 통째로 받아서 있으면 쓴다
 const CROSSWALKS = Array.isArray(MAP_DATA.CROSSWALKS) ? MAP_DATA.CROSSWALKS : [];
 
-const ASSET_VERSION = "20261124e";
+const ASSET_VERSION = "20261125a";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -2093,6 +2093,7 @@ function loadPlaceModelInto(entry) {
     undefined,
     (err) => {
       entry.loading = false;
+      entry.failed = true; // 파일이 없거나 깨졌으면 다시 받으려고 계속 요청하지 않는다(임시 매싱이 그대로 보인다)
       console.warn(`${entry.place.name} 모델을 못 불러왔다`, err);
     }
   );
@@ -2111,7 +2112,7 @@ function updateModelStreaming(dt) {
     const dist = Math.hypot(cp.x - entry.px, cp.z - entry.pz);
     entry.streamDist = dist;
     if (dist <= modelLoadRangeFor(entry.place.id)) {
-      if (!entry.loadedModel && !entry.loading) want.push(entry);
+      if (!entry.loadedModel && !entry.loading && !entry.failed) want.push(entry);
     } else if (dist > modelUnloadRangeFor(entry.place.id) && entry.loadedModel) {
       entry.group.remove(entry.loadedModel);
       disposeObject3D(entry.loadedModel);

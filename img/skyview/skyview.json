@@ -583,6 +583,14 @@
   "width": 116.718,
   "depth": 130.67
  },
+ "models/place_금호초등학교1.glb": {
+  "file": "img/skyview/place_금호초등학교1.webp",
+  "hash": "a45e4c76e5",
+  "minX": -69.491,
+  "minZ": -77.738,
+  "width": 143.787,
+  "depth": 160.273
+ },
  "models/place_남광빌딩.glb": {
   "file": "img/skyview/place_남광빌딩.webp",
   "hash": "7d38278065",
@@ -710,6 +718,14 @@
   "minZ": -40.8,
   "width": 45.066,
   "depth": 83.6
+ },
+ "models/place_우리농산물직판장.glb": {
+  "file": "img/skyview/place_우리농산물직판장.webp",
+  "hash": "91c4a87063",
+  "minX": -13.43,
+  "minZ": -32.4,
+  "width": 39.313,
+  "depth": 68
  },
  "models/place_제주수퍼.glb": {
   "file": "img/skyview/place_제주수퍼.webp",
@@ -1006,5 +1022,21 @@
   "minZ": -10.666,
   "width": 13,
   "depth": 22.25
+ },
+ "models/금파힐_남커뮤.glb": {
+  "file": "img/skyview/금파힐_남커뮤.webp",
+  "hash": "3e36e21128",
+  "minX": -89.549,
+  "minZ": -66.081,
+  "width": 206.734,
+  "depth": 128.67
+ },
+ "models/금파힐_북커뮤.glb": {
+  "file": "img/skyview/금파힐_북커뮤.webp",
+  "hash": "f4543efd6d",
+  "minX": -63.949,
+  "minZ": -54.97,
+  "width": 135.869,
+  "depth": 112.871
  }
 }
