@@ -22,6 +22,8 @@
 // 도로마다 끝별로 덮어쓸 수 있다(맵 에디터의 "횡단보도·신호등" 설정):
 //   crosswalkA / crosswalkB : true면 폭과 상관없이 만들고, false면 안 만든다(없으면 13m 이상일 때 자동)
 //   signalA / signalB       : false면 그 횡단보도에 신호등을 세우지 않는다(없으면 신호등 있음)
+//   joinA / joinB           : false면 그 끝이 다른 길에 닿아 있어도 자동으로 교차로로 잇지 않는다(맵 에디터에서
+//                             교차로를 지운 곳 — "🔗 교차로 추가"로 그 자리를 누르면 다시 이어지고 표시가 없어진다)
 // 길 중간(교차로가 아닌 곳)의 횡단보도는 midList로 받는다 — { x, z, signal? } 배열(맵 에디터의 "🚦 신호등 추가").
 //   도로 폭 전체를 가로지르는 얼룩무늬 + 양쪽 방향 정지선을 긋고, crossings에는 다가오는 방향마다 하나씩
 //   { mid: true, dirSign(+1: a→b로 달리는 차, -1: b→a), sStop(그 차가 서는 정지선, a 끝에서 잰 거리),
@@ -395,8 +397,10 @@ function splitSegAt(segs, k, t, P) {
   // 끝(A/B)별 횡단보도·신호등 설정은 원래 그 끝을 가진 쪽에만 남긴다(새로 생긴 가운데 끝은 자동)
   delete second.crosswalkA;
   delete second.signalA;
+  delete second.joinA;
   delete seg.crosswalkB;
   delete seg.signalB;
+  delete seg.joinB;
   segs.push(second);
   return segs.length - 1;
 }
@@ -446,7 +450,10 @@ export function connectRoads(segs, focus, opts = {}) {
     segs.forEach((sg, j) => ["a", "b"].forEach((w) => { if (Math.hypot(sg[w][0] - x, sg[w][1] - z) < JOIN_THRESH) g.push([j, w]); }));
     return g;
   };
-  const moveEnds = (group, P) => group.forEach(([j, w]) => { segs[j][w] = [P[0], P[1]]; changed.add(j); });
+  // 끝을 옮겨 이을 때는 "잇지 않음(joinA/B: false)" 표시도 지운다 — 이제 이어졌으니까
+  const moveEnds = (group, P) => group.forEach(([j, w]) => { segs[j][w] = [P[0], P[1]]; delete segs[j]["join" + w.toUpperCase()]; changed.add(j); });
+  // 교차로를 지운 끝(joinA/B: false)은 자동으로는 다시 잇지 않는다 — 사람이 그 자리를 직접 누른 경우(lenient)만
+  const blocked = (group) => !lenient && group.some(([j, w]) => segs[j]["join" + w.toUpperCase()] === false);
   const interior = (s, L) => s >= JOIN_THRESH && s <= L - JOIN_THRESH;
   const tOf = (r, near) => (r.pts.length > 2 ? (near.piece + near.t) / (r.pts.length - 1) : near.t);
   const box = (r, pad) => {
@@ -490,6 +497,7 @@ export function connectRoads(segs, focus, opts = {}) {
       for (const which of ["a", "b"]) {
         const E = segs[i][which];
         const group = groupAt(E[0], E[1]);
+        if (blocked(group)) continue;
         const free = group.length === 1;
         for (let k = 0; k < segs.length; k++) {
           if (k === i || !reach[k] || (!all && !work.has(i) && !work.has(k))) continue;
@@ -538,6 +546,7 @@ export function connectRoads(segs, focus, opts = {}) {
           }
           const gI = inI ? null : groupAt(segs[i][endI][0], segs[i][endI][1]);
           const gK = inK ? null : groupAt(segs[k][endK][0], segs[k][endK][1]);
+          if ((gI && blocked(gI)) || (gK && blocked(gK))) continue;
           if (gI && gK) {
             // 둘 다 끝 근처: 둘 다 빈 끝일 때만(ㄱ자 모서리를 살짝 넘겨 그린 것) 교차점에서 만나게
             if (gI.length !== 1 || gK.length !== 1) continue;
@@ -567,4 +576,190 @@ export function connectRoads(segs, focus, opts = {}) {
     if (opts.at && !anchor) anchor = c.P;
   }
   return { changed, added, joins, points };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 교차로 찾기·없애기(맵 에디터 "🗑 교차로·신호등 삭제") ──
+//   findJunctions(segs): 도로 끝 3개 이상이 14 안에 모인 곳들 [{ x, z(가운데), ends: [[도로 번호, "a"|"b"], ...] }]
+//   disconnectJunction(segs, ends): 그 교차로를 없앤다 — 곧게 이어지는 두 길(폭·보도·울타리가 같고 거의 일직선,
+//     넓은 길 먼저)을 하나로 다시 붙이고("🔗 교차로 추가"로 잘랐던 길이면 원래 모양 그대로), 나머지 길 끝은 그
+//     자리에 둔 채 joinA/B: false를 붙여 자동으로 다시 이어지지 않게 한다. segs를 그 자리에서 고친다(붙인 길의
+//     뒤쪽 조각은 segs에서 빠진다). 반환 { ok, reason?("no-straight-pair": Y자처럼 곧게 이어지는 같은 길이 없음) }
+// ════════════════════════════════════════════════════════════════════════════
+export function findJunctions(segs) {
+  const ends = [];
+  segs.forEach((sg, i) => ["a", "b"].forEach((w) => ends.push({ i, w, x: sg[w][0], z: sg[w][1] })));
+  const used = new Array(ends.length).fill(false);
+  const out = [];
+  for (let k = 0; k < ends.length; k++) {
+    if (used[k]) continue;
+    const g = [ends[k]];
+    used[k] = true;
+    for (let m = k + 1; m < ends.length; m++) {
+      if (!used[m] && Math.hypot(ends[k].x - ends[m].x, ends[k].z - ends[m].z) < JOIN_THRESH) { g.push(ends[m]); used[m] = true; }
+    }
+    if (g.length < 3) continue;
+    out.push({ x: g.reduce((a, e) => a + e.x, 0) / g.length, z: g.reduce((a, e) => a + e.z, 0) / g.length, ends: g.map((e) => [e.i, e.w]) });
+  }
+  return out;
+}
+
+// 2차 베지어가 매개변수 t에서 점 N을 지나도록 하는 제어점
+function controlThrough(F1, N, F2, t) {
+  const u = 1 - t;
+  return [(N[0] - u * u * F1[0] - t * t * F2[0]) / (2 * t * u), (N[1] - u * u * F1[1] - t * t * F2[1]) / (2 * t * u)];
+}
+
+// 길 모양 두 개(폴리라인)가 서로 얼마나 다른지 — 한쪽 점에서 다른 쪽 선까지 거리의 최댓값(양방향)
+function shapeGap(P, Q) {
+  const one = (A, B) => {
+    let worst = 0;
+    for (const p of A) {
+      let best = Infinity;
+      for (let i = 0; i < B.length - 1; i++) {
+        const [x1, z1] = B[i], [x2, z2] = B[i + 1];
+        const vx = x2 - x1, vz = z2 - z1, l2 = vx * vx + vz * vz || 1e-9;
+        const t = Math.max(0, Math.min(1, ((p[0] - x1) * vx + (p[1] - z1) * vz) / l2));
+        best = Math.min(best, Math.hypot(p[0] - x1 - vx * t, p[1] - z1 - vz * t));
+      }
+      worst = Math.max(worst, best);
+    }
+    return worst;
+  };
+  return Math.max(one(P, Q), one(Q, P));
+}
+const densePts = (sg) => {
+  const c = sg.curve || [(sg.a[0] + sg.b[0]) / 2, (sg.a[1] + sg.b[1]) / 2];
+  const out = [];
+  for (let i = 0; i <= ROAD_CURVE_STEPS; i++) out.push(quadPoint(sg.a, c, sg.b, i / ROAD_CURVE_STEPS));
+  return out;
+};
+// 길 sg의 w쪽 끝을 길을 따라 안쪽으로 당겨서, 그 끝이 keepPts 모두에서 minDist 이상 떨어지게 한다(곡선이면 같은
+// 곡선의 나머지 부분을 정확히 남긴다). 길이 너무 짧아 그렇게 못 하면 false.
+function pullBackEnd(sg, w, keepPts, minDist) {
+  const r = roadInfo(sg);
+  for (let d = 0.5; d <= r.L * 0.8; d += 0.5) {
+    const sA = w === "a" ? d : r.L - d;
+    const p = pointAt(r.pts, r.cum, sA);
+    if (!keepPts.every((k) => Math.hypot(p.x - k[0], p.z - k[1]) >= minDist)) continue;
+    const P = [r1(p.x), r1(p.z)];
+    if (sg.curve) {
+      const near = nearestOnPolyline(r.pts, r.cum, [p.x, p.z]);
+      const t = (near.piece + near.t) / (r.pts.length - 1);
+      const q0 = lerp2(sg.a, sg.curve, t), q1 = lerp2(sg.curve, sg.b, t);
+      if (w === "a") { sg.a = P; sg.curve = [r1(q1[0]), r1(q1[1])]; } else { sg.b = P; sg.curve = [r1(q0[0]), r1(q0[1])]; }
+      const mx = (sg.a[0] + sg.b[0]) / 2, mz = (sg.a[1] + sg.b[1]) / 2;
+      if (Math.hypot(sg.curve[0] - mx, sg.curve[1] - mz) < 0.5) delete sg.curve;
+    } else {
+      sg[w] = P;
+    }
+    return true;
+  }
+  return false;
+}
+
+export function disconnectJunction(segs, ends) {
+  if (!ends || ends.length < 3) return { ok: false, reason: "not-junction" };
+  const arms = ends.map(([i, w]) => {
+    const r = roadInfo(segs[i]);
+    const d = pointAt(r.pts, r.cum, w === "a" ? 0 : r.L);
+    return { i, w, seg: segs[i], L: r.L, away: w === "a" ? [d.dx, d.dz] : [-d.dx, -d.dz] };
+  });
+  const cx = arms.reduce((a, m) => a + m.seg[m.w][0], 0) / arms.length;
+  const cz = arms.reduce((a, m) => a + m.seg[m.w][1], 0) / arms.length;
+  // 곧게 이어지는 한 쌍(마주 보는 방향, 같은 폭·보도·울타리) — 넓은 길, 더 곧은 쌍 먼저
+  let best = null;
+  for (let p = 0; p < arms.length; p++) {
+    for (let q = p + 1; q < arms.length; q++) {
+      const A = arms[p], B = arms[q];
+      if (A.i === B.i || A.L < 1e-3 || B.L < 1e-3) continue;
+      const dot = A.away[0] * B.away[0] + A.away[1] * B.away[1];
+      if (dot > -0.87) continue; // 약 150° 이상 벌어진(거의 일직선) 것만
+      if (Math.abs(A.seg.width - B.seg.width) > 0.5) continue;
+      if ((A.seg.sidewalk || 0) !== (B.seg.sidewalk || 0) || !!A.seg.railing !== !!B.seg.railing) continue;
+      const farA = A.seg[A.w === "a" ? "b" : "a"], farB = B.seg[B.w === "a" ? "b" : "a"];
+      if (Math.hypot(farA[0] - cx, farA[1] - cz) < JOIN_THRESH || Math.hypot(farB[0] - cx, farB[1] - cz) < JOIN_THRESH) continue;
+      const score = A.seg.width * 10 - dot;
+      if (!best || score > best.score) best = { A, B, score };
+    }
+  }
+
+  // ① 그 한 쌍을 한 길로 다시 붙여도 모양이 거의 그대로면(교차로 추가로 잘랐던 길이면 원래 모양 그대로) 붙인다
+  if (best) {
+    const { A, B } = best;
+    const segA = A.seg, segB = B.seg;
+    const fw1 = A.w === "a" ? "b" : "a", fw2 = B.w === "a" ? "b" : "a";
+    const F1 = [segA[fw1][0], segA[fw1][1]], F2 = [segB[fw2][0], segB[fw2][1]];
+    const N = [(segA[A.w][0] + segB[B.w][0]) / 2, (segA[A.w][1] + segB[B.w][1]) / 2];
+    const ctrl = (sg) => sg.curve || [(sg.a[0] + sg.b[0]) / 2, (sg.a[1] + sg.b[1]) / 2];
+    const tN = A.L / (A.L + B.L);
+    let curve = null;
+    if (segA.curve || segB.curve) {
+      // "교차로 추가"가 곡선을 둘로 자른 것이면(드 카스텔조) 원래 제어점을 그대로 되살린다
+      const Q0 = ctrl(segA), Q1 = ctrl(segB);
+      const qx = Q1[0] - Q0[0], qz = Q1[1] - Q0[1], ql = Math.hypot(qx, qz);
+      if (ql > 1e-6) {
+        const t0 = ((N[0] - Q0[0]) * qx + (N[1] - Q0[1]) * qz) / (ql * ql);
+        const off = Math.abs((N[0] - Q0[0]) * qz - (N[1] - Q0[1]) * qx) / ql;
+        if (t0 > 0.02 && t0 < 0.98 && off < 1) {
+          const C = [F1[0] + (Q0[0] - F1[0]) / t0, F1[1] + (Q0[1] - F1[1]) / t0];
+          const Q1c = lerp2(C, F2, t0);
+          if (Math.hypot(Q1c[0] - Q1[0], Q1c[1] - Q1[1]) < 1.5) curve = C;
+        }
+      }
+      if (!curve) curve = controlThrough(F1, N, F2, tN);
+    } else {
+      const lx = F2[0] - F1[0], lz = F2[1] - F1[1], ll = Math.hypot(lx, lz) || 1;
+      if (Math.abs((N[0] - F1[0]) * lz - (N[1] - F1[1]) * lx) / ll >= 1) curve = controlThrough(F1, N, F2, tN);
+    }
+    if (curve && Math.hypot(curve[0] - (F1[0] + F2[0]) / 2, curve[1] - (F1[1] + F2[1]) / 2) < 0.5) curve = null;
+    const merged = { a: F1, b: F2 };
+    if (curve) merged.curve = [r1(curve[0]), r1(curve[1])];
+    const orient = (sg, fromW) => (fromW === "a" ? densePts(sg) : densePts(sg).reverse());
+    const before = [...orient(segA, fw1), ...orient(segB, B.w)];
+    const tol = Math.max(1.5, segA.width * 0.12);
+    if (shapeGap(densePts(merged), before) <= tol) {
+      // 바깥 두 끝의 설정(횡단보도·신호등·잇지 않음)은 그대로 옮기고, 교차로 쪽 끝 설정은 버린다
+      const flagsOf = (sg, w) => {
+        const W = w.toUpperCase();
+        return { cw: sg["crosswalk" + W], sg: sg["signal" + W], jn: sg["join" + W] };
+      };
+      const fA = flagsOf(segA, fw1), fB = flagsOf(segB, fw2);
+      ["crosswalkA", "crosswalkB", "signalA", "signalB", "joinA", "joinB"].forEach((k) => delete segA[k]);
+      segA.a = merged.a;
+      segA.b = merged.b;
+      if (merged.curve) segA.curve = merged.curve;
+      else delete segA.curve;
+      [["A", fA], ["B", fB]].forEach(([W, f]) => {
+        if (typeof f.cw === "boolean") segA["crosswalk" + W] = f.cw;
+        if (typeof f.sg === "boolean") segA["signal" + W] = f.sg;
+        if (f.jn === false) segA["join" + W] = false;
+      });
+      // 나머지 길 끝은 그 자리에(지나가는 길에 닿은 채로) 두고 "자동으로 다시 잇지 않음" 표시
+      arms.forEach((m) => { if (m !== A && m !== B) m.seg["join" + m.w.toUpperCase()] = false; });
+      segs.splice(segs.indexOf(segB), 1);
+      return { ok: true, mode: "merged" };
+    }
+  }
+
+  // ② 붙이면 모양이 바뀌는 경우(따로 그린 길끼리 꺾여 만나는 곳 등): 길은 그대로 두고, 남길 두 길(곧게 이어지는
+  //    쌍, 없으면 가장 넓은 두 길) 말고 나머지 길의 끝을 길을 따라 조금 당겨서 교차로에서 떼어 놓는다
+  const keep = best ? [best.A, best.B] : [...arms].sort((p, q) => q.seg.width - p.seg.width || q.L - p.L).slice(0, 2);
+  const keepPts = keep.map((m) => m.seg[m.w]);
+  const others = arms.filter((m) => !keep.includes(m));
+  const plan = others.map((m) => ({ m, copy: JSON.parse(JSON.stringify(m.seg)) }));
+  for (const pl of plan) {
+    if (!pullBackEnd(pl.copy, pl.m.w, keepPts, JOIN_THRESH + 0.5)) return { ok: false, reason: "too-short" };
+  }
+  plan.forEach(({ m, copy }) => {
+    m.seg.a = copy.a;
+    m.seg.b = copy.b;
+    if (copy.curve) m.seg.curve = copy.curve;
+    else delete m.seg.curve;
+    const W = m.w.toUpperCase();
+    delete m.seg["crosswalk" + W];
+    delete m.seg["signal" + W];
+    m.seg["join" + W] = false;
+  });
+  return { ok: true, mode: "detached" };
 }
