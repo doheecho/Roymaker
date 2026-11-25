@@ -504,6 +504,8 @@ function buildStaticScene() {
 
   // 네이버 지도 이미지를 실제 좌표에 맞춰 바닥에 깐다(없으면 위의 초록 바닥이 그대로 보임)
   buildMapGround(scene);
+  // [실험 중] 실제 금호동 지형(GameMap.glb) — 아직 위치·크기 보정 전, 비교해 보려고 일단 얹어만 둔다
+  buildGlbTerrain(scene);
 
   // 각 건물 사이에 깔린 회색 보행로 — 지도 이미지가 보이도록 숨긴다
   const plaza = new THREE.Mesh(
@@ -763,6 +765,51 @@ function buildMapGround(scene) {
     },
     undefined,
     () => console.warn("지도 바닥 이미지를 불러오지 못했다")
+  );
+}
+
+// [실험 중] 실제 금호동 지형(models/GameMap.glb, Web Mercator 위성사진+지형 내보내기 도구로 만듦).
+// XZ 정렬: glTF가 내보내기 도구에서 받은 자기 노드 변환(scale·translation)에 WORLD_SCALE만 곱했더니
+// PLACES 좌표(raw)가 이미 실제 건물 지붕 위에 거의 정확히 올라간다(건물마다 점을 찍어 렌더링해서
+// 눈으로 확인함, 2026-11-25) — 그래서 추가 이동·회전·배율 보정이 필요 없었다.
+// Y(높이): 이 지형 메시 자체의 절대 높이(해발고도 비슷한 값, 원점 근처에서 scene 단위로 약 16)는
+// 게임이 지금까지 가정해 온 "도로·건물 바닥 = y 0"과 안 맞아서, 원점(113동, raw 0,0) 바로 위에서
+// 땅까지 레이캐스트한 높이를 통째로 빼서 그 자리만 y=0이 되게 맞춘다 — 나머지 지점은 거기서부터의
+// 실제 높이 차이(경사)를 그대로 가져간다. getTerrainY(x,z)로 이후 건물·캐릭터 배치에 쓸 수 있다.
+const GLB_TERRAIN_FILE = "models/GameMap.glb";
+const GLB_TERRAIN_ENABLED = true;
+let glbTerrain = null;
+const glbTerrainRaycaster = new THREE.Raycaster();
+function getTerrainY(x, z) {
+  if (!glbTerrain) return 0;
+  glbTerrainRaycaster.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
+  const hits = glbTerrainRaycaster.intersectObject(glbTerrain, true);
+  return hits.length ? hits[0].point.y : 0;
+}
+function buildGlbTerrain(scene) {
+  if (!GLB_TERRAIN_ENABLED) return;
+  gltfLoader.load(
+    `${GLB_TERRAIN_FILE}?v=${ASSET_VERSION}`,
+    (gltf) => {
+      const terrain = gltf.scene;
+      terrain.scale.multiplyScalar(WORLD_SCALE);
+      terrain.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = false; } });
+      terrain.updateMatrixWorld(true);
+      glbTerrain = terrain;
+      const originY = getTerrainY(0, 0);
+      terrain.position.y -= originY;
+      terrain.updateMatrixWorld(true);
+      scene.add(terrain);
+      const box = new THREE.Box3().setFromObject(terrain);
+      console.log("[GLB 지형] 불러옴 — 원점(113동) 높이 보정값:", -originY.toFixed(2), "scene 단위");
+      console.log("[GLB 지형] 보정 후 범위(scene 단위):", {
+        x: [box.min.x.toFixed(1), box.max.x.toFixed(1)],
+        y: [box.min.y.toFixed(2), box.max.y.toFixed(2)],
+        z: [box.min.z.toFixed(1), box.max.z.toFixed(1)],
+      });
+    },
+    undefined,
+    (err) => console.warn("[GLB 지형] models/GameMap.glb를 못 불러왔다", err)
   );
 }
 
@@ -6031,6 +6078,8 @@ async function initNeighborhood3D() {
     renderer.shadowMap.enabled = true;
     clock = new THREE.Clock();
     buildStaticScene();
+    // [임시 디버그 — GLB 지형 실험 끝나면 지울 것] 브라우저 콘솔에서 바로 scene·camera를 들여다보려고
+    window.__nbDebug = { scene, camera, renderer, getTerrainY, THREE };
     await loadCharacter();
     // 113동 중 북서쪽으로 뻗은 날개(WingA)가 건물 중심 쪽(동)·북쪽 모서리에서 북동쪽을 보고
     // 있는 1-2호 출입구 앞 — 실제 모델(place_금파힐113.glb)을 rotationDeg(67.4°) 그대로 적용해
