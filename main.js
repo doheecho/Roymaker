@@ -5577,7 +5577,14 @@ async function main() {
   renderActivityInfo();
   renderTimetable();
   renderShop();
-  await renderMap(character, academies, activities, stations, hotplaces);
+  try {
+    await renderMap(character, academies, activities, stations, hotplaces);
+  } catch (err) {
+    // 로컬 테스트 등 카카오맵 API 키가 없는 환경에선 여기서 예외가 나는데, 그걸 그냥 두면
+    // main() 전체가 멈춰서 아래 wireNav() 등도 안 불려 "지도" 말고 다른 탭(거리 모험 등)까지
+    // 전부 못 쓰게 된다 — 지도 탭 하나만 깨지고 나머지는 정상 작동하도록 여기서 막는다.
+    console.warn("지도를 그리지 못했다(카카오맵 API 키 없음 등) — 지도 탭 말고는 정상 작동한다", err);
+  }
   state.placeEvents = placeEvents.map((pe) => ({
     ...pe,
     pos: state.places[pe.placeName] ?? null,
