@@ -4,10 +4,19 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>지도 에디터</title>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+</script>
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
   .sky-img { pointer-events: none; }
+  .terrain-bg-img { pointer-events: none; }
   #overlay.sky-hidden .sky-layer { display: none; }
   #skyOpacity { width: 80px; vertical-align: middle; }
   html, body { margin: 0; height: 100%; font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
@@ -67,6 +76,7 @@
   .curve-hit { fill: transparent; cursor: grab; pointer-events: all; }
   .curve-hit:active { cursor: grabbing; }
   .pending-point { fill: #ffd34d; stroke: #202225; stroke-width: 2; pointer-events: none; }
+  .pick-elevation-mark { fill: none; stroke: #3fd0ff; stroke-width: 2.5; pointer-events: none; }
   .park-rect { fill: #4fae3f; fill-opacity: 0.45; stroke: #2f7a2a; stroke-width: 2; cursor: grab; pointer-events: all; }
   .park-rect:active { cursor: grabbing; }
   .park-rect.selected { stroke: #fff; stroke-width: 3; }
@@ -152,6 +162,8 @@
   #labelToggleWrap input { cursor: pointer; }
   #laneToggleWrap { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; color: #e8eaf0; user-select: none; }
   #roadOpacity { width: 80px; vertical-align: middle; }
+  #terrainToggleWrap { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; color: #e8eaf0; user-select: none; }
+  #terrainOpacity { width: 80px; vertical-align: middle; }
   #overlay.labels-hidden .marker-label { display: none; }
   /* ── 터치: 끌 수 있는 것들은 브라우저 스크롤 대신 드래그로, 손잡이는 확대 배율에 맞춰 손가락 크기로 ── */
   #stageWrap { touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
@@ -216,9 +228,9 @@
     #toolbar button, #toolbar input { font-size: 15px; padding: 9px 12px; }
     #toolbar input[type="text"] { width: 160px; font-size: 16px; }
     #toolbar .hint { display: none; }
-    #labelToggleWrap, #skyToggleWrap, #laneToggleWrap { font-size: 15px; }
-    #labelToggleWrap input, #skyToggleWrap input, #laneToggleWrap input { width: 20px; height: 20px; }
-    #skyOpacity, #roadOpacity { width: 110px; }
+    #labelToggleWrap, #skyToggleWrap, #laneToggleWrap, #terrainToggleWrap { font-size: 15px; }
+    #labelToggleWrap input, #skyToggleWrap input, #laneToggleWrap input, #terrainToggleWrap input { width: 20px; height: 20px; }
+    #skyOpacity, #roadOpacity, #terrainOpacity { width: 110px; }
     #sidePanel { width: 320px; padding: 0 14px 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
     #panelHeader {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -255,6 +267,8 @@
   <input id="skyOpacity" type="range" min="0.2" max="1" step="0.05" value="0.9" title="스카이뷰 진하기" />
   <label id="laneToggleWrap" title="도로를 게임과 같은 실제 폭·색·차선으로 그립니다"><input type="checkbox" id="laneToggle" checked /> 차선</label>
   <input id="roadOpacity" type="range" min="0.2" max="1" step="0.05" value="0.85" title="도로 진하기(낮추면 밑의 지도 사진이 비쳐 보여요)" />
+  <label id="terrainToggleWrap" title="실제 지형(models/GameMap.glb)을 위에서 찍은 그림을 지도 자리에 깝니다 — 그림은 node tools/make_terrain_topdown.cjs로 만듭니다"><input type="checkbox" id="terrainToggle" /> 실제 지형</label>
+  <input id="terrainOpacity" type="range" min="0.1" max="1" step="0.05" value="0.9" title="지형 그림 진하기" />
   <span class="sep"></span>
   <button id="addPlaceBtn">🏢 건물 추가</button>
   <button id="addRoadBtn">🛣️ 도로 추가</button>
@@ -265,6 +279,7 @@
   <button id="addSignalBtn" title="도로 위를 누르면 그 자리에 횡단보도+신호등을 놓습니다(교차로 끝 근처를 누르면 그 끝의 횡단보도·신호등을 켭니다)">🚦 신호등 추가</button>
   <button id="addJunctionBtn" title="누른 뒤 지도에서 길끼리 닿거나 가로지르는 자리를 누르면 그 자리만 교차로로 이어 줍니다(이어지지 않은 곳은 주황 점선 원으로 보여요)">🔗 교차로 추가</button>
   <button id="deleteModeBtn" title="누른 뒤 지도에서 교차로(빨간 점선 원)나 신호등(빨간 원)을 누르면 지웁니다">🗑 교차로·신호등 삭제</button>
+  <button id="pickElevationBtn" title="누른 뒤 지도를 누르면 그 자리의 raw 좌표(x,z)와 실제 지형 고도를 클립보드에 복사합니다 — 제미나이에 새 건물 3D 모델링을 요청할 때 붙여넣으면 됩니다">📍 위치+고도 뽑기</button>
   <span class="hint" id="statusText">neighborhood3d.js 불러오는 중…</span>
   <button id="undoBtn" title="되돌리기 (Ctrl+Z)" disabled>↶ 되돌리기</button>
   <button id="redoBtn" title="다시 실행 (Ctrl+Shift+Z 또는 Ctrl+Y)" disabled>↷ 다시</button>
@@ -607,6 +622,7 @@
   labelToggle.addEventListener("change", () => {
     svg.classList.toggle("labels-hidden", !labelToggle.checked);
   });
+
   const hoverTip = document.getElementById("hoverTip");
   function showTip(text, ev) {
     if (ev.pointerType === "touch") return;
@@ -641,6 +657,74 @@
     const node = document.createElementNS(NS, tag);
     for (const k in attrs) node.setAttribute(k, attrs[k]);
     return node;
+  }
+
+  // ── 실제 지형(GameMap.glb) 위에서 찍은 그림 — tools/make_terrain_topdown.cjs로 만듦.
+  // 이 그림의 raw 범위(gamemap_topdown.json)를 기존 rawToPx로 그대로 변환해서 깐다 — 이 지형의
+  // 자체 좌표가 이미 PLACES/ROAD_SEGMENTS와 같은 raw 단위라서(2026-11-25 확인) 별도 보정이 필요
+  // 없다. 맨 처음 레이어(가장 아래)로 넣어서 건물·도로·공원이 항상 그 위에 보인다.
+  const terrainBgImg = el("image", { class: "terrain-bg-img", preserveAspectRatio: "none", visibility: "hidden" });
+  svg.insertBefore(terrainBgImg, svg.firstChild);
+  (async () => {
+    try {
+      const info = await (await fetch("img/gamemap_topdown.json", { cache: "no-store" })).json();
+      const [x0, y0] = rawToPx(info.minX, info.minZ);
+      const [x1, y1] = rawToPx(info.minX + info.width, info.minZ + info.depth);
+      terrainBgImg.setAttribute("href", "img/gamemap_topdown.webp");
+      terrainBgImg.setAttribute("x", Math.min(x0, x1));
+      terrainBgImg.setAttribute("y", Math.min(y0, y1));
+      terrainBgImg.setAttribute("width", Math.abs(x1 - x0));
+      terrainBgImg.setAttribute("height", Math.abs(y1 - y0));
+    } catch (err) {
+      console.warn("실제 지형 그림(img/gamemap_topdown.webp)을 못 불러왔다 — node tools/make_terrain_topdown.cjs로 만들 수 있다", err);
+    }
+  })();
+  const terrainToggle = document.getElementById("terrainToggle");
+  terrainToggle.addEventListener("change", () => {
+    terrainBgImg.setAttribute("visibility", terrainToggle.checked ? "visible" : "hidden");
+  });
+  document.getElementById("terrainOpacity").addEventListener("input", (ev) => {
+    terrainBgImg.setAttribute("opacity", ev.target.value);
+  });
+  terrainBgImg.setAttribute("opacity", document.getElementById("terrainOpacity").value);
+
+  // ── 위치+고도 뽑기: 제미나이에 새 건물 3D 모델링(거리뷰+스카이뷰 사진 기반)을 요청할 때 쓸
+  // 대략적인 자리(raw x,z)와 그 자리 실제 지형 고도를 클립보드에 바로 복사한다. 고도 기준은
+  // 게임의 getTerrainY와 같다(원점=113동=우리집에서 0) — 나중에 이 값을 place.y에 그대로 써도
+  // 맞게. 이 glb는 raw 좌표계랑 자체 단위가 같아서(2026-11-25 확인) WORLD_SCALE 없이 그대로 쓴다.
+  let sampleTerrainRaw = null, terrainOriginRawY = 0;
+  (async () => {
+    try {
+      const THREE = await import("three");
+      const { GLTFLoader } = await import("three/addons/loaders/GLTFLoader.js");
+      const { MeshoptDecoder } = await import("three/addons/libs/meshopt_decoder.module.js");
+      const loader = new GLTFLoader();
+      loader.setMeshoptDecoder(MeshoptDecoder);
+      const gltf = await loader.loadAsync("models/GameMap.glb");
+      const terrainMesh = gltf.scene;
+      terrainMesh.updateMatrixWorld(true);
+      const ray = new THREE.Raycaster();
+      sampleTerrainRaw = (x, z) => {
+        ray.set(new THREE.Vector3(x, 1e6, z), new THREE.Vector3(0, -1, 0));
+        const hits = ray.intersectObject(terrainMesh, true);
+        return hits.length ? hits[0].point.y : null;
+      };
+      terrainOriginRawY = sampleTerrainRaw(0, 0) ?? 0;
+    } catch (err) {
+      console.warn("위치+고도 뽑기용 지형(GameMap.glb)을 못 불러왔다", err);
+    }
+  })();
+  function pickElevationAt(rx, rz, pt) {
+    const x = Math.round(rx * 10) / 10, z = Math.round(rz * 10) / 10;
+    const raw = sampleTerrainRaw ? sampleTerrainRaw(x, z) : null;
+    const text = raw == null
+      ? `x: ${x}, z: ${z} (raw, m) · 고도 정보 없음(지형 범위 밖이거나 아직 불러오는 중)`
+      : `x: ${x}, z: ${z} (raw, m) · 고도: ${(raw - terrainOriginRawY).toFixed(1)}m (우리집 기준)`;
+    navigator.clipboard?.writeText(text).catch(() => {});
+    toast(`📋 복사됨: ${text}`);
+    const mark = el("circle", { cx: pt.x, cy: pt.y, r: 9, class: "pick-elevation-mark" });
+    pendingLayer.appendChild(mark);
+    setTimeout(() => mark.remove(), 1500);
   }
 
   // ── glb 바운딩박스로 "기본 긴 변이 x축인지 z축인지" 캐싱(회전 손잡이 변환용) ──
@@ -1932,6 +2016,7 @@
     "add-terrain": document.getElementById("addTerrainBtn"),
     "add-junction": document.getElementById("addJunctionBtn"),
     "delete": document.getElementById("deleteModeBtn"),
+    "pick-elevation": document.getElementById("pickElevationBtn"),
   };
   const MODE_HINT = {
     "select": "",
@@ -1944,6 +2029,7 @@
     "add-fence": "지도를 차례로 누르면 그 점들을 따라 울타리가 이어져요 — 다 그렸으면 Esc나 🧱 버튼을 다시 누르세요(다른 울타리 끝 3m 안을 누르면 딱 붙어요).",
     "add-junction": "주황 원(이어지지 않은 곳)을 누르면 거기만 교차로로 이어져요 — 연달아 눌러도 돼요(다시 누르면 꺼짐)",
     "delete": "교차로(빨간 점선 원)나 신호등(빨간 원)·길 중간 횡단보도(파란 점)를 누르면 지워요 — 연달아 눌러도 돼요(다시 누르면 꺼짐)",
+    "pick-elevation": "지도를 누르면 그 자리의 raw 좌표(x,z)와 실제 지형 고도가 클립보드에 복사돼요 — 제미나이에 새 건물 3D 모델링을 요청할 때 붙여넣으세요(연달아 눌러도 돼요, 다시 누르면 꺼짐).",
   };
   function setMode(next) {
     if (pendingLayer.firstChild) pendingLayer.innerHTML = "";
@@ -1971,6 +2057,7 @@
   addButtons["add-fence"].addEventListener("click", () => setMode("add-fence"));
   addButtons["add-terrain"].addEventListener("click", () => setMode("add-terrain"));
   addButtons["delete"].addEventListener("click", () => setMode("delete"));
+  addButtons["pick-elevation"].addEventListener("click", () => setMode("pick-elevation"));
   window.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
     if (!delModal.classList.contains("hidden")) { closeDelModal(); return; } // 열린 창부터 닫는다
@@ -2171,6 +2258,10 @@
       addTreeNode(tree);
       toast(`나무 ${TREES.length}그루`);
       return; // add-tree는 계속 켜 둔다(여러 그루 연달아 심기)
+    }
+    if (mode === "pick-elevation") {
+      pickElevationAt(rx, rz, pt);
+      return; // 모드는 켜 둔다(여러 자리를 연달아 찍어볼 수 있게)
     }
     if (mode === "delete") {
       // 누른 자리에서 가장 가까운 것(손가락이면 화면에서 반지름 약 30px 안)
@@ -2891,7 +2982,7 @@
   undoBtn.addEventListener("click", undo);
   redoBtn.addEventListener("click", redo);
   // 바꾸기 직전에 기록: 지도(마커·손잡이·빈 곳 누르기), 오른쪽 패널(입력칸·버튼), 툴바의 추가/삭제 버튼
-  const NO_CHECKPOINT = "#undoBtn, #redoBtn, #zoomInBtn, #zoomOutBtn, #searchInput, #labelToggleWrap, #skyToggleWrap, #laneToggleWrap, #panelHeader, #exportBtn, #ghSaveBtn";
+  const NO_CHECKPOINT = "#undoBtn, #redoBtn, #zoomInBtn, #zoomOutBtn, #searchInput, #labelToggleWrap, #skyToggleWrap, #laneToggleWrap, #terrainToggleWrap, #panelHeader, #exportBtn, #ghSaveBtn";
   document.addEventListener("pointerdown", (ev) => {
     const t = ev.target;
     if (t && t.closest && t.closest("#overlay, #panelBody, #toolbar") && !t.closest(NO_CHECKPOINT)) checkpoint();
