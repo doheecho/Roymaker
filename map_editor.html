@@ -76,6 +76,11 @@
   .tree-hit { fill: transparent; cursor: grab; pointer-events: all; }
   /* 길 중간 횡단보도·신호등 표시(파란 점 = 신호등 있음, 회색 = 횡단보도만, 빨강 점선 = 근처에 도로가 없음) */
   .cw-node { transform-box: fill-box; transform-origin: center; transform: scale(var(--cw-k, 1)); }
+  .terrain-zone { fill: #ffd400; fill-opacity: 0.12; stroke: #e0a800; stroke-width: 3; vector-effect: non-scaling-stroke; stroke-dasharray: 10 6; pointer-events: none; }
+  .terrain-pt { stroke: #222; stroke-width: 1.5; cursor: grab; touch-action: none; }
+  .terrain-pt.selected { stroke: #fff; stroke-width: 3.5; }
+  .terrain-txt { font: bold 12px sans-serif; fill: #111; paint-order: stroke; stroke: #fff; stroke-width: 3px; pointer-events: none; text-anchor: middle; }
+  .terrain-off .terrain-ui { display: none; }
   .fence-line { fill: none; stroke-width: 4; stroke-linecap: round; pointer-events: none; }
   .fence-posts { fill: none; stroke: #111; stroke-width: 7; pointer-events: none; }
   .fence-line.selected { stroke-width: 7; filter: drop-shadow(0 0 3px #fff); }
@@ -255,6 +260,7 @@
   <button id="addRoadBtn">🛣️ 도로 추가</button>
   <button id="addParkBtn">🌳 공원 추가</button>
   <button id="addTreeBtn">🌲 나무 추가</button>
+  <button id="addTerrainBtn" title="누른 뒤 지도를 누르면 그 자리에 지형 높이 점(층)이 생깁니다. 노란 점선 = 높이가 있는 구역(금호파크힐스)">⛰ 지형 높이</button>
   <button id="addFenceBtn" title="누른 뒤 지도를 차례로 누르면 그 점들을 따라 울타리가 이어집니다(Esc나 버튼을 다시 누르면 끝)">🧱 울타리 추가</button>
   <button id="addSignalBtn" title="도로 위를 누르면 그 자리에 횡단보도+신호등을 놓습니다(교차로 끝 근처를 누르면 그 끝의 횡단보도·신호등을 켭니다)">🚦 신호등 추가</button>
   <button id="addJunctionBtn" title="누른 뒤 지도에서 길끼리 닿거나 가로지르는 자리를 누르면 그 자리만 교차로로 이어 줍니다(이어지지 않은 곳은 주황 점선 원으로 보여요)">🔗 교차로 추가</button>
@@ -511,6 +517,30 @@
     return out;
   }
 
+  // 지형 높이: TERRAIN_ZONES(구역 외곽선) · TERRAIN_POINTS(높이 점 {x, z, h(층), name}) — 없으면 빈 목록
+  function parseTerrainZones(src) {
+    const out = [];
+    for (const raw of arrayBlock(src, "TERRAIN_ZONES").split("\n")) {
+      const line = raw.trim();
+      if (!line.startsWith("{")) continue;
+      const pm = line.match(/poly:\s*(\[\[[\s\S]*\]\])/);
+      if (!pm) continue;
+      try { out.push({ name: grab(line, /name:\s*"([^"]*)"/, String) || "", poly: JSON.parse(pm[1]) }); } catch (err) { /* 깨진 줄은 건너뜀 */ }
+    }
+    return out;
+  }
+  function parseTerrainPoints(src) {
+    const out = [];
+    for (const raw of arrayBlock(src, "TERRAIN_POINTS").split("\n")) {
+      const line = raw.trim();
+      if (!line.startsWith("{")) continue;
+      const x = grab(line, /\bx:\s*(-?[\d.]+)/, Number), z = grab(line, /\bz:\s*(-?[\d.]+)/, Number);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+      out.push({ x, z, h: grab(line, /\bh:\s*(-?[\d.]+)/, Number) ?? 0, name: grab(line, /name:\s*"([^"]*)"/, String) || "" });
+    }
+    return out;
+  }
+
   const mapImage = parseMapImage(srcText);
   const roadConsts = parseRoadConstants(srcText);
   const PLACES = parsePlaces(dataText);
@@ -519,6 +549,8 @@
   const PARKS = parseParks(dataText);
   const CROSSWALKS = parseCrosswalks(dataText);
   const FENCES = parseFences(dataText);
+  const TERRAIN_ZONES = parseTerrainZones(dataText);
+  const TERRAIN_POINTS = parseTerrainPoints(dataText);
   statusText.textContent = `건물 ${PLACES.length}개 · 도로 ${ROADS.length}개 · 나무 ${TREES.length}그루 · 공원 ${PARKS.length}개${CROSSWALKS.length ? ` · 길 중간 신호등 ${CROSSWALKS.length}곳` : ""}${FENCES.length ? ` · 울타리 ${FENCES.length}토막` : ""} 불러옴`;
 
   const SCALE = mapImage.scale;
@@ -680,6 +712,8 @@
   svg.appendChild(skyLayer);
   const fenceLayer = el("g", {}); // 울타리 — 스카이뷰 위(단지 둘레가 잘 보이게), 나무·건물 마커 아래
   svg.appendChild(fenceLayer);
+  const terrainLayer = el("g", { class: "terrain-ui" }); // 지형 높이 구역·점 — "⛰ 지형 높이" 모드이거나 점을 골랐을 때만 보인다
+  svg.appendChild(terrainLayer);
   svg.appendChild(treeLayer);
   svg.appendChild(placeLayer);
   const crossLayer = el("g", {}); // 길 중간 횡단보도·신호등 손잡이(건물 마커보다 위 — 작아서 가려지지 않게)
@@ -1087,6 +1121,89 @@
     [[node.handleA, ax, ay], [node.handleB, bx, by]].forEach(([h, x, y]) => { h.setAttribute("cx", x.toFixed(1)); h.setAttribute("cy", y.toFixed(1)); });
   }
   FENCES.forEach(addFenceNode);
+
+  // ── 지형 높이 점(TERRAIN_POINTS): 층 숫자를 색(파랑 낮음 → 빨강 높음)과 글씨로 보여 주고, 끌어서 옮긴다 ──
+  const terrainNodes = []; // { pt, dot, txt, uid }
+  let terrainUid = 0;
+  const terrainZoneEls = [];
+  function drawTerrainZones() {
+    terrainZoneEls.forEach((e) => e.remove());
+    terrainZoneEls.length = 0;
+    TERRAIN_ZONES.forEach((zn) => {
+      const d = zn.poly.map(([x, z], i) => { const [px, py] = rawToPx(x, z); return `${i ? "L" : "M"}${px.toFixed(1)} ${py.toFixed(1)}`; }).join(" ") + " Z";
+      const path = el("path", { d, class: "terrain-zone" });
+      terrainLayer.insertBefore(path, terrainLayer.firstChild);
+      terrainZoneEls.push(path);
+    });
+  }
+  function terrainColor(h) {
+    const t = Math.max(0, Math.min(1, h / 3));
+    return `hsl(${Math.round(220 - 220 * t)}, 80%, 55%)`;
+  }
+  function addTerrainNode(pt) {
+    const dot = el("circle", { r: 12, class: "terrain-pt" });
+    const txt = el("text", { class: "terrain-txt" });
+    terrainLayer.appendChild(dot);
+    terrainLayer.appendChild(txt);
+    const node = { pt, dot, txt, uid: ++terrainUid };
+    terrainNodes.push(node);
+    dot.addEventListener("pointerdown", (ev) => startTerrainDrag(ev, node));
+    wireHoverTip(dot, () => `⛰ ${node.pt.name || "높이 점"} · ${node.pt.h}층(약 ${(node.pt.h * 3).toFixed(1)}m)`);
+    updateTerrainVisual(node);
+    return node;
+  }
+  function updateTerrainVisual(node) {
+    const [px, py] = rawToPx(node.pt.x, node.pt.z);
+    node.dot.setAttribute("cx", px.toFixed(1));
+    node.dot.setAttribute("cy", py.toFixed(1));
+    node.dot.setAttribute("fill", terrainColor(node.pt.h));
+    node.txt.setAttribute("x", px.toFixed(1));
+    node.txt.setAttribute("y", (py - 13).toFixed(1));
+    node.txt.textContent = `${node.pt.h}층`;
+  }
+  drawTerrainZones();
+  TERRAIN_POINTS.forEach(addTerrainNode);
+  function setTerrainVisible() {
+    svg.classList.toggle("terrain-off", !(mode === "add-terrain" || (selected && selected.kind === "terrain")));
+  }
+  function selectTerrainNode(node) {
+    clearSelectionVisual();
+    selected = { kind: "terrain", ref: node };
+    node.dot.classList.add("selected");
+    setTerrainVisible();
+    renderPanel();
+  }
+  function startTerrainDrag(ev, node) {
+    ev.stopPropagation();
+    if (mode !== "select" && mode !== "add-terrain") return;
+    if (mode === "add-terrain") setMode("add-terrain"); // 점을 누르면 추가 모드를 끄고 그 점을 고른다
+    selectTerrainNode(node);
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const [rx, rz] = pxToRaw(pt.x, pt.y);
+      node.pt.x = Math.round(rx * 10) / 10;
+      node.pt.z = Math.round(rz * 10) / 10;
+      updateTerrainVisual(node);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (selected && selected.kind === "terrain" && selected.ref === node) renderPanel();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  function deleteTerrain(node) {
+    const idx = TERRAIN_POINTS.indexOf(node.pt);
+    if (idx !== -1) TERRAIN_POINTS.splice(idx, 1);
+    node.dot.remove(); node.txt.remove();
+    const ni = terrainNodes.indexOf(node);
+    if (ni !== -1) terrainNodes.splice(ni, 1);
+    selected = null;
+    setTerrainVisible();
+    renderPanel();
+    toast("높이 점을 지웠어요.");
+  }
   function selectFenceNode(node) {
     clearSelectionVisual();
     selected = { kind: "fence", ref: node };
@@ -1261,6 +1378,7 @@
     if (selected.kind === "park") selected.ref.rect.classList.remove("selected");
     if (selected.kind === "tree") selected.ref.dot.classList.remove("selected");
     if (selected.kind === "crosswalk") selected.ref.dot.classList.remove("selected");
+    if (selected.kind === "terrain") selected.ref.dot.classList.remove("selected");
     if (selected.kind === "fence") {
       selected.ref.line.classList.remove("selected");
       selected.ref.handleA.setAttribute("visibility", "hidden");
@@ -1403,7 +1521,7 @@
     const key = selected ? selected.kind + ":" + (selected.ref.id ?? selected.ref.index ?? selected.ref.uid ?? "") + ":" + (selected.ref.seg ? ROADS.indexOf(selected.ref.seg) : "") : null;
     if (key !== lastPanelKey) setPanelCollapsed(!selected);
     lastPanelKey = key;
-    panelTitle.textContent = !selected ? "편집 패널" : selected.kind === "place" ? `🏢 ${selected.ref.name}` : selected.kind === "road" ? "🛣️ 도로" : selected.kind === "park" ? "🌳 공원" : selected.kind === "crosswalk" ? "🚦 횡단보도·신호등" : selected.kind === "fence" ? "🧱 울타리" : "🌲 나무";
+    panelTitle.textContent = !selected ? "편집 패널" : selected.kind === "place" ? `🏢 ${selected.ref.name}` : selected.kind === "road" ? "🛣️ 도로" : selected.kind === "park" ? "🌳 공원" : selected.kind === "crosswalk" ? "🚦 횡단보도·신호등" : selected.kind === "fence" ? "🧱 울타리" : selected.kind === "terrain" ? "⛰ 지형 높이" : "🌲 나무";
     panelBody.innerHTML = "";
     if (!selected) {
       panelBody.innerHTML = '<p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)·신호등(파란 점)·울타리(하늘색 선)를 클릭해서 선택하세요.</p>';
@@ -1723,6 +1841,23 @@
       note.textContent = "빨간 양 끝 점을 끌면 늘이고 줄여요(다른 울타리 끝 3m 안이면 딱 붙어요). 선 가운데를 끌면 통째로 옮겨요. 검은 눈금이 기둥 자리예요.";
       panelBody.appendChild(note);
       panelBody.appendChild(deleteButton(() => deleteFence(node), "🗑 이 울타리 삭제"));
+    } else if (selected.kind === "terrain") {
+      const node = selected.ref;
+      const h2 = document.createElement("h2");
+      h2.textContent = node.pt.name || "높이 점";
+      panelBody.appendChild(h2);
+      panelBody.appendChild(fieldText("이름(메모)", node.pt.name, (v) => { node.pt.name = v; }));
+      panelBody.appendChild(fieldNum("높이 (층, 1층 ≈ 3m)", node.pt.h, (v) => { node.pt.h = v; updateTerrainVisual(node); }, {
+        step: "0.25", note: "바깥 도로 = 0층. 0.5층 단위 정도로 고쳐 보세요. 출입구(도로가 구역 경계를 지나는 곳)는 0으로 두면 옹벽 없이 경사로가 돼요.",
+      }));
+      panelBody.appendChild(fieldNum("x (raw)", node.pt.x, (v) => { node.pt.x = v; updateTerrainVisual(node); }));
+      panelBody.appendChild(fieldNum("z (raw)", node.pt.z, (v) => { node.pt.z = v; updateTerrainVisual(node); }));
+      const note = document.createElement("p");
+      note.className = "note";
+      note.style.marginBottom = "10px";
+      note.textContent = "점 사이의 땅 높이는 게임이 부드럽게 이어 줘요. 노란 점선 밖은 언제나 0층(평지)이고, 경계에는 옹벽이 서요. 점을 끌어 옮길 수 있어요.";
+      panelBody.appendChild(note);
+      panelBody.appendChild(deleteButton(() => deleteTerrain(node), "🗑 이 높이 점 삭제"));
     }
   }
 
@@ -1793,6 +1928,7 @@
     "add-tree": document.getElementById("addTreeBtn"),
     "add-signal": document.getElementById("addSignalBtn"),
     "add-fence": document.getElementById("addFenceBtn"),
+    "add-terrain": document.getElementById("addTerrainBtn"),
     "add-junction": document.getElementById("addJunctionBtn"),
     "delete": document.getElementById("deleteModeBtn"),
   };
@@ -1803,6 +1939,7 @@
     "add-park": "지도를 클릭하면 그 자리에 20×20m 공원이 생깁니다 — 크기는 옆 칸에서 조절하세요(다시 누르면 꺼집니다).",
     "add-tree": "지도를 클릭할 때마다 나무가 하나씩 심어집니다(다시 누르면 꺼집니다).",
     "add-signal": "도로 위를 누르면 그 자리에 횡단보도+신호등이 생깁니다. 교차로 끝 근처를 누르면 그 끝의 횡단보도·신호등을 켭니다(다시 누르면 꺼집니다).",
+    "add-terrain": "노란 점선(높이 구역) 안을 누르면 높이 점이 생겨요 — 숫자 = 바깥 도로보다 몇 층 높은지. 있는 점을 누르면 골라서 고칠 수 있어요(다시 누르면 꺼짐).",
     "add-fence": "지도를 차례로 누르면 그 점들을 따라 울타리가 이어져요 — 다 그렸으면 Esc나 🧱 버튼을 다시 누르세요(다른 울타리 끝 3m 안을 누르면 딱 붙어요).",
     "add-junction": "주황 원(이어지지 않은 곳)을 누르면 거기만 교차로로 이어져요 — 연달아 눌러도 돼요(다시 누르면 꺼짐)",
     "delete": "교차로(빨간 점선 원)나 신호등(빨간 원)·길 중간 횡단보도(파란 점)를 누르면 지워요 — 연달아 눌러도 돼요(다시 누르면 꺼짐)",
@@ -1820,6 +1957,7 @@
       selected = null;
       renderPanel();
     }
+    setTerrainVisible();
     if (mode === "add-junction") refreshJoinSpots(true);
     if (mode === "delete") { refreshDeleteTargets(); toast("지울 교차로(빨간 점선 원)나 신호등(빨간 원)을 누르세요."); }
   }
@@ -1830,6 +1968,7 @@
   addButtons["add-signal"].addEventListener("click", () => setMode("add-signal"));
   addButtons["add-junction"].addEventListener("click", () => setMode("add-junction"));
   addButtons["add-fence"].addEventListener("click", () => setMode("add-fence"));
+  addButtons["add-terrain"].addEventListener("click", () => setMode("add-terrain"));
   addButtons["delete"].addEventListener("click", () => setMode("delete"));
   window.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
@@ -2094,6 +2233,18 @@
       setMode("add-signal");
       selectCrossNode(cnode);
       toast("횡단보도·신호등을 놓았어요 — 파란 점을 끌어 옮기고, 오른쪽에서 신호등을 끄거나 지울 수 있어요.");
+      return;
+    }
+    if (mode === "add-terrain") {
+      const near = terrainNodes.map((n) => [n, Math.hypot(n.pt.x - rx, n.pt.z - rz)]).sort((a, b) => a[1] - b[1])[0];
+      // 있는 점 바로 위(화면에서 약 14px 안)를 누르면 새로 만들지 않고 그 점을 고른다
+      if (near && near[1] / SCALE * zoom < (COARSE ? 22 : 14)) { setMode("add-terrain"); selectTerrainNode(near[0]); return; }
+      const pt = { x: Math.round(rx * 10) / 10, z: Math.round(rz * 10) / 10, h: near ? near[0].pt.h : 1, name: "" };
+      TERRAIN_POINTS.push(pt);
+      const node = addTerrainNode(pt);
+      setMode("add-terrain");
+      selectTerrainNode(node);
+      toast("높이 점을 놓았어요 — 오른쪽에서 몇 층인지 고치세요(처음엔 가장 가까운 점과 같은 높이).");
       return;
     }
     if (mode === "add-fence") {
@@ -2380,6 +2531,12 @@
   function serializeFence(f) {
     return `  { a: [${fmtNum(f.a[0])}, ${fmtNum(f.a[1])}], b: [${fmtNum(f.b[0])}, ${fmtNum(f.b[1])}], type: ${JSON.stringify(f.type || "parkhills_glass")}${f.base === false ? ", base: false" : ""} },`;
   }
+  function serializeTerrainZone(z) {
+    return `  { name: ${JSON.stringify(z.name || "")}, poly: [${z.poly.map(([x, zz]) => `[${fmtNum(x)}, ${fmtNum(zz)}]`).join(", ")}] },`;
+  }
+  function serializeTerrainPoint(t) {
+    return `  { x: ${fmtNum(t.x)}, z: ${fmtNum(t.z)}, h: ${Math.round(t.h * 100) / 100}${t.name ? `, name: ${JSON.stringify(t.name)}` : ""} },`;
+  }
   function serializePark(p) {
     return `  { id: ${p.id}, x: ${fmtNum(p.x)}, z: ${fmtNum(p.z)}, w: ${fmtNum(p.w)}, d: ${fmtNum(p.d)}, rotationDeg: ${fmtNum(p.rotationDeg || 0)} },`;
   }
@@ -2396,7 +2553,7 @@
   }
   function buildMapDataFile() {
     // 파일에 있는 목록만 그 자리에서 바꿔치기한다(CROSSWALKS는 예전 파일엔 없을 수 있어서 없으면 맨 뒤에 붙인다)
-    const sections = ["PLACES", "ROAD_SEGMENTS", "TREES", "PARKS", "CROSSWALKS", "FENCES"]
+    const sections = ["PLACES", "ROAD_SEGMENTS", "TREES", "PARKS", "CROSSWALKS", "FENCES", "TERRAIN_ZONES", "TERRAIN_POINTS"]
       .map((name) => ({ name, ...sliceArraySection(name) }))
       .filter((sec) => sec.start >= 0)
       .sort((p, q) => p.start - q.start);
@@ -2408,6 +2565,8 @@
       PARKS: "export const PARKS = [\n" + PARKS.map(serializePark).join("\n") + (PARKS.length ? "\n" : "") + "];",
       CROSSWALKS: "export const CROSSWALKS = [\n" + CROSSWALKS.map(serializeCrosswalk).join("\n") + (CROSSWALKS.length ? "\n" : "") + "];",
       FENCES: "export const FENCES = [\n" + FENCES.map(serializeFence).join("\n") + (FENCES.length ? "\n" : "") + "];",
+      TERRAIN_ZONES: "export const TERRAIN_ZONES = [\n" + TERRAIN_ZONES.map(serializeTerrainZone).join("\n") + (TERRAIN_ZONES.length ? "\n" : "") + "];",
+      TERRAIN_POINTS: "export const TERRAIN_POINTS = [\n" + TERRAIN_POINTS.map(serializeTerrainPoint).join("\n") + (TERRAIN_POINTS.length ? "\n" : "") + "];",
     };
     for (let i = 0; i < sections.length; i++) {
       out += blocks[sections[i].name];
@@ -2476,7 +2635,7 @@
     window.dispatchEvent(new PointerEvent("pointerup", { pointerType: "touch" }));
   }
   // 끌 수 있는 걸 손가락으로 누르면 화면이 같이 스크롤되지 않게(iOS는 SVG의 touch-action을 잘 안 지켜서 한 번 더 막는다)
-  const DRAGGABLE = ".marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect, .cw-hit, .fence-hit";
+  const DRAGGABLE = ".marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect, .cw-hit, .fence-hit, .terrain-pt";
   svg.addEventListener("touchstart", (ev) => {
     if (ev.touches.length === 1 && ev.target.closest && ev.target.closest(DRAGGABLE) && mode === "select") ev.preventDefault();
   }, { passive: false });
@@ -2645,7 +2804,7 @@
   const undoBtn = document.getElementById("undoBtn");
   const redoBtn = document.getElementById("redoBtn");
   function snapshotState() {
-    return JSON.stringify({ PLACES, ROADS, PARKS, TREES, CROSSWALKS, FENCES });
+    return JSON.stringify({ PLACES, ROADS, PARKS, TREES, CROSSWALKS, FENCES, TERRAIN_POINTS });
   }
   function updateUndoButtons() {
     undoBtn.disabled = undoStack.length === 0;
@@ -2672,13 +2831,14 @@
     replaceAll(TREES, st.TREES);
     replaceAll(CROSSWALKS, st.CROSSWALKS || []);
     replaceAll(FENCES, st.FENCES || []);
+    replaceAll(TERRAIN_POINTS, st.TERRAIN_POINTS || []);
     rebuildView();
   }
   function rebuildView() {
     selected = null;
     pendingRoadStart = null;
     pendingFenceStart = null;
-    [parkLayer, sidewalkLayer, laneLayer, roadMarkLayer, skyLayer, fenceLayer, treeLayer, placeLayer, crossLayer, pendingLayer, handleLayer].forEach((l) => { l.innerHTML = ""; });
+    [parkLayer, sidewalkLayer, laneLayer, roadMarkLayer, skyLayer, fenceLayer, terrainLayer, treeLayer, placeLayer, crossLayer, pendingLayer, handleLayer].forEach((l) => { l.innerHTML = ""; });
     // roadLayer 안에는 도로 표면 묶음(roadSurfaceLayer)도 들어 있어서 통째로 비우면 안 된다 — 클릭 영역(hit)만 지운다
     [...roadLayer.children].forEach((c) => { if (c !== roadSurfaceLayer) c.remove(); });
     roadRankGroups.forEach((g) => { g.innerHTML = ""; });
@@ -2691,12 +2851,16 @@
     treeNodes.length = 0;
     crossNodes.length = 0;
     fenceNodes.length = 0;
+    terrainNodes.length = 0;
     PLACES.forEach(addPlaceNode);
     ROADS.forEach(addRoadNode);
     PARKS.forEach(addParkNode);
     TREES.forEach(addTreeNode);
     CROSSWALKS.forEach(addCrossNode);
     FENCES.forEach(addFenceNode);
+    drawTerrainZones();
+    TERRAIN_POINTS.forEach(addTerrainNode);
+    setTerrainVisible();
     scheduleRoadMarkings();
     renderPanel();
     if (mode === "add-junction") refreshJoinSpots(false);

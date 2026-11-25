@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261124b";
+import * as MAP_DATA from "./map_data.js?v=20261125t";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 
@@ -16,6 +16,9 @@ const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
 // 이름을 골라 가져오지 않고(없으면 모듈 전체가 깨진다) 통째로 받아서 있으면 쓴다
 const CROSSWALKS = Array.isArray(MAP_DATA.CROSSWALKS) ? MAP_DATA.CROSSWALKS : [];
 const FENCES = Array.isArray(MAP_DATA.FENCES) ? MAP_DATA.FENCES : []; // 울타리 토막 { a, b, type, base? }
+// 지형 높이(단차): 높이가 다른 구역(예: 금호파크힐스 단지)의 외곽선과 높이 점 — 맵 에디터 "⛰ 지형 높이"로 다룬다
+const TERRAIN_ZONES = Array.isArray(MAP_DATA.TERRAIN_ZONES) ? MAP_DATA.TERRAIN_ZONES : [];
+const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN_POINTS : [];
 
 const ASSET_VERSION = "20261125b";
 
@@ -99,6 +102,112 @@ const NAME_COLOR_OVERRIDE = {
 // 지도 화면에서 움직이는 정도로 느껴지도록 전체를 줄여 쓴다 — 113동(우리집) 건물 밑변이
 // 이로이 캐릭터(키 1.7) 두 배쯤 되도록 축척을 잡았다(22m짜리 폭 → 약 3.3)
 const WORLD_SCALE = 0.15;
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── 지형 높이(단차) — 주인공 집이 있는 금호파크힐스처럼 바깥 도로보다 높은 단지 ──
+// · map_data.js의 TERRAIN_ZONES(구역 외곽선)과 TERRAIN_POINTS(높이 점, h = 바깥 도로 기준 "층", 1층 = 3m)로
+//   구역 안의 땅 높이를 정한다: 높이 점들 사이는 거리에 반비례하는 가중 평균(가까운 점일수록 크게)으로 부드럽게 잇는다.
+// · 구역 밖은 높이 0(지금까지처럼 평평). 구역 경계에는 옹벽(+높으면 위에 난간)을 세운다 — 단지 출입구(높이 0인
+//   점을 둔 곳)는 옹벽 없이 경사로가 된다.
+// · 게임 계산(걷기·충돌·행인·차 경로 등)은 전부 평평한 땅 기준 그대로 두고, "그릴 때만" 구역 안의 모든 꼭짓점을
+//   그 자리 땅 높이만큼 올린다(three.js의 project_vertex·worldpos_vertex 조각을 고쳐서 — 건물·도로·나무·사람·차·
+//   캐릭터·그림자까지 한 번에 같이 올라간다). 구역 밖 물체는 계산을 바로 건너뛰어서 부담이 거의 없다.
+// ════════════════════════════════════════════════════════════════════════════
+const TERRAIN_FLOOR_M = 3; // 1층 높이(raw m)
+const terrainZones = TERRAIN_ZONES.map((zone) => {
+  const poly = (zone.poly || []).map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
+  if (poly.length < 3) return null;
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  poly.forEach(([x, z]) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); });
+  return { name: zone.name || "", poly, box: [x0, z0, x1, z1], points: [] };
+}).filter(Boolean);
+function pointInPoly2(x, z, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > z) !== (b[1] > z) && x < ((b[0] - a[0]) * (z - a[1])) / (b[1] - a[1]) + a[0]) c = !c;
+  }
+  return c;
+}
+// 높이 점은 그 점이 들어 있는(또는 경계에서 15m 안인) 구역에 속한다 — 출입구 점은 경계선 위에 찍어도 된다
+TERRAIN_POINTS.forEach((pt) => {
+  const x = pt.x * WORLD_SCALE, z = pt.z * WORLD_SCALE, h = (pt.h || 0) * TERRAIN_FLOOR_M * WORLD_SCALE;
+  const zone = terrainZones.find((zn) => pointInPoly2(x, z, zn.poly)) ||
+    terrainZones.find((zn) => zn.poly.some((a, i) => { const b = zn.poly[(i + 1) % zn.poly.length]; return distToSegmentRaw(x, z, a, b) < 15 * WORLD_SCALE; }));
+  if (zone) zone.points.push([x, z, h]);
+});
+function distToSegmentRaw(px, pz, a, b) {
+  const dx = b[0] - a[0], dz = b[1] - a[1];
+  const L2 = dx * dx + dz * dz || 1e-9;
+  const t = Math.max(0, Math.min(1, ((px - a[0]) * dx + (pz - a[1]) * dz) / L2));
+  return Math.hypot(px - a[0] - dx * t, pz - a[1] - dz * t);
+}
+const TERRAIN_EPS = 0.006; // 가중치 계산의 작은 값(월드² — 높이 점 바로 위에서 0으로 나누지 않게)
+// 구역 안 땅 높이(외곽선 검사 없이) — 셰이더와 같은 식
+function zoneHeightRaw(zone, x, z) {
+  if (!zone.points.length) return 0;
+  let sw = 0, sh = 0;
+  for (const [px, pz, h] of zone.points) {
+    const w = 1 / ((x - px) * (x - px) + (z - pz) * (z - pz) + TERRAIN_EPS);
+    sw += w;
+    sh += w * h;
+  }
+  return sh / sw;
+}
+// 월드 좌표 (x, z)의 땅 높이(월드 단위) — 구역 밖이면 0
+function terrainAt(x, z) {
+  for (const zone of terrainZones) {
+    const [x0, z0, x1, z1] = zone.box;
+    if (x < x0 || x > x1 || z < z0 || z > z1) continue;
+    if (pointInPoly2(x, z, zone.poly)) return zoneHeightRaw(zone, x, z);
+  }
+  return 0;
+}
+// 셰이더용 함수(구역·점 값을 상수로 박아 넣는다 — 맵을 불러올 때 한 번 만든다)
+function buildTerrainGLSL() {
+  const f = (v) => (Number.isInteger(v) ? v.toFixed(1) : String(+v.toFixed(5)));
+  const parts = ["float nbZoneH(vec2 p, int zi) { return 0.0; }"];
+  const insideFns = [], heightFns = [];
+  terrainZones.forEach((zone, zi) => {
+    const n = zone.poly.length, m = Math.max(1, zone.points.length);
+    const pts = zone.points.length ? zone.points : [[0, 0, 0]];
+    parts.push(`const vec2 NB_POLY${zi}[${n}] = vec2[${n}](${zone.poly.map(([x, z]) => `vec2(${f(x)}, ${f(z)})`).join(", ")});`);
+    parts.push(`const vec3 NB_PTS${zi}[${m}] = vec3[${m}](${pts.map(([x, z, h]) => `vec3(${f(x)}, ${f(z)}, ${f(h)})`).join(", ")});`);
+    parts.push(`bool nbIn${zi}(vec2 p) {
+  if (p.x < ${f(zone.box[0])} || p.x > ${f(zone.box[2])} || p.y < ${f(zone.box[1])} || p.y > ${f(zone.box[3])}) return false;
+  bool c = false;
+  for (int i = 0, j = ${n - 1}; i < ${n}; j = i++) {
+    vec2 a = NB_POLY${zi}[i], b = NB_POLY${zi}[j];
+    if (((a.y > p.y) != (b.y > p.y)) && (p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)) c = !c;
+  }
+  return c;
+}
+float nbH${zi}(vec2 p) {
+  float sw = 0.0, sh = 0.0;
+  for (int i = 0; i < ${m}; i++) { vec2 d = p - NB_PTS${zi}[i].xy; float w = 1.0 / (dot(d, d) + ${f(TERRAIN_EPS)}); sw += w; sh += w * NB_PTS${zi}[i].z; }
+  return sh / sw;
+}`);
+    insideFns.push(`nbIn${zi}(p)`);
+    heightFns.push(`if (nbIn${zi}(p)) return nbH${zi}(p);`);
+  });
+  parts.push(`bool nbInZone(vec2 p) { return ${insideFns.join(" || ") || "false"}; }`);
+  // 외곽선 검사 없이(구역 사각 범위 안이면) 그 구역 높이 — 땅 메시 가장자리가 옹벽 꼭대기까지 꽉 차게
+  parts.push(`float nbTerrainAny(vec2 p) { ${terrainZones.map((zone, zi) => `if (p.x >= ${f(zone.box[0] - 2)} && p.x <= ${f(zone.box[2] + 2)} && p.y >= ${f(zone.box[1] - 2)} && p.y <= ${f(zone.box[3] + 2)}) return nbH${zi}(p);`).join(" ")} return 0.0; }`);
+  parts.push(`float nbTerrain(vec2 p) { ${heightFns.join(" ")} return 0.0; }`);
+  return parts.slice(1).join("\n");
+}
+if (terrainZones.length) {
+  // 모든 재질의 정점 위치 계산(project_vertex)과 그림자·환경용 월드 위치(worldpos_vertex)에 땅 높이를 더한다
+  THREE.ShaderChunk.common += "\n" + buildTerrainGLSL() + "\n";
+  THREE.ShaderChunk.project_vertex = THREE.ShaderChunk.project_vertex.replace(
+    "mvPosition = modelViewMatrix * mvPosition;",
+    "vec4 nbWorldPos = modelMatrix * mvPosition;\nnbWorldPos.y += nbTerrain(nbWorldPos.xz);\nmvPosition = viewMatrix * nbWorldPos;"
+  );
+  THREE.ShaderChunk.worldpos_vertex = THREE.ShaderChunk.worldpos_vertex.replace(
+    "worldPosition = modelMatrix * worldPosition;",
+    "worldPosition = modelMatrix * worldPosition;\n\tworldPosition.y += nbTerrain(worldPosition.xz);"
+  );
+}
 // 도로 지도(kakaomap_road1.png, 사용자가 건물번호 지도와 같은 위성사진 위에 빨간색으로 도로를
 // 직접 칠해 준 버전) 기준. 이 지도는 번호 지도(kakaomap_number.png)와 완전히 같은 사진이라, 건물
 // 좌표를 구할 때 썼던 것과 같은 축척·기준점으로 도로 모양을 그대로 옮길 수 있었다 — 빨간색 영역을
@@ -390,6 +499,7 @@ function buildStaticScene() {
   bg.rotation.x = -Math.PI / 2;
   bg.position.set((AREA_MIN_X + AREA_MAX_X) / 2, -0.03, (AREA_MIN_Z + AREA_MAX_Z) / 2);
   bg.receiveShadow = true;
+  bg.renderOrder = -3;
   scene.add(bg);
 
   // 네이버 지도 이미지를 실제 좌표에 맞춰 바닥에 깐다(없으면 위의 초록 바닥이 그대로 보임)
@@ -412,6 +522,8 @@ function buildStaticScene() {
   buildRoads();
   buildRoadsideProps();
   buildFences();
+  buildTerrainWalls();
+  tessellateForTerrain(scene.children.filter((o) => !before.has(o)));
   freezeStaticObjects([bg, ...scene.children.filter((o) => !before.has(o))]);
   buildPlaces();
   before = new Set(scene.children);
@@ -441,6 +553,193 @@ const MAP_IMAGE = {
   scale: 0.728, // raw 단위 / 이미지 px
   anchorPx: { x: 1339.4, y: 1381.5 }, // 주황색으로 칠해진 113동(우리집, raw 0,0)의 이미지 픽셀 좌표
 };
+// 지형 단차 구역의 땅: 같은 지도 그림을 잘게 나눈 판에 입혀서 땅 높이만큼 올리고, 구역 밖 부분은 그리지 않는다.
+// 깊이(depth)를 쓰지 않고 바닥 바로 다음에 그려서, 도로·건물 바닥판 등이 언제나 그 위에 보인다(높이가 조금씩 어긋나도
+// 땅이 도로를 뚫고 올라오지 않게).
+const TERRAIN_GRID_RAW = 6; // 땅 판 한 칸(raw m)
+function buildTerrainGround(tex, mapCx, mapCz, mapW, mapH) {
+  terrainZones.forEach((zone) => {
+    const [x0, z0, x1, z1] = zone.box;
+    const cell = TERRAIN_GRID_RAW * WORLD_SCALE;
+    const nx = Math.max(1, Math.ceil((x1 - x0) / cell)), nz = Math.max(1, Math.ceil((z1 - z0) / cell));
+    const geo = new THREE.PlaneGeometry(nx * cell, nz * cell, nx, nz);
+    geo.rotateX(-Math.PI / 2);
+    geo.translate(x0 + (nx * cell) / 2, 0, z0 + (nz * cell) / 2);
+    // 바닥 지도와 같은 자리에 같은 그림이 오게 UV를 다시 계산
+    const pos = geo.attributes.position, uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      uv.setXY(i, (pos.getX(i) - (mapCx - mapW / 2)) / mapW, 1 - (pos.getZ(i) - (mapCz - mapH / 2)) / mapH);
+    }
+    uv.needsUpdate = true;
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 1, depthWrite: false });
+    mat.customProgramCacheKey = () => "nb-terrain-ground";
+    mat.onBeforeCompile = (shader) => {
+      const lift = (v) => `${v}.y += nbTerrainAny(${v}.xz);`;
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\nvarying vec2 vNbXZ;")
+        .replace("#include <project_vertex>", `vec4 nbW = modelMatrix * vec4(transformed, 1.0);\nvNbXZ = nbW.xz;\n${lift("nbW")}\nvec4 mvPosition = viewMatrix * nbW;\ngl_Position = projectionMatrix * mvPosition;`)
+        .replace("#include <worldpos_vertex>", `vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);\n${lift("worldPosition")}`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace("#include <common>", "#include <common>\nvarying vec2 vNbXZ;")
+        .replace("void main() {", "void main() {\n  if (!nbInZone(vNbXZ)) discard;");
+    };
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.y = -0.015;
+    mesh.receiveShadow = true;
+    mesh.renderOrder = -1;
+    mesh.userData.noTerrainTess = true;
+    scene.add(mesh);
+  });
+}
+// 지형 구역 경계의 옹벽(+높은 곳은 위에 난간). 꼭짓점을 구역 바깥으로 아주 조금 비켜 놓아서 셰이더가 다시 올리지
+// 않게 하고, 높이는 직접(절대값으로) 준다. 높이가 거의 0인 곳(출입구)은 비운다.
+function buildTerrainWalls() {
+  if (!terrainZones.length) return;
+  const W = WORLD_SCALE;
+  const wall = { pos: [], uv: [], idx: [] }, cap = { pos: [], idx: [] }, rail = { pos: [], idx: [] };
+  const posts = [];
+  const quad = (store, a, b, c, d, uvs) => {
+    const base = store.pos.length / 3;
+    [a, b, c, d].forEach((v) => store.pos.push(v[0], v[1], v[2]));
+    if (uvs) uvs.forEach((u) => store.uv.push(u[0], u[1]));
+    store.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  const OUT = 0.04 * W, CAP = 0.35 * W, RAIL_H = 1.1 * W, POST_EVERY = 2.5 * W;
+  terrainZones.forEach((zone) => {
+    const P = zone.poly;
+    let along = 0;
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i], b = P[(i + 1) % P.length];
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (L < 1e-4) continue;
+      const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
+      let nx = uz, nz = -ux; // 바깥쪽 법선(구역 안이면 뒤집는다)
+      const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+      if (pointInPoly2(mx + nx * 0.02, mz + nz * 0.02, P)) { nx = -nx; nz = -nz; }
+      const n = Math.max(1, Math.ceil(L / (1.5 * W)));
+      let nextPost = 0;
+      for (let k = 0; k < n; k++) {
+        const t0 = k / n, t1 = (k + 1) / n;
+        const p0 = [a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0], p1 = [a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1];
+        const h0 = zoneHeightRaw(zone, p0[0], p0[1]), h1 = zoneHeightRaw(zone, p1[0], p1[1]);
+        const d0 = along + L * t0, d1 = along + L * t1;
+        if (Math.max(h0, h1) < 0.15 * W) continue; // 출입구(땅 높이 거의 0)는 벽 없이
+        const o0 = [p0[0] + nx * OUT, p0[1] + nz * OUT], o1 = [p1[0] + nx * OUT, p1[1] + nz * OUT];
+        const yb = -0.03;
+        quad(wall, [o0[0], yb, o0[1]], [o1[0], yb, o1[1]], [o1[0], h1, o1[1]], [o0[0], h0, o0[1]],
+          [[d0 / (2 * W), yb / (1.9 * W)], [d1 / (2 * W), yb / (1.9 * W)], [d1 / (2 * W), h1 / (1.9 * W)], [d0 / (2 * W), h0 / (1.9 * W)]]);
+        // 벽 위 두겁석(바깥쪽으로 살짝 내민 띠)
+        const c0 = [o0[0] + nx * CAP * 0.3, o0[1] + nz * CAP * 0.3], c1 = [o1[0] + nx * CAP * 0.3, o1[1] + nz * CAP * 0.3];
+        quad(cap, [o0[0], h0 + 0.004, o0[1]], [o1[0], h1 + 0.004, o1[1]], [c1[0], h1 + 0.004, c1[1]], [c0[0], h0 + 0.004, c0[1]]);
+        quad(cap, [c0[0], h0 - 0.03, c0[1]], [c1[0], h1 - 0.03, c1[1]], [c1[0], h1 + 0.004, c1[1]], [c0[0], h0 + 0.004, c0[1]]);
+        // 1.5m 넘는 옹벽 위에는 난간
+        if (Math.min(h0, h1) > 1.5 * W) {
+          const r0 = [o0[0] + nx * 0.01, o0[1] + nz * 0.01], r1 = [o1[0] + nx * 0.01, o1[1] + nz * 0.01];
+          quad(rail, [r0[0], h0 + RAIL_H - 0.012, r0[1]], [r1[0], h1 + RAIL_H - 0.012, r1[1]], [r1[0], h1 + RAIL_H, r1[1]], [r0[0], h0 + RAIL_H, r0[1]]);
+          quad(rail, [r0[0], h0 + RAIL_H * 0.5 - 0.008, r0[1]], [r1[0], h1 + RAIL_H * 0.5 - 0.008, r1[1]], [r1[0], h1 + RAIL_H * 0.5, r1[1]], [r0[0], h0 + RAIL_H * 0.5, r0[1]]);
+          while (nextPost <= L * t1) {
+            if (nextPost >= L * t0) {
+              const tt = nextPost / L;
+              posts.push([a[0] + (b[0] - a[0]) * tt + nx * (OUT + 0.01), zoneHeightRaw(zone, a[0] + (b[0] - a[0]) * tt, a[1] + (b[1] - a[1]) * tt), a[1] + (b[1] - a[1]) * tt + nz * (OUT + 0.01)]);
+            }
+            nextPost += POST_EVERY;
+          }
+        } else nextPost = L * t1;
+      }
+      along += L;
+    }
+  });
+  const mk = (store, mat, withUv) => {
+    if (!store.idx.length) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(store.pos, 3));
+    if (withUv) geo.setAttribute("uv", new THREE.Float32BufferAttribute(store.uv, 2));
+    geo.setIndex(store.idx);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    mesh.userData.noTerrainTess = true;
+    scene.add(mesh);
+    return mesh;
+  };
+  const stoneTex = fenceTexture("stone").clone();
+  stoneTex.wrapS = stoneTex.wrapT = THREE.RepeatWrapping;
+  stoneTex.needsUpdate = true;
+  mk(wall, new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.9, side: THREE.DoubleSide }), true);
+  mk(cap, new THREE.MeshStandardMaterial({ color: 0xb9b4a6, roughness: 0.85, side: THREE.DoubleSide }), false);
+  const railMat = new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: 0.5, metalness: 0.5, side: THREE.DoubleSide });
+  mk(rail, railMat, false);
+  if (posts.length) {
+    const postGeo = new THREE.BoxGeometry(0.012, RAIL_H, 0.012);
+    postGeo.translate(0, RAIL_H / 2, 0);
+    const inst = new THREE.InstancedMesh(postGeo, railMat, posts.length);
+    const mtx = new THREE.Matrix4();
+    posts.forEach(([x, y, z], i) => inst.setMatrixAt(i, mtx.makeTranslation(x, y, z)));
+    inst.instanceMatrix.needsUpdate = true;
+    inst.computeBoundingSphere();
+    scene.add(inst);
+  }
+}
+
+// 지형 구역 안에 걸친 큰 판(직선 도로 리본·공원 판·교차로 채움 등)은 꼭짓점이 양 끝에만 있어서 땅 높이를 따라
+// 휘지 못한다 — 긴 삼각형을 반으로 나누기를 되풀이해 한 변이 약 4m 아래가 되게 잘게 쪼갠다(구역에 걸친 것만).
+const TERRAIN_TESS_RAW = 4;
+function tessellateForTerrain(objects) {
+  if (!terrainZones.length) return;
+  const maxLen = TERRAIN_TESS_RAW * WORLD_SCALE;
+  const boxes = terrainZones.map((z) => z.box);
+  const hitsZone = (b) => boxes.some(([x0, z0, x1, z1]) => b.max.x >= x0 && b.min.x <= x1 && b.max.z >= z0 && b.min.z <= z1);
+  objects.forEach((obj) => {
+    obj.traverse((o) => {
+      if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o.userData.noTerrainTess) return;
+      const geo = o.geometry;
+      if (!geo || !geo.attributes.position || geo.groups.length > 1 || Object.keys(geo.morphAttributes || {}).length) return;
+      o.updateMatrixWorld(true);
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      const wb = geo.boundingBox.clone().applyMatrix4(o.matrixWorld);
+      if (!hitsZone(wb)) return;
+      const out = splitLongTriangles(geo, maxLen);
+      if (out) { o.geometry = out; geo.dispose(); }
+    });
+  });
+}
+function splitLongTriangles(geo, maxLen) {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  const names = Object.keys(g.attributes);
+  const attrs = names.map((n) => g.attributes[n]);
+  const pos = g.attributes.position;
+  const max2 = maxLen * maxLen;
+  let need = false;
+  for (let i = 0; i < pos.count && !need; i += 3) {
+    for (let e = 0; e < 3; e++) {
+      const a = i + e, b = i + ((e + 1) % 3);
+      const dx = pos.getX(a) - pos.getX(b), dy = pos.getY(a) - pos.getY(b), dz = pos.getZ(a) - pos.getZ(b);
+      if (dx * dx + dy * dy + dz * dz > max2) { need = true; break; }
+    }
+  }
+  if (!need) { if (g !== geo) g.dispose(); return null; }
+  const outArr = attrs.map(() => []);
+  const vert = (i) => attrs.map((at) => { const v = []; for (let c = 0; c < at.itemSize; c++) v.push(at.array[i * at.itemSize + c] ?? 0); return v; });
+  const mid = (A, B) => A.map((va, k) => va.map((x, c) => (x + B[k][c]) / 2));
+  const d2 = (A, B) => { const p = A[names.indexOf("position")], q = B[names.indexOf("position")]; return (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2; };
+  const emit = (A, B, C, depth) => {
+    const ab = d2(A, B), bc = d2(B, C), ca = d2(C, A);
+    const m = Math.max(ab, bc, ca);
+    if (m <= max2 || depth > 14) {
+      [A, B, C].forEach((V) => V.forEach((v, k) => outArr[k].push(...v)));
+      return;
+    }
+    if (m === ab) { const M = mid(A, B); emit(A, M, C, depth + 1); emit(M, B, C, depth + 1); }
+    else if (m === bc) { const M = mid(B, C); emit(A, B, M, depth + 1); emit(A, M, C, depth + 1); }
+    else { const M = mid(C, A); emit(A, B, M, depth + 1); emit(M, B, C, depth + 1); }
+  };
+  for (let i = 0; i < pos.count; i += 3) emit(vert(i), vert(i + 1), vert(i + 2), 0);
+  const out = new THREE.BufferGeometry();
+  names.forEach((n, k) => out.setAttribute(n, new THREE.Float32BufferAttribute(outArr[k], attrs[k].itemSize)));
+  if (g !== geo) g.dispose();
+  return out;
+}
 function buildMapGround(scene) {
   new THREE.TextureLoader().load(
     `${MAP_IMAGE.file}?v=${ASSET_VERSION}`,
@@ -458,7 +757,9 @@ function buildMapGround(scene) {
       const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
       mesh.position.set(cx, -0.025, cz);
       mesh.receiveShadow = true;
+      mesh.renderOrder = -2; // 지형 단차 땅(아래)보다 먼저
       scene.add(mesh);
+      buildTerrainGround(tex, cx, cz, w, h);
     },
     undefined,
     () => console.warn("지도 바닥 이미지를 불러오지 못했다")
@@ -2377,7 +2678,8 @@ function buildPlaces() {
 
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
-    label.position.set(px, groundY + height + 1.1, pz);
+    const terrainLift = terrainAt(px, pz); // 지형 단차(이름표는 그림 셰이더가 아니라서 직접 올린다)
+    label.position.set(px, groundY + terrainLift + height + 1.1, pz);
     label.userData.placeId = place.id; // updateLabelVisibility에서 거리·목적지 판정에 쓴다
     scene.add(label);
 
@@ -2386,7 +2688,7 @@ function buildPlaces() {
       new THREE.SpriteMaterial({ map: highlightTexture(), color: 0x3fa9ff, transparent: true, opacity: 0, depthTest: false })
     );
     highlight.scale.set(5, 5, 1);
-    highlight.position.set(px, groundY + height + 1.1, pz);
+    highlight.position.set(px, groundY + terrainLift + height + 1.1, pz);
     highlight.renderOrder = 998;
     highlight.visible = false;
     scene.add(highlight);
@@ -2986,6 +3288,7 @@ function spawnErrandMom() {
 // 방향키는 "월드 기준 앞/뒤/좌/우"가 아니라, 지금 마우스로 돌려 둔 카메라가 보는 방향을 기준으로
 // 움직인다 — 카메라를 오른쪽으로 돌렸으면 위쪽 키가 그 돌린 방향으로 가도록, camYaw를 매 프레임
 // 그대로 반영한다.
+const TERRAIN_STEP_MAX = 1.0 * WORLD_SCALE; // 한 걸음에 오르내릴 수 있는 땅 높이 차(raw 1m) — 경사로는 되고 옹벽은 안 된다
 function updateMovement(dt) {
   characterMoving = false;
   if (!character || dancing) return;
@@ -3009,6 +3312,16 @@ function updateMovement(dt) {
     let nz = curZ + dir.z * speed * dt;
     nx = Math.max(AREA_MIN_X + 1, Math.min(AREA_MAX_X - 1, nx));
     nz = Math.max(AREA_MIN_Z + 1, Math.min(AREA_MAX_Z - 1, nz));
+    // 옹벽(땅 높이가 갑자기 1m 넘게 바뀌는 곳)은 못 넘는다 — 벽을 따라 미끄러지듯 한쪽 방향으로만 움직여 본다
+    if (terrainZones.length) {
+      const t0 = terrainAt(curX, curZ);
+      const ok = (x, z) => Math.abs(terrainAt(x, z) - t0) <= TERRAIN_STEP_MAX;
+      if (!ok(nx, nz)) {
+        if (ok(nx, curZ)) nz = curZ;
+        else if (ok(curX, nz)) nx = curX;
+        else { nx = curX; nz = curZ; }
+      }
+    }
     character.position.x = nx;
     character.position.z = nz;
     character.rotation.y = Math.atan2(dir.x, dir.z);
@@ -3109,12 +3422,14 @@ function wireDpad() {
 
 function updateCamera() {
   if (!character) return;
+  // 지형 단차가 있는 곳에선 캐릭터가 그려지는 높이(땅 높이만큼 올라감)를 따라간다
+  const ty = character.position.y + terrainAt(character.position.x, character.position.z);
   const x = character.position.x + camDistance * Math.cos(camPitch) * Math.sin(camYaw);
   // 아래를 볼 때(pitch < 0)는 카메라가 땅 밑으로 내려가지 않게 바닥 위에 머문다
-  const y = Math.max(0.25, character.position.y + camDistance * Math.sin(camPitch) + CAM_LOOK_Y);
+  const y = Math.max(0.25 + ty - character.position.y, ty + camDistance * Math.sin(camPitch) + CAM_LOOK_Y);
   const z = character.position.z + camDistance * Math.cos(camPitch) * Math.cos(camYaw);
   camera.position.set(x, y, z);
-  camera.lookAt(character.position.x, character.position.y + CAM_LOOK_Y, character.position.z);
+  camera.lookAt(character.position.x, ty + CAM_LOOK_Y, character.position.z);
 }
 
 function animate() {
