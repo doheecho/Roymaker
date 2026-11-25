@@ -199,6 +199,14 @@
   "width": 22.083,
   "depth": 0.5
  },
+ "models/GameMap.glb": {
+  "file": "img/skyview/GameMap.webp",
+  "hash": "5b7c65f54f",
+  "minX": -1443.415,
+  "minZ": -1107.447,
+  "width": 2751.794,
+  "depth": 2142.673
+ },
  "models/Geumho_2Story_Commercial_NorthDoors.glb": {
   "file": "img/skyview/Geumho_2Story_Commercial_NorthDoors.webp",
   "hash": "520f9a8c38",
