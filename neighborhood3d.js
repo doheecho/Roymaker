@@ -788,20 +788,32 @@ const GLB_TERRAIN_ENABLED = true;
 let glbTerrain = null;
 const glbTerrainRaycaster = new THREE.Raycaster();
 // 보도·학교앞 글씨처럼 한 자리를 아주 촘촘히(raw 0.6m 간격) 여러 번 묻는 코드가 있어서, 캐시
-// 없이 매번 레이캐스트하면 씬을 짓는 데만 수십 초가 걸렸다(2026-11-25 발견) — 지형이 그렇게까지
-// 촘촘하게 바뀌진 않으니, raw 2m(scene 0.3) 격자로 캐시해서 가까운 자리는 결과를 그대로 쓴다.
+// 없이 매번 레이캐스트하면 씬을 짓는 데만 수십 초가 걸렸다(2026-11-25 발견). 그렇다고 그냥
+// "가장 가까운 격자점 값을 그대로 쓰는" 캐시로 하면(처음에 이렇게 했다가 바로 문제가 됨) 격자
+// 칸 경계마다 지형이 뚝 끊겨 보이고 — 옹벽 1m 이상은 못 넘는 캐릭터 걷기 체크가 그 "가짜 절벽"에
+// 걸려 아예 못 움직이는 심각한 버그가 생겼다. 그래서 레이캐스트 자체는 격자점에서만 하고(그 결과만
+// 캐시), 실제 반환값은 그 자리를 둘러싼 4개 격자점을 양선형보간(bilinear)해서 매끈하게 잇는다 —
+// 격자가 성겨도(raw 20m) 이어지는 값 자체는 끊김 없이 부드럽다.
 const TERRAIN_Y_CACHE_GRID = 3;
 const terrainYCache = new Map();
-function getTerrainY(x, z) {
-  if (!glbTerrain) return 0;
-  const key = Math.round(x / TERRAIN_Y_CACHE_GRID) + "," + Math.round(z / TERRAIN_Y_CACHE_GRID);
+function rawTerrainYAt(gx, gz) {
+  const key = gx + "," + gz;
   const cached = terrainYCache.get(key);
   if (cached !== undefined) return cached;
-  glbTerrainRaycaster.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
+  glbTerrainRaycaster.set(new THREE.Vector3(gx * TERRAIN_Y_CACHE_GRID, 1000, gz * TERRAIN_Y_CACHE_GRID), new THREE.Vector3(0, -1, 0));
   const hits = glbTerrainRaycaster.intersectObject(glbTerrain, true);
   const y = hits.length ? hits[0].point.y : 0;
   terrainYCache.set(key, y);
   return y;
+}
+function getTerrainY(x, z) {
+  if (!glbTerrain) return 0;
+  const fx = x / TERRAIN_Y_CACHE_GRID, fz = z / TERRAIN_Y_CACHE_GRID;
+  const gx0 = Math.floor(fx), gz0 = Math.floor(fz);
+  const tx = fx - gx0, tz = fz - gz0;
+  const h00 = rawTerrainYAt(gx0, gz0), h10 = rawTerrainYAt(gx0 + 1, gz0);
+  const h01 = rawTerrainYAt(gx0, gz0 + 1), h11 = rawTerrainYAt(gx0 + 1, gz0 + 1);
+  return h00 * (1 - tx) * (1 - tz) + h10 * tx * (1 - tz) + h01 * (1 - tx) * tz + h11 * tx * tz;
 }
 // 반환값: 기존 평평한 바닥(초록 들판 + 네이버 지도 이미지)으로 대신해야 하면 true, 이 실제
 // 지형으로 됐으면 false — buildStaticScene()이 이 값을 보고 평평한 바닥을 깔지 결정한다.
