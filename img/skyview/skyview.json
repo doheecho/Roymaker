@@ -623,6 +623,14 @@
   "width": 143.787,
   "depth": 160.273
  },
+ "models/place_금호초등학교2.glb": {
+  "file": "img/skyview/place_금호초등학교2.webp",
+  "hash": "49e818c8d0",
+  "minX": -50.458,
+  "minZ": -73.529,
+  "width": 100.507,
+  "depth": 148.727
+ },
  "models/place_남광빌딩.glb": {
   "file": "img/skyview/place_남광빌딩.webp",
   "hash": "7d38278065",
