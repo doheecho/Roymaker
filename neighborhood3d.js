@@ -2738,11 +2738,12 @@ function buildPlaces() {
     const groundY = (place.y || 0) * WORLD_SCALE;
     // 건물 바닥은 보도 높이(SIDEWALK_TOP_Y)에 맞춘다 — 도로는 그보다 낮다(문주 등 도로 위 시설은 예외)
     const baseLift = ROAD_LEVEL_PLACE_IDS.has(place.id) ? 0 : SIDEWALK_TOP_Y;
-    // 실제 지형(GLB)이 있으면 이 건물 자리의 실측 높이도 더한다 — 평지 가정이던 나머지 계산
-    // (groundY·baseLift·스커트 길이 등)은 전부 이 기준 위에 상대적으로 얹힌다.
-    const terrainY = getTerrainY(px, pz);
+    // 건물은 평지 기준으로 그대로 둔다(지형을 안 따라감) — 건물 폭 안에서도 실제 지형이 몇 m씩
+    // 바뀌는 곳이 많아서(금호동 특성상), 중심점 높이 하나로 앉히면 가파른 곳에서 바닥이 땅을
+    // 뚫고 올라오거나 떠 보이는 문제가 생겼다(2026-11-26, 행당대림108동 등에서 확인). 도로·보도·
+    // 캐릭터는 계속 지형을 따라가게 두고, 건물만 이 평지 가정으로 되돌렸다(사용자 결정).
     const group = new THREE.Group();
-    group.position.y = terrainY + groundY + baseLift;
+    group.position.y = groundY + baseLift;
     scene.add(group);
     if (groundY !== 0) {
       const skirtH = Math.abs(groundY + baseLift);
@@ -2809,7 +2810,7 @@ function buildPlaces() {
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
     const terrainLift = terrainAt(px, pz); // (예전) 금호파크힐스 구역 단차 — 이름표는 그림 셰이더가 아니라서 직접 올린다
-    label.position.set(px, terrainY + groundY + terrainLift + height + 1.1, pz);
+    label.position.set(px, groundY + terrainLift + height + 1.1, pz);
     label.userData.placeId = place.id; // updateLabelVisibility에서 거리·목적지 판정에 쓴다
     scene.add(label);
 
@@ -2818,7 +2819,7 @@ function buildPlaces() {
       new THREE.SpriteMaterial({ map: highlightTexture(), color: 0x3fa9ff, transparent: true, opacity: 0, depthTest: false })
     );
     highlight.scale.set(5, 5, 1);
-    highlight.position.set(px, terrainY + groundY + terrainLift + height + 1.1, pz);
+    highlight.position.set(px, groundY + terrainLift + height + 1.1, pz);
     highlight.renderOrder = 998;
     highlight.visible = false;
     scene.add(highlight);
