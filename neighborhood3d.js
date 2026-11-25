@@ -1135,8 +1135,12 @@ function buildRibbonGeometry(pts, tangents, width, offset = 0) {
     const px = -tz, pz = tx; // 진행 방향에 수직인 단위벡터
     const [x, z] = pts[i];
     const cx = x + px * offset, cz = z + pz * offset;
-    positions.push(cx + (px * width) / 2, 0, cz + (pz * width) / 2);
-    positions.push(cx - (px * width) / 2, 0, cz - (pz * width) / 2);
+    // 실제 지형(GLB)이 있으면 그 자리 높이를 정점마다 그대로 구워 넣는다 — 도로·중앙선·보도가
+    // 전부 이 함수 하나로 만들어지니, 여기 한 곳만 고치면 전부 비탈을 따라 휘어진다(mesh.position.y는
+    // 그 위에 더해지는 작은 우선순위 오프셋일 뿐이라 그대로 둬도 된다).
+    const y = getTerrainY(cx, cz);
+    positions.push(cx + (px * width) / 2, y, cz + (pz * width) / 2);
+    positions.push(cx - (px * width) / 2, y, cz - (pz * width) / 2);
   }
   const indices = [];
   for (let i = 0; i < n - 1; i++) {
@@ -1238,7 +1242,8 @@ function buildRoadRibbon(seg, segIndex) {
         while (nextDashAt < dist + segLen) {
           const t = (nextDashAt - dist) / segLen;
           if (inGap(nextDashAt / WORLD_SCALE)) { nextDashAt += step; continue; }
-          list.push({ x: x1 + dx * t + perpX * offset, z: z1 + dz * t + perpZ * offset, yaw, y: dashY });
+          const dx1 = x1 + dx * t + perpX * offset, dz1 = z1 + dz * t + perpZ * offset;
+          list.push({ x: dx1, z: dz1, yaw, y: dashY + getTerrainY(dx1, dz1) });
           nextDashAt += step;
         }
         dist += segLen;
@@ -1320,7 +1325,7 @@ function buildSchoolDecals() {
     const corner = (a, b) => [d.x + d.fx * a + rx * b, d.z + d.fz * a + rz * b];
     // 캔버스 위쪽(v=1)이 진행 방향 앞(멀리), 왼쪽(u=0)이 운전자 왼쪽
     [[corner(-hl, -hw), 0, 0], [corner(-hl, hw), 1, 0], [corner(hl, hw), 1, 1], [corner(hl, -hw), 0, 1]].forEach(([p, u, v]) => {
-      pos.push(p[0], 0, p[1]);
+      pos.push(p[0], getTerrainY(p[0], p[1]), p[1]);
       uv.push(u, v);
     });
     const b = k * 4;
@@ -2097,7 +2102,10 @@ function buildJunctionFillers() {
     const hull = convexHull2D(cornerPts);
     if (hull.length < 3) continue;
     const positions = [];
-    hull.forEach(([x, z]) => positions.push(x * WORLD_SCALE, 0, z * WORLD_SCALE));
+    hull.forEach(([x, z]) => {
+      const wx = x * WORLD_SCALE, wz = z * WORLD_SCALE;
+      positions.push(wx, getTerrainY(wx, wz), wz);
+    });
     const indices = [];
     for (let k = 1; k < hull.length - 1; k++) indices.push(0, k, k + 1);
     const geo = new THREE.BufferGeometry();
@@ -2122,7 +2130,10 @@ function buildRoadMarks() {
   const positions = [];
   const indices = [];
   quads.forEach((q, k) => {
-    q.forEach(([x, z]) => positions.push(x * WORLD_SCALE, 0, z * WORLD_SCALE));
+    q.forEach(([x, z]) => {
+      const wx = x * WORLD_SCALE, wz = z * WORLD_SCALE;
+      positions.push(wx, getTerrainY(wx, wz), wz);
+    });
     const b = k * 4;
     indices.push(b, b + 1, b + 2, b, b + 2, b + 3);
   });
