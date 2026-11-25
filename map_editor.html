@@ -415,6 +415,7 @@
         model: grab(line, /model:\s*"([^"]*)"/, String),
         rotationDeg: grab(line, /rotationDeg:\s*(-?[\d.]+)/, Number),
         scaleRatio: grab(line, /scaleRatio:\s*(-?[\d.]+)/, Number),
+        terrain: grab(line, /terrain:\s*"([^"]+)"/, String),
       };
       if (/\bhome:\s*true/.test(line)) p.home = true;
       if (/\bdiagonal:\s*true/.test(line)) p.diagonal = true;
@@ -2509,6 +2510,7 @@
     if (p.model) parts.push(`model: ${JSON.stringify(p.model)}`);
     if (p.rotationDeg != null) parts.push(`rotationDeg: ${fmtNum(p.rotationDeg)}`);
     if (p.scaleRatio != null && p.scaleRatio !== 1) parts.push(`scaleRatio: ${fmtNum(p.scaleRatio)}`);
+    if (p.terrain) parts.push(`terrain: ${JSON.stringify(p.terrain)}`);
     return `  { ${parts.join(", ")} },`;
   }
   function serializeRoad(r) {

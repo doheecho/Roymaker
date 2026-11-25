@@ -201,11 +201,11 @@ if (terrainZones.length) {
   THREE.ShaderChunk.common += "\n" + buildTerrainGLSL() + "\n";
   THREE.ShaderChunk.project_vertex = THREE.ShaderChunk.project_vertex.replace(
     "mvPosition = modelViewMatrix * mvPosition;",
-    "vec4 nbWorldPos = modelMatrix * mvPosition;\nnbWorldPos.y += nbTerrain(nbWorldPos.xz);\nmvPosition = viewMatrix * nbWorldPos;"
+    "vec4 nbWorldPos = modelMatrix * mvPosition;\n#ifndef NB_TERRAIN_BAKED\nnbWorldPos.y += nbTerrain(nbWorldPos.xz);\n#endif\nmvPosition = viewMatrix * nbWorldPos;"
   );
   THREE.ShaderChunk.worldpos_vertex = THREE.ShaderChunk.worldpos_vertex.replace(
     "worldPosition = modelMatrix * worldPosition;",
-    "worldPosition = modelMatrix * worldPosition;\n\tworldPosition.y += nbTerrain(worldPosition.xz);"
+    "worldPosition = modelMatrix * worldPosition;\n#ifndef NB_TERRAIN_BAKED\n\tworldPosition.y += nbTerrain(worldPosition.xz);\n#endif"
   );
 }
 // 도로 지도(kakaomap_road1.png, 사용자가 건물번호 지도와 같은 위성사진 위에 빨간색으로 도로를
@@ -2530,6 +2530,10 @@ function loadPlaceModelInto(entry) {
         if (o.isMesh) {
           o.castShadow = true;
           o.receiveShadow = true;
+          // terrain: "baked" — 모델 안에 단차(높이)가 이미 들어 있으니 게임이 땅 높이만큼 또 올리지 않는다
+          if (entry.place.terrain === "baked") {
+            (Array.isArray(o.material) ? o.material : [o.material]).forEach((mt) => { if (mt) { mt.defines = { ...(mt.defines || {}), NB_TERRAIN_BAKED: "" }; mt.needsUpdate = true; } });
+          }
         }
       });
       model.updateMatrixWorld(true);
