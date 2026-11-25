@@ -17,7 +17,7 @@ const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
 const CROSSWALKS = Array.isArray(MAP_DATA.CROSSWALKS) ? MAP_DATA.CROSSWALKS : [];
 const FENCES = Array.isArray(MAP_DATA.FENCES) ? MAP_DATA.FENCES : []; // 울타리 토막 { a, b, type, base? }
 
-const ASSET_VERSION = "20261125a";
+const ASSET_VERSION = "20261125b";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을

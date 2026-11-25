@@ -26,6 +26,7 @@ meshopt 지오메트리 압축만 쓰고 join/palette/simplify는 끈 "검증된
 (three.js로 불러와서 Box3로 재보는 식으로) 직접 확인한 뒤 바꿀 것.
 """
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -107,12 +108,54 @@ def is_already_optimized(path):
         return False
 
 
+def strip_extras(src, dst):
+    """GLB 안 JSON의 "extras"(편집기가 남긴 메모·백업 데이터)를 모두 지운다. 게임은 이걸 쓰지 않는다.
+    어떤 편집기는 여기에 three.js 장면 전체를 통째로 다시 넣어 둬서(2026-11-25 행당대림105·107: 28MB 중 19MB)
+    최적화를 해도 용량이 거의 안 줄었다. 지운 게 있으면 True."""
+    with open(src, "rb") as f:
+        data = f.read()
+    if data[:4] != b"glTF":
+        return False
+    json_len = int.from_bytes(data[12:16], "little")
+    doc = json.loads(data[20:20 + json_len])
+    removed = [0]
+
+    def walk(o):
+        if isinstance(o, dict):
+            if "extras" in o:
+                del o["extras"]
+                removed[0] += 1
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    walk(doc)
+    if not removed[0]:
+        return False
+    new_json = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    new_json += b" " * ((4 - len(new_json) % 4) % 4)  # GLB 청크는 4바이트 단위
+    rest = data[20 + json_len:]  # BIN 청크(있으면) 그대로
+    total = 12 + 8 + len(new_json) + len(rest)
+    with open(dst, "wb") as f:
+        f.write(b"glTF" + (2).to_bytes(4, "little") + total.to_bytes(4, "little"))
+        f.write(len(new_json).to_bytes(4, "little") + b"JSON" + new_json)
+        f.write(rest)
+    return True
+
+
 def optimize_one(path, texture_size):
     size_before = os.path.getsize(path)
     with tempfile.TemporaryDirectory() as tmp:
         out_path = os.path.join(tmp, os.path.basename(path))
+        src = path
+        stripped = os.path.join(tmp, "stripped.glb")
+        if strip_extras(path, stripped):
+            print("  (편집기가 남긴 extras 데이터 제거)")
+            src = stripped
         result = run_npx(
-            ["optimize", path, out_path, "--texture-size", str(texture_size), *SAFE_OPTIMIZE_FLAGS],
+            ["optimize", src, out_path, "--texture-size", str(texture_size), *SAFE_OPTIMIZE_FLAGS],
             capture_output=True, **SUBPROCESS_TEXT_KWARGS,
         )
         if result.returncode != 0 or not os.path.exists(out_path):
