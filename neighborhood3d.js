@@ -471,7 +471,25 @@ function updatePlaceVisibility() {
   });
 }
 
-function buildStaticScene() {
+// 기존 평평한 바닥(초록 들판 + 네이버 지도 이미지) — GLB 지형이 꺼져 있거나 못 불러왔을 때만 쓴다
+function buildFlatGround(scene) {
+  const groundW = AREA_MAX_X - AREA_MIN_X;
+  const groundD = AREA_MAX_Z - AREA_MIN_Z;
+  const bg = new THREE.Mesh(
+    new THREE.PlaneGeometry(groundW, groundD),
+    new THREE.MeshStandardMaterial({ color: 0x8fbf72 })
+  );
+  bg.rotation.x = -Math.PI / 2;
+  bg.position.set((AREA_MIN_X + AREA_MAX_X) / 2, -0.03, (AREA_MIN_Z + AREA_MAX_Z) / 2);
+  bg.receiveShadow = true;
+  bg.renderOrder = -3;
+  scene.add(bg);
+  // 네이버 지도 이미지를 실제 좌표에 맞춰 바닥에 깐다(없으면 위의 초록 바닥이 그대로 보임)
+  buildMapGround(scene);
+  return bg;
+}
+
+async function buildStaticScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xbfe3ff);
   scene.fog = new THREE.Fog(0xbfe3ff, 20, 180);
@@ -489,25 +507,14 @@ function buildStaticScene() {
   scene.add(sun.target);
   sunLight = sun;
 
-  // 동네 전체를 덮는 잔디 바닥 — 건물들이 차지하는 영역(AREA_MIN/MAX)보다 넉넉하게 깐다
+  // 실제 지형(GameMap.glb)을 다 불러올 때까지 기다린 뒤에야 건물·도로 등을 짓는다 — 그래야
+  // buildPlaces() 등에서 getTerrainY(x,z)가 0이 아니라 그 자리 실측 높이를 돌려준다.
+  const needsFlatGround = await buildGlbTerrain(scene);
+  const bg = needsFlatGround ? buildFlatGround(scene) : null;
+
+  // 각 건물 사이에 깔린 회색 보행로 — 지도 이미지가 보이도록 숨긴다(예전부터 안 쓰는 비상용)
   const groundW = AREA_MAX_X - AREA_MIN_X;
   const groundD = AREA_MAX_Z - AREA_MIN_Z;
-  const bg = new THREE.Mesh(
-    new THREE.PlaneGeometry(groundW, groundD),
-    new THREE.MeshStandardMaterial({ color: 0x8fbf72 })
-  );
-  bg.rotation.x = -Math.PI / 2;
-  bg.position.set((AREA_MIN_X + AREA_MAX_X) / 2, -0.03, (AREA_MIN_Z + AREA_MAX_Z) / 2);
-  bg.receiveShadow = true;
-  bg.renderOrder = -3;
-  scene.add(bg);
-
-  // 네이버 지도 이미지를 실제 좌표에 맞춰 바닥에 깐다(없으면 위의 초록 바닥이 그대로 보임)
-  buildMapGround(scene);
-  // [실험 중] 실제 금호동 지형(GameMap.glb) — 아직 위치·크기 보정 전, 비교해 보려고 일단 얹어만 둔다
-  buildGlbTerrain(scene);
-
-  // 각 건물 사이에 깔린 회색 보행로 — 지도 이미지가 보이도록 숨긴다
   const plaza = new THREE.Mesh(
     new THREE.PlaneGeometry(groundW * 0.6, groundD * 0.6),
     new THREE.MeshStandardMaterial({ color: 0xc7c7c2 })
@@ -526,7 +533,7 @@ function buildStaticScene() {
   buildFences();
   buildTerrainWalls();
   tessellateForTerrain(scene.children.filter((o) => !before.has(o)));
-  freezeStaticObjects([bg, ...scene.children.filter((o) => !before.has(o))]);
+  freezeStaticObjects([...(bg ? [bg] : []), ...scene.children.filter((o) => !before.has(o))]);
   buildPlaces();
   before = new Set(scene.children);
   buildTrees();
@@ -786,31 +793,34 @@ function getTerrainY(x, z) {
   const hits = glbTerrainRaycaster.intersectObject(glbTerrain, true);
   return hits.length ? hits[0].point.y : 0;
 }
+// 반환값: 기존 평평한 바닥(초록 들판 + 네이버 지도 이미지)으로 대신해야 하면 true, 이 실제
+// 지형으로 됐으면 false — buildStaticScene()이 이 값을 보고 평평한 바닥을 깔지 결정한다.
+// buildPlaces() 등 getTerrainY를 쓰는 다음 단계들이 실제 높이를 받아 쓸 수 있도록, 이 함수가
+// 끝날 때까지(지형이 다 뜰 때까지) 기다렸다가 건물을 짓는다 — 그래서 Promise로 돌려준다.
 function buildGlbTerrain(scene) {
-  if (!GLB_TERRAIN_ENABLED) return;
-  gltfLoader.load(
-    `${GLB_TERRAIN_FILE}?v=${ASSET_VERSION}`,
-    (gltf) => {
-      const terrain = gltf.scene;
-      terrain.scale.multiplyScalar(WORLD_SCALE);
-      terrain.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = false; } });
-      terrain.updateMatrixWorld(true);
-      glbTerrain = terrain;
-      const originY = getTerrainY(0, 0);
-      terrain.position.y -= originY;
-      terrain.updateMatrixWorld(true);
-      scene.add(terrain);
-      const box = new THREE.Box3().setFromObject(terrain);
-      console.log("[GLB 지형] 불러옴 — 원점(113동) 높이 보정값:", -originY.toFixed(2), "scene 단위");
-      console.log("[GLB 지형] 보정 후 범위(scene 단위):", {
-        x: [box.min.x.toFixed(1), box.max.x.toFixed(1)],
-        y: [box.min.y.toFixed(2), box.max.y.toFixed(2)],
-        z: [box.min.z.toFixed(1), box.max.z.toFixed(1)],
-      });
-    },
-    undefined,
-    (err) => console.warn("[GLB 지형] models/GameMap.glb를 못 불러왔다", err)
-  );
+  if (!GLB_TERRAIN_ENABLED) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    gltfLoader.load(
+      `${GLB_TERRAIN_FILE}?v=${ASSET_VERSION}`,
+      (gltf) => {
+        const terrain = gltf.scene;
+        terrain.scale.multiplyScalar(WORLD_SCALE);
+        terrain.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = false; } });
+        terrain.updateMatrixWorld(true);
+        glbTerrain = terrain;
+        const originY = getTerrainY(0, 0);
+        terrain.position.y -= originY;
+        terrain.updateMatrixWorld(true);
+        scene.add(terrain);
+        resolve(false);
+      },
+      undefined,
+      (err) => {
+        console.warn("[GLB 지형] models/GameMap.glb를 못 불러왔다 — 기존 평평한 바닥으로 대신한다", err);
+        resolve(true);
+      }
+    );
+  });
 }
 
 // 금호파크힐스 단지 내부 공터에 나무를 심는다 — 나무가 많아서(170여 그루) 개별 메시로 만들면
@@ -2383,27 +2393,31 @@ function addPolyPlatform(poly, y) {
   groundPlatforms.push({ poly, y, minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs) });
 }
 function groundHeightAt(x, z) {
+  // 실제 지형(GLB)이 있으면 그 자리 실측 높이가 기준(base)이고, 아래의 발판·단차 턱들은
+  // 전부 그 기준 위에 얹는 상대적인 높이 차다(터널을 뚫은 평지 가정이 아니라, 언덕 중턱이어도
+  // 건물 발판·보도 턱 높이는 그대로 유지된다).
+  const base = getTerrainY(x, z);
   for (const p of groundPlatforms) {
     if (p.poly) {
       if (x < p.minx || x > p.maxx || z < p.minz || z > p.maxz) continue;
-      if (pointInPolygon(x, z, p.poly)) return p.y;
-    } else if (insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return p.y;
+      if (pointInPolygon(x, z, p.poly)) return base + p.y;
+    } else if (insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return base + p.y;
   }
   // 다른 도로가 지나가서 내려앉았거나 경사진 보도
   for (const d of walkDips) {
     if (x < d.minx || x > d.maxx || z < d.minz || z > d.maxz) continue;
     if (!pointInPolygon(x, z, d.poly)) continue;
     const t = Math.max(0, Math.min(1, ((x - d.ax) * d.ux + (z - d.az) * d.uz) / d.len2));
-    return d.y0 + (d.y1 - d.y0) * t;
+    return base + d.y0 + (d.y1 - d.y0) * t;
   }
   // 보도 위면 턱만큼 높다(도로에서 보도로 올라서면 캐릭터도 같이 올라간다)
   for (const s of walkBands) {
     if (Math.max(s.ax, s.bx) < x - s.outer || Math.min(s.ax, s.bx) > x + s.outer) continue;
     if (Math.max(s.az, s.bz) < z - s.outer || Math.min(s.az, s.bz) > z + s.outer) continue;
     const d = distToSegment(x, z, s.ax, s.az, s.bx, s.bz);
-    if (d > s.inner && d <= s.outer) return SIDEWALK_TOP_Y;
+    if (d > s.inner && d <= s.outer) return base + SIDEWALK_TOP_Y;
   }
-  return 0;
+  return base;
 }
 let modelStreamTimer = 0;
 
@@ -2656,14 +2670,17 @@ function buildPlaces() {
     // 건물 자체(플레이스홀더·실제 glb·교회 첨탑 등)는 전부 이 group에 담아서, 아래
     // updatePlaceVisibility()가 group째로 보이기/숨기기만 하면 되게 한다 — 라벨과 똑같이
     // 캐릭터와 LABEL_VISIBLE_RANGE(약 300m) 안에 있거나 지금 심부름 목적지일 때만 보인다.
-    // place.y(기본 0, raw 미터)는 금호동처럼 단지 안에 단차가 있는 동네에서 건물마다 실제
-    // 지면 높이가 다른 걸 표현하는 값 — group 자체를 그만큼 올리고/내리고, 바닥(y=0)까지
-    // 이어지는 벽(스커트)을 세워서 "여기만 지대가 높다/낮다"는 느낌을 준다.
+    // place.y(기본 0, raw 미터)는 실제 지형 높이와 별개로 건물마다 수동으로 더/덜 얹고 싶을 때
+    // 쓰는 값 — group 자체를 그만큼 올리고/내리고, 그 자리 지형 표면까지 이어지는 벽(스커트)을
+    // 세워서 "여기만 지대가 더 높다/낮다"는 느낌을 준다.
     const groundY = (place.y || 0) * WORLD_SCALE;
     // 건물 바닥은 보도 높이(SIDEWALK_TOP_Y)에 맞춘다 — 도로는 그보다 낮다(문주 등 도로 위 시설은 예외)
     const baseLift = ROAD_LEVEL_PLACE_IDS.has(place.id) ? 0 : SIDEWALK_TOP_Y;
+    // 실제 지형(GLB)이 있으면 이 건물 자리의 실측 높이도 더한다 — 평지 가정이던 나머지 계산
+    // (groundY·baseLift·스커트 길이 등)은 전부 이 기준 위에 상대적으로 얹힌다.
+    const terrainY = getTerrainY(px, pz);
     const group = new THREE.Group();
-    group.position.y = groundY + baseLift;
+    group.position.y = terrainY + groundY + baseLift;
     scene.add(group);
     if (groundY !== 0) {
       const skirtH = Math.abs(groundY + baseLift);
@@ -2671,7 +2688,7 @@ function buildPlaces() {
         new THREE.BoxGeometry(colW * 1.4, skirtH, colD * 1.4),
         new THREE.MeshStandardMaterial({ color: 0x9a9488 })
       );
-      skirt.position.set(0, -(groundY + baseLift) / 2, 0); // group 기준 로컬 좌표 — group.position.y와 합쳐지면 실제 지면(y=0)까지 이어진다
+      skirt.position.set(0, -(groundY + baseLift) / 2, 0); // group 기준 로컬 좌표 — group.position.y와 합쳐지면 그 자리 지형 표면까지 이어진다
       skirt.castShadow = true;
       skirt.receiveShadow = true;
       group.add(skirt);
@@ -2729,8 +2746,8 @@ function buildPlaces() {
 
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
-    const terrainLift = terrainAt(px, pz); // 지형 단차(이름표는 그림 셰이더가 아니라서 직접 올린다)
-    label.position.set(px, groundY + terrainLift + height + 1.1, pz);
+    const terrainLift = terrainAt(px, pz); // (예전) 금호파크힐스 구역 단차 — 이름표는 그림 셰이더가 아니라서 직접 올린다
+    label.position.set(px, terrainY + groundY + terrainLift + height + 1.1, pz);
     label.userData.placeId = place.id; // updateLabelVisibility에서 거리·목적지 판정에 쓴다
     scene.add(label);
 
@@ -2739,7 +2756,7 @@ function buildPlaces() {
       new THREE.SpriteMaterial({ map: highlightTexture(), color: 0x3fa9ff, transparent: true, opacity: 0, depthTest: false })
     );
     highlight.scale.set(5, 5, 1);
-    highlight.position.set(px, groundY + terrainLift + height + 1.1, pz);
+    highlight.position.set(px, terrainY + groundY + terrainLift + height + 1.1, pz);
     highlight.renderOrder = 998;
     highlight.visible = false;
     scene.add(highlight);
@@ -3364,9 +3381,9 @@ function updateMovement(dt) {
     nx = Math.max(AREA_MIN_X + 1, Math.min(AREA_MAX_X - 1, nx));
     nz = Math.max(AREA_MIN_Z + 1, Math.min(AREA_MAX_Z - 1, nz));
     // 옹벽(땅 높이가 갑자기 1m 넘게 바뀌는 곳)은 못 넘는다 — 벽을 따라 미끄러지듯 한쪽 방향으로만 움직여 본다
-    if (terrainZones.length) {
-      const t0 = terrainAt(curX, curZ);
-      const ok = (x, z) => Math.abs(terrainAt(x, z) - t0) <= TERRAIN_STEP_MAX;
+    if (terrainZones.length || glbTerrain) {
+      const t0 = groundHeightAt(curX, curZ);
+      const ok = (x, z) => Math.abs(groundHeightAt(x, z) - t0) <= TERRAIN_STEP_MAX;
       if (!ok(nx, nz)) {
         if (ok(nx, curZ)) nz = curZ;
         else if (ok(curX, nz)) nx = curX;
@@ -6077,15 +6094,15 @@ async function initNeighborhood3D() {
     initPerformanceHelpers();
     renderer.shadowMap.enabled = true;
     clock = new THREE.Clock();
-    buildStaticScene();
+    await buildStaticScene();
     // [임시 디버그 — GLB 지형 실험 끝나면 지울 것] 브라우저 콘솔에서 바로 scene·camera를 들여다보려고
-    window.__nbDebug = { scene, camera, renderer, getTerrainY, THREE };
+    window.__nbDebug = { scene, camera, renderer, getTerrainY, groundHeightAt, keys, getCharacter: () => character, THREE };
     await loadCharacter();
     // 113동 중 북서쪽으로 뻗은 날개(WingA)가 건물 중심 쪽(동)·북쪽 모서리에서 북동쪽을 보고
     // 있는 1-2호 출입구 앞 — 실제 모델(place_금파힐113.glb)을 rotationDeg(67.4°) 그대로 적용해
     // 불러온 뒤 그 날개의 월드 좌표 바운딩박스 모서리를 구해서(2026-11-21), 거기서 북동쪽으로
     // 3m 더 나가 선 자리다.
-    character.position.set(1.3, 0, -1.31);
+    character.position.set(1.3, groundHeightAt(1.3, -1.31), -1.31);
     playAction("Idle_02");
     wireOrbitControls();
     wireDpad();
