@@ -786,34 +786,77 @@ function buildMapGround(scene) {
 const GLB_TERRAIN_FILE = "models/GameMap.glb";
 const GLB_TERRAIN_ENABLED = true;
 let glbTerrain = null;
-const glbTerrainRaycaster = new THREE.Raycaster();
-// 보도·학교앞 글씨처럼 한 자리를 아주 촘촘히(raw 0.6m 간격) 여러 번 묻는 코드가 있어서, 캐시
-// 없이 매번 레이캐스트하면 씬을 짓는 데만 수십 초가 걸렸다(2026-11-25 발견). 그렇다고 그냥
-// "가장 가까운 격자점 값을 그대로 쓰는" 캐시로 하면(처음에 이렇게 했다가 바로 문제가 됨) 격자
-// 칸 경계마다 지형이 뚝 끊겨 보이고 — 옹벽 1m 이상은 못 넘는 캐릭터 걷기 체크가 그 "가짜 절벽"에
-// 걸려 아예 못 움직이는 심각한 버그가 생겼다. 그래서 레이캐스트 자체는 격자점에서만 하고(그 결과만
-// 캐시), 실제 반환값은 그 자리를 둘러싼 4개 격자점을 양선형보간(bilinear)해서 매끈하게 잇는다 —
-// 격자가 성겨도(raw 20m) 이어지는 값 자체는 끊김 없이 부드럽다.
-const TERRAIN_Y_CACHE_GRID = 3;
-const terrainYCache = new Map();
-function rawTerrainYAt(gx, gz) {
-  const key = gx + "," + gz;
-  const cached = terrainYCache.get(key);
-  if (cached !== undefined) return cached;
-  glbTerrainRaycaster.set(new THREE.Vector3(gx * TERRAIN_Y_CACHE_GRID, 1000, gz * TERRAIN_Y_CACHE_GRID), new THREE.Vector3(0, -1, 0));
-  const hits = glbTerrainRaycaster.intersectObject(glbTerrain, true);
-  const y = hits.length ? hits[0].point.y : 0;
-  terrainYCache.set(key, y);
-  return y;
+// [2026-11-26] 처음엔 Three.js Raycaster로 지형 높이를 구했는데, 이 지형 메시(삼각형 4096개) 하나
+// 레이캐스트하는 데 약 2ms씩 걸려서(브루트포스라 그런 듯) 도로·보도가 한 자리를 촘촘히 묻는
+// 코드와 만나면 씬 하나 짓는 데 수십 초가 걸렸다. 격자로 캐시해서 빠르게 만들려 했더니 이번엔
+// 격자 사이 보간 오차(raw 1m 격자에서도 최대 raw 0.17m)가 도로·보도의 "지형보다 살짝 위" 여유
+// 폭보다 커서, 실제 지형이 도로·보도 위로 삐져나와 보이는 문제가 생겼다(사용자 보고: "도로
+// 텍스처 안 보이고 구글맵 그림만 보인다"). 레이캐스트 자체가 느린 게 근본 원인이라 격자를
+// 아무리 조정해도 "빠르면서 정확함"을 동시에 못 만족했다.
+// → 그래서 Raycaster를 아예 안 쓰고, 지형 메시의 삼각형을 직접 pick한다: 불러올 때 한 번만
+// 모든 삼각형을 XZ 격자(칸)에 나눠 담아 두고(buildTerrainTriIndex), 질의 때는 그 칸 안의 몇 개
+// 삼각형만 점-안-삼각형 판정 + 무게중심좌표(barycentric)로 높이를 보간한다 — 오차 없이 정확하고,
+// 삼각형 4096개 전부가 아니라 한 칸(보통 몇 개)만 보니 레이캐스트보다 훨씬 빠르다.
+let terrainTriIndex = null;
+function buildTerrainTriIndex(mesh) {
+  mesh.updateMatrixWorld(true);
+  const geo = mesh.geometry;
+  const pos = geo.attributes.position;
+  const idx = geo.index;
+  const m = mesh.matrixWorld;
+  const vcount = pos.count;
+  const wx = new Float64Array(vcount), wy = new Float64Array(vcount), wz = new Float64Array(vcount);
+  const v = new THREE.Vector3();
+  for (let i = 0; i < vcount; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(m);
+    wx[i] = v.x; wy[i] = v.y; wz[i] = v.z;
+  }
+  const triCount = idx ? idx.count / 3 : vcount / 3;
+  const triA = new Int32Array(triCount), triB = new Int32Array(triCount), triC = new Int32Array(triCount);
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let t = 0; t < triCount; t++) {
+    const a = idx ? idx.getX(t * 3) : t * 3, b = idx ? idx.getX(t * 3 + 1) : t * 3 + 1, c = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    triA[t] = a; triB[t] = b; triC[t] = c;
+    minX = Math.min(minX, wx[a], wx[b], wx[c]); maxX = Math.max(maxX, wx[a], wx[b], wx[c]);
+    minZ = Math.min(minZ, wz[a], wz[b], wz[c]); maxZ = Math.max(maxZ, wz[a], wz[b], wz[c]);
+  }
+  const GRID_N = 48; // 지형 전체를 대략 48x48칸으로 — 칸마다 삼각형 몇 개 정도로 가볍게
+  const cellW = Math.max((maxX - minX) / GRID_N, 1e-6), cellH = Math.max((maxZ - minZ) / GRID_N, 1e-6);
+  const cells = new Map();
+  for (let t = 0; t < triCount; t++) {
+    const a = triA[t], b = triB[t], c = triC[t];
+    const tminX = Math.min(wx[a], wx[b], wx[c]), tmaxX = Math.max(wx[a], wx[b], wx[c]);
+    const tminZ = Math.min(wz[a], wz[b], wz[c]), tmaxZ = Math.max(wz[a], wz[b], wz[c]);
+    const cx0 = Math.floor((tminX - minX) / cellW), cx1 = Math.floor((tmaxX - minX) / cellW);
+    const cz0 = Math.floor((tminZ - minZ) / cellH), cz1 = Math.floor((tmaxZ - minZ) / cellH);
+    for (let cx = cx0; cx <= cx1; cx++) {
+      for (let cz = cz0; cz <= cz1; cz++) {
+        const key = cx * 100000 + cz;
+        let list = cells.get(key);
+        if (!list) cells.set(key, (list = []));
+        list.push(t);
+      }
+    }
+  }
+  return { wx, wy, wz, triA, triB, triC, minX, minZ, cellW, cellH, cells };
 }
 function getTerrainY(x, z) {
-  if (!glbTerrain) return 0;
-  const fx = x / TERRAIN_Y_CACHE_GRID, fz = z / TERRAIN_Y_CACHE_GRID;
-  const gx0 = Math.floor(fx), gz0 = Math.floor(fz);
-  const tx = fx - gx0, tz = fz - gz0;
-  const h00 = rawTerrainYAt(gx0, gz0), h10 = rawTerrainYAt(gx0 + 1, gz0);
-  const h01 = rawTerrainYAt(gx0, gz0 + 1), h11 = rawTerrainYAt(gx0 + 1, gz0 + 1);
-  return h00 * (1 - tx) * (1 - tz) + h10 * tx * (1 - tz) + h01 * (1 - tx) * tz + h11 * tx * tz;
+  const idx = terrainTriIndex;
+  if (!idx) return 0;
+  const cx = Math.floor((x - idx.minX) / idx.cellW), cz = Math.floor((z - idx.minZ) / idx.cellH);
+  const list = idx.cells.get(cx * 100000 + cz);
+  if (!list) return 0;
+  for (const t of list) {
+    const a = idx.triA[t], b = idx.triB[t], c = idx.triC[t];
+    const ax = idx.wx[a], az = idx.wz[a], bx = idx.wx[b], bz = idx.wz[b], cx2 = idx.wx[c], cz2 = idx.wz[c];
+    const v0x = bx - ax, v0z = bz - az, v1x = cx2 - ax, v1z = cz2 - az, v2x = x - ax, v2z = z - az;
+    const den = v0x * v1z - v1x * v0z;
+    if (Math.abs(den) < 1e-9) continue;
+    const vv = (v2x * v1z - v1x * v2z) / den, ww = (v0x * v2z - v2x * v0z) / den, uu = 1 - vv - ww;
+    if (uu < -1e-4 || vv < -1e-4 || ww < -1e-4) continue;
+    return idx.wy[a] * uu + idx.wy[b] * vv + idx.wy[c] * ww;
+  }
+  return 0;
 }
 // 반환값: 기존 평평한 바닥(초록 들판 + 네이버 지도 이미지)으로 대신해야 하면 true, 이 실제
 // 지형으로 됐으면 false — buildStaticScene()이 이 값을 보고 평평한 바닥을 깔지 결정한다.
@@ -827,17 +870,16 @@ function buildGlbTerrain(scene) {
       (gltf) => {
         const terrain = gltf.scene;
         terrain.scale.multiplyScalar(WORLD_SCALE);
-        terrain.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = false; } });
+        let terrainMesh = null;
+        terrain.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = false; if (!terrainMesh) terrainMesh = o; } });
         terrain.updateMatrixWorld(true);
         glbTerrain = terrain;
-        // getTerrainY(캐시가 있다)를 쓰지 않고 레이캐스터를 직접 불러서 구한다 — 캐시를 거치면
-        // "옮기기 전" 높이가 원점 칸에 그대로 박혀서, 나중에 그 칸을 다시 물어도(원점 근처) 옮기기
-        // 전 값이 나오는 버그가 있었다(2026-11-25 발견).
-        glbTerrainRaycaster.set(new THREE.Vector3(0, 1000, 0), new THREE.Vector3(0, -1, 0));
-        const originHits = glbTerrainRaycaster.intersectObject(glbTerrain, true);
-        const originY = originHits.length ? originHits[0].point.y : 0;
+        terrainTriIndex = buildTerrainTriIndex(terrainMesh);
+        const originY = getTerrainY(0, 0);
         terrain.position.y -= originY;
         terrain.updateMatrixWorld(true);
+        // 인덱스에 이미 구워 둔 높이(wy)도 원점 보정만큼 그대로 내린다 — 다시 통째로 만들 필요 없음
+        for (let i = 0; i < terrainTriIndex.wy.length; i++) terrainTriIndex.wy[i] -= originY;
         scene.add(terrain);
         resolve(false);
       },
@@ -1100,7 +1142,11 @@ const LANE_WHITE = 0xf2f2f2;
 const PAVING_TILE_RAW = { walk: 3, school: 2.4 }; // 포장 무늬 한 장이 덮는 길이(raw m)
 // rank는 도로끼리 겹칠 때(또는 교차로에서) 어느 쪽이 위에 보일지 정하는 우선순위다 — 차로가 많은(=더
 // 중요한) 도로일수록 높고, 보행용 도로가 가장 낮다(사용자 지정, 2026-11-22).
-const ROAD_LAYER_BASE_Y = 0.005;
+// 지형(GLB) 높이 샘플은 raw 1m 격자 보간이라 실제 지형 표면과 최대 raw 0.17m 안팎 오차가 난다
+// (실측). 그 오차보다 확실히 크게 띄워 둬야 실제 지형 표면이 도로·보도 위로 삐져나와 "구글맵
+// 그림만 보이고 도로 텍스처가 안 보이는" 것처럼 되는 일이 없다(2026-11-26 사용자 보고로 발견) —
+// 그래서 예전엔 z-fighting만 막으면 됐던 이 상수들에 전부 +0.05 여유를 더했다.
+const ROAD_LAYER_BASE_Y = 0.055;
 const ROAD_LAYER_STEP = 0.0015; // 눈에 띄는 단차는 아니고, 겹칠 때 어느 면이 위인지만 확실히 가르는 정도
 function surfaceYFor(seg) {
   return ROAD_LAYER_BASE_Y + roadLook(seg).rank * ROAD_LAYER_STEP;
@@ -1393,7 +1439,7 @@ function buildSchoolDecals() {
 // 보도 윗면이 기본 지면 높이(SIDEWALK_TOP_Y)이고 도로는 그보다 낮다. 보도·경계선·연석·울타리는
 // 도로마다 메시를 만들지 않고 종류별로 하나씩 합쳐 그린다(드로우콜 몇 개뿐).
 const SIDEWALK_TILE_RAW = 2.4; // 보도 텍스처 한 장이 덮는 길이(raw m) — 0.3m 블록 8×8
-const SIDEWALK_TOP_Y = 0.05; // 보도 윗면 높이 — 도로(0.005~0.0135)보다 연석(턱)만큼 올라와 있다
+const SIDEWALK_TOP_Y = 0.1; // 보도 윗면 높이 — 도로(0.055~0.0615)보다 연석(턱)만큼 올라와 있다(지형 오차 여유 +0.05 포함)
 const SIDEWALK_YELLOW_Y = SIDEWALK_TOP_Y + 0.001; // 황색 경계선은 보도 윗면 바로 위
 const CURB_COLOR = 0xb9b4a8;
 // 캐릭터가 보도 위에 설 때 쓰는 띠 목록(월드 좌표). 도로 중심선에서 떨어진 거리(inner~outer)가
@@ -1657,7 +1703,7 @@ function chainGeometry(members) {
 // 도로가 그 위를 덮으니 도로가 우선이고, 예전처럼 비스듬히 잘린 세로 단면이나 빈 구멍이 생기지 않는다.
 // 캐릭터·행인도 그 경사를 따라 내려갔다 올라온다(사용자 지정 2026-11-25).
 const SIDEWALK_RAMP_RAW = 2; // 보도가 도로 높이까지 내려가는 경사 길이(raw m)
-const SIDEWALK_LOW_Y = 0.003; // 내려앉은 보도 높이 — 가장 낮은 도로 표면(0.005)보다 조금 아래라 도로가 위에 보인다
+const SIDEWALK_LOW_Y = 0.053; // 내려앉은 보도 높이 — 가장 낮은 도로 표면(0.055)보다 조금 아래라 도로가 위에 보인다
 const SIDEWALK_PROBES = [0.12, 0.5, 0.88]; // 보도 폭에서 이 비율 자리 중 한 곳이라도 다른 도로 위면 내려앉힌다
 const walkDips = []; // 내려앉은·경사진 보도 조각(캐릭터 발밑 높이) — 나머지 보도는 walkBands가 보도 높이로 처리
 
@@ -6159,7 +6205,7 @@ async function initNeighborhood3D() {
     clock = new THREE.Clock();
     await buildStaticScene();
     // [임시 디버그 — GLB 지형 실험 끝나면 지울 것] 브라우저 콘솔에서 바로 scene·camera를 들여다보려고
-    window.__nbDebug = { scene, camera, renderer, getTerrainY, groundHeightAt, keys, getCharacter: () => character, THREE, terrainYCache };
+    window.__nbDebug = { scene, camera, renderer, getTerrainY, groundHeightAt, keys, getCharacter: () => character, THREE, terrainTriIndex: () => terrainTriIndex };
     await loadCharacter();
     // 113동 중 북서쪽으로 뻗은 날개(WingA)가 건물 중심 쪽(동)·북쪽 모서리에서 북동쪽을 보고
     // 있는 1-2호 출입구 앞 — 실제 모델(place_금파힐113.glb)을 rotationDeg(67.4°) 그대로 적용해
