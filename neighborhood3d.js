@@ -1033,10 +1033,30 @@ function quadBezierPoint(p0, p1, p2, t) {
   const mt = 1 - t;
   return [mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0], mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1]];
 }
+// 직선 구간도 중간에 점을 촘촘히 넣는다(raw 10m 간격) — 실제 지형(GLB)은 두 끝점 사이에서도
+// 오르내릴 수 있는데, 점이 양 끝 2개뿐이면 리본이 그 사이를 일직선으로만 이어서 지형이 그
+// 사이에서 많이 바뀌는 곳은 도로가 지형에 파묻히거나 뜬다(건물·곡선 도로는 이미 괜찮은데 긴
+// 직선 도로만 이 문제가 있었다 — 2026-11-25 보고).
+const ROAD_STRAIGHT_TESS_RAW = 10;
 function roadPolyline(seg) {
-  if (!seg.curve) return [seg.a, seg.b];
+  if (!seg.curve) {
+    const [ax, az] = seg.a, [bx, bz] = seg.b;
+    const len = Math.hypot(bx - ax, bz - az);
+    const n = Math.max(1, Math.ceil(len / ROAD_STRAIGHT_TESS_RAW));
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      pts.push([ax + (bx - ax) * t, az + (bz - az) * t]);
+    }
+    return pts;
+  }
+  // 곡선도 너무 길면(큰길의 완만한 커브 등) 고정 20칸으로는 지형을 따라가기엔 성길 수 있어서,
+  // 양 끝 직선거리 기준으로 더 필요하면 칸 수를 늘린다(짧은 곡선은 그대로 20칸 — 부드러움 유지).
+  const [ax, az] = seg.a, [bx, bz] = seg.b;
+  const approxLen = Math.hypot(bx - ax, bz - az);
+  const steps = Math.max(ROAD_CURVE_STEPS, Math.ceil(approxLen / ROAD_STRAIGHT_TESS_RAW));
   const pts = [];
-  for (let i = 0; i <= ROAD_CURVE_STEPS; i++) pts.push(quadBezierPoint(seg.a, seg.curve, seg.b, i / ROAD_CURVE_STEPS));
+  for (let i = 0; i <= steps; i++) pts.push(quadBezierPoint(seg.a, seg.curve, seg.b, i / steps));
   return pts;
 }
 
