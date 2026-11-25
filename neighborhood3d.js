@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261125t";
+import * as MAP_DATA from "./map_data.js?v=20261125u";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 
@@ -17,7 +17,7 @@ const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
 const CROSSWALKS = Array.isArray(MAP_DATA.CROSSWALKS) ? MAP_DATA.CROSSWALKS : [];
 const FENCES = Array.isArray(MAP_DATA.FENCES) ? MAP_DATA.FENCES : []; // 울타리 토막 { a, b, type, base? }
 // 지형 높이(단차): 높이가 다른 구역(예: 금호파크힐스 단지)의 외곽선과 높이 점 — 맵 에디터 "⛰ 지형 높이"로 다룬다
-const TERRAIN_ZONES = Array.isArray(MAP_DATA.TERRAIN_ZONES) ? MAP_DATA.TERRAIN_ZONES : [];
+const TERRAIN_ZONES = MAP_DATA.TERRAIN_ENABLED !== false && Array.isArray(MAP_DATA.TERRAIN_ZONES) ? MAP_DATA.TERRAIN_ZONES : []; // TERRAIN_ENABLED: false면 끔
 const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN_POINTS : [];
 
 const ASSET_VERSION = "20261125b";
