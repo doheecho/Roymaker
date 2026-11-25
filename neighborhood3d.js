@@ -1736,9 +1736,13 @@ function pushStripY(store, A, B, ys) {
   }
 }
 // 바닥(0)부터 점마다 다른 높이 ys(절대 높이)까지 세운 면(연석 — 내려앉은 곳은 높이가 0이라 안 보인다)
-function pushVerticalQuadStripY(store, pts2d, ys) {
+// y0s를 안 주면(옛 호출부 호환) 바닥을 0으로 — 줄 때는 그 자리 지형 높이를 넘겨서, 연석이 실제
+// 지형이 0에서 먼 곳(이번 지형 작업 이후)에서 세로로 길게 늘어나 보이는 벽처럼 되는 걸 막는다
+// (2026-11-26 발견 — 극동미라주 근처 보도 "깨짐"의 진짜 원인이었다: 연석 바닥이 항상 y=0에
+// 고정돼 있어서, 그 자리 실제 지형이 y=0과 많이 다르면 연석이 수 미터짜리 수직 벽처럼 보였다).
+function pushVerticalQuadStripY(store, pts2d, ys, y0s) {
   const base = store.pos.length / 3;
-  pts2d.forEach(([x, z], k) => store.pos.push(x, 0, z, x, ys[k], z));
+  pts2d.forEach(([x, z], k) => store.pos.push(x, y0s ? y0s[k] : 0, z, x, ys[k], z));
   for (let i = 0; i < pts2d.length - 1; i++) {
     const a0 = base + i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
     store.idx.push(a0, b0, a1, a1, b0, b1);
@@ -1763,8 +1767,11 @@ function emitSidewalkBand(stores, secs, opts) {
   const ys = secs.map((sc) => sc.y - SIDEWALK_TOP_Y + terrainAt(sc));
   const A = secs.map((sc) => sc.inner), B = secs.map((sc) => sc.outer);
   pushStripY(sideStore(stores, opts.style), A, B, ys);
-  pushVerticalQuadStripY(stores.curb, A, secs.map((sc) => sc.y + terrainAt(sc))); // 도로 쪽 연석 면
-  [secs[0], secs[secs.length - 1]].forEach((sc) => pushVerticalQuadStripY(stores.curb, [sc.inner, sc.outer], [sc.y + terrainAt(sc), sc.y + terrainAt(sc)])); // 띠 끝 단면
+  // 연석 벽 바닥은 그 자리 지형 높이로(꼭대기 ys와 같은 지형 기준이라야 벽 높이가 턱 높이만큼으로
+  // 일정하게 유지된다) — 도로 rank 높이(약 0.055~0.07)는 연석 높이(SIDEWALK_TOP_Y=0.1)에 비해
+  // 작아서 무시해도 눈에 띄지 않는다.
+  pushVerticalQuadStripY(stores.curb, A, secs.map((sc) => sc.y + terrainAt(sc)), secs.map((sc) => terrainAt(sc))); // 도로 쪽 연석 면
+  [secs[0], secs[secs.length - 1]].forEach((sc) => pushVerticalQuadStripY(stores.curb, [sc.inner, sc.outer], [sc.y + terrainAt(sc), sc.y + terrainAt(sc)], [terrainAt(sc), terrainAt(sc)])); // 띠 끝 단면
   pushStripY(stores.line, secs.map((sc) => sc.at(inset)), secs.map((sc) => sc.at(inset + lineW)), ys);
   // 걷는 높이: 보도 높이 그대로인 구간은 다각형(platform) 또는 walkBands, 내려앉은·경사진 곳은 조각(walkDips)으로
   const full = (sc) => sc.h >= 0.999;
