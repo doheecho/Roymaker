@@ -787,11 +787,21 @@ const GLB_TERRAIN_FILE = "models/GameMap.glb";
 const GLB_TERRAIN_ENABLED = true;
 let glbTerrain = null;
 const glbTerrainRaycaster = new THREE.Raycaster();
+// 보도·학교앞 글씨처럼 한 자리를 아주 촘촘히(raw 0.6m 간격) 여러 번 묻는 코드가 있어서, 캐시
+// 없이 매번 레이캐스트하면 씬을 짓는 데만 수십 초가 걸렸다(2026-11-25 발견) — 지형이 그렇게까지
+// 촘촘하게 바뀌진 않으니, raw 2m(scene 0.3) 격자로 캐시해서 가까운 자리는 결과를 그대로 쓴다.
+const TERRAIN_Y_CACHE_GRID = 3;
+const terrainYCache = new Map();
 function getTerrainY(x, z) {
   if (!glbTerrain) return 0;
+  const key = Math.round(x / TERRAIN_Y_CACHE_GRID) + "," + Math.round(z / TERRAIN_Y_CACHE_GRID);
+  const cached = terrainYCache.get(key);
+  if (cached !== undefined) return cached;
   glbTerrainRaycaster.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
   const hits = glbTerrainRaycaster.intersectObject(glbTerrain, true);
-  return hits.length ? hits[0].point.y : 0;
+  const y = hits.length ? hits[0].point.y : 0;
+  terrainYCache.set(key, y);
+  return y;
 }
 // 반환값: 기존 평평한 바닥(초록 들판 + 네이버 지도 이미지)으로 대신해야 하면 true, 이 실제
 // 지형으로 됐으면 false — buildStaticScene()이 이 값을 보고 평평한 바닥을 깔지 결정한다.
@@ -808,7 +818,12 @@ function buildGlbTerrain(scene) {
         terrain.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = false; } });
         terrain.updateMatrixWorld(true);
         glbTerrain = terrain;
-        const originY = getTerrainY(0, 0);
+        // getTerrainY(캐시가 있다)를 쓰지 않고 레이캐스터를 직접 불러서 구한다 — 캐시를 거치면
+        // "옮기기 전" 높이가 원점 칸에 그대로 박혀서, 나중에 그 칸을 다시 물어도(원점 근처) 옮기기
+        // 전 값이 나오는 버그가 있었다(2026-11-25 발견).
+        glbTerrainRaycaster.set(new THREE.Vector3(0, 1000, 0), new THREE.Vector3(0, -1, 0));
+        const originHits = glbTerrainRaycaster.intersectObject(glbTerrain, true);
+        const originY = originHits.length ? originHits[0].point.y : 0;
         terrain.position.y -= originY;
         terrain.updateMatrixWorld(true);
         scene.add(terrain);
@@ -1684,11 +1699,14 @@ function emitSidewalkBand(stores, secs, opts) {
   const lineW = SIDEWALK_YELLOW_W_RAW * WORLD_SCALE;
   const inset = SIDEWALK_YELLOW_INSET_RAW * WORLD_SCALE;
   sidewalkHeights(secs);
-  const ys = secs.map((sc) => sc.y - SIDEWALK_TOP_Y);
+  // 실제 지형(GLB)이 있으면 그 자리 실측 높이도 더한다 — sc.y 자체는(옛 평지 가정) 도로·연석의
+  // 상대적인 턱 높이만 담당하고, 전역 높낮이는 여기서 더해 준다(건물·캐릭터와 같은 방식).
+  const terrainAt = (sc) => getTerrainY(sc.c[0], sc.c[1]);
+  const ys = secs.map((sc) => sc.y - SIDEWALK_TOP_Y + terrainAt(sc));
   const A = secs.map((sc) => sc.inner), B = secs.map((sc) => sc.outer);
   pushStripY(sideStore(stores, opts.style), A, B, ys);
-  pushVerticalQuadStripY(stores.curb, A, secs.map((sc) => sc.y)); // 도로 쪽 연석 면
-  [secs[0], secs[secs.length - 1]].forEach((sc) => pushVerticalQuadStripY(stores.curb, [sc.inner, sc.outer], [sc.y, sc.y])); // 띠 끝 단면
+  pushVerticalQuadStripY(stores.curb, A, secs.map((sc) => sc.y + terrainAt(sc))); // 도로 쪽 연석 면
+  [secs[0], secs[secs.length - 1]].forEach((sc) => pushVerticalQuadStripY(stores.curb, [sc.inner, sc.outer], [sc.y + terrainAt(sc), sc.y + terrainAt(sc)])); // 띠 끝 단면
   pushStripY(stores.line, secs.map((sc) => sc.at(inset)), secs.map((sc) => sc.at(inset + lineW)), ys);
   // 걷는 높이: 보도 높이 그대로인 구간은 다각형(platform) 또는 walkBands, 내려앉은·경사진 곳은 조각(walkDips)으로
   const full = (sc) => sc.h >= 0.999;
@@ -1721,7 +1739,7 @@ function emitSidewalkBand(stores, secs, opts) {
     const mid = secs.map((sc) => sc.at(opts.width * 0.62));
     const pcum = [0];
     for (let i = 1; i < mid.length; i++) pcum.push(pcum[i - 1] + Math.hypot(mid[i][0] - mid[i - 1][0], mid[i][1] - mid[i - 1][1]));
-    pedPaths.push({ pts: mid, ys: secs.map((sc) => sc.y), cum: pcum, len: pcum[pcum.length - 1], w: opts.width });
+    pedPaths.push({ pts: mid, ys: secs.map((sc) => sc.y + terrainAt(sc)), cum: pcum, len: pcum[pcum.length - 1], w: opts.width });
   }
   if (opts.railing) {
     // 울타리는 보도 높이 그대로인 구간에만(내려앉은 곳 = 길이 지나가는 곳은 비운다)
@@ -1847,9 +1865,10 @@ function buildSidewalkJoints(conns, chainOf, stores) {
         return out;
       };
       const inner = arc(ri);
-      pushStrip(sideStore(stores, swStyleOf(seg)), inner, arc(ro));
-      pushVerticalQuadStrip(stores.curb, inner);
-      pushStrip(stores.line, arc(ri + inset), arc(ri + inset + lineW));
+      const tP = getTerrainY(P[0], P[1]); // 작은 부채꼴이라 한 점 높이로 충분하다
+      pushStrip(sideStore(stores, swStyleOf(seg)), inner, arc(ro), tP);
+      pushVerticalQuadStrip(stores.curb, inner, tP, tP + SIDEWALK_TOP_Y);
+      pushStrip(stores.line, arc(ri + inset), arc(ri + inset + lineW), tP);
     });
   });
 }
@@ -6127,7 +6146,7 @@ async function initNeighborhood3D() {
     clock = new THREE.Clock();
     await buildStaticScene();
     // [임시 디버그 — GLB 지형 실험 끝나면 지울 것] 브라우저 콘솔에서 바로 scene·camera를 들여다보려고
-    window.__nbDebug = { scene, camera, renderer, getTerrainY, groundHeightAt, keys, getCharacter: () => character, THREE };
+    window.__nbDebug = { scene, camera, renderer, getTerrainY, groundHeightAt, keys, getCharacter: () => character, THREE, terrainYCache };
     await loadCharacter();
     // 113동 중 북서쪽으로 뻗은 날개(WingA)가 건물 중심 쪽(동)·북쪽 모서리에서 북동쪽을 보고
     // 있는 1-2호 출입구 앞 — 실제 모델(place_금파힐113.glb)을 rotationDeg(67.4°) 그대로 적용해
