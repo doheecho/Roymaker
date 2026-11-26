@@ -87,6 +87,13 @@
   /* 길 중간 횡단보도·신호등 표시(파란 점 = 신호등 있음, 회색 = 횡단보도만, 빨강 점선 = 근처에 도로가 없음) */
   .cw-node { transform-box: fill-box; transform-origin: center; transform: scale(var(--cw-k, 1)); }
   .terrain-zone { fill: #ffd400; fill-opacity: 0.12; stroke: #e0a800; stroke-width: 3; vector-effect: non-scaling-stroke; stroke-dasharray: 10 6; pointer-events: none; }
+  .shape-poly { stroke-width: 2.5; vector-effect: non-scaling-stroke; fill-opacity: 0.28; cursor: pointer; touch-action: none; }
+  .shape-poly.selected { stroke: #fff !important; stroke-width: 4; fill-opacity: 0.4; }
+  .shape-vtx { fill: #fff; stroke: #111; stroke-width: 1.5; cursor: grab; touch-action: none; }
+  .shape-vtx.fixed { fill: #ffcc33; }
+  .shape-mid { fill: #fff; fill-opacity: 0.55; stroke: #333; stroke-width: 1; cursor: copy; touch-action: none; }
+  .shape-txt { font: bold 13px sans-serif; fill: #111; paint-order: stroke; stroke: #fff; stroke-width: 3px; pointer-events: none; text-anchor: middle; }
+  .shape-vtxt { font: bold 10px sans-serif; fill: #111; paint-order: stroke; stroke: #fff; stroke-width: 2.5px; pointer-events: none; text-anchor: middle; }
   .terrain-pt { stroke: #222; stroke-width: 1.5; cursor: grab; touch-action: none; }
   .terrain-pt.selected { stroke: #fff; stroke-width: 3.5; }
   .terrain-txt { font: bold 12px sans-serif; fill: #111; paint-order: stroke; stroke: #fff; stroke-width: 3px; pointer-events: none; text-anchor: middle; }
@@ -274,7 +281,8 @@
   <button id="addRoadBtn">🛣️ 도로 추가</button>
   <button id="addParkBtn">🌳 공원 추가</button>
   <button id="addTreeBtn">🌲 나무 추가</button>
-  <button id="addTerrainBtn" title="누른 뒤 지도를 누르면 그 자리에 지형 높이 점(층)이 생깁니다. 노란 점선 = 높이가 있는 구역(금호파크힐스)">⛰ 지형 높이</button>
+  <button id="addShapeBtn" title="실제 지형 위에 평지(운동장 등)·경사로(진입로 등) 구역을 그립니다 — 지도를 차례로 눌러 꼭짓점을 찍고, 첫 점을 다시 누르거나 Enter로 끝. 높이가 다른 구역 가장자리엔 게임이 옹벽을 세웁니다">⛰ 평지·경사 구역</button>
+  <button id="addTerrainBtn" title="(지금 꺼 둔 예전 기능) 금호파크힐스 단지 높이 점 — 노란 점선 = 높이가 있는 구역">⛰ 단지 높이(꺼둠)</button>
   <button id="addFenceBtn" title="누른 뒤 지도를 차례로 누르면 그 점들을 따라 울타리가 이어집니다(Esc나 버튼을 다시 누르면 끝)">🧱 울타리 추가</button>
   <button id="addSignalBtn" title="도로 위를 누르면 그 자리에 횡단보도+신호등을 놓습니다(교차로 끝 근처를 누르면 그 끝의 횡단보도·신호등을 켭니다)">🚦 신호등 추가</button>
   <button id="addJunctionBtn" title="누른 뒤 지도에서 길끼리 닿거나 가로지르는 자리를 누르면 그 자리만 교차로로 이어 줍니다(이어지지 않은 곳은 주황 점선 원으로 보여요)">🔗 교차로 추가</button>
@@ -557,6 +565,25 @@
     return out;
   }
 
+  // 평지·경사 구역: { name, h?, walls?, pts: [[x, z, h?], ...] } — 없으면 빈 목록
+  function parseTerrainShapes(src) {
+    const out = [];
+    for (const raw of arrayBlock(src, "TERRAIN_SHAPES").split("\n")) {
+      const line = raw.trim();
+      if (!line.startsWith("{")) continue;
+      const pm = line.match(/pts:\s*(\[\[[\s\S]*\]\])/);
+      if (!pm) continue;
+      try {
+        const sh = { name: grab(line, /name:\s*"([^"]*)"/, String) || "", pts: JSON.parse(pm[1]) };
+        const h = grab(line, /(?:\{|,)\s*h:\s*(-?[\d.]+)/, Number);
+        if (Number.isFinite(h)) sh.h = h;
+        if (/\bwalls:\s*false/.test(line)) sh.walls = false;
+        out.push(sh);
+      } catch (err) { /* 깨진 줄은 건너뜀 */ }
+    }
+    return out;
+  }
+
   const mapImage = parseMapImage(srcText);
   const roadConsts = parseRoadConstants(srcText);
   const PLACES = parsePlaces(dataText);
@@ -567,6 +594,7 @@
   const FENCES = parseFences(dataText);
   const TERRAIN_ZONES = parseTerrainZones(dataText);
   const TERRAIN_POINTS = parseTerrainPoints(dataText);
+  const TERRAIN_SHAPES = parseTerrainShapes(dataText);
   statusText.textContent = `건물 ${PLACES.length}개 · 도로 ${ROADS.length}개 · 나무 ${TREES.length}그루 · 공원 ${PARKS.length}개${CROSSWALKS.length ? ` · 길 중간 신호등 ${CROSSWALKS.length}곳` : ""}${FENCES.length ? ` · 울타리 ${FENCES.length}토막` : ""} 불러옴`;
 
   const SCALE = mapImage.scale;
@@ -721,6 +749,7 @@
         return hits.length ? hits[0].point.y * A.scale : null;
       };
       terrainOriginRawY = sampleTerrainRaw(0, 0) ?? 0;
+      window.__refreshTerrainShapes?.(); // 지형을 다 불러왔으니 구역 높이 표시(실제 지형을 따르는 꼭짓점)를 다시 계산
     } catch (err) {
       console.warn("위치+고도 뽑기용 지형(GameMap.glb)을 못 불러왔다", err);
     }
@@ -806,6 +835,8 @@
   svg.appendChild(sidewalkLayer);
   svg.appendChild(roadLayer);
   svg.appendChild(skyLayer);
+  const shapeLayer = el("g", {}); // 평지·경사 구역 — 스카이뷰 위, 울타리 아래
+  svg.appendChild(shapeLayer);
   const fenceLayer = el("g", {}); // 울타리 — 스카이뷰 위(단지 둘레가 잘 보이게), 나무·건물 마커 아래
   svg.appendChild(fenceLayer);
   const terrainLayer = el("g", { class: "terrain-ui" }); // 지형 높이 구역·점 — "⛰ 지형 높이" 모드이거나 점을 골랐을 때만 보인다
@@ -1259,6 +1290,167 @@
   }
   drawTerrainZones();
   TERRAIN_POINTS.forEach(addTerrainNode);
+
+  // ── 평지·경사 구역(TERRAIN_SHAPES): 색 = 높이(파랑 낮음 → 빨강 높음), 고르면 꼭짓점(흰 점·노란 점=높이 지정)과
+  // 변 가운데 "+"점(누르면 꼭짓점 추가)이 나온다. 높이는 우리집 기준 raw m("위치+고도 뽑기"와 같은 기준).
+  const shapeNodes = []; // { shape, poly, label, g, uid }
+  let shapeUid = 0;
+  let pendingShape = null; // 그리는 중인 새 구역의 꼭짓점들 [[x, z]]
+  function shapeAutoH(x, z) { return sampleTerrainRaw ? (sampleTerrainRaw(x, z) ?? terrainOriginRawY) - terrainOriginRawY : 0; }
+  function shapeVtxH(sh, pt) { return pt[2] != null ? pt[2] : sh.h != null ? sh.h : shapeAutoH(pt[0], pt[1]); }
+  function shapeColor(sh) {
+    const hs = sh.pts.map((pt) => shapeVtxH(sh, pt));
+    const avg = hs.reduce((a, b) => a + b, 0) / hs.length;
+    const t = Math.max(0, Math.min(1, (avg + 5) / 45));
+    return `hsl(${Math.round(220 - 220 * t)}, 75%, 50%)`;
+  }
+  function shapeLabelText(sh) {
+    const hs = sh.pts.map((pt) => shapeVtxH(sh, pt));
+    const lo = Math.min(...hs), hi = Math.max(...hs);
+    return `${sh.name || "구역"} · ${hi - lo < 0.05 ? lo.toFixed(1) + "m 평지" : lo.toFixed(1) + "~" + hi.toFixed(1) + "m 경사"}`;
+  }
+  function addShapeNode(shape) {
+    const g = el("g", {});
+    const poly = el("polygon", { class: "shape-poly" });
+    const label = el("text", { class: "shape-txt" });
+    g.appendChild(poly);
+    g.appendChild(label);
+    shapeLayer.appendChild(g);
+    const node = { shape, poly, label, g, uid: ++shapeUid, handles: [] };
+    shapeNodes.push(node);
+    poly.addEventListener("pointerdown", (ev) => startShapeDrag(ev, node));
+    wireHoverTip(poly, () => "⛰ " + shapeLabelText(node.shape));
+    updateShapeVisual(node);
+    return node;
+  }
+  function updateShapeVisual(node) {
+    const sh = node.shape;
+    const pxs = sh.pts.map(([x, z]) => rawToPx(x, z));
+    node.poly.setAttribute("points", pxs.map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join(" "));
+    const col = shapeColor(sh);
+    node.poly.setAttribute("fill", col);
+    node.poly.setAttribute("stroke", col);
+    node.poly.setAttribute("stroke-dasharray", sh.walls === false ? "6 4" : "none");
+    const cx = pxs.reduce((a, p) => a + p[0], 0) / pxs.length, cy = pxs.reduce((a, p) => a + p[1], 0) / pxs.length;
+    node.label.setAttribute("x", cx.toFixed(1));
+    node.label.setAttribute("y", cy.toFixed(1));
+    node.label.textContent = shapeLabelText(sh);
+    const isSel = selected && selected.kind === "shape" && selected.ref === node;
+    node.poly.classList.toggle("selected", !!isSel);
+    node.handles.forEach((h) => h.remove());
+    node.handles = [];
+    if (!isSel) return;
+    // 변 가운데 "+": 누르면 그 자리에 꼭짓점을 넣고 바로 끌 수 있다
+    pxs.forEach((a, i) => {
+      const b = pxs[(i + 1) % pxs.length];
+      const m = el("circle", { cx: ((a[0] + b[0]) / 2).toFixed(1), cy: ((a[1] + b[1]) / 2).toFixed(1), r: 6, class: "shape-mid" });
+      m.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+        const A = sh.pts[i], B = sh.pts[(i + 1) % sh.pts.length];
+        sh.pts.splice(i + 1, 0, [Math.round((A[0] + B[0]) * 5) / 10, Math.round((A[1] + B[1]) * 5) / 10]);
+        updateShapeVisual(node);
+        startShapeVtxDrag(ev, node, i + 1);
+      });
+      handleLayer.appendChild(m);
+      node.handles.push(m);
+    });
+    pxs.forEach(([x, y], i) => {
+      const pt = sh.pts[i];
+      const v = el("circle", { cx: x.toFixed(1), cy: y.toFixed(1), r: 8, class: "shape-vtx" + (pt[2] != null ? " fixed" : "") });
+      v.addEventListener("pointerdown", (ev) => startShapeVtxDrag(ev, node, i));
+      wireHoverTip(v, () => `꼭짓점 ${i + 1} · ${shapeVtxH(sh, sh.pts[i]).toFixed(1)}m${sh.pts[i][2] != null ? " (지정)" : sh.h != null ? " (구역 높이)" : " (실제 지형)"}`);
+      const t = el("text", { x: x.toFixed(1), y: (y - 11).toFixed(1), class: "shape-vtxt" });
+      t.textContent = `${i + 1}`;
+      handleLayer.appendChild(v);
+      handleLayer.appendChild(t);
+      node.handles.push(v, t);
+    });
+  }
+  function selectShapeNode(node) {
+    clearSelectionVisual();
+    selected = { kind: "shape", ref: node };
+    updateShapeVisual(node);
+    renderPanel();
+  }
+  function startShapeDrag(ev, node) {
+    ev.stopPropagation();
+    if (mode !== "select") return;
+    selectShapeNode(node);
+    const sh = node.shape;
+    const p0 = svgPoint(ev);
+    const [r0x, r0z] = pxToRaw(p0.x, p0.y);
+    const orig = sh.pts.map((pt) => [...pt]);
+    let moved = false;
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const [rx, rz] = pxToRaw(pt.x, pt.y);
+      const dx = rx - r0x, dz = rz - r0z;
+      if (!moved && Math.hypot(dx, dz) < 1) return;
+      moved = true;
+      sh.pts = orig.map((q) => { const n = [Math.round((q[0] + dx) * 10) / 10, Math.round((q[1] + dz) * 10) / 10]; if (q[2] != null) n.push(q[2]); return n; });
+      updateShapeVisual(node);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (moved) renderPanel();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  function startShapeVtxDrag(ev, node, i) {
+    ev.stopPropagation();
+    const sh = node.shape;
+    const move = (mev) => {
+      const pt = svgPoint(mev);
+      const [rx, rz] = pxToRaw(pt.x, pt.y);
+      const n = [Math.round(rx * 10) / 10, Math.round(rz * 10) / 10];
+      if (sh.pts[i][2] != null) n.push(sh.pts[i][2]);
+      sh.pts[i] = n;
+      updateShapeVisual(node);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (selected && selected.kind === "shape" && selected.ref === node) renderPanel();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  function deleteShape(node) {
+    const idx = TERRAIN_SHAPES.indexOf(node.shape);
+    if (idx !== -1) TERRAIN_SHAPES.splice(idx, 1);
+    node.handles.forEach((h) => h.remove());
+    node.g.remove();
+    const ni = shapeNodes.indexOf(node);
+    if (ni !== -1) shapeNodes.splice(ni, 1);
+    selected = null;
+    renderPanel();
+    toast("구역을 지웠어요.");
+  }
+  function drawPendingShape() {
+    pendingLayer.innerHTML = "";
+    if (!pendingShape || !pendingShape.length) return;
+    const pxs = pendingShape.map(([x, z]) => rawToPx(x, z));
+    if (pxs.length > 1) pendingLayer.appendChild(el("polyline", { points: pxs.map(([a, b]) => `${a},${b}`).join(" "), fill: "none", stroke: "#ffcc33", "stroke-width": 2.5, "vector-effect": "non-scaling-stroke", "stroke-dasharray": "6 4" }));
+    pxs.forEach(([a, b], i) => pendingLayer.appendChild(el("circle", { cx: a, cy: b, r: i === 0 ? 10 : 6, class: "pending-point" })));
+  }
+  function finishPendingShape() {
+    if (!pendingShape || pendingShape.length < 3) { toast("꼭짓점을 3개 이상 찍어 주세요."); return; }
+    const pts = pendingShape.map(([x, z]) => [x, z]);
+    const h = Math.round(shapeAutoH(pts[0][0], pts[0][1]) * 10) / 10;
+    const shape = { name: `구역 ${TERRAIN_SHAPES.length + 1}`, h, pts };
+    TERRAIN_SHAPES.push(shape);
+    pendingShape = null;
+    pendingLayer.innerHTML = "";
+    const node = addShapeNode(shape);
+    setMode("add-shape"); // 끄고
+    selectShapeNode(node);
+    toast("구역을 만들었어요 — 오른쪽에서 이름·높이를 정하세요(평지면 구역 높이만, 경사면 꼭짓점마다 높이).");
+  }
+  TERRAIN_SHAPES.forEach(addShapeNode);
+  window.__refreshTerrainShapes = () => { shapeNodes.forEach(updateShapeVisual); if (selected && selected.kind === "shape") renderPanel(); };
+  if (sampleTerrainRaw) window.__refreshTerrainShapes();
   function setTerrainVisible() {
     svg.classList.toggle("terrain-off", !(mode === "add-terrain" || (selected && selected.kind === "terrain")));
   }
@@ -1475,6 +1667,7 @@
     if (selected.kind === "tree") selected.ref.dot.classList.remove("selected");
     if (selected.kind === "crosswalk") selected.ref.dot.classList.remove("selected");
     if (selected.kind === "terrain") selected.ref.dot.classList.remove("selected");
+    if (selected.kind === "shape") { const n = selected.ref; selected = null; updateShapeVisual(n); return; }
     if (selected.kind === "fence") {
       selected.ref.line.classList.remove("selected");
       selected.ref.handleA.setAttribute("visibility", "hidden");
@@ -1617,7 +1810,7 @@
     const key = selected ? selected.kind + ":" + (selected.ref.id ?? selected.ref.index ?? selected.ref.uid ?? "") + ":" + (selected.ref.seg ? ROADS.indexOf(selected.ref.seg) : "") : null;
     if (key !== lastPanelKey) setPanelCollapsed(!selected);
     lastPanelKey = key;
-    panelTitle.textContent = !selected ? "편집 패널" : selected.kind === "place" ? `🏢 ${selected.ref.name}` : selected.kind === "road" ? "🛣️ 도로" : selected.kind === "park" ? "🌳 공원" : selected.kind === "crosswalk" ? "🚦 횡단보도·신호등" : selected.kind === "fence" ? "🧱 울타리" : selected.kind === "terrain" ? "⛰ 지형 높이" : "🌲 나무";
+    panelTitle.textContent = !selected ? "편집 패널" : selected.kind === "place" ? `🏢 ${selected.ref.name}` : selected.kind === "road" ? "🛣️ 도로" : selected.kind === "park" ? "🌳 공원" : selected.kind === "crosswalk" ? "🚦 횡단보도·신호등" : selected.kind === "fence" ? "🧱 울타리" : selected.kind === "terrain" ? "⛰ 지형 높이" : selected.kind === "shape" ? "⛰ 평지·경사 구역" : "🌲 나무";
     panelBody.innerHTML = "";
     if (!selected) {
       panelBody.innerHTML = '<p class="empty">건물(원)·도로(선)·공원(초록 네모)·나무(초록 점)·신호등(파란 점)·울타리(하늘색 선)를 클릭해서 선택하세요.</p>';
@@ -1937,6 +2130,63 @@
       note.textContent = "빨간 양 끝 점을 끌면 늘이고 줄여요(다른 울타리 끝 3m 안이면 딱 붙어요). 선 가운데를 끌면 통째로 옮겨요. 검은 눈금이 기둥 자리예요.";
       panelBody.appendChild(note);
       panelBody.appendChild(deleteButton(() => deleteFence(node), "🗑 이 울타리 삭제"));
+    } else if (selected.kind === "shape") {
+      const node = selected.ref;
+      const sh = node.shape;
+      const h2 = document.createElement("h2");
+      h2.textContent = sh.name || "구역";
+      panelBody.appendChild(h2);
+      panelBody.appendChild(fieldText("이름", sh.name, (v) => { sh.name = v; updateShapeVisual(node); }));
+      panelBody.appendChild(fieldText("구역 높이 (m, 비우면 실제 지형)", sh.h != null ? String(sh.h) : "", (v) => {
+        const n = parseFloat(v);
+        if (v.trim() === "" || !Number.isFinite(n)) delete sh.h; else sh.h = n;
+        updateShapeVisual(node);
+      }, { note: "우리집 = 0m 기준(\"위치+고도 뽑기\"와 같은 숫자). 평지면 여기만 정하면 돼요. 꼭짓점 높이를 따로 정한 곳은 그 값을 써요." }));
+      const wl = document.createElement("label");
+      wl.className = "field";
+      wl.style.cssText = "display:flex; align-items:center; gap:8px; cursor:pointer;";
+      const wb = document.createElement("input");
+      wb.type = "checkbox";
+      wb.checked = sh.walls !== false;
+      wb.style.cssText = "width:18px; height:18px;";
+      wb.addEventListener("change", () => { if (wb.checked) delete sh.walls; else sh.walls = false; updateShapeVisual(node); });
+      const wt = document.createElement("span");
+      wt.textContent = "가장자리 옹벽 (끄면 점선 — 높이 차가 있어도 벽 없이)";
+      wl.appendChild(wb); wl.appendChild(wt);
+      panelBody.appendChild(wl);
+      const tbl = document.createElement("div");
+      tbl.style.cssText = "display:grid; grid-template-columns: 26px 1fr 1fr 1fr 28px; gap:4px; align-items:center; margin:8px 0; font-size:12px;";
+      ["#", "x", "z", "높이 m", ""].forEach((t) => { const d = document.createElement("b"); d.textContent = t; tbl.appendChild(d); });
+      sh.pts.forEach((pt, i) => {
+        const num = document.createElement("span"); num.textContent = i + 1; tbl.appendChild(num);
+        [0, 1, 2].forEach((k) => {
+          const inp = document.createElement("input");
+          inp.type = "number"; inp.step = k === 2 ? "0.1" : "0.5";
+          inp.style.cssText = "width:100%; padding:3px; font:inherit; box-sizing:border-box;";
+          inp.value = pt[k] != null ? pt[k] : "";
+          if (k === 2) inp.placeholder = shapeVtxH(sh, pt).toFixed(1);
+          inp.addEventListener("change", () => {
+            const n = parseFloat(inp.value);
+            if (k === 2) { if (inp.value === "" || !Number.isFinite(n)) pt.length = 2; else pt[2] = n; }
+            else if (Number.isFinite(n)) pt[k] = n;
+            updateShapeVisual(node);
+            renderPanel();
+          });
+          tbl.appendChild(inp);
+        });
+        const del = document.createElement("button");
+        del.textContent = "✕"; del.title = "이 꼭짓점 지우기"; del.style.cssText = "padding:2px 6px;";
+        del.disabled = sh.pts.length <= 3;
+        del.addEventListener("click", () => { sh.pts.splice(i, 1); updateShapeVisual(node); renderPanel(); });
+        tbl.appendChild(del);
+      });
+      panelBody.appendChild(tbl);
+      const note = document.createElement("p");
+      note.className = "note";
+      note.style.marginBottom = "10px";
+      note.textContent = "꼭짓점 높이 칸을 비우면 구역 높이(없으면 그 자리 실제 지형)를 따라요 — 노란 점이 높이를 따로 정한 꼭짓점이에요. 경사로는 위쪽 끝 꼭짓점들에 윗 높이, 아래쪽 끝은 비워 두면 길에 자연스럽게 붙어요. 흰 점을 끌어 옮기고, 변 가운데 작은 점을 누르면 꼭짓점이 늘어나요. 구역 안을 끌면 통째로 옮겨요.";
+      panelBody.appendChild(note);
+      panelBody.appendChild(deleteButton(() => deleteShape(node), "🗑 이 구역 삭제"));
     } else if (selected.kind === "terrain") {
       const node = selected.ref;
       const h2 = document.createElement("h2");
@@ -2025,6 +2275,7 @@
     "add-signal": document.getElementById("addSignalBtn"),
     "add-fence": document.getElementById("addFenceBtn"),
     "add-terrain": document.getElementById("addTerrainBtn"),
+    "add-shape": document.getElementById("addShapeBtn"),
     "add-junction": document.getElementById("addJunctionBtn"),
     "delete": document.getElementById("deleteModeBtn"),
     "pick-elevation": document.getElementById("pickElevationBtn"),
@@ -2037,6 +2288,7 @@
     "add-tree": "지도를 클릭할 때마다 나무가 하나씩 심어집니다(다시 누르면 꺼집니다).",
     "add-signal": "도로 위를 누르면 그 자리에 횡단보도+신호등이 생깁니다. 교차로 끝 근처를 누르면 그 끝의 횡단보도·신호등을 켭니다(다시 누르면 꺼집니다).",
     "add-terrain": "노란 점선(높이 구역) 안을 누르면 높이 점이 생겨요 — 숫자 = 바깥 도로보다 몇 층 높은지. 있는 점을 누르면 골라서 고칠 수 있어요(다시 누르면 꺼짐).",
+    "add-shape": "지도를 차례로 눌러 구역 꼭짓점을 찍으세요 — 첫 점(큰 원)을 다시 누르거나 Enter로 끝, Esc로 취소. 만든 뒤 오른쪽에서 높이를 정해요.",
     "add-fence": "지도를 차례로 누르면 그 점들을 따라 울타리가 이어져요 — 다 그렸으면 Esc나 🧱 버튼을 다시 누르세요(다른 울타리 끝 3m 안을 누르면 딱 붙어요).",
     "add-junction": "주황 원(이어지지 않은 곳)을 누르면 거기만 교차로로 이어져요 — 연달아 눌러도 돼요(다시 누르면 꺼짐)",
     "delete": "교차로(빨간 점선 원)나 신호등(빨간 원)·길 중간 횡단보도(파란 점)를 누르면 지워요 — 연달아 눌러도 돼요(다시 누르면 꺼짐)",
@@ -2046,6 +2298,7 @@
     if (pendingLayer.firstChild) pendingLayer.innerHTML = "";
     pendingRoadStart = null;
     pendingFenceStart = null;
+    pendingShape = null;
     mode = mode === next ? "select" : next;
     Object.entries(addButtons).forEach(([key, btn]) => btn.classList.toggle("active", key === mode));
     svg.classList.toggle("mode-add", mode !== "select");
@@ -2067,9 +2320,16 @@
   addButtons["add-junction"].addEventListener("click", () => setMode("add-junction"));
   addButtons["add-fence"].addEventListener("click", () => setMode("add-fence"));
   addButtons["add-terrain"].addEventListener("click", () => setMode("add-terrain"));
+  addButtons["add-shape"].addEventListener("click", () => setMode("add-shape"));
   addButtons["delete"].addEventListener("click", () => setMode("delete"));
   addButtons["pick-elevation"].addEventListener("click", () => setMode("pick-elevation"));
   window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && mode === "add-shape" && pendingShape && document.activeElement?.tagName !== "INPUT") {
+      ev.preventDefault(); // 눌려 있던(포커스된) 버튼이 Enter로 다시 눌리지 않게
+      document.activeElement?.blur?.();
+      finishPendingShape();
+      return;
+    }
     if (ev.key !== "Escape") return;
     if (!delModal.classList.contains("hidden")) { closeDelModal(); return; } // 열린 창부터 닫는다
     if (mode !== "select") setMode(mode);
@@ -2336,6 +2596,18 @@
       setMode("add-signal");
       selectCrossNode(cnode);
       toast("횡단보도·신호등을 놓았어요 — 파란 점을 끌어 옮기고, 오른쪽에서 신호등을 끄거나 지울 수 있어요.");
+      return;
+    }
+    if (mode === "add-shape") {
+      const p = [Math.round(rx * 10) / 10, Math.round(rz * 10) / 10];
+      if (!pendingShape) pendingShape = [];
+      if (pendingShape.length >= 3) {
+        const [fx, fy] = rawToPx(pendingShape[0][0], pendingShape[0][1]);
+        if (Math.hypot(fx - pt.x, fy - pt.y) * zoom < (COARSE ? 26 : 16)) { finishPendingShape(); return; }
+      }
+      pendingShape.push(p);
+      drawPendingShape();
+      statusText.textContent = `꼭짓점 ${pendingShape.length}개 — 첫 점(큰 원)을 누르거나 Enter로 끝, Esc로 취소`;
       return;
     }
     if (mode === "add-terrain") {
@@ -2638,6 +2910,11 @@
   function serializeTerrainZone(z) {
     return `  { name: ${JSON.stringify(z.name || "")}, poly: [${z.poly.map(([x, zz]) => `[${fmtNum(x)}, ${fmtNum(zz)}]`).join(", ")}] },`;
   }
+  function serializeTerrainShape(sh) {
+    const r = (v) => Math.round(v * 100) / 100;
+    const pts = sh.pts.map((pt) => `[${fmtNum(pt[0])}, ${fmtNum(pt[1])}${pt[2] != null ? ", " + r(pt[2]) : ""}]`).join(", ");
+    return `  { name: ${JSON.stringify(sh.name || "")}${sh.h != null ? ", h: " + r(sh.h) : ""}${sh.walls === false ? ", walls: false" : ""}, pts: [${pts}] },`;
+  }
   function serializeTerrainPoint(t) {
     return `  { x: ${fmtNum(t.x)}, z: ${fmtNum(t.z)}, h: ${Math.round(t.h * 100) / 100}${t.name ? `, name: ${JSON.stringify(t.name)}` : ""} },`;
   }
@@ -2657,7 +2934,7 @@
   }
   function buildMapDataFile() {
     // 파일에 있는 목록만 그 자리에서 바꿔치기한다(CROSSWALKS는 예전 파일엔 없을 수 있어서 없으면 맨 뒤에 붙인다)
-    const sections = ["PLACES", "ROAD_SEGMENTS", "TREES", "PARKS", "CROSSWALKS", "FENCES", "TERRAIN_ZONES", "TERRAIN_POINTS"]
+    const sections = ["PLACES", "ROAD_SEGMENTS", "TREES", "PARKS", "CROSSWALKS", "FENCES", "TERRAIN_ZONES", "TERRAIN_POINTS", "TERRAIN_SHAPES"]
       .map((name) => ({ name, ...sliceArraySection(name) }))
       .filter((sec) => sec.start >= 0)
       .sort((p, q) => p.start - q.start);
@@ -2671,6 +2948,7 @@
       FENCES: "export const FENCES = [\n" + FENCES.map(serializeFence).join("\n") + (FENCES.length ? "\n" : "") + "];",
       TERRAIN_ZONES: "export const TERRAIN_ZONES = [\n" + TERRAIN_ZONES.map(serializeTerrainZone).join("\n") + (TERRAIN_ZONES.length ? "\n" : "") + "];",
       TERRAIN_POINTS: "export const TERRAIN_POINTS = [\n" + TERRAIN_POINTS.map(serializeTerrainPoint).join("\n") + (TERRAIN_POINTS.length ? "\n" : "") + "];",
+      TERRAIN_SHAPES: "export const TERRAIN_SHAPES = [\n" + TERRAIN_SHAPES.map(serializeTerrainShape).join("\n") + (TERRAIN_SHAPES.length ? "\n" : "") + "];",
     };
     for (let i = 0; i < sections.length; i++) {
       out += blocks[sections[i].name];
@@ -2681,6 +2959,9 @@
       out = out.replace(/\s*$/, "\n\n") +
         "// 길 중간 횡단보도·신호등 — x,z(raw)는 도로 위 자리(가장 가까운 도로에 붙는다), signal: false면 신호등 없이 횡단보도만.\n" +
         "// map_editor.html의 \"🚦 신호등 추가\"로 다룬다.\n" + blocks.CROSSWALKS + "\n";
+    }
+    if (!sections.some((sec) => sec.name === "TERRAIN_SHAPES") && TERRAIN_SHAPES.length) {
+      out = out.replace(/\s*$/, "\n\n") + "// 평지·경사 구역 — map_editor.html의 \"⛰ 평지·경사 구역\"으로 다룬다.\n" + blocks.TERRAIN_SHAPES + "\n";
     }
     if (!sections.some((sec) => sec.name === "FENCES") && FENCES.length) {
       out = out.replace(/\s*$/, "\n\n") +
@@ -2739,7 +3020,7 @@
     window.dispatchEvent(new PointerEvent("pointerup", { pointerType: "touch" }));
   }
   // 끌 수 있는 걸 손가락으로 누르면 화면이 같이 스크롤되지 않게(iOS는 SVG의 touch-action을 잘 안 지켜서 한 번 더 막는다)
-  const DRAGGABLE = ".marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect, .cw-hit, .fence-hit, .terrain-pt";
+  const DRAGGABLE = ".marker-hit, .rot-hit, .curve-hit, .tree-hit, .road-handle, .park-rect, .cw-hit, .fence-hit, .terrain-pt, .shape-poly, .shape-vtx, .shape-mid";
   svg.addEventListener("touchstart", (ev) => {
     if (ev.touches.length === 1 && ev.target.closest && ev.target.closest(DRAGGABLE) && mode === "select") ev.preventDefault();
   }, { passive: false });
@@ -2908,7 +3189,7 @@
   const undoBtn = document.getElementById("undoBtn");
   const redoBtn = document.getElementById("redoBtn");
   function snapshotState() {
-    return JSON.stringify({ PLACES, ROADS, PARKS, TREES, CROSSWALKS, FENCES, TERRAIN_POINTS });
+    return JSON.stringify({ PLACES, ROADS, PARKS, TREES, CROSSWALKS, FENCES, TERRAIN_POINTS, TERRAIN_SHAPES });
   }
   function updateUndoButtons() {
     undoBtn.disabled = undoStack.length === 0;
@@ -2936,13 +3217,15 @@
     replaceAll(CROSSWALKS, st.CROSSWALKS || []);
     replaceAll(FENCES, st.FENCES || []);
     replaceAll(TERRAIN_POINTS, st.TERRAIN_POINTS || []);
+    replaceAll(TERRAIN_SHAPES, st.TERRAIN_SHAPES || []);
     rebuildView();
   }
   function rebuildView() {
     selected = null;
     pendingRoadStart = null;
     pendingFenceStart = null;
-    [parkLayer, sidewalkLayer, laneLayer, roadMarkLayer, skyLayer, fenceLayer, terrainLayer, treeLayer, placeLayer, crossLayer, pendingLayer, handleLayer].forEach((l) => { l.innerHTML = ""; });
+    pendingShape = null;
+    [parkLayer, sidewalkLayer, laneLayer, roadMarkLayer, skyLayer, shapeLayer, fenceLayer, terrainLayer, treeLayer, placeLayer, crossLayer, pendingLayer, handleLayer].forEach((l) => { l.innerHTML = ""; });
     // roadLayer 안에는 도로 표면 묶음(roadSurfaceLayer)도 들어 있어서 통째로 비우면 안 된다 — 클릭 영역(hit)만 지운다
     [...roadLayer.children].forEach((c) => { if (c !== roadSurfaceLayer) c.remove(); });
     roadRankGroups.forEach((g) => { g.innerHTML = ""; });
@@ -2956,6 +3239,7 @@
     crossNodes.length = 0;
     fenceNodes.length = 0;
     terrainNodes.length = 0;
+    shapeNodes.length = 0;
     PLACES.forEach(addPlaceNode);
     ROADS.forEach(addRoadNode);
     PARKS.forEach(addParkNode);
@@ -2964,6 +3248,7 @@
     FENCES.forEach(addFenceNode);
     drawTerrainZones();
     TERRAIN_POINTS.forEach(addTerrainNode);
+    TERRAIN_SHAPES.forEach(addShapeNode);
     setTerrainVisible();
     scheduleRoadMarkings();
     renderPanel();
