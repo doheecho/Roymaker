@@ -2420,66 +2420,255 @@
     root.add(plazaMesh);
 
     // ---------------------------------------------------------
-    // 교문 앞길: 좌측 초록길 + 중앙 빨간길 + 우측 베이지색 계단 보행로 + 우측 금속 울타리
+    // 교문 앞길: 좌측 초록 보행로 + 중앙 빨간 차도 + 우측 흰색 3D 화강석 계단 + 은색 U자 볼라드 + 우측 금속 울타리
+    // (교문에서 직진 후 좌측/동쪽으로 둥글게 틀어져 어린이 보호구역 도로 보도로 합류)
     // ---------------------------------------------------------
-    const greenSidePathPoly = [
-      [51.8,  48.0],
-      [53.8,  48.0],
-      [44.2, 118.0],
-      [41.5, 118.0]
-    ];
-    const greenSidePath = createGroundPolygon(
-      greenSidePathPoly,
-      0.42,
-      -0.35,
-      new THREE.MeshStandardMaterial({
-        map: createStampedRoadTexture('#2F7A47', 'rgba(20,60,32,0.22)', 'rgba(95,180,120,0.16)'),
-        roughness: 0.84
-      })
-    );
-    root.add(greenSidePath);
+    (() => {
+      const Cx = 63.307, Cz = 80.952;
+      const aStart = Math.atan2(-0.1788854, -0.9838699) + Math.PI * 2; // ~190.30 deg
+      const aEnd   = Math.atan2(0.9901475, -0.1400280);                 // ~98.05 deg
+      const etx = 0.9901475, etz = 0.1400280;                           // 동쪽 도로 보도 수직 합류 방향
+      const leadLen = 6.33;
+      const R_GR = 16.5, R_RD = 14.5, R_ST = 8.1, R_IN = 4.8;
+      const N_ARC = 16;
 
-    const redRoadPoly = [
-      [53.8,  45.5],
-      [60.2,  45.5],
-      [51.4, 118.0],
-      [44.2, 118.0]
-    ];
-    const redEntranceRoad = createGroundPolygon(
-      redRoadPoly,
-      0.42,
-      -0.35,
-      new THREE.MeshStandardMaterial({
-        map: createStampedRoadTexture('#B85349', 'rgba(95,30,25,0.22)', 'rgba(220,140,125,0.16)'),
-        roughness: 0.84
-      })
-    );
-    root.add(redEntranceRoad);
+      // 반지름 R(4.8=우측 울타리 ~ 16.5=좌측 담장)에 대한 경로 포인트 생성
+      function traceLane(R, topExtendZ = 0, arcSteps = N_ARC) {
+        const u = (R_GR - R) / (R_GR - R_IN); // 0(좌측 담장) ~ 1(우측 울타리)
+        const pts = [];
+        const gx = 51.8 + (63.5 - 51.8) * u;
+        if (topExtendZ !== 0) pts.push([gx, 48.0 + topExtendZ]);
+        pts.push([gx, 48.0]);
+        pts.push([47.8 + (59.18 - 47.8) * u, 74.0 + (76.09 - 74.0) * u]);
+        for (let i = 0; i <= arcSteps; i++) {
+          const a = aStart + (aEnd - aStart) * (i / arcSteps);
+          pts.push([Cx + R * Math.cos(a), Cz + R * Math.sin(a)]);
+        }
+        const [ex0, ez0] = pts[pts.length - 1];
+        pts.push([ex0 + leadLen * etx, ez0 + leadLen * etz]);
+        return pts;
+      }
 
-    const roadLineMat = new THREE.MeshStandardMaterial({ color: '#F1F5F9', roughness: 0.70 });
-    [
-      [[53.95, 48.0], [44.45, 118.0]],
-      [[60.05, 48.0], [51.20, 118.0]]
-    ].forEach(([[x1, z1], [x2, z2]]) => {
-      const len = Math.hypot(x2 - x1, z2 - z1);
-      const edgeLine = new THREE.Mesh(new THREE.BoxGeometry(len, 0.014, 0.14), roadLineMat);
-      edgeLine.position.set((x1 + x2) / 2, 0.072, (z1 + z2) / 2);
-      edgeLine.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
-      root.add(edgeLine);
-    });
+      function makeStripPoly(Rleft, Rright, topExtendZ = 0) {
+        const leftPts = traceLane(Rleft, topExtendZ);
+        const rightPts = traceLane(Rright, topExtendZ).reverse();
+        return [...leftPts, ...rightPts];
+      }
 
-    const stairTopLeft  = [60.2, 48.0];
-    const stairTopRight = [63.5, 48.0];
-    const stairBotLeft  = [51.4, 118.0];
-    const stairBotRight = [54.9, 118.0];
-    root.add(createBeigeStairWalkway(stairTopLeft, stairTopRight, stairBotLeft, stairBotRight, 0.075));
+      // 1) 좌측 초록 보행로
+      const greenSidePath = createGroundPolygon(
+        makeStripPoly(R_GR, R_RD),
+        0.42,
+        -0.35,
+        new THREE.MeshStandardMaterial({
+          map: createStampedRoadTexture('#2F7A47', 'rgba(20,60,32,0.22)', 'rgba(95,180,120,0.16)'),
+          roughness: 0.84
+        })
+      );
+      root.add(greenSidePath);
 
-    const rightRoadsideFencePoints = [
-      [61.0, 48.0],
-      stairTopRight,
-      stairBotRight
-    ];
-    root.add(createRoadsideMetalFence(rightRoadsideFencePoints));
+      // 2) 중앙 빨간 차도 (교문 안쪽 z=45.5까지 연결)
+      const redEntranceRoad = createGroundPolygon(
+        makeStripPoly(R_RD, R_ST, -2.5),
+        0.42,
+        -0.35,
+        new THREE.MeshStandardMaterial({
+          map: createStampedRoadTexture('#B85349', 'rgba(95,30,25,0.22)', 'rgba(220,140,125,0.16)'),
+          roughness: 0.84
+        })
+      );
+      root.add(redEntranceRoad);
+
+      // 3) 흰색 차선 2줄 (직선 + 둥근 곡선 + 합류부)
+      const roadLineMat = new THREE.MeshStandardMaterial({ color: '#F1F5F9', roughness: 0.70 });
+      root.add(createGroundPolygon(makeStripPoly(R_RD + 0.02, R_RD - 0.13), 0.018, 0.060, roadLineMat));
+      root.add(createGroundPolygon(makeStripPoly(R_ST + 0.15, R_ST), 0.018, 0.060, roadLineMat));
+
+      // 4) 초록 보행로·빨간 차도 경계 은색 U자 안전 가드레일 (거리뷰 참고 디테일)
+      (function addSilverURails() {
+        const uPath = new THREE.CurvePath();
+        const halfL = 0.56, railH = 0.72, bendR = 0.11;
+        uPath.add(new THREE.LineCurve3(new THREE.Vector3(-halfL, 0, 0), new THREE.Vector3(-halfL, railH - bendR, 0)));
+        const ptsL = [];
+        for (let i = 0; i <= 6; i++) {
+          const t = (Math.PI / 2) * (i / 6);
+          ptsL.push(new THREE.Vector3(-halfL + bendR - Math.cos(t) * bendR, railH - bendR + Math.sin(t) * bendR, 0));
+        }
+        uPath.add(new THREE.CatmullRomCurve3(ptsL));
+        uPath.add(new THREE.LineCurve3(new THREE.Vector3(-halfL + bendR, railH, 0), new THREE.Vector3(halfL - bendR, railH, 0)));
+        const ptsR = [];
+        for (let i = 0; i <= 6; i++) {
+          const t = (Math.PI / 2) * (i / 6);
+          ptsR.push(new THREE.Vector3(halfL - bendR + Math.sin(t) * bendR, railH - bendR + Math.cos(t) * bendR, 0));
+        }
+        uPath.add(new THREE.CatmullRomCurve3(ptsR));
+        uPath.add(new THREE.LineCurve3(new THREE.Vector3(halfL, railH - bendR, 0), new THREE.Vector3(halfL, 0, 0)));
+
+        const uGeo = new THREE.TubeGeometry(uPath, 28, 0.032, 8, false);
+        const uMat = new THREE.MeshStandardMaterial({ color: '#DCE3EC', metalness: 0.78, roughness: 0.24 });
+        const linePts = traceLane(R_RD - 0.04, 0, 24);
+        const placements = [];
+        const spacing = 2.25;
+        let carry = 1.6;
+        for (let i = 0; i < linePts.length - 1; i++) {
+          const [x1, z1] = linePts[i], [x2, z2] = linePts[i + 1];
+          const dx = x2 - x1, dz = z2 - z1, segL = Math.hypot(dx, dz);
+          if (segL < 1e-4) continue;
+          const rotY = -Math.atan2(dz, dx);
+          while (carry <= segL) {
+            const t = carry / segL;
+            placements.push({ x: x1 + dx * t, z: z1 + dz * t, rotY });
+            carry += spacing;
+          }
+          carry -= segL;
+        }
+        // 마지막 합류부 끝 0.8m는 여백을 남김
+        if (placements.length > 1) placements.pop();
+        const uInst = new THREE.InstancedMesh(uGeo, uMat, placements.length);
+        uInst.castShadow = true;
+        const dummy = new THREE.Object3D();
+        placements.forEach((p, idx) => {
+          dummy.position.set(p.x, 0.06, p.z);
+          dummy.rotation.set(0, p.rotY, 0);
+          dummy.updateMatrix();
+          uInst.setMatrixAt(idx, dummy.matrix);
+        });
+        uInst.instanceMatrix.needsUpdate = true;
+        root.add(uInst);
+      })();
+
+      // 5) 우측 흰색 화강석 3D 계단 보행로 (하부 슬래브 + 양측 화강석 연석 + 99개 입체 계단 디딤판)
+      (function addWhite3DStairway() {
+        const stairGroup = new THREE.Group();
+
+        // 화강석 디딤판 텍스처 (밝은 흰·미색 화강석 + 앞단 논슬립 홈)
+        const sCanvas = document.createElement('canvas');
+        sCanvas.width = 256; sCanvas.height = 256;
+        const sctx = sCanvas.getContext('2d');
+        sctx.fillStyle = '#ECE9E2';
+        sctx.fillRect(0, 0, 256, 256);
+        for (let i = 0; i < 3600; i++) {
+          const gx = (i * 59) % 256, gy = (i * 103 + Math.floor(i / 256) * 19) % 256;
+          sctx.fillStyle = (i % 3 === 0) ? 'rgba(255,255,255,0.28)' : 'rgba(90,86,78,0.12)';
+          sctx.fillRect(gx, gy, 2, 2);
+        }
+        // 앞단 미끄럼방지 논슬립 줄 (v=0..1 중 앞쪽 가장자리)
+        sctx.fillStyle = '#9E988C';
+        sctx.fillRect(0, 220, 256, 7);
+        sctx.fillRect(0, 232, 256, 5);
+        sctx.fillStyle = '#CFCAC0';
+        sctx.fillRect(0, 246, 256, 10);
+        const stepTex = makeTex(sCanvas);
+
+        const slabMat = new THREE.MeshStandardMaterial({ color: '#CFC9BD', roughness: 0.88 });
+        const curbMat = new THREE.MeshStandardMaterial({ color: '#E0DCD4', roughness: 0.78 });
+        const stepTopMat = new THREE.MeshStandardMaterial({ map: stepTex, roughness: 0.76 });
+        const stepSideMat = new THREE.MeshStandardMaterial({ color: '#C4BEB2', roughness: 0.86 });
+
+        // 하부 경사 슬래브 (계단 밑 틈 차단, 우측 옹벽 두겁석 위에 딱 맞게 안쪽 0.06m 여유)
+        stairGroup.add(createGroundPolygon(makeStripPoly(R_ST, R_IN + 0.06), 0.26, -0.22, slabMat));
+        // 양측 화강석 연석(경계석)
+        stairGroup.add(createGroundPolygon(makeStripPoly(R_ST, R_ST - 0.24), 0.18, -0.04, curbMat));
+        stairGroup.add(createGroundPolygon(makeStripPoly(R_IN + 0.24, R_IN + 0.02), 0.18, -0.04, curbMat));
+
+        const stepW = (R_ST - R_IN) - 0.42; // 2.88m (연석 안쪽에 밀착)
+        const stepH = 0.36;
+        const stepTopY = 0.115;
+        const stepCenterY = stepTopY - stepH / 2;
+
+        // 직선부 + 합류부 직사각 3D 계단 (InstancedMesh — 각 단이 수평 디딤판+수직 챌면 유지)
+        const straightStepGeo = new THREE.BoxGeometry(stepW, stepH, 0.56);
+        const straightStepMats = [stepSideMat, stepSideMat, stepTopMat, stepSideMat, stepSideMat, stepSideMat];
+        const rectPlacements = [];
+        const dummy = new THREE.Object3D();
+
+        // 직선부: 교문(61.85, 48.0) -> 곡선 시작(56.96, 79.80)
+        const stMidStart = [61.85, 48.0];
+        const stMidEnd = [Cx + ((R_ST + R_IN) / 2) * Math.cos(aStart), Cz + ((R_ST + R_IN) / 2) * Math.sin(aStart)];
+        const stDx = stMidEnd[0] - stMidStart[0], stDz = stMidEnd[1] - stMidStart[1];
+        const stLen = Math.hypot(stDx, stDz);
+        const stCount = Math.round(stLen / 0.50);
+        // BoxGeometry의 +Z가 진행방향(내리막)을 향하도록 Y회전
+        const stYaw = Math.atan2(stDx, stDz);
+        for (let i = 0; i < stCount; i++) {
+          const t = (i + 0.5) / stCount;
+          rectPlacements.push({ x: stMidStart[0] + stDx * t, z: stMidStart[1] + stDz * t, yaw: stYaw });
+        }
+
+        // 합류부 직선: 곡선 끝 -> 보도 가장자리
+        const Rmid = (R_ST + R_IN) / 2;
+        const exStart = [Cx + Rmid * Math.cos(aEnd), Cz + Rmid * Math.sin(aEnd)];
+        const exCount = Math.round(leadLen / 0.50);
+        const exYaw = Math.atan2(etx, etz);
+        for (let i = 0; i < exCount; i++) {
+          const dist = ((i + 0.5) / exCount) * leadLen;
+          rectPlacements.push({ x: exStart[0] + etx * dist, z: exStart[1] + etz * dist, yaw: exYaw });
+        }
+
+        const rectInst = new THREE.InstancedMesh(straightStepGeo, straightStepMats, rectPlacements.length);
+        rectInst.castShadow = true;
+        rectInst.receiveShadow = true;
+        rectPlacements.forEach((p, idx) => {
+          dummy.position.set(p.x, stepCenterY, p.z);
+          dummy.rotation.set(0, p.yaw, 0);
+          dummy.updateMatrix();
+          rectInst.setMatrixAt(idx, dummy.matrix);
+        });
+        rectInst.instanceMatrix.needsUpdate = true;
+        stairGroup.add(rectInst);
+
+        // 둥근 곡선부 부채꼴(사다리꼴) 3D 계단 (InstancedMesh)
+        const arcCount = 22;
+        const dAng = Math.abs(aEnd - aStart) / arcCount;
+        const rInner = R_IN + 0.21, rOuter = R_ST - 0.21;
+        const halfIn = Math.max(0.22, rInner * dAng * 0.62);
+        const halfOut = Math.max(0.32, rOuter * dAng * 0.60);
+        const halfW = (rOuter - rInner) / 2;
+        const trapShape = new THREE.Shape();
+        // X = 반경방향(-halfW=안쪽, +halfW=바깥쪽), Y -> rotateX(PI/2) 후 Z = 접선방향(+Z가 내리막 앞단)
+        trapShape.moveTo(-halfW, -halfIn);
+        trapShape.lineTo( halfW, -halfOut);
+        trapShape.lineTo( halfW,  halfOut);
+        trapShape.lineTo(-halfW,  halfIn);
+        trapShape.closePath();
+        const trapGeo = new THREE.ExtrudeGeometry(trapShape, { depth: stepH, bevelEnabled: false });
+        trapGeo.rotateX(Math.PI / 2); // 상면 y=0, 하면 y=-stepH
+        trapGeo.translate(0, stepH / 2, 0); // 중심 y=0
+        // 상면 UV를 [0,1]x[0,1]로 정규화 (앞단 논슬립 줄이 내리막 방향(+Z)에 정렬되도록)
+        const tPos = trapGeo.attributes.position, tUv = trapGeo.attributes.uv;
+        for (let i = 0; i < tPos.count; i++) {
+          const lx = tPos.getX(i), lz = tPos.getZ(i);
+          const u = (lx + halfW) / (2 * halfW);
+          const spanZ = halfIn + (halfOut - halfIn) * Math.max(0, Math.min(1, u));
+          // aStart(190deg)->aEnd(98deg)로 각도 감소 -> 내리막 접선은 -Z 방향!
+          const v = (spanZ - lz) / (2 * spanZ);
+          tUv.setXY(i, u, Math.max(0, Math.min(1, 1 - v)));
+        }
+        tUv.needsUpdate = true;
+        const arcInst = new THREE.InstancedMesh(trapGeo, [stepTopMat, stepSideMat], arcCount);
+        arcInst.castShadow = true;
+        arcInst.receiveShadow = true;
+        for (let i = 0; i < arcCount; i++) {
+          const a = aStart + (aEnd - aStart) * ((i + 0.5) / arcCount);
+          const px = Cx + Rmid * Math.cos(a);
+          const pz = Cz + Rmid * Math.sin(a);
+          // 로컬 +X가 바깥쪽 반경 (cos(a), sin(a))을 향하도록 rotation.y = -a
+          dummy.position.set(px, stepCenterY, pz);
+          dummy.rotation.set(0, -a, 0);
+          dummy.updateMatrix();
+          arcInst.setMatrixAt(i, dummy.matrix);
+        }
+        arcInst.instanceMatrix.needsUpdate = true;
+        stairGroup.add(arcInst);
+
+        root.add(stairGroup);
+      })();
+
+      // 6) 우측 금속 울타리 (교문 우측 -> 직선 -> 둥근 좌측 커브 -> 노란 종료지점)
+      const rightFenceCurve = traceLane(R_IN + 0.05, 0, 6);
+      const rightRoadsideFencePoints = [[61.0, 48.0], ...rightFenceCurve];
+      root.add(createRoadsideMetalFence(rightRoadsideFencePoints));
+    })();
 
     // ---------------------------------------------------------
     // 교직원용 주차장 (주차 구획선 + 카스토퍼)
