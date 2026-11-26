@@ -3428,15 +3428,89 @@ function disposeObject3D(obj) {
 // · 안 넘어가면 보도 높이 그대로 두고, 외곽을 따라 바닥까지 벽(받침 옆면)만 세워 허공에 뜬 틈을 가린다
 //   (예전처럼 사각형 판을 통째로 깔면 모양이 다른 건물은 판이 도로까지 튀어나왔다).
 // · 같은 외곽을 캐릭터 발판으로 등록해서 건물 앞마당에서도 보도 높이로 선다.
-function modelBottomHull(model) {
+function polygonArea2D(poly) {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i], q = poly[(i + 1) % poly.length];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return Math.abs(a) * 0.5;
+}
+
+// 점유된 격자 셀 집합(keys "ix,iz")의 외곽 직교 경계 루프들을 추적한다(L자·U자형 아파트용)
+function traceGridBoundaryLoops(cellSet, cellSize) {
+  const edges = new Map(); // "x,z" -> [[nx, nz], ...]
+  const addEdge = (x0, z0, x1, z1) => {
+    const k = `${x0},${z0}`;
+    if (!edges.has(k)) edges.set(k, []);
+    edges.get(k).push([x1, z1]);
+  };
+  cellSet.forEach((key) => {
+    const [ix, iz] = key.split(",").map(Number);
+    if (!cellSet.has(`${ix},${iz - 1}`)) addEdge(ix, iz, ix + 1, iz);
+    if (!cellSet.has(`${ix + 1},${iz}`)) addEdge(ix + 1, iz, ix + 1, iz + 1);
+    if (!cellSet.has(`${ix},${iz + 1}`)) addEdge(ix + 1, iz + 1, ix, iz + 1);
+    if (!cellSet.has(`${ix - 1},${iz}`)) addEdge(ix, iz + 1, ix, iz);
+  });
+  const loops = [];
+  const used = new Set();
+  for (const [startKey, nexts] of edges) {
+    for (let ni = 0; ni < nexts.length; ni++) {
+      const ek = `${startKey}->${nexts[ni][0]},${nexts[ni][1]}`;
+      if (used.has(ek)) continue;
+      const [sx, sz] = startKey.split(",").map(Number);
+      const loop = [[sx, sz]];
+      let cx = nexts[ni][0], cz = nexts[ni][1];
+      used.add(ek);
+      let guard = 0;
+      while ((cx !== sx || cz !== sz) && guard++ < 4000) {
+        loop.push([cx, cz]);
+        const ck = `${cx},${cz}`;
+        const opts = edges.get(ck);
+        if (!opts) break;
+        let picked = null;
+        for (const cand of opts) {
+          const k2 = `${ck}->${cand[0]},${cand[1]}`;
+          if (!used.has(k2)) { picked = cand; used.add(k2); break; }
+        }
+        if (!picked) break;
+        cx = picked[0]; cz = picked[1];
+      }
+      if (loop.length >= 3) {
+        // 일직선 중간 꼭짓점을 정리해 불필요한 폴리곤 수를 줄인다
+        const simp = [];
+        for (let i = 0; i < loop.length; i++) {
+          const prev = loop[(i - 1 + loop.length) % loop.length];
+          const cur = loop[i];
+          const next = loop[(i + 1) % loop.length];
+          if ((cur[0] - prev[0]) * (next[1] - cur[1]) !== (cur[1] - prev[1]) * (next[0] - cur[0])) {
+            simp.push([cur[0] * cellSize, cur[1] * cellSize]);
+          }
+        }
+        if (simp.length >= 3) loops.push(simp);
+      }
+    }
+  }
+  return loops;
+}
+
+// 모델의 1층 바닥 외곽을 건물 로컬 좌표계(회전 정렬)에서 추출한다:
+// · minY+0.03만 보던 기존 방식과 달리 1층 벽면 대역(바닥 기준 -0.8m~+3.2m)을 모아
+//   지하 계단·보도판이 있어도 본관 외곽을 놓치지 않는다.
+// · L자/U자 아파트나 여러 동이 합쳐진 모델(Community_north/south)은 동/날개별 연결 섬으로
+//   나눠 중정이나 도로를 가로지르는 가짜 벽이 생기지 않게 한다.
+function modelGroundFootprints(model, baseWorldY, rotY, originX, originZ) {
   model.updateMatrixWorld(true);
+  const W = WORLD_SCALE;
   const v = new THREE.Vector3();
   const im = new THREE.Matrix4();
   const mw = new THREE.Matrix4();
-  const visit = (cb) => model.traverse((o) => {
+  const allPts = [];
+  let minY = Infinity, maxY = -Infinity;
+  model.traverse((o) => {
     if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
     const pos = o.geometry.attributes.position;
-    const step = Math.max(1, Math.floor(pos.count / 3000));
+    const step = Math.max(1, Math.floor(pos.count / 2500));
     const mats = [];
     if (o.isInstancedMesh) {
       const cnt = Math.min(o.count, 300);
@@ -3450,17 +3524,103 @@ function modelBottomHull(model) {
     for (const m of mats) {
       for (let i = 0; i < pos.count; i += step) {
         v.fromBufferAttribute(pos, i).applyMatrix4(m);
-        cb(v);
+        if (v.y < minY) minY = v.y;
+        if (v.y > maxY) maxY = v.y;
+        allPts.push(v.x, v.y, v.z);
       }
     }
   });
-  let minY = Infinity;
-  visit((p) => { if (p.y < minY) minY = p.y; });
-  const pts = [];
-  const th = minY + 0.03;
-  visit((p) => { if (p.y <= th) pts.push([p.x, p.z]); });
-  return pts.length >= 3 ? convexHull2D(pts) : null;
+  if (!allPts.length) return { loops: [], minY: baseWorldY, maxY: baseWorldY };
+
+  const cos = Math.cos(rotY), sin = Math.sin(rotY);
+  const toLocal = (wx, wz) => {
+    const dx = wx - originX, dz = wz - originZ;
+    return [dx * cos - dz * sin, dx * sin + dz * cos];
+  };
+  const toWorld = (lx, lz) => [
+    originX + lx * cos + lz * sin,
+    originZ - lx * sin + lz * cos,
+  ];
+
+  // 1층 대역 정점 수집(부족하면 가장 낮은 대역으로 확장)
+  let bandLo = baseWorldY - 0.8 * W;
+  let bandHi = baseWorldY + 3.2 * W;
+  let localPts = [];
+  for (let i = 0; i < allPts.length; i += 3) {
+    const py = allPts[i + 1];
+    if (py >= bandLo && py <= bandHi) localPts.push(toLocal(allPts[i], allPts[i + 2]));
+  }
+  if (localPts.length < 6) {
+    localPts = [];
+    const th = minY + 4.5 * W;
+    for (let i = 0; i < allPts.length; i += 3) {
+      if (allPts[i + 1] <= th) localPts.push(toLocal(allPts[i], allPts[i + 2]));
+    }
+  }
+  if (localPts.length < 3) return { loops: [], minY, maxY };
+
+  // 2.0m raw 격자로 8방향 연결 섬(동/날개) 분리
+  const CELL = 2.0 * W;
+  const grid = new Map();
+  for (const pt of localPts) {
+    const ix = Math.floor(pt[0] / CELL);
+    const iz = Math.floor(pt[1] / CELL);
+    const key = `${ix},${iz}`;
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push(pt);
+  }
+  const visited = new Set();
+  const components = [];
+  for (const startKey of grid.keys()) {
+    if (visited.has(startKey)) continue;
+    const queue = [startKey];
+    visited.add(startKey);
+    const compCells = new Set();
+    const compPts = [];
+    while (queue.length) {
+      const k = queue.pop();
+      compCells.add(k);
+      const pts = grid.get(k);
+      for (const p of pts) compPts.push(p);
+      const [ix, iz] = k.split(",").map(Number);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          if (dx === 0 && dz === 0) continue;
+          const nk = `${ix + dx},${iz + dz}`;
+          if (grid.has(nk) && !visited.has(nk)) {
+            visited.add(nk);
+            queue.push(nk);
+          }
+        }
+      }
+    }
+    components.push({ cells: compCells, pts: compPts });
+  }
+  const maxCells = Math.max(...components.map((c) => c.cells.size));
+  const loops = [];
+  for (const comp of components) {
+    // 가로등·간판 기둥 같은 아주 작은 파편(1셀)은 본관 섬이 따로 있을 때 건너뛴다
+    if (comp.cells.size < 2 && maxCells >= 4) continue;
+    if (comp.pts.length < 3) continue;
+    const hullLocal = convexHull2D(comp.pts);
+    if (hullLocal.length < 3) continue;
+    const hullArea = polygonArea2D(hullLocal);
+    const gridArea = comp.cells.size * CELL * CELL;
+    // 볼록 껍질이 실제 점유 면적보다 크게 부풀면(L자·U자형 건물) 직교 격자 외곽을 사용해 빈 마당을 가리지 않는다
+    if (comp.cells.size >= 8 && hullArea > gridArea * 1.45) {
+      const bLoops = traceGridBoundaryLoops(comp.cells, CELL);
+      if (bLoops.length) {
+        // 가장 큰 외곽 루프만(내부 안마당 구멍은 제외)
+        bLoops.sort((a, b) => polygonArea2D(b) - polygonArea2D(a));
+        loops.push(bLoops[0].map(([lx, lz]) => toWorld(lx, lz)));
+        continue;
+      }
+    }
+    loops.push(hullLocal.map(([lx, lz]) => toWorld(lx, lz)));
+  }
+  return { loops, minY, maxY };
 }
+
 function hullOverlapsRoad(hull) {
   const step = 0.05;
   for (let i = 0; i < hull.length; i++) {
@@ -3474,9 +3634,105 @@ function hullOverlapsRoad(hull) {
   }
   return false;
 }
+
 let buildingSkirtMaterial = null;
+function getBuildingSkirtMaterial() {
+  if (buildingSkirtMaterial) return buildingSkirtMaterial;
+  // 한국 언덕 아파트·교회·상가 하부 석재/콘크리트 기단 느낌의 은은한 블록 텍스처
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 256;
+  const g = c.getContext("2d");
+  g.fillStyle = "#b5b2aa";
+  g.fillRect(0, 0, 256, 256);
+  const rows = 4, cols = 4, rh = 256 / rows, cw = 256 / cols;
+  for (let r = 0; r < rows; r++) {
+    const xOff = (r % 2) * (cw / 2);
+    for (let col = -1; col <= cols; col++) {
+      const tone = ((r * 13 + (col + 2) * 29) % 7) - 3;
+      const v = 176 + tone * 3;
+      g.fillStyle = `rgb(${v},${v - 2},${v - 6})`;
+      g.fillRect(col * cw + xOff + 1, r * rh + 1, cw - 2, rh - 2);
+    }
+  }
+  g.strokeStyle = "rgba(75, 72, 66, 0.32)";
+  g.lineWidth = 2;
+  for (let r = 0; r <= rows; r++) {
+    g.beginPath(); g.moveTo(0, r * rh); g.lineTo(256, r * rh); g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  buildingSkirtMaterial = new THREE.MeshStandardMaterial({
+    map: tex,
+    roughness: 0.92,
+    metalness: 0.02,
+    side: THREE.DoubleSide,
+  });
+  return buildingSkirtMaterial;
+}
+
+// 외곽 루프를 따라 실제 지형보다 위에 떠 있는(내리막) 변마다 지형 아래(-1.2m)까지 기단 벽을 세운다
+function buildFoundationSkirtMesh(loops, baseY, skipRoadSegs = false) {
+  const W = WORLD_SCALE;
+  const SEG_STEP = 2.0 * W; // 2m마다 지형 높이를 촘촘히 샘플링해 긴 벽 중간이 뜨지 않게
+  const TILE = 3.0 * W; // 3m×3m 석재 기단 무늬 반복
+  const yTop = 0.05 * W; // group 로컬 기준: 건물 바닥 바로 안쪽까지 끼워 틈이 안 보이게
+  const verts = [];
+  const uvs = [];
+  for (const loop of loops) {
+    let uDist = 0;
+    for (let i = 0; i < loop.length; i++) {
+      const a = loop[i], b = loop[(i + 1) % loop.length];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len < 1e-4) continue;
+      const steps = Math.max(1, Math.ceil(len / SEG_STEP));
+      for (let k = 0; k < steps; k++) {
+        const t0 = k / steps, t1 = (k + 1) / steps;
+        const x0 = a[0] + (b[0] - a[0]) * t0, z0 = a[1] + (b[1] - a[1]) * t0;
+        const x1 = a[0] + (b[0] - a[0]) * t1, z1 = a[1] + (b[1] - a[1]) * t1;
+        const segLen = len / steps;
+        if (skipRoadSegs && pointOnRoad((x0 + x1) * 0.5, (z0 + z1) * 0.5, null, -0.02)) {
+          uDist += segLen;
+          continue;
+        }
+        const ty0 = getTerrainY(x0, z0);
+        const ty1 = getTerrainY(x1, z1);
+        const gap0 = baseY - ty0;
+        const gap1 = baseY - ty1;
+        if (Math.max(gap0, gap1) > 0.02 * W) {
+          // 지형 아래 1.2m까지 넉넉히 묻어 가파른 경사면에서도 틈이 안 생기게
+          const yBot0 = Math.min(yTop - 0.1 * W, ty0 - baseY - 1.2 * W);
+          const yBot1 = Math.min(yTop - 0.1 * W, ty1 - baseY - 1.2 * W);
+          const u0 = uDist / TILE, u1 = (uDist + segLen) / TILE;
+          const vTop = 0;
+          const vBot0 = (yTop - yBot0) / TILE;
+          const vBot1 = (yTop - yBot1) / TILE;
+          verts.push(
+            x0, yTop, z0, x0, yBot0, z0, x1, yTop, z1,
+            x1, yTop, z1, x0, yBot0, z0, x1, yBot1, z1
+          );
+          uvs.push(
+            u0, vTop, u0, vBot0, u1, vTop,
+            u1, vTop, u0, vBot0, u1, vBot1
+          );
+        }
+        uDist += segLen;
+      }
+    }
+  }
+  if (!verts.length) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, getBuildingSkirtMaterial());
+  mesh.receiveShadow = true;
+  mesh.castShadow = true;
+  return mesh;
+}
+
 function settleBuildingBase(entry, model) {
-  if (ROAD_LEVEL_PLACE_IDS.has(entry.place.id)) return;
   if (entry.place.terrain === "baked") return; // 단차가 들어간 모델은 자기 바닥 그대로(받침벽·발판을 덧대지 않는다)
   const terrainY = entry.terrainY || 0;
   if (entry.baseDecided === "low") {
@@ -3484,32 +3740,52 @@ function settleBuildingBase(entry, model) {
     return;
   }
   if (entry.baseDecided === "raised") return;
-  const hull = modelBottomHull(model);
-  if (!hull) { entry.baseDecided = "raised"; return; }
-  if (hullOverlapsRoad(hull)) {
-    // 건물 판이 도로에 걸친다 → 도로보다 살짝 낮게(도로가 위에 보이게)
+
+  const W = WORLD_SCALE;
+  const baseWorldY = entry.group.position.y;
+  const rotY = entry.place.rotationDeg != null ? THREE.MathUtils.degToRad(entry.place.rotationDeg) : entry.rotY;
+  const { loops, minY, maxY } = modelGroundFootprints(model, baseWorldY, rotY, entry.px, entry.pz);
+  if (!loops.length) {
+    entry.baseDecided = "raised";
+    return;
+  }
+
+  // 도로에 걸치는 건물은 보도 턱(baseLift)만 낮춰 도로가 덮이지 않게 하되,
+  // 예전처럼 여기서 바로 return하지 않고 아래에서 내리막 기단 벽까지 반드시 세워 공중에 뜨지 않게 한다!
+  const isRoadGate = ROAD_LEVEL_PLACE_IDS.has(entry.place.id);
+  const overlapsRoad = !isRoadGate && loops.some((hull) => hullOverlapsRoad(hull));
+  if (overlapsRoad) {
     entry.baseDecided = "low";
     entry.group.position.y = terrainY + entry.groundY;
     model.position.y += -0.01 - DEFAULT_MODEL_Y_LIFT;
-    return;
+  } else {
+    entry.baseDecided = "raised";
   }
-  entry.baseDecided = "raised";
-  const baseY = entry.group.position.y;
-  if (shapeIndexAt(entry.px, entry.pz) >= 0) return; // 평지·경사 구역 위 건물은 구역 옹벽이 받친다(받침벽 없음)
-  // 받침벽: 건물 바닥 둘레에서 가장 낮은 지형까지 내려 세운다(비탈에서 건물 아래가 떠 보이지 않게)
-  let lowest = Infinity;
-  hull.forEach(([x, z]) => { lowest = Math.min(lowest, getTerrainY(x, z)); });
-  if (!Number.isFinite(lowest)) lowest = terrainY;
-  const drop = baseY - lowest; // 바닥에서 가장 낮은 땅까지
-  if (drop <= 0.004) return;
-  if (!buildingSkirtMaterial) buildingSkirtMaterial = new THREE.MeshStandardMaterial({ color: CURB_COLOR, roughness: 1, side: THREE.DoubleSide });
-  const store = newRibbonStore();
-  pushVerticalQuadStrip(store, [...hull, hull[0]], -drop - 0.01, -0.003); // group 기준: 가장 낮은 땅 ~ 건물 바닥 바로 아래
-  store.uv.length = 0;
-  const skirt = new THREE.Mesh(storeToGeometry(store), buildingSkirtMaterial);
-  skirt.receiveShadow = true;
-  entry.group.add(skirt);
-  if (baseY > terrainY) addPolyPlatform(hull, baseY - terrainY); // 지형 위로 얹는 높이(상대값 — groundHeightAt이 그 자리 지형을 더한다)
+
+  // 지하철 출구(신금호역)·버스정류장처럼 키가 낮은 소형 구조물(높이 ≤ 6m)이 경사지에 놓였으면
+  // 중심 고도보다 살짝 낮춰 출입구가 인도에 자연스럽게 밀착되도록 보정한다(사용자 수동 y 지정이 없을 때)
+  const modelH = maxY - minY;
+  if (!entry.place.y && modelH > 0 && modelH <= 6.0 * W && !isRoadGate) {
+    let minEdgeTy = Infinity;
+    for (const loop of loops) {
+      for (const [x, z] of loop) minEdgeTy = Math.min(minEdgeTy, getTerrainY(x, z));
+    }
+    if (Number.isFinite(minEdgeTy) && entry.group.position.y - minEdgeTy > 0.35 * W) {
+      entry.group.position.y = minEdgeTy + (entry.group.position.y - minEdgeTy) * 0.45;
+    }
+  }
+
+  const finalBaseY = entry.group.position.y;
+  if (!entry.skirtBuilt) {
+    entry.skirtBuilt = true;
+    const skirt = buildFoundationSkirtMesh(loops, finalBaseY, isRoadGate);
+    if (skirt) {
+      entry.group.add(skirt);
+    }
+    if (!overlapsRoad && !isRoadGate && finalBaseY > terrainY && shapeIndexAt(entry.px, entry.pz) < 0) {
+      loops.forEach((hull) => addPolyPlatform(hull, finalBaseY - terrainY));
+    }
+  }
 }
 
 // 건물 모델은 작은 조각(메시)이 수십~수백 개라 조각마다 그리기 명령이 하나씩 나간다(멀리 보면 1000번 넘게).
@@ -4069,8 +4345,11 @@ function loadPlaceModelInto(entry) {
       model.rotation.y = entry.place.rotationDeg != null ? THREE.MathUtils.degToRad(entry.place.rotationDeg) : entry.rotY;
       model.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
-      // 단차가 들어간 모델(terrain: "baked")은 모델의 y=0이 곧 장소 좌표 자리의 땅 높이 — 가장 낮은 점으로 맞추지 않는다
-      const floorY = entry.place.terrain === "baked" ? 0 : MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
+      // 대부분 모델은 y=0이 1층 바닥이고 음수 Y(지하 계단·기초·보도판)는 땅속으로 들어가야 하므로,
+      // box.min.y가 음수일 때 건물을 위로 들어올리지 않는다(0보다 위에 떠 있는 모델만 바닥으로 내린다).
+      const floorY = entry.place.terrain === "baked"
+        ? 0
+        : MODEL_FLOOR_OVERRIDE[entry.place.id] ?? Math.max(0, box.min.y);
       model.position.y -= floorY;
       if (entry.place.terrain !== "baked") model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
       entry.group.add(model);
