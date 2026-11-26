@@ -865,11 +865,11 @@
  },
  "models/place_행당대림105.glb": {
   "file": "img/skyview/place_행당대림105.webp",
-  "hash": "dd9af755f0",
-  "minX": -44.249,
-  "minZ": -47.649,
-  "width": 77.865,
-  "depth": 80.702
+  "hash": "4ab01c4315",
+  "minX": -41.243,
+  "minZ": -45.51,
+  "width": 72.311,
+  "depth": 75.557
  },
  "models/place_행당대림106.glb": {
   "file": "img/skyview/place_행당대림106.webp",
