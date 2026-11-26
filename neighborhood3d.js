@@ -3672,8 +3672,69 @@ function getBuildingSkirtMaterial() {
   return buildingSkirtMaterial;
 }
 
+function isParkHillsApartmentPlace(place) {
+  if (!place || ROAD_LEVEL_PLACE_IDS.has(place.id)) return false;
+  if (place.name && /(?:금호파크힐스|커뮤니티)/.test(place.name)) return true;
+  if (place.model && /(?:금파힐\d|Community|커뮤니티)/i.test(place.model)) return true;
+  return false;
+}
+
+function isParkHillsCommunityComplex(place) {
+  if (!place) return false;
+  return /(?:Community|커뮤니티)/i.test(place.model || "") || /(?:커뮤니티)/.test(place.name || "");
+}
+
+let parkHillsSkirtMaterial = null;
+function getParkHillsSkirtMaterial() {
+  if (parkHillsSkirtMaterial) return parkHillsSkirtMaterial;
+  // 금호파크힐스 1~3층 검정(다크 차콜) 화강석 판넬 외벽과 동일한 스타일의 기단 텍스처
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 256;
+  const g = c.getContext("2d");
+  // 어두운 줄눈 배경
+  g.fillStyle = "#1b1f24";
+  g.fillRect(0, 0, 256, 256);
+  const rows = 5, cols = 3, rh = 256 / rows, cw = 256 / cols;
+  for (let r = 0; r < rows; r++) {
+    for (let col = 0; col < cols; col++) {
+      const tone = ((r * 17 + col * 31) % 7) - 3;
+      const rv = 47 + tone;
+      const gv = 52 + tone;
+      const bv = 58 + tone;
+      const x = Math.round(col * cw) + 1;
+      const y = Math.round(r * rh) + 1;
+      const w = Math.round((col + 1) * cw) - x - 1;
+      const h = Math.round((r + 1) * rh) - y - 1;
+      g.fillStyle = `rgb(${rv},${gv},${bv})`;
+      g.fillRect(x, y, w, h);
+      // 1~3층 화강석 특유의 상단 미세 하이라이트 엣지
+      g.fillStyle = "rgba(116, 125, 136, 0.28)";
+      g.fillRect(x, y, w, 1);
+      // 은은한 화강석 미세 입자
+      for (let s = 0; s < 14; s++) {
+        const hash = (r * 73 + col * 41 + s * 97) % 1009;
+        const sx = x + 2 + (hash % Math.max(1, w - 4));
+        const sy = y + 2 + ((hash * 7) % Math.max(1, h - 4));
+        g.fillStyle = s % 2 === 0 ? "rgba(95, 104, 114, 0.18)" : "rgba(22, 25, 29, 0.24)";
+        g.fillRect(sx, sy, 2, 2);
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  parkHillsSkirtMaterial = new THREE.MeshStandardMaterial({
+    map: tex,
+    roughness: 0.72,
+    metalness: 0.04,
+    side: THREE.DoubleSide,
+  });
+  return parkHillsSkirtMaterial;
+}
+
 // 외곽 루프를 따라 실제 지형보다 위에 떠 있는(내리막) 변마다 지형 아래(-1.2m)까지 기단 벽을 세운다
-function buildFoundationSkirtMesh(loops, baseY, skipRoadSegs = false) {
+function buildFoundationSkirtMesh(loops, baseY, skipRoadSegs = false, skirtMat = null) {
   const W = WORLD_SCALE;
   const SEG_STEP = 2.0 * W; // 2m마다 지형 높이를 촘촘히 샘플링해 긴 벽 중간이 뜨지 않게
   const TILE = 3.0 * W; // 3m×3m 석재 기단 무늬 반복
@@ -3726,7 +3787,7 @@ function buildFoundationSkirtMesh(loops, baseY, skipRoadSegs = false) {
   geo.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
   geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, getBuildingSkirtMaterial());
+  const mesh = new THREE.Mesh(geo, skirtMat || getBuildingSkirtMaterial());
   mesh.receiveShadow = true;
   mesh.castShadow = true;
   return mesh;
@@ -3750,10 +3811,23 @@ function settleBuildingBase(entry, model) {
     return;
   }
 
+  const isParkHills = isParkHillsApartmentPlace(entry.place);
+  let lx0 = Infinity, lx1 = -Infinity, lz0 = Infinity, lz1 = -Infinity;
+  for (const loop of loops) {
+    for (const [x, z] of loop) {
+      if (x < lx0) lx0 = x; if (x > lx1) lx1 = x;
+      if (z < lz0) lz0 = z; if (z > lz1) lz1 = z;
+    }
+  }
+  const footprintSpan = Math.max(lx1 - lx0, lz1 - lz0);
+  // 금호파크힐스 개별 동(커뮤니티 통합 초대형 블록 제외)은 오르막 땅에 1층과 출입문이 묻히지 않도록
+  // 건물 외곽이 닿는 가장 높은 지형 위로 올리고, 아래 빈 공간 전체를 1~3층과 동일한 검정 화강석 기단으로 채운다.
+  const isParkHillsSingleDong = isParkHills && !isParkHillsCommunityComplex(entry.place) && footprintSpan <= 90 * W;
+
   // 도로에 걸치는 건물은 보도 턱(baseLift)만 낮춰 도로가 덮이지 않게 하되,
   // 예전처럼 여기서 바로 return하지 않고 아래에서 내리막 기단 벽까지 반드시 세워 공중에 뜨지 않게 한다!
   const isRoadGate = ROAD_LEVEL_PLACE_IDS.has(entry.place.id);
-  const overlapsRoad = !isRoadGate && loops.some((hull) => hullOverlapsRoad(hull));
+  const overlapsRoad = !isRoadGate && !isParkHillsSingleDong && loops.some((hull) => hullOverlapsRoad(hull));
   if (overlapsRoad) {
     entry.baseDecided = "low";
     entry.group.position.y = terrainY + entry.groundY;
@@ -3762,10 +3836,37 @@ function settleBuildingBase(entry, model) {
     entry.baseDecided = "raised";
   }
 
+  if (isParkHillsSingleDong && !entry.place.y) {
+    let maxEdgeTy = getTerrainY(entry.px, entry.pz);
+    const sampleStep = 2.0 * W;
+    for (const loop of loops) {
+      let cx = 0, cz = 0;
+      for (let i = 0; i < loop.length; i++) {
+        const a = loop[i], b = loop[(i + 1) % loop.length];
+        cx += a[0]; cz += a[1];
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const steps = Math.max(1, Math.ceil(len / sampleStep));
+        for (let k = 0; k <= steps; k++) {
+          const t = k / steps;
+          const ty = getTerrainY(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
+          if (ty > maxEdgeTy) maxEdgeTy = ty;
+        }
+      }
+      if (loop.length) {
+        const cty = getTerrainY(cx / loop.length, cz / loop.length);
+        if (cty > maxEdgeTy) maxEdgeTy = cty;
+      }
+    }
+    const targetY = maxEdgeTy + 0.05 * W;
+    if (targetY > entry.group.position.y) {
+      entry.group.position.y = targetY;
+    }
+  }
+
   // 지하철 출구(신금호역)·버스정류장처럼 키가 낮은 소형 구조물(높이 ≤ 6m)이 경사지에 놓였으면
   // 중심 고도보다 살짝 낮춰 출입구가 인도에 자연스럽게 밀착되도록 보정한다(사용자 수동 y 지정이 없을 때)
   const modelH = maxY - minY;
-  if (!entry.place.y && modelH > 0 && modelH <= 6.0 * W && !isRoadGate) {
+  if (!entry.place.y && !isParkHillsSingleDong && modelH > 0 && modelH <= 6.0 * W && !isRoadGate) {
     let minEdgeTy = Infinity;
     for (const loop of loops) {
       for (const [x, z] of loop) minEdgeTy = Math.min(minEdgeTy, getTerrainY(x, z));
@@ -3778,7 +3879,8 @@ function settleBuildingBase(entry, model) {
   const finalBaseY = entry.group.position.y;
   if (!entry.skirtBuilt) {
     entry.skirtBuilt = true;
-    const skirt = buildFoundationSkirtMesh(loops, finalBaseY, isRoadGate);
+    const skirtMat = isParkHills ? getParkHillsSkirtMaterial() : getBuildingSkirtMaterial();
+    const skirt = buildFoundationSkirtMesh(loops, finalBaseY, isRoadGate, skirtMat);
     if (skirt) {
       entry.group.add(skirt);
     }
@@ -4806,7 +4908,7 @@ function buildPlaces() {
       const skirtH = Math.abs(groundY + baseLift);
       const skirt = new THREE.Mesh(
         new THREE.BoxGeometry(colW * 1.4, skirtH, colD * 1.4),
-        new THREE.MeshStandardMaterial({ color: 0x9a9488 })
+        isParkHillsApartmentPlace(place) ? getParkHillsSkirtMaterial() : new THREE.MeshStandardMaterial({ color: 0x9a9488 })
       );
       skirt.position.set(px, -(groundY + baseLift) / 2, pz); // group 기준 로컬 좌표 — group.position.y와 합쳐지면 그 자리 지형 표면까지 이어진다
       skirt.castShadow = true;
