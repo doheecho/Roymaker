@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261126v";
+import * as MAP_DATA from "./map_data.js?v=20261126w";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -3509,7 +3509,7 @@ function settleBuildingBase(entry, model) {
   const skirt = new THREE.Mesh(storeToGeometry(store), buildingSkirtMaterial);
   skirt.receiveShadow = true;
   entry.group.add(skirt);
-  addPolyPlatform(hull, baseY - terrainY); // 지형 위로 얹는 높이(상대값 — groundHeightAt이 그 자리 지형을 더한다)
+  if (baseY > terrainY) addPolyPlatform(hull, baseY - terrainY); // 지형 위로 얹는 높이(상대값 — groundHeightAt이 그 자리 지형을 더한다)
 }
 
 // 건물 모델은 작은 조각(메시)이 수십~수백 개라 조각마다 그리기 명령이 하나씩 나간다(멀리 보면 1000번 넘게).
@@ -3884,13 +3884,13 @@ function buildPlaces() {
     const group = new THREE.Group();
     group.position.y = terrainY + groundY + baseLift;
     scene.add(group);
-    if (groundY !== 0) {
+    if (groundY > 0) {
       const skirtH = Math.abs(groundY + baseLift);
       const skirt = new THREE.Mesh(
         new THREE.BoxGeometry(colW * 1.4, skirtH, colD * 1.4),
         new THREE.MeshStandardMaterial({ color: 0x9a9488 })
       );
-      skirt.position.set(0, -(groundY + baseLift) / 2, 0); // group 기준 로컬 좌표 — group.position.y와 합쳐지면 그 자리 지형 표면까지 이어진다
+      skirt.position.set(px, -(groundY + baseLift) / 2, pz); // group 기준 로컬 좌표 — group.position.y와 합쳐지면 그 자리 지형 표면까지 이어진다
       skirt.castShadow = true;
       skirt.receiveShadow = true;
       group.add(skirt);
@@ -3905,7 +3905,7 @@ function buildPlaces() {
       const colRot = place.rotationDeg != null ? THREE.MathUtils.degToRad(place.rotationDeg) : rotY;
       const cos = Math.cos(colRot);
       const sin = Math.sin(colRot);
-      if (groundY !== 0) {
+      if (groundY > 0) {
         groundPlatforms.push({ cx: px, cz: pz, cos, sin, halfW: (colW * 1.4) / 2, halfD: (colD * 1.4) / 2, y: groundY + baseLift }); // 지형 위로 더 얹는 높이(상대값)
       }
 
