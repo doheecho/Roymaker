@@ -161,7 +161,7 @@ export const PLACES = [
   { id: 212, name: "신금호역 인근 상가", floors: 15, type: "기타", x: -540, z: -83, model: "models/place_신금호역5번출구앞상가.glb", rotationDeg: -3.2, scaleRatio: 1.3 },
   { id: 213, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -623.5, z: 22.2, model: "models/place_megacoffee2.glb", rotationDeg: -25.5, scaleRatio: 1.5 },
   { id: 214, name: "주택", floors: 5, type: "기타", x: 15.4, z: -226.6, model: "models/place_bagel.glb", rotationDeg: 0.8, scaleRatio: 1.4 },
-  { id: 216, name: "주택가", floors: 3, type: "기타", x: -79.5, z: -301.3, y: -1.5, model: "models/place_금북주택가2.glb", rotationDeg: -0.9, scaleRatio: 1.3 },
+  { id: 216, name: "주택가", floors: 3, type: "기타", x: -79.5, z: -301.3, y: -3.0, model: "models/place_금북주택가2.glb", rotationDeg: -0.9, scaleRatio: 1.3 },
   { id: 217, name: "금호1가동 주민센터", floors: 5, type: "아파트", x: -340.6, z: -63.2, model: "models/place_금호1가동주민센터.glb", rotationDeg: 28.9, scaleRatio: 1.5 },
   { id: 218, name: "GS25", floors: 15, type: "아파트", x: -21.8, z: -576.1, model: "models/place_gs25극미점.glb", scaleRatio: 1.8 },
   { id: 219, name: "상가", floors: 15, type: "기타", x: 2.6, z: -510.1, model: "models/place_산마을돈타운2.glb", scaleRatio: 1.4 },
