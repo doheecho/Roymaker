@@ -775,6 +775,14 @@
   "width": 45.066,
   "depth": 83.6
  },
+ "models/place_왕십리풍림아이원114.glb": {
+  "file": "img/skyview/place_왕십리풍림아이원114.webp",
+  "hash": "ce812b72e4",
+  "minX": -17.005,
+  "minZ": -20.833,
+  "width": 35,
+  "depth": 41.833
+ },
  "models/place_우리농산물직판장.glb": {
   "file": "img/skyview/place_우리농산물직판장.webp",
   "hash": "91c4a87063",
