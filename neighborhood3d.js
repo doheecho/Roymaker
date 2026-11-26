@@ -3508,7 +3508,7 @@ function modelGroundFootprints(model, baseWorldY, rotY, originX, originZ) {
   const allPts = [];
   let minY = Infinity, maxY = -Infinity;
   model.traverse((o) => {
-    if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+    if (!o.isMesh || !o.visible || o.userData._nbEnvProp || !o.geometry || !o.geometry.attributes.position) return;
     const pos = o.geometry.attributes.position;
     const step = Math.max(1, Math.floor(pos.count / 2500));
     const mats = [];
@@ -3809,7 +3809,7 @@ function mergeModelMeshes(model) {
   const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
   const groups = new Map();
   model.traverse((o) => {
-    if (!o.isMesh || !o.visible || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || !o.geometry?.attributes?.position) return;
+    if (!o.isMesh || !o.visible || o.userData._nbEnvProp || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || !o.geometry?.attributes?.position) return;
     // 거울처럼 뒤집힌 조각은 합치면 면 방향이 뒤집혀 안 보일 수 있어서 그대로 둔다
     if (new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld).determinant() < 0) return;
     if (Object.keys(o.geometry.morphAttributes || {}).length) return;
@@ -3836,6 +3836,350 @@ function mergeModelMeshes(model) {
     after += 1;
   });
   return { before, after };
+}
+
+// 모델 GLB 안에 건물과 함께 구워져 있는 평면 바닥판·주차장·보도·차선 타일 등을 자동으로 숨기고,
+// 그 위에 놓인 외부 소품(가로수·조경수·주차 차량·볼라드·울타리·화단·옹벽 등)을 실제 경사 지형에 밀착시킨다.
+// 이렇게 하면 경사지에서 평면 바닥판이 공중에 뜨거나 지형을 뚫는 현상이 사라지고,
+// settleBuildingBase()의 석재 기단 벽이 넓은 마당이 아닌 실제 건물 외벽 아래에만 깔끔하게 생성된다.
+const ENV_FLAT_HIDE_RE = /^(?:Preview_FlatSitePad|Flat_Sidewalk_Slab|Flat_ChurchSidewalk_Slab|Forecourt_GraniteSidewalkSlab|Compact_Flat_Sidewalk(?:_Slab)?|Compact_Flat_TiledSidewalk|Compact_Flat_GroundPad|Compact_Front_Sidewalk|Compact_ResidentialBlock_GroundSlab|Compact_Lot_BasePad|Compact_East_Sidewalk|Compact_South_AlleyApron|SiteEnv_ApartmentDeck_Base|Yard_TightPolygon_Slab|SiteGround_YellowBoundary_Slab|Merged_Block_BasePad|Block_BaseApron|SW_CustomerParking_Asphalt|North_Parking_Deck|West_Parking_Driveway|Env_FireLaneMarking|Alley_Between_B3_B4|Merged_GreenAlleyFloor|Merged_Ground_InnerAlley|Merged_Ground_AlleyStripe|Merged_Inner_Alleys|Merged_Park_(?:White)?Lines|Merged_Driveway_YellowStripes|Merged_Sidewalk_Curbs|Merged_Tactile_Blocks|West_Haengdangro1gil_AlleyStrip|East_Haengdangro3gil_AlleyStrip|South_Sidewalk|East_Sidewalk|South_Patterned_Sidewalk|Sidewalk_(?:West|East|South|NE_Front|SE_Edge|NW_Alley)|Road_(?:East_RedSchoolZone|West_Asphalt|South_Alley)|Merged_(?:Env|Preview|Yard)_(?:SiteBase|SiteSlab|SiteAsphalt|YardAsphalt|CourtyardAsphalt|DrivewayAsphalt|Sidewalks?|NorthSidewalk|EastSidewalk|MainApron|WestApron|Alleys?|AlleyFloor|AlleyYellow|AlleyBlack|HaengdangAlley|EastWalk|InvertedLBase|BrickPaver|Walkway|Grass|YellowBorder|ParkLines|NoPark\w*|Crosswalk|Tactile|Curbs?|DiagonalCurb|NorthCurb))$/i;
+const ENV_PROP_PER_VERTEX_RE = /(?:Guardrail|WoodFence|IronFence|WroughtFence|Park_Fence|FencePosts|LowWallBase|Retain(?:ing)?Wall|RetainCap|WhiteSignWall|StarWall_|WSWBrickWall|WSWBrickCap|Planters?|PlanterSoil|Env_Soil|Playground_EPDM_SafetyFloor|14Bay_ParkingCanopy_Roof|Canopy_Steel)/i;
+const ENV_PROP_CLUSTER_RE = /(?:Trunks?|Leaf\w*|Leaves\w*|Pines?|Ginkgo|Zelkova|Foliage\w*|Shrubs?|Bushes|Azalea\w*|Conifers?|Bollards?|BollardRef\w*|TrafficCones|ConeBases|Barrier_|North_Cones|Bench\w*|Sculpture|Reflectors|Poles?|PoleBlue|PoleArms|YardSign_Posts|Car_|Cars_|ParkedCar_|ShuttleVan_|Play_(?:Blue|Yellow|Orange|Green|Chains|WoodBench|Tree|Leaf))/i;
+const ENV_PROP_EXCLUDE_RE = /(?:Roof|Balc|Terrace|2F|3F|4F|5F|Upper|Garage|Piloti|Indoor|Interior|West_Pot)/i;
+const ENV_GROUP_RE = /(?:Env|Preview|Yard|Sidewalk|Trees|Curated_Trees|Playground|FlatGround|CompactGround|CompactSiteBase|SiteGround|AlleyGround|CustomerParking_Wall)/i;
+const ENV_NAMED_PROP_PREFIX_RE = /^(?:Merged_(?:Env|Preview|Yard|Tree|Trees|Ginkgo|Zelkova|Car|Cars|ParkedCar|ShuttleVan|Sidewalk|Play|Barrier|North_Cones|Park_Fence|SE_Retain|SW_Retain|SW_FrontPlanter|SW_PlanterSoil|SW_Shrubs|Planter_Shrubs|StarWall_|Canopy_Steel)|SE_SplitBlock_RetainingWall|NE_BlueStar_RetainingWall|West_Driveway_RetainingWall|SW_Parking_WhiteSignWall|North_14Bay_ParkingCanopy_Roof|Playground_EPDM_SafetyFloor|YardSign_Posts)/i;
+
+function computeMeshWorldBox(mesh) {
+  const box = new THREE.Box3();
+  const pos = mesh.geometry?.attributes?.position;
+  if (!pos) return box;
+  const v = new THREE.Vector3();
+  if (mesh.isInstancedMesh) {
+    const localBox = new THREE.Box3();
+    const step = Math.max(1, Math.floor(pos.count / 128));
+    for (let i = 0; i < pos.count; i += step) {
+      v.fromBufferAttribute(pos, i);
+      localBox.expandByPoint(v);
+    }
+    const im = new THREE.Matrix4();
+    const mw = new THREE.Matrix4();
+    const corners = [
+      new THREE.Vector3(localBox.min.x, localBox.min.y, localBox.min.z),
+      new THREE.Vector3(localBox.max.x, localBox.min.y, localBox.min.z),
+      new THREE.Vector3(localBox.min.x, localBox.max.y, localBox.min.z),
+      new THREE.Vector3(localBox.max.x, localBox.max.y, localBox.min.z),
+      new THREE.Vector3(localBox.min.x, localBox.min.y, localBox.max.z),
+      new THREE.Vector3(localBox.max.x, localBox.min.y, localBox.max.z),
+      new THREE.Vector3(localBox.min.x, localBox.max.y, localBox.max.z),
+      new THREE.Vector3(localBox.max.x, localBox.max.y, localBox.max.z),
+    ];
+    for (let k = 0; k < mesh.count; k++) {
+      mesh.getMatrixAt(k, im);
+      mw.multiplyMatrices(mesh.matrixWorld, im);
+      for (const c of corners) {
+        v.copy(c).applyMatrix4(mw);
+        box.expandByPoint(v);
+      }
+    }
+  } else {
+    const step = Math.max(1, Math.floor(pos.count / 512));
+    for (let i = 0; i < pos.count; i += step) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      box.expandByPoint(v);
+    }
+  }
+  return box;
+}
+
+function preparePlaceEnvCleanup(entry, model, modelScale) {
+  if (entry.place.terrain === "baked") return;
+  if (ROAD_LEVEL_PLACE_IDS.has(entry.place.id)) return;
+  if (entry.place.type === "학교") return;
+  if (!modelScale || modelScale <= 0) return;
+
+  model.updateMatrixWorld(true);
+  const baseWorldY = entry.group.position.y + model.position.y;
+  const items = [];
+  let modelMaxRelY = 0;
+
+  model.traverse((o) => {
+    if (!o.isMesh || !o.visible || !o.geometry?.attributes?.position) return;
+    const box = computeMeshWorldBox(o);
+    if (box.isEmpty()) return;
+    const relMinY = (box.min.y - baseWorldY) / modelScale;
+    const relMaxY = (box.max.y - baseWorldY) / modelScale;
+    const dx = (box.max.x - box.min.x) / modelScale;
+    const dz = (box.max.z - box.min.z) / modelScale;
+    const dy = relMaxY - relMinY;
+    if (relMaxY > modelMaxRelY) modelMaxRelY = relMaxY;
+    const ancNames = [];
+    let p = o.parent;
+    while (p && p !== model) {
+      if (p.name) ancNames.push(p.name);
+      p = p.parent;
+    }
+    items.push({
+      mesh: o,
+      name: o.name || "",
+      ancPath: ancNames.join("/"),
+      box,
+      relMinY,
+      relMaxY,
+      dx,
+      dy,
+      dz,
+      inst: !!o.isInstancedMesh,
+    });
+  });
+  if (!items.length) return;
+
+  // 순수 건물 본체 XZ 영역 추정(높이가 충분한 비-환경 구조물 기준)
+  const tallThresh = Math.max(2.5, Math.min(12.0, modelMaxRelY * 0.25));
+  let bMinX = Infinity, bMaxX = -Infinity, bMinZ = Infinity, bMaxZ = -Infinity;
+  for (const it of items) {
+    if (it.inst) continue;
+    const isEnvish = ENV_GROUP_RE.test(it.ancPath) || ENV_FLAT_HIDE_RE.test(it.name) || ENV_PROP_CLUSTER_RE.test(it.name) || ENV_PROP_PER_VERTEX_RE.test(it.name);
+    if (!isEnvish && it.relMaxY > tallThresh) {
+      if (it.box.min.x < bMinX) bMinX = it.box.min.x;
+      if (it.box.max.x > bMaxX) bMaxX = it.box.max.x;
+      if (it.box.min.z < bMinZ) bMinZ = it.box.min.z;
+      if (it.box.max.z > bMaxZ) bMaxZ = it.box.max.z;
+    }
+  }
+  const hasBodyBox = bMaxX > bMinX && bMaxZ > bMinZ;
+  const bAreaRaw = hasBodyBox ? ((bMaxX - bMinX) / modelScale) * ((bMaxZ - bMinZ) / modelScale) : 0;
+  const isUnnamedOrGeneric = (name) => !name || /^Mesh_\d+(?:\.\d+)?$/i.test(name);
+  const isKeepFloorName = (name) => /(?:Floor|Deck|Terrace|Landing|Steps|Ramp|Playground)/i.test(name);
+
+  let hasBigSlab = false;
+  // 1단계: 명시된 평면 바닥/보도/주차장 타일 및 무명 대형 평면 바닥판 숨김
+  for (const it of items) {
+    const thinGround = it.relMaxY <= 0.45 && it.relMinY >= -0.60 && it.dy <= 0.55;
+    const overX = hasBodyBox ? (Math.max(0, bMinX - it.box.min.x) + Math.max(0, it.box.max.x - bMaxX)) / modelScale : 0;
+    const overZ = hasBodyBox ? (Math.max(0, bMinZ - it.box.min.z) + Math.max(0, it.box.max.z - bMaxZ)) / modelScale : 0;
+
+    if (!it.inst && thinGround && ENV_FLAT_HIDE_RE.test(it.name)) {
+      it.mesh.visible = false;
+      it.hidden = true;
+      hasBigSlab = true;
+    } else if (!it.inst && thinGround && !it.name && /(?:Env_Sidewalk|FlatGround)/i.test(it.ancPath) && Math.max(it.dx, it.dz) >= 4.0) {
+      it.mesh.visible = false;
+      it.hidden = true;
+      hasBigSlab = true;
+    } else if (
+      !it.inst &&
+      it.relMaxY <= 0.25 &&
+      it.relMinY >= -0.45 &&
+      it.dy <= 0.35 &&
+      it.dx * it.dz >= 40 &&
+      Math.max(it.dx, it.dz) >= 8.0 &&
+      hasBodyBox &&
+      (overX > 2.0 || overZ > 2.0 || it.dx * it.dz > bAreaRaw * 1.15) &&
+      !isKeepFloorName(it.name)
+    ) {
+      it.mesh.visible = false;
+      it.hidden = true;
+      hasBigSlab = true;
+    }
+  }
+
+  // 2단계: 대형 바닥판이 숨겨진 모델의 외부 무명 보도/주차선 띠도 함께 숨김
+  if (hasBigSlab && hasBodyBox) {
+    for (const it of items) {
+      if (it.hidden) continue;
+      if (!isUnnamedOrGeneric(it.name) && !/(?:YellowDash|ParkLine|Curb|Sidewalk|Asphalt|Alley)/i.test(it.name)) continue;
+      if (isKeepFloorName(it.name)) continue;
+      const overX = (Math.max(0, bMinX - it.box.min.x) + Math.max(0, it.box.max.x - bMaxX)) / modelScale;
+      const overZ = (Math.max(0, bMinZ - it.box.min.z) + Math.max(0, it.box.max.z - bMaxZ)) / modelScale;
+      const outside =
+        it.box.max.x < bMinX - 0.5 * modelScale ||
+        it.box.min.x > bMaxX + 0.5 * modelScale ||
+        it.box.max.z < bMinZ - 0.5 * modelScale ||
+        it.box.min.z > bMaxZ + 0.5 * modelScale;
+      const isFlatPaintLine = it.relMaxY <= 0.05 && it.relMinY >= -0.05 && it.dy <= 0.04 && (outside || overX > 0.5 || overZ > 0.5);
+      const isOuterStrip = it.relMaxY <= 0.25 && it.relMinY >= -0.35 && it.dy <= 0.25 && Math.max(it.dx, it.dz) >= 4.0 && (overX > 1.5 || overZ > 1.5 || outside);
+      if (isFlatPaintLine || isOuterStrip) {
+        it.mesh.visible = false;
+        it.hidden = true;
+      }
+    }
+  }
+
+  // 3단계: 숨겨진 바닥판 위에 있던 외부 소품(나무·차량·울타리·화단·옹벽·놀이터 등)에 지형 밀착 태그 부착
+  for (const it of items) {
+    if (it.hidden) continue;
+    const isCanopyAllow = /(?:14Bay_ParkingCanopy_Roof|Canopy_Steel)/i.test(it.name);
+    if (!isCanopyAllow && (ENV_PROP_EXCLUDE_RE.test(it.name) || ENV_PROP_EXCLUDE_RE.test(it.ancPath))) continue;
+    if (it.relMinY > 4.5) continue;
+
+    const inEnvGroup = ENV_GROUP_RE.test(it.ancPath);
+    const isNamedProp = ENV_NAMED_PROP_PREFIX_RE.test(it.name);
+    if (inEnvGroup || isNamedProp) {
+      if (ENV_PROP_PER_VERTEX_RE.test(it.name)) {
+        it.mesh.userData._nbEnvProp = "vertex";
+        if (/Playground_EPDM_SafetyFloor/i.test(it.name)) it.mesh.userData._nbEnvYOffset = 0.04;
+        continue;
+      }
+      if (ENV_PROP_CLUSTER_RE.test(it.name)) {
+        it.mesh.userData._nbEnvProp = "cluster";
+        continue;
+      }
+    }
+
+    // 무명/일반 이름 모델(극미 101~104 등)에서 건물 본체 완전히 바깥의 가로수·담장·외부 소품 자동 밀착
+    if (hasBigSlab && hasBodyBox && isUnnamedOrGeneric(it.name) && it.relMaxY <= 10.0) {
+      const margin = 0.6 * modelScale;
+      let outside =
+        it.box.max.x < bMinX - margin ||
+        it.box.min.x > bMaxX + margin ||
+        it.box.max.z < bMinZ - margin ||
+        it.box.min.z > bMaxZ + margin;
+      if (!outside && it.inst) {
+        // 건물 양쪽에 흩어진 InstancedMesh(예: 극미102 가로수·주차선)는 인스턴스별 위치가 모두 본체 밖인지 확인
+        const im = new THREE.Matrix4();
+        const mw = new THREE.Matrix4();
+        const wp = new THREE.Vector3();
+        outside = it.mesh.count > 0;
+        for (let k = 0; k < it.mesh.count; k++) {
+          it.mesh.getMatrixAt(k, im);
+          mw.multiplyMatrices(it.mesh.matrixWorld, im);
+          wp.setFromMatrixPosition(mw);
+          if (wp.x >= bMinX - margin && wp.x <= bMaxX + margin && wp.z >= bMinZ - margin && wp.z <= bMaxZ + margin) {
+            outside = false;
+            break;
+          }
+        }
+      }
+      if (outside) {
+        if (it.inst && it.relMaxY <= 0.25 && it.relMinY >= -0.35 && it.dy <= 0.25) {
+          it.mesh.visible = false;
+          it.hidden = true;
+        } else if (!it.inst && Math.max(it.dx, it.dz) >= 12.0 && Math.min(it.dx, it.dz) <= 1.2 && it.relMaxY <= 4.5) {
+          it.mesh.userData._nbEnvProp = "vertex";
+        } else {
+          it.mesh.userData._nbEnvProp = "cluster";
+        }
+      }
+    }
+  }
+}
+
+function snapPlaceEnvPropsToTerrain(entry, model) {
+  if (entry.place.terrain === "baked") return;
+  if (ROAD_LEVEL_PLACE_IDS.has(entry.place.id)) return;
+  if (entry.place.type === "학교") return;
+
+  entry.group.updateMatrixWorld(true);
+  const finalBaseY = entry.group.position.y + model.position.y;
+  const W = WORLD_SCALE;
+  const MIN_SNAP_EPS = 0.03 * W;
+  const tmpV = new THREE.Vector3();
+
+  model.traverse((mesh) => {
+    const mode = mesh.userData?._nbEnvProp;
+    if (!mesh.isMesh || !mesh.visible || !mode || !mesh.geometry?.attributes?.position) return;
+
+    const yExtra = (mesh.userData._nbEnvYOffset || 0) * W;
+
+    if (mesh.isInstancedMesh) {
+      const m = new THREE.Matrix4();
+      const mw = new THREE.Matrix4();
+      const invMesh = mesh.matrixWorld.clone().invert();
+      const worldPos = new THREE.Vector3();
+      const localPos = new THREE.Vector3();
+      let changed = false;
+      for (let i = 0; i < mesh.count; i++) {
+        mesh.getMatrixAt(i, m);
+        mw.multiplyMatrices(mesh.matrixWorld, m);
+        worldPos.setFromMatrixPosition(mw);
+        const dyWorld = getTerrainY(worldPos.x, worldPos.z) - finalBaseY + yExtra;
+        if (Math.abs(dyWorld) >= MIN_SNAP_EPS) {
+          worldPos.y += dyWorld;
+          localPos.copy(worldPos).applyMatrix4(invMesh);
+          m.setPosition(localPos);
+          mesh.setMatrixAt(i, m);
+          changed = true;
+        }
+      }
+      if (changed) mesh.instanceMatrix.needsUpdate = true;
+      return;
+    }
+
+    const g = toFloatGeometry(mesh.geometry);
+    const pos = g.attributes.position;
+    const n = pos.count;
+    if (!n) { g.dispose(); return; }
+    const pts = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      tmpV.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      pts[i * 3] = tmpV.x;
+      pts[i * 3 + 1] = tmpV.y;
+      pts[i * 3 + 2] = tmpV.z;
+    }
+
+    let maxAbsDy = 0;
+    if (mode === "vertex") {
+      for (let i = 0; i < n; i++) {
+        const dy = getTerrainY(pts[i * 3], pts[i * 3 + 2]) - finalBaseY + yExtra;
+        if (Math.abs(dy) > maxAbsDy) maxAbsDy = Math.abs(dy);
+        pts[i * 3 + 1] += dy;
+      }
+    } else {
+      // 연결된 삼각형 섬(개별 나무·차량·볼라드 등) 단위로 같은 높이를 적용해 기울어지지 않게 유지
+      const parent = new Int32Array(n);
+      for (let i = 0; i < n; i++) parent[i] = i;
+      const find = (a) => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+      const unite = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[a] = b; };
+      const idx = g.index ? g.index.array : null;
+      const triCount = idx ? idx.length / 3 : Math.floor(n / 3);
+      const posMap = new Map();
+      const qScale = 10 / W;
+      for (let i = 0; i < n; i++) {
+        const key = `${Math.round(pts[i * 3] * qScale)},${Math.round(pts[i * 3 + 1] * qScale)},${Math.round(pts[i * 3 + 2] * qScale)}`;
+        const prev = posMap.get(key);
+        if (prev !== undefined) unite(i, prev);
+        else posMap.set(key, i);
+      }
+      for (let t = 0; t < triCount; t++) {
+        const a = idx ? idx[t * 3] : t * 3;
+        const b = idx ? idx[t * 3 + 1] : t * 3 + 1;
+        const c = idx ? idx[t * 3 + 2] : t * 3 + 2;
+        unite(a, b); unite(b, c);
+      }
+      const sumX = new Map(), sumZ = new Map(), cnt = new Map();
+      for (let i = 0; i < n; i++) {
+        const r = find(i);
+        sumX.set(r, (sumX.get(r) || 0) + pts[i * 3]);
+        sumZ.set(r, (sumZ.get(r) || 0) + pts[i * 3 + 2]);
+        cnt.set(r, (cnt.get(r) || 0) + 1);
+      }
+      const dyMap = new Map();
+      cnt.forEach((c, r) => {
+        const dy = getTerrainY(sumX.get(r) / c, sumZ.get(r) / c) - finalBaseY + yExtra;
+        if (Math.abs(dy) > maxAbsDy) maxAbsDy = Math.abs(dy);
+        dyMap.set(r, dy);
+      });
+      for (let i = 0; i < n; i++) {
+        pts[i * 3 + 1] += dyMap.get(find(i)) || 0;
+      }
+    }
+
+    if (maxAbsDy < MIN_SNAP_EPS) {
+      g.dispose();
+      return;
+    }
+
+    const invMesh = mesh.matrixWorld.clone().invert();
+    for (let i = 0; i < n; i++) {
+      tmpV.set(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2]).applyMatrix4(invMesh);
+      pos.setXYZ(i, tmpV.x, tmpV.y, tmpV.z);
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
+    mesh.geometry = g;
+  });
 }
 
 // 경사 구역(TERRAIN_SHAPES 중 평지가 아닌 곳) 위에 걸치는 모델 조각(금북초 교문 앞 초록 보행로·빨간 길·
@@ -4358,8 +4702,9 @@ function loadPlaceModelInto(entry) {
         adaptLotteMartToTerrain(entry, model);
       } else {
         conformModelToSlopedShapes(model, entry.group.position.y + model.position.y);
+        preparePlaceEnvCleanup(entry, model, modelScale);
       }
-      mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(경사 밀착 후)
+      mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(경사 밀착·환경 바닥 정리 후)
       model.traverse((o) => {
         if (o.isMesh) {
           o.castShadow = true;
@@ -4371,6 +4716,9 @@ function loadPlaceModelInto(entry) {
         }
       });
       settleBuildingBase(entry, model);
+      if (!(entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb"))) {
+        snapPlaceEnvPropsToTerrain(entry, model);
+      }
       entry.loadedModel = model;
       registerBuildingGlass(entry, model); // 밤에 창문 불빛
       fitShopToModel(entry); // 입간판이 건물 안에 들어갔으면 옮기고, 문 닫은 시간엔 셔터
