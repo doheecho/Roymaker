@@ -3502,35 +3502,13 @@ function traceGridBoundaryLoops(cellSet, cellSize) {
 function modelGroundFootprints(model, baseWorldY, rotY, originX, originZ) {
   model.updateMatrixWorld(true);
   const W = WORLD_SCALE;
-  const v = new THREE.Vector3();
+  const CELL = 1.0 * W;
+  const SAMPLE_STEP = CELL * 0.5;
+  const vA = new THREE.Vector3();
+  const vB = new THREE.Vector3();
+  const vC = new THREE.Vector3();
   const im = new THREE.Matrix4();
   const mw = new THREE.Matrix4();
-  const allPts = [];
-  let minY = Infinity, maxY = -Infinity;
-  model.traverse((o) => {
-    if (!o.isMesh || !o.visible || o.userData._nbEnvProp || !o.geometry || !o.geometry.attributes.position) return;
-    const pos = o.geometry.attributes.position;
-    const step = Math.max(1, Math.floor(pos.count / 2500));
-    const mats = [];
-    if (o.isInstancedMesh) {
-      const cnt = Math.min(o.count, 300);
-      for (let k = 0; k < cnt; k++) {
-        o.getMatrixAt(k, im);
-        mats.push(new THREE.Matrix4().multiplyMatrices(o.matrixWorld, im));
-      }
-    } else {
-      mats.push(mw.copy(o.matrixWorld));
-    }
-    for (const m of mats) {
-      for (let i = 0; i < pos.count; i += step) {
-        v.fromBufferAttribute(pos, i).applyMatrix4(m);
-        if (v.y < minY) minY = v.y;
-        if (v.y > maxY) maxY = v.y;
-        allPts.push(v.x, v.y, v.z);
-      }
-    }
-  });
-  if (!allPts.length) return { loops: [], minY: baseWorldY, maxY: baseWorldY };
 
   const cos = Math.cos(rotY), sin = Math.sin(rotY);
   const toLocal = (wx, wz) => {
@@ -3542,33 +3520,98 @@ function modelGroundFootprints(model, baseWorldY, rotY, originX, originZ) {
     originZ - lx * sin + lz * cos,
   ];
 
-  // 1층 대역 정점 수집(부족하면 가장 낮은 대역으로 확장)
-  let bandLo = baseWorldY - 0.8 * W;
-  let bandHi = baseWorldY + 3.2 * W;
-  let localPts = [];
-  for (let i = 0; i < allPts.length; i += 3) {
-    const py = allPts[i + 1];
-    if (py >= bandLo && py <= bandHi) localPts.push(toLocal(allPts[i], allPts[i + 2]));
-  }
-  if (localPts.length < 6) {
-    localPts = [];
+  let minY = Infinity, maxY = -Infinity;
+  const bandLo = baseWorldY - 0.8 * W;
+  const bandHi = baseWorldY + 3.2 * W;
+  const grid = new Map();
+  const fallbackPts = [];
+
+  const addLocalPt = (lx, lz) => {
+    const ix = Math.floor(lx / CELL);
+    const iz = Math.floor(lz / CELL);
+    const key = `${ix},${iz}`;
+    let cell = grid.get(key);
+    if (!cell) {
+      cell = { minX: lx, maxX: lx, minZ: lz, maxZ: lz, pts: [[lx, lz]] };
+      grid.set(key, cell);
+    } else {
+      if (lx < cell.minX) cell.minX = lx;
+      if (lx > cell.maxX) cell.maxX = lx;
+      if (lz < cell.minZ) cell.minZ = lz;
+      if (lz > cell.maxZ) cell.maxZ = lz;
+      if (cell.pts.length < 4) cell.pts.push([lx, lz]);
+    }
+  };
+
+  const sampleEdge = (ax, az, bx, bz) => {
+    const len = Math.hypot(bx - ax, bz - az);
+    const steps = Math.max(1, Math.min(200, Math.ceil(len / SAMPLE_STEP)));
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps;
+      addLocalPt(ax + (bx - ax) * t, az + (bz - az) * t);
+    }
+  };
+
+  model.traverse((o) => {
+    if (!o.isMesh || !o.visible || o.userData._nbEnvProp || !o.geometry || !o.geometry.attributes.position) return;
+    const pos = o.geometry.attributes.position;
+    const idx = o.geometry.index ? o.geometry.index.array : null;
+    const triCount = idx ? Math.floor(idx.length / 3) : Math.floor(pos.count / 3);
+    const mats = [];
+    if (o.isInstancedMesh) {
+      const cnt = Math.min(o.count, 300);
+      for (let k = 0; k < cnt; k++) {
+        o.getMatrixAt(k, im);
+        mats.push(new THREE.Matrix4().multiplyMatrices(o.matrixWorld, im));
+      }
+    } else {
+      mats.push(mw.copy(o.matrixWorld));
+    }
+    for (const m of mats) {
+      // 전체 높이(minY/maxY) 파악 — 지하층(y < 0) 깊이 판정에도 사용
+      const vStep = Math.max(1, Math.floor(pos.count / 1500));
+      for (let i = 0; i < pos.count; i += vStep) {
+        vA.fromBufferAttribute(pos, i).applyMatrix4(m);
+        if (vA.y < minY) minY = vA.y;
+        if (vA.y > maxY) maxY = vA.y;
+        fallbackPts.push(vA.x, vA.y, vA.z);
+      }
+      // 1층 대역(-0.8m~+3.2m)에 걸치는 삼각형의 변을 0.5m 간격으로 래스터화해
+      // 긴 평면 외벽(꼭짓점이 양 끝에만 있는 벽) 중간이 비어 기둥처럼 쪼개지지 않게 한다.
+      const tStep = Math.max(1, Math.floor(triCount / 20000));
+      for (let t = 0; t < triCount; t += tStep) {
+        const ia = idx ? idx[t * 3] : t * 3;
+        const ib = idx ? idx[t * 3 + 1] : t * 3 + 1;
+        const ic = idx ? idx[t * 3 + 2] : t * 3 + 2;
+        vA.fromBufferAttribute(pos, ia).applyMatrix4(m);
+        vB.fromBufferAttribute(pos, ib).applyMatrix4(m);
+        vC.fromBufferAttribute(pos, ic).applyMatrix4(m);
+        const tMinY = Math.min(vA.y, vB.y, vC.y);
+        const tMaxY = Math.max(vA.y, vB.y, vC.y);
+        if (tMaxY < bandLo || tMinY > bandHi) continue;
+        const [ax, az] = toLocal(vA.x, vA.z);
+        const [bx, bz] = toLocal(vB.x, vB.z);
+        const [cx, cz] = toLocal(vC.x, vC.z);
+        sampleEdge(ax, az, bx, bz);
+        sampleEdge(bx, bz, cx, cz);
+        sampleEdge(cx, cz, ax, az);
+      }
+    }
+  });
+
+  if (!fallbackPts.length) return { loops: [], minY: baseWorldY, maxY: baseWorldY };
+
+  if (grid.size < 3) {
     const th = minY + 4.5 * W;
-    for (let i = 0; i < allPts.length; i += 3) {
-      if (allPts[i + 1] <= th) localPts.push(toLocal(allPts[i], allPts[i + 2]));
+    for (let i = 0; i < fallbackPts.length; i += 3) {
+      if (fallbackPts[i + 1] <= th) {
+        const [lx, lz] = toLocal(fallbackPts[i], fallbackPts[i + 2]);
+        addLocalPt(lx, lz);
+      }
     }
   }
-  if (localPts.length < 3) return { loops: [], minY, maxY };
+  if (!grid.size) return { loops: [], minY, maxY };
 
-  // 2.0m raw 격자로 8방향 연결 섬(동/날개) 분리
-  const CELL = 2.0 * W;
-  const grid = new Map();
-  for (const pt of localPts) {
-    const ix = Math.floor(pt[0] / CELL);
-    const iz = Math.floor(pt[1] / CELL);
-    const key = `${ix},${iz}`;
-    if (!grid.has(key)) grid.set(key, []);
-    grid.get(key).push(pt);
-  }
   const visited = new Set();
   const components = [];
   for (const startKey of grid.keys()) {
@@ -3577,11 +3620,16 @@ function modelGroundFootprints(model, baseWorldY, rotY, originX, originZ) {
     visited.add(startKey);
     const compCells = new Set();
     const compPts = [];
+    let cMinX = Infinity, cMaxX = -Infinity, cMinZ = Infinity, cMaxZ = -Infinity;
     while (queue.length) {
       const k = queue.pop();
       compCells.add(k);
-      const pts = grid.get(k);
-      for (const p of pts) compPts.push(p);
+      const cell = grid.get(k);
+      if (cell.minX < cMinX) cMinX = cell.minX;
+      if (cell.maxX > cMaxX) cMaxX = cell.maxX;
+      if (cell.minZ < cMinZ) cMinZ = cell.minZ;
+      if (cell.maxZ > cMaxZ) cMaxZ = cell.maxZ;
+      for (const p of cell.pts) compPts.push(p);
       const [ix, iz] = k.split(",").map(Number);
       for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
@@ -3594,25 +3642,29 @@ function modelGroundFootprints(model, baseWorldY, rotY, originX, originZ) {
         }
       }
     }
-    components.push({ cells: compCells, pts: compPts });
+    components.push({ cells: compCells, pts: compPts, minX: cMinX, maxX: cMaxX, minZ: cMinZ, maxZ: cMaxZ });
   }
   const maxCells = Math.max(...components.map((c) => c.cells.size));
   const loops = [];
   for (const comp of components) {
-    // 가로등·간판 기둥 같은 아주 작은 파편(1셀)은 본관 섬이 따로 있을 때 건너뛴다
-    if (comp.cells.size < 2 && maxCells >= 4) continue;
+    // 가로등·간판 기둥 같은 아주 작은 파편은 본관 섬이 따로 있을 때 건너뛴다
+    if (comp.cells.size < 4 && maxCells >= 16) continue;
     if (comp.pts.length < 3) continue;
     const hullLocal = convexHull2D(comp.pts);
     if (hullLocal.length < 3) continue;
     const hullArea = polygonArea2D(hullLocal);
     const gridArea = comp.cells.size * CELL * CELL;
     // 볼록 껍질이 실제 점유 면적보다 크게 부풀면(L자·U자형 건물) 직교 격자 외곽을 사용해 빈 마당을 가리지 않는다
-    if (comp.cells.size >= 8 && hullArea > gridArea * 1.45) {
+    if (comp.cells.size >= 12 && hullArea > gridArea * 1.35) {
       const bLoops = traceGridBoundaryLoops(comp.cells, CELL);
       if (bLoops.length) {
-        // 가장 큰 외곽 루프만(내부 안마당 구멍은 제외)
+        // 가장 큰 외곽 루프만(내부 안마당·빈 방 구멍은 제외) 사용하고 실제 벽 범위 안으로 클램프
         bLoops.sort((a, b) => polygonArea2D(b) - polygonArea2D(a));
-        loops.push(bLoops[0].map(([lx, lz]) => toWorld(lx, lz)));
+        const clamped = bLoops[0].map(([lx, lz]) => [
+          Math.max(comp.minX, Math.min(comp.maxX, lx)),
+          Math.max(comp.minZ, Math.min(comp.maxZ, lz)),
+        ]);
+        loops.push(clamped.map(([lx, lz]) => toWorld(lx, lz)));
         continue;
       }
     }
@@ -3734,11 +3786,12 @@ function getParkHillsSkirtMaterial() {
 }
 
 // 외곽 루프를 따라 실제 지형보다 위에 떠 있는(내리막) 변마다 지형 아래(-1.2m)까지 기단 벽을 세운다
-function buildFoundationSkirtMesh(loops, baseY, skipRoadSegs = false, skirtMat = null) {
+// skirtTopOffset: group 로컬 Y 기준 기단 상단(지하층이 없는 모델은 +0.05m, 지하 1~2층이 y<0으로 디자인된 모델은 지하 하단 +0.05m)
+function buildFoundationSkirtMesh(loops, baseY, skipRoadSegs = false, skirtMat = null, skirtTopOffset = 0.05 * WORLD_SCALE) {
   const W = WORLD_SCALE;
   const SEG_STEP = 2.0 * W; // 2m마다 지형 높이를 촘촘히 샘플링해 긴 벽 중간이 뜨지 않게
   const TILE = 3.0 * W; // 3m×3m 석재 기단 무늬 반복
-  const yTop = 0.05 * W; // group 로컬 기준: 건물 바닥 바로 안쪽까지 끼워 틈이 안 보이게
+  const yTop = skirtTopOffset;
   const verts = [];
   const uvs = [];
   for (const loop of loops) {
@@ -3759,9 +3812,9 @@ function buildFoundationSkirtMesh(loops, baseY, skipRoadSegs = false, skirtMat =
         }
         const ty0 = getTerrainY(x0, z0);
         const ty1 = getTerrainY(x1, z1);
-        const gap0 = baseY - ty0;
-        const gap1 = baseY - ty1;
-        if (Math.max(gap0, gap1) > 0.02 * W) {
+        const gap0 = (baseY + yTop) - ty0;
+        const gap1 = (baseY + yTop) - ty1;
+        if (Math.max(gap0, gap1) > 0.07 * W) {
           // 지형 아래 1.2m까지 넉넉히 묻어 가파른 경사면에서도 틈이 안 생기게
           const yBot0 = Math.min(yTop - 0.1 * W, ty0 - baseY - 1.2 * W);
           const yBot1 = Math.min(yTop - 0.1 * W, ty1 - baseY - 1.2 * W);
@@ -3823,11 +3876,12 @@ function settleBuildingBase(entry, model) {
   // 금호파크힐스 개별 동(커뮤니티 통합 초대형 블록 제외)은 오르막 땅에 1층과 출입문이 묻히지 않도록
   // 건물 외곽이 닿는 가장 높은 지형 위로 올리고, 아래 빈 공간 전체를 1~3층과 동일한 검정 화강석 기단으로 채운다.
   const isParkHillsSingleDong = isParkHills && !isParkHillsCommunityComplex(entry.place) && footprintSpan <= 90 * W;
+  const anchor1FXZ = model.userData?._nbAnchor1FXZ || null;
 
   // 도로에 걸치는 건물은 보도 턱(baseLift)만 낮춰 도로가 덮이지 않게 하되,
   // 예전처럼 여기서 바로 return하지 않고 아래에서 내리막 기단 벽까지 반드시 세워 공중에 뜨지 않게 한다!
   const isRoadGate = ROAD_LEVEL_PLACE_IDS.has(entry.place.id);
-  const overlapsRoad = !isRoadGate && !isParkHillsSingleDong && loops.some((hull) => hullOverlapsRoad(hull));
+  const overlapsRoad = !isRoadGate && !isParkHillsSingleDong && !anchor1FXZ && loops.some((hull) => hullOverlapsRoad(hull));
   if (overlapsRoad) {
     entry.baseDecided = "low";
     entry.group.position.y = terrainY + entry.groundY;
@@ -3836,7 +3890,11 @@ function settleBuildingBase(entry, model) {
     entry.baseDecided = "raised";
   }
 
-  if (isParkHillsSingleDong && !entry.place.y) {
+  // GLB 안에 1층 출입구 기준 노드(Anchor_1F / Entrance_1F / Ground_1F 등)가 명시돼 있으면
+  // 해당 출입구 자리의 실제 지형 높이에 1층 바닥을 정확히 맞춘다(지하 1~2층은 내리막에서만 자연 노출).
+  if (anchor1FXZ && !entry.place.y) {
+    entry.group.position.y = getTerrainY(anchor1FXZ[0], anchor1FXZ[1]) + 0.02 * W;
+  } else if (isParkHillsSingleDong && !entry.place.y) {
     let maxEdgeTy = getTerrainY(entry.px, entry.pz);
     const sampleStep = 2.0 * W;
     for (const loop of loops) {
@@ -3866,7 +3924,7 @@ function settleBuildingBase(entry, model) {
   // 지하철 출구(신금호역)·버스정류장처럼 키가 낮은 소형 구조물(높이 ≤ 6m)이 경사지에 놓였으면
   // 중심 고도보다 살짝 낮춰 출입구가 인도에 자연스럽게 밀착되도록 보정한다(사용자 수동 y 지정이 없을 때)
   const modelH = maxY - minY;
-  if (!entry.place.y && !isParkHillsSingleDong && modelH > 0 && modelH <= 6.0 * W && !isRoadGate) {
+  if (!entry.place.y && !anchor1FXZ && !isParkHillsSingleDong && modelH > 0 && modelH <= 6.0 * W && !isRoadGate) {
     let minEdgeTy = Infinity;
     for (const loop of loops) {
       for (const [x, z] of loop) minEdgeTy = Math.min(minEdgeTy, getTerrainY(x, z));
@@ -3879,8 +3937,12 @@ function settleBuildingBase(entry, model) {
   const finalBaseY = entry.group.position.y;
   if (!entry.skirtBuilt) {
     entry.skirtBuilt = true;
+    // 모델 자체에 지하 1~2층(y < -0.5m)이 디자인되어 있으면 그 지하 외벽을 덮지 않고,
+    // 경사가 모델의 지하 하단(modelBottomLocalY)보다도 더 깊게 내려갈 때만 그 아래부터 기단을 이어 붙인다.
+    const modelBottomLocalY = minY - baseWorldY;
+    const skirtTopOffset = modelBottomLocalY < -0.5 * W ? modelBottomLocalY + 0.05 * W : 0.05 * W;
     const skirtMat = isParkHills ? getParkHillsSkirtMaterial() : getBuildingSkirtMaterial();
-    const skirt = buildFoundationSkirtMesh(loops, finalBaseY, isRoadGate, skirtMat);
+    const skirt = buildFoundationSkirtMesh(loops, finalBaseY, isRoadGate, skirtMat, skirtTopOffset);
     if (skirt) {
       entry.group.add(skirt);
     }
@@ -4791,11 +4853,31 @@ function loadPlaceModelInto(entry) {
       model.rotation.y = entry.place.rotationDeg != null ? THREE.MathUtils.degToRad(entry.place.rotationDeg) : entry.rotY;
       model.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
-      // 대부분 모델은 y=0이 1층 바닥이고 음수 Y(지하 계단·기초·보도판)는 땅속으로 들어가야 하므로,
+      // GLB 안에 1층 출입구 하단 기준 노드(Anchor_1F / Entrance_1F / Ground_1F / Floor_1F)가 있으면
+      // 그 노드의 높이를 1층 바닥(y=0) 기준으로 삼고, 출입구 XZ 위치를 기록해 지형 높이에 정확히 맞춘다.
+      let anchor1FNode = null;
+      model.traverse((o) => {
+        if (!anchor1FNode && /^(?:Anchor_1F|Ground_1F|Entrance_1F|Floor_1F|1F_Anchor|1F_Ground|1F_Entrance)$/i.test(o.name || "")) {
+          anchor1FNode = o;
+        }
+      });
+      let anchorFloorY = null;
+      if (anchor1FNode) {
+        if (anchor1FNode.isMesh) {
+          const ab = new THREE.Box3().setFromObject(anchor1FNode);
+          anchorFloorY = ab.min.y;
+          model.userData._nbAnchor1FXZ = [(ab.min.x + ab.max.x) * 0.5, (ab.min.z + ab.max.z) * 0.5];
+        } else {
+          const ap = new THREE.Vector3().setFromMatrixPosition(anchor1FNode.matrixWorld);
+          anchorFloorY = ap.y;
+          model.userData._nbAnchor1FXZ = [ap.x, ap.z];
+        }
+      }
+      // 대부분 모델은 y=0이 1층 바닥이고 음수 Y(지하 1~2층·계단·기초)는 땅속으로 들어가야 하므로,
       // box.min.y가 음수일 때 건물을 위로 들어올리지 않는다(0보다 위에 떠 있는 모델만 바닥으로 내린다).
       const floorY = entry.place.terrain === "baked"
         ? 0
-        : MODEL_FLOOR_OVERRIDE[entry.place.id] ?? Math.max(0, box.min.y);
+        : MODEL_FLOOR_OVERRIDE[entry.place.id] ?? (anchorFloorY != null ? anchorFloorY : Math.max(0, box.min.y));
       model.position.y -= floorY;
       if (entry.place.terrain !== "baked") model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
       entry.group.add(model);
