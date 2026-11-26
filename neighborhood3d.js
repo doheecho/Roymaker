@@ -530,6 +530,7 @@ async function buildStaticScene() {
   buildParks();
   buildRoads();
   buildRoadsideProps();
+  conformToTerrain(scene.children.filter((o) => !before.has(o))); // 평평하게 만든 도로·보도·공원 등을 실제 지형에 붙인다
   buildFences();
   buildTerrainWalls();
   tessellateForTerrain(scene.children.filter((o) => !before.has(o)));
@@ -798,6 +799,102 @@ let glbTerrain = null;
 // 삼각형만 점-안-삼각형 판정 + 무게중심좌표(barycentric)로 높이를 보간한다 — 오차 없이 정확하고,
 // 삼각형 4096개 전부가 아니라 한 칸(보통 몇 개)만 보니 레이캐스트보다 훨씬 빠르다.
 let terrainTriIndex = null;
+// (x, z)가 들어 있는 지형 삼각형 번호(없으면 -1) — 같은 삼각형 안의 점들은 지형이 평면이라 사이를 그냥 이어도 된다
+function terrainTriAt(x, z) {
+  const idx = terrainTriIndex;
+  if (!idx) return -1;
+  const list = idx.cells.get(Math.floor((x - idx.minX) / idx.cellW) * 100000 + Math.floor((z - idx.minZ) / idx.cellH));
+  if (!list) return -1;
+  for (const t of list) {
+    const a = idx.triA[t], b = idx.triB[t], c = idx.triC[t];
+    const ax = idx.wx[a], az = idx.wz[a];
+    const v0x = idx.wx[b] - ax, v0z = idx.wz[b] - az, v1x = idx.wx[c] - ax, v1z = idx.wz[c] - az, v2x = x - ax, v2z = z - az;
+    const den = v0x * v1z - v1x * v0z;
+    if (Math.abs(den) < 1e-9) continue;
+    const vv = (v2x * v1z - v1x * v2z) / den, ww = (v0x * v2z - v2x * v0z) / den;
+    if (vv < -1e-4 || ww < -1e-4 || 1 - vv - ww < -1e-4) continue;
+    return t;
+  }
+  return -1;
+}
+// 평평하게 만든 메시들(도로·보도·연석·노면표시·공원 등)을 지형에 붙인다: 모든 정점 높이 = 그 자리 지형 높이 + 원래 높이.
+// 실제 지형은 큰 삼각형(약 60m) 판들이라, 한 삼각형 안에서는 평면이지만 경계에서 꺾인다 — 도로 삼각형이 그 꺾이는
+// 선을 걸치면 사이가 일직선으로 이어져서 땅에 묻히거나(볼록한 곳) 떠 보인다(오목한 곳). 그래서 꼭짓점들이 서로 다른
+// 지형 삼각형에 있는 삼각형만 반씩 잘게(raw 약 1.2m까지) 나눈 뒤 높이를 다시 매긴다. 오차는 몇 cm 안쪽이 된다.
+const CONFORM_MIN_EDGE_RAW = 1.2;
+const CONFORM_TOLERANCE = 0.004; // 월드 단위(raw 약 2.7cm) — 이보다 덜 어긋나면 더 나누지 않는다(삼각형 수 절약)
+function conformToTerrain(objects) {
+  if (!terrainTriIndex) return;
+  const minEdge = CONFORM_MIN_EDGE_RAW * WORLD_SCALE;
+  const inv = new THREE.Matrix4(), v = new THREE.Vector3();
+  let triIn = 0, triOut = 0;
+  objects.forEach((obj) => obj.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o === glbTerrain || o.userData.noConform) return;
+    const src = o.geometry;
+    if (!src || !src.attributes.position || src.groups.length > 1 || Object.keys(src.morphAttributes || {}).length) return;
+    o.updateMatrixWorld(true);
+    const g = src.index ? src.toNonIndexed() : src.clone();
+    const names = Object.keys(g.attributes);
+    const attrs = names.map((n) => g.attributes[n]);
+    const pi = names.indexOf("position");
+    // 월드 좌표로
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    const out = attrs.map(() => []);
+    const vert = (i) => attrs.map((at) => { const r = []; for (let c = 0; c < at.itemSize; c++) r.push(at.array[i * at.itemSize + c]); return r; });
+    const mid = (A, B) => A.map((va, k) => va.map((x, c) => (x + B[k][c]) / 2));
+    const xzLen2 = (A, B) => { const p = A[pi], q = B[pi]; return (p[0] - q[0]) ** 2 + (p[2] - q[2]) ** 2; };
+    const triOf = (V) => terrainTriAt(V[pi][0], V[pi][2]);
+    const tY = (V) => getTerrainY(V[pi][0], V[pi][2]);
+    // 이 삼각형을 일직선(평면)으로 이었을 때 실제 지형과 가장 많이 어긋나는 정도 — 변 가운데 3곳과 무게중심을 본다
+    const chordErr = (A, B, C) => {
+      const ha = tY(A), hb = tY(B), hc = tY(C);
+      const at = (x, z) => getTerrainY(x, z);
+      const P = (V) => V[pi];
+      return Math.max(
+        Math.abs(at((P(A)[0] + P(B)[0]) / 2, (P(A)[2] + P(B)[2]) / 2) - (ha + hb) / 2),
+        Math.abs(at((P(B)[0] + P(C)[0]) / 2, (P(B)[2] + P(C)[2]) / 2) - (hb + hc) / 2),
+        Math.abs(at((P(C)[0] + P(A)[0]) / 2, (P(C)[2] + P(A)[2]) / 2) - (hc + ha) / 2),
+        Math.abs(at((P(A)[0] + P(B)[0] + P(C)[0]) / 3, (P(A)[2] + P(B)[2] + P(C)[2]) / 3) - (ha + hb + hc) / 3)
+      );
+    };
+    const emit = (A, B, C, depth) => {
+      const ta = triOf(A);
+      const same = ta === triOf(B) && ta === triOf(C);
+      const ab = xzLen2(A, B), bc = xzLen2(B, C), ca = xzLen2(C, A);
+      const m = Math.max(ab, bc, ca);
+      if (same || m <= minEdge * minEdge || depth > 16 || chordErr(A, B, C) < CONFORM_TOLERANCE) {
+        [A, B, C].forEach((V) => V.forEach((val, k) => out[k].push(...val)));
+        return;
+      }
+      if (m === ab) { const M = mid(A, B); emit(A, M, C, depth + 1); emit(M, B, C, depth + 1); }
+      else if (m === bc) { const M = mid(B, C); emit(A, B, M, depth + 1); emit(A, M, C, depth + 1); }
+      else { const M = mid(C, A); emit(A, B, M, depth + 1); emit(M, B, C, depth + 1); }
+    };
+    for (let i = 0; i < pos.count; i += 3) emit(vert(i), vert(i + 1), vert(i + 2), 0);
+    triIn += pos.count / 3;
+    // 높이 매기고 다시 메시 자기 좌표로
+    inv.copy(o.matrixWorld).invert();
+    const P = out[pi];
+    for (let i = 0; i < P.length; i += 3) {
+      v.set(P[i], P[i + 1] + getTerrainY(P[i], P[i + 2]), P[i + 2]).applyMatrix4(inv);
+      P[i] = v.x; P[i + 1] = v.y; P[i + 2] = v.z;
+    }
+    const geo = new THREE.BufferGeometry();
+    names.forEach((n, k) => geo.setAttribute(n, new THREE.Float32BufferAttribute(out[k], attrs[k].itemSize)));
+    if (geo.attributes.normal) geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    geo.computeBoundingBox();
+    triOut += P.length / 9;
+    o.geometry = geo;
+    src.dispose();
+    g.dispose();
+  }));
+  console.info(`[지형] 도로·보도 등 지형에 붙임: 삼각형 ${Math.round(triIn)} → ${Math.round(triOut)}`);
+}
 function buildTerrainTriIndex(mesh) {
   mesh.updateMatrixWorld(true);
   const geo = mesh.geometry;
@@ -922,17 +1019,30 @@ function buildFences() {
     const bay = L / n;
     const withBase = f.base !== false;
     const drop = withBase ? 0 : T.baseH || 0;
-    // 바닥 높이: 토막 가운데의 지면(보도 위면 보도 높이)
+    // 바닥 높이: 기둥(칸 경계)마다 그 자리 지형 높이 + (토막 가운데가 보도 위면 보도 턱 높이)
     const mx = (f.a[0] + f.b[0]) / 2 * W, mz = (f.a[1] + f.b[1]) / 2 * W;
-    const gy = groundHeightAt(mx, mz);
-    const push = (part, cx, len, matName) => {
+    const lift = Math.max(0, groundHeightAt(mx, mz) - getTerrainY(mx, mz));
+    const postY = [];
+    for (let k = 0; k <= n; k++) {
+      const t = k * bay;
+      postY.push(getTerrainY((f.a[0] + ux * t) * W, (f.a[1] + uz * t) * W) + lift);
+    }
+    const heightAt = (cx) => { // 토막을 따라 cx(raw m) 자리의 바닥 높이(기둥 사이는 직선으로)
+      const k = Math.max(0, Math.min(n - 1, Math.floor(cx / bay)));
+      const t = Math.max(0, Math.min(1, cx / bay - k));
+      return postY[k] + (postY[k + 1] - postY[k]) * t;
+    };
+    const shearM = new THREE.Matrix4(), rotM = new THREE.Matrix4(), sclM = new THREE.Matrix4();
+    const push = (part, cx, len, matName, slope = 0) => {
       const y0 = Math.max(0, part.y0 - (part.onBase ? 0 : drop)), y1 = part.y1 - (part.onBase ? 0 : drop);
       if (y1 - y0 <= 0) return;
       const off = part.z || 0;
-      tmp.position.set((f.a[0] + ux * cx - uz * off) * W, gy + ((y0 + y1) / 2) * W, (f.a[1] + uz * cx + ux * off) * W);
-      tmp.rotation.set(0, yaw, 0);
-      tmp.scale.set(len * W, (y1 - y0) * W, (part.d || 0.05) * W);
-      tmp.updateMatrix();
+      tmp.position.set((f.a[0] + ux * cx - uz * off) * W, heightAt(cx) + ((y0 + y1) / 2) * W, (f.a[1] + uz * cx + ux * off) * W);
+      // 위치 × 회전 × 기울임(길이 방향으로 갈수록 높이가 slope만큼 변함) × 크기 — 칸 위아래 선이 경사를 따라간다
+      shearM.set(1, 0, 0, 0, slope, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+      tmp.matrix.makeTranslation(tmp.position.x, tmp.position.y, tmp.position.z)
+        .multiply(rotM.makeRotationY(yaw)).multiply(shearM)
+        .multiply(sclM.makeScale(len * W, (y1 - y0) * W, (part.d || 0.05) * W));
       // 동네를 FENCE_CHUNK 크기 칸으로 나눠 칸마다 따로 담는다 — 화면 밖·멀리 있는 칸은 아예 안 그린다
       const chunk = `${Math.floor(tmp.position.x / FENCE_CHUNK)},${Math.floor(tmp.position.z / FENCE_CHUNK)}`;
       const key = `${typeKey}:${matName || part.mat}:${chunk}`;
@@ -947,7 +1057,8 @@ function buildFences() {
         const inset = part.inset || 0;
         for (let k = 0; k < n; k++) {
           const len = part.w ? part.w : Math.max(0.05, bay - inset * 2);
-          push(part, (k + 0.5) * bay, len, part.matAlt ? part.matAlt[k % part.matAlt.length] : null);
+          const slope = part.w ? 0 : (postY[k + 1] - postY[k]) / (bay * W); // 짧은 고정 폭 부품(배수구 등)은 수평
+          push(part, (k + 0.5) * bay, len, part.matAlt ? part.matAlt[k % part.matAlt.length] : null, slope);
         }
       }
     });
@@ -1059,10 +1170,11 @@ function buildTrees() {
     const scale = 0.85 + ((i * 37) % 30) / 100; // 170여 그루가 전부 같은 크기면 부자연스러워서 자리마다 살짝 다르게
     dummy.scale.setScalar(scale);
     dummy.rotation.y = (i * 2.4) % (Math.PI * 2);
-    dummy.position.set(x, 1.5 * WORLD_SCALE * scale, z); // 줄기 밑동이 땅(y=0)에 닿도록 중심을 절반 높이만큼 띄운다
+    const gy = getTerrainY(x, z); // 실제 지형 높이(없으면 0)
+    dummy.position.set(x, gy + 1.5 * WORLD_SCALE * scale, z); // 줄기 밑동이 땅에 닿도록 중심을 절반 높이만큼 띄운다
     dummy.updateMatrix();
     trunkInst.setMatrixAt(i, dummy.matrix);
-    dummy.position.y = 3 * WORLD_SCALE * scale + 2.3 * WORLD_SCALE * scale; // 줄기 꼭대기 위에 수관(원뿔)을 얹는다
+    dummy.position.y = gy + 3 * WORLD_SCALE * scale + 2.3 * WORLD_SCALE * scale; // 줄기 꼭대기 위에 수관(원뿔)을 얹는다
     dummy.updateMatrix();
     foliageInst.setMatrixAt(i, dummy.matrix);
   });
@@ -1081,7 +1193,7 @@ function buildParks() {
     const geo = new THREE.PlaneGeometry(park.w * WORLD_SCALE, park.d * WORLD_SCALE);
     geo.rotateX(-Math.PI / 2);
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(park.x * WORLD_SCALE, -0.01, park.z * WORLD_SCALE);
+    mesh.position.set(park.x * WORLD_SCALE, glbTerrain ? 0.015 : -0.01, park.z * WORLD_SCALE); // 실제 지형이 있으면 그 위로(conformToTerrain이 붙임)
     mesh.rotation.y = park.rotationDeg ? THREE.MathUtils.degToRad(park.rotationDeg) : 0;
     mesh.receiveShadow = true;
     scene.add(mesh);
@@ -1146,7 +1258,7 @@ const PAVING_TILE_RAW = { walk: 3, school: 2.4 }; // 포장 무늬 한 장이 �
 // (실측). 그 오차보다 확실히 크게 띄워 둬야 실제 지형 표면이 도로·보도 위로 삐져나와 "구글맵
 // 그림만 보이고 도로 텍스처가 안 보이는" 것처럼 되는 일이 없다(2026-11-26 사용자 보고로 발견) —
 // 그래서 예전엔 z-fighting만 막으면 됐던 이 상수들에 전부 +0.05 여유를 더했다.
-const ROAD_LAYER_BASE_Y = 0.055;
+const ROAD_LAYER_BASE_Y = 0.03; // conformToTerrain으로 지형에 정확히 붙이니 여유는 조금만(예전 0.055)
 const ROAD_LAYER_STEP = 0.0015; // 눈에 띄는 단차는 아니고, 겹칠 때 어느 면이 위인지만 확실히 가르는 정도
 function surfaceYFor(seg) {
   return ROAD_LAYER_BASE_Y + roadLook(seg).rank * ROAD_LAYER_STEP;
@@ -1231,9 +1343,9 @@ function buildRibbonGeometry(pts, tangents, width, offset = 0) {
     // 실제 지형(GLB)이 있으면 그 자리 높이를 정점마다 그대로 구워 넣는다 — 도로·중앙선·보도가
     // 전부 이 함수 하나로 만들어지니, 여기 한 곳만 고치면 전부 비탈을 따라 휘어진다(mesh.position.y는
     // 그 위에 더해지는 작은 우선순위 오프셋일 뿐이라 그대로 둬도 된다).
-    const y = getTerrainY(cx, cz);
-    positions.push(cx + (px * width) / 2, y, cz + (pz * width) / 2);
-    positions.push(cx - (px * width) / 2, y, cz - (pz * width) / 2);
+    // 높이는 0(평평)으로 만들고, 장면을 다 지은 뒤 conformToTerrain()이 지형에 꼭 맞게 붙인다
+    positions.push(cx + (px * width) / 2, 0, cz + (pz * width) / 2);
+    positions.push(cx - (px * width) / 2, 0, cz - (pz * width) / 2);
   }
   const indices = [];
   for (let i = 0; i < n - 1; i++) {
@@ -1418,7 +1530,7 @@ function buildSchoolDecals() {
     const corner = (a, b) => [d.x + d.fx * a + rx * b, d.z + d.fz * a + rz * b];
     // 캔버스 위쪽(v=1)이 진행 방향 앞(멀리), 왼쪽(u=0)이 운전자 왼쪽
     [[corner(-hl, -hw), 0, 0], [corner(-hl, hw), 1, 0], [corner(hl, hw), 1, 1], [corner(hl, -hw), 0, 1]].forEach(([p, u, v]) => {
-      pos.push(p[0], getTerrainY(p[0], p[1]), p[1]);
+      pos.push(p[0], 0, p[1]); // 높이는 conformToTerrain()이
       uv.push(u, v);
     });
     const b = k * 4;
@@ -1439,7 +1551,7 @@ function buildSchoolDecals() {
 // 보도 윗면이 기본 지면 높이(SIDEWALK_TOP_Y)이고 도로는 그보다 낮다. 보도·경계선·연석·울타리는
 // 도로마다 메시를 만들지 않고 종류별로 하나씩 합쳐 그린다(드로우콜 몇 개뿐).
 const SIDEWALK_TILE_RAW = 2.4; // 보도 텍스처 한 장이 덮는 길이(raw m) — 0.3m 블록 8×8
-const SIDEWALK_TOP_Y = 0.1; // 보도 윗면 높이 — 도로(0.055~0.0615)보다 연석(턱)만큼 올라와 있다(지형 오차 여유 +0.05 포함)
+const SIDEWALK_TOP_Y = 0.075; // (예전 0.1) 연석 턱 = 0.075 - 0.03 — 보도 윗면 높이 — 도로(0.055~0.0615)보다 연석(턱)만큼 올라와 있다(지형 오차 여유 +0.05 포함)
 const SIDEWALK_YELLOW_Y = SIDEWALK_TOP_Y + 0.001; // 황색 경계선은 보도 윗면 바로 위
 const CURB_COLOR = 0xb9b4a8;
 // 캐릭터가 보도 위에 설 때 쓰는 띠 목록(월드 좌표). 도로 중심선에서 떨어진 거리(inner~outer)가
@@ -1703,7 +1815,7 @@ function chainGeometry(members) {
 // 도로가 그 위를 덮으니 도로가 우선이고, 예전처럼 비스듬히 잘린 세로 단면이나 빈 구멍이 생기지 않는다.
 // 캐릭터·행인도 그 경사를 따라 내려갔다 올라온다(사용자 지정 2026-11-25).
 const SIDEWALK_RAMP_RAW = 2; // 보도가 도로 높이까지 내려가는 경사 길이(raw m)
-const SIDEWALK_LOW_Y = 0.053; // 내려앉은 보도 높이 — 가장 낮은 도로 표면(0.055)보다 조금 아래라 도로가 위에 보인다
+const SIDEWALK_LOW_Y = 0.028; // (예전 0.053) 내려앉은 보도 높이 — 가장 낮은 도로 표면(0.055)보다 조금 아래라 도로가 위에 보인다
 const SIDEWALK_PROBES = [0.12, 0.5, 0.88]; // 보도 폭에서 이 비율 자리 중 한 곳이라도 다른 도로 위면 내려앉힌다
 const walkDips = []; // 내려앉은·경사진 보도 조각(캐릭터 발밑 높이) — 나머지 보도는 walkBands가 보도 높이로 처리
 
@@ -1763,15 +1875,15 @@ function emitSidewalkBand(stores, secs, opts) {
   sidewalkHeights(secs);
   // 실제 지형(GLB)이 있으면 그 자리 실측 높이도 더한다 — sc.y 자체는(옛 평지 가정) 도로·연석의
   // 상대적인 턱 높이만 담당하고, 전역 높낮이는 여기서 더해 준다(건물·캐릭터와 같은 방식).
-  const terrainAt = (sc) => getTerrainY(sc.c[0], sc.c[1]);
-  const ys = secs.map((sc) => sc.y - SIDEWALK_TOP_Y + terrainAt(sc));
+  const terrainAt = (sc) => getTerrainY(sc.c[0], sc.c[1]); // 행인 경로 높이에만 쓴다(그림은 conformToTerrain이 붙인다)
+  const ys = secs.map((sc) => sc.y - SIDEWALK_TOP_Y);
   const A = secs.map((sc) => sc.inner), B = secs.map((sc) => sc.outer);
   pushStripY(sideStore(stores, opts.style), A, B, ys);
   // 연석 벽 바닥은 그 자리 지형 높이로(꼭대기 ys와 같은 지형 기준이라야 벽 높이가 턱 높이만큼으로
   // 일정하게 유지된다) — 도로 rank 높이(약 0.055~0.07)는 연석 높이(SIDEWALK_TOP_Y=0.1)에 비해
   // 작아서 무시해도 눈에 띄지 않는다.
-  pushVerticalQuadStripY(stores.curb, A, secs.map((sc) => sc.y + terrainAt(sc)), secs.map((sc) => terrainAt(sc))); // 도로 쪽 연석 면
-  [secs[0], secs[secs.length - 1]].forEach((sc) => pushVerticalQuadStripY(stores.curb, [sc.inner, sc.outer], [sc.y + terrainAt(sc), sc.y + terrainAt(sc)], [terrainAt(sc), terrainAt(sc)])); // 띠 끝 단면
+  pushVerticalQuadStripY(stores.curb, A, secs.map((sc) => sc.y)); // 도로 쪽 연석 면
+  [secs[0], secs[secs.length - 1]].forEach((sc) => pushVerticalQuadStripY(stores.curb, [sc.inner, sc.outer], [sc.y, sc.y])); // 띠 끝 단면
   pushStripY(stores.line, secs.map((sc) => sc.at(inset)), secs.map((sc) => sc.at(inset + lineW)), ys);
   // 걷는 높이: 보도 높이 그대로인 구간은 다각형(platform) 또는 walkBands, 내려앉은·경사진 곳은 조각(walkDips)으로
   const full = (sc) => sc.h >= 0.999;
@@ -1930,7 +2042,7 @@ function buildSidewalkJoints(conns, chainOf, stores) {
         return out;
       };
       const inner = arc(ri);
-      const tP = getTerrainY(P[0], P[1]); // 작은 부채꼴이라 한 점 높이로 충분하다
+      const tP = 0; // 평평하게 — 지형 높이는 conformToTerrain()이
       pushStrip(sideStore(stores, swStyleOf(seg)), inner, arc(ro), tP);
       pushVerticalQuadStrip(stores.curb, inner, tP, tP + SIDEWALK_TOP_Y);
       pushStrip(stores.line, arc(ri + inset), arc(ri + inset + lineW), tP);
@@ -2106,7 +2218,7 @@ function buildRoadSidewalks() {
       const posts = new THREE.InstancedMesh(postGeo, railMat, stores.posts.length);
       const dummy = new THREE.Object3D();
       stores.posts.forEach(([x, z], i) => {
-        dummy.position.set(x, SIDEWALK_TOP_Y + RAILING_H / 2, z);
+        dummy.position.set(x, getTerrainY(x, z) + SIDEWALK_TOP_Y + RAILING_H / 2, z);
         dummy.updateMatrix();
         posts.setMatrixAt(i, dummy.matrix);
       });
@@ -2125,8 +2237,11 @@ function buildDashInstances(transforms, color) {
   const inst = new THREE.InstancedMesh(dashGeo, laneMat, transforms.length);
   const dummy = new THREE.Object3D();
   transforms.forEach((t, i) => {
-    dummy.position.set(t.x, t.y, t.z);
-    dummy.rotation.set(0, t.yaw, 0);
+    // 앞뒤 끝의 지형 높이 차만큼 기울여서 비탈에서도 점선이 도로에 묻히지 않게
+    const ex = Math.sin(t.yaw) * dashLen / 2, ez = Math.cos(t.yaw) * dashLen / 2;
+    const hF = getTerrainY(t.x + ex, t.z + ez), hB = getTerrainY(t.x - ex, t.z - ez), hC = getTerrainY(t.x, t.z);
+    dummy.position.set(t.x, t.y + (hF + hB) / 2 - hC, t.z);
+    dummy.rotation.set(-Math.atan2(hF - hB, dashLen), t.yaw, 0, "YXZ");
     dummy.updateMatrix();
     inst.setMatrixAt(i, dummy.matrix);
   });
@@ -2206,10 +2321,7 @@ function buildJunctionFillers() {
     const hull = convexHull2D(cornerPts);
     if (hull.length < 3) continue;
     const positions = [];
-    hull.forEach(([x, z]) => {
-      const wx = x * WORLD_SCALE, wz = z * WORLD_SCALE;
-      positions.push(wx, getTerrainY(wx, wz), wz);
-    });
+    hull.forEach(([x, z]) => positions.push(x * WORLD_SCALE, 0, z * WORLD_SCALE)); // 높이는 conformToTerrain()이
     const indices = [];
     for (let k = 1; k < hull.length - 1; k++) indices.push(0, k, k + 1);
     const geo = new THREE.BufferGeometry();
@@ -2234,10 +2346,7 @@ function buildRoadMarks() {
   const positions = [];
   const indices = [];
   quads.forEach((q, k) => {
-    q.forEach(([x, z]) => {
-      const wx = x * WORLD_SCALE, wz = z * WORLD_SCALE;
-      positions.push(wx, getTerrainY(wx, wz), wz);
-    });
+    q.forEach(([x, z]) => positions.push(x * WORLD_SCALE, 0, z * WORLD_SCALE)); // 높이는 conformToTerrain()이
     const b = k * 4;
     indices.push(b, b + 1, b + 2, b, b + 2, b + 3);
   });
@@ -2345,16 +2454,21 @@ function buildStreetlights() {
   poolInst.visible = false;
   streetlightPools = poolInst;
   const dummy = new THREE.Object3D();
+  const upV = new THREE.Vector3(0, 1, 0), nV = new THREE.Vector3();
   streetlightTransforms.forEach((t, i) => {
-    dummy.position.set(t.x, STREETLIGHT_POLE_HEIGHT / 2, t.z); // 기둥 밑동이 땅(y=0)에 닿도록
+    const gy = getTerrainY(t.x, t.z); // 실제 지형 높이(없으면 0)
+    dummy.position.set(t.x, gy + STREETLIGHT_POLE_HEIGHT / 2, t.z); // 기둥 밑동이 땅에 닿도록
     dummy.rotation.set(0, t.yaw, 0);
     dummy.updateMatrix();
     poleInst.setMatrixAt(i, dummy.matrix);
-    dummy.position.y = STREETLIGHT_POLE_HEIGHT + 0.15 * WORLD_SCALE; // 기둥 꼭대기 위에 등 얹기
+    dummy.position.y = gy + STREETLIGHT_POLE_HEIGHT + 0.15 * WORLD_SCALE; // 기둥 꼭대기 위에 등 얹기
     dummy.updateMatrix();
     headInst.setMatrixAt(i, dummy.matrix);
-    dummy.position.set(t.x, SIDEWALK_TOP_Y + 0.006, t.z);
-    dummy.rotation.set(0, 0, 0);
+    // 바닥 불빛 판은 그 자리 경사대로 기울인다
+    const e = STREETLIGHT_POOL_RADIUS * 0.7;
+    nV.set(-(getTerrainY(t.x + e, t.z) - getTerrainY(t.x - e, t.z)) / (2 * e), 1, -(getTerrainY(t.x, t.z + e) - getTerrainY(t.x, t.z - e)) / (2 * e)).normalize();
+    dummy.position.set(t.x, groundHeightAt(t.x, t.z) + 0.012, t.z);
+    dummy.quaternion.setFromUnitVectors(upV, nV);
     dummy.scale.setScalar(STREETLIGHT_POOL_RADIUS);
     dummy.updateMatrix();
     poolInst.setMatrixAt(i, dummy.matrix);
@@ -2532,6 +2646,8 @@ function groundHeightAt(x, z) {
     const d = distToSegment(x, z, s.ax, s.az, s.bx, s.bz);
     if (d > s.inner && d <= s.outer) return base + SIDEWALK_TOP_Y;
   }
+  // 실제 지형이 있을 때 도로 위면 도로 표면 높이(지형보다 ROAD_LAYER_BASE_Y 위) — 발이 도로에 묻히지 않게
+  if (glbTerrain && pointOnRoad(x, z, null, 0)) return base + ROAD_LAYER_BASE_Y;
   return base;
 }
 let modelStreamTimer = 0;
@@ -2610,6 +2726,8 @@ function hullOverlapsRoad(hull) {
 let buildingSkirtMaterial = null;
 function settleBuildingBase(entry, model) {
   if (ROAD_LEVEL_PLACE_IDS.has(entry.place.id)) return;
+  if (entry.place.terrain === "baked") return; // 단차가 들어간 모델은 자기 바닥 그대로(받침벽·발판을 덧대지 않는다)
+  const terrainY = entry.terrainY || 0;
   if (entry.baseDecided === "low") {
     model.position.y += -0.01 - DEFAULT_MODEL_Y_LIFT;
     return;
@@ -2620,21 +2738,26 @@ function settleBuildingBase(entry, model) {
   if (hullOverlapsRoad(hull)) {
     // 건물 판이 도로에 걸친다 → 도로보다 살짝 낮게(도로가 위에 보이게)
     entry.baseDecided = "low";
-    entry.group.position.y = entry.groundY;
+    entry.group.position.y = terrainY + entry.groundY;
     model.position.y += -0.01 - DEFAULT_MODEL_Y_LIFT;
     return;
   }
   entry.baseDecided = "raised";
   const baseY = entry.group.position.y;
-  if (baseY <= 0) return;
+  // 받침벽: 건물 바닥 둘레에서 가장 낮은 지형까지 내려 세운다(비탈에서 건물 아래가 떠 보이지 않게)
+  let lowest = Infinity;
+  hull.forEach(([x, z]) => { lowest = Math.min(lowest, getTerrainY(x, z)); });
+  if (!Number.isFinite(lowest)) lowest = terrainY;
+  const drop = baseY - lowest; // 바닥에서 가장 낮은 땅까지
+  if (drop <= 0.004) return;
   if (!buildingSkirtMaterial) buildingSkirtMaterial = new THREE.MeshStandardMaterial({ color: CURB_COLOR, roughness: 1, side: THREE.DoubleSide });
   const store = newRibbonStore();
-  pushVerticalQuadStrip(store, [...hull, hull[0]], -baseY, -0.003); // group 기준: 지면(0)~건물 바닥 바로 아래
+  pushVerticalQuadStrip(store, [...hull, hull[0]], -drop - 0.01, -0.003); // group 기준: 가장 낮은 땅 ~ 건물 바닥 바로 아래
   store.uv.length = 0;
   const skirt = new THREE.Mesh(storeToGeometry(store), buildingSkirtMaterial);
   skirt.receiveShadow = true;
   entry.group.add(skirt);
-  addPolyPlatform(hull, baseY);
+  addPolyPlatform(hull, baseY - terrainY); // 지형 위로 얹는 높이(상대값 — groundHeightAt이 그 자리 지형을 더한다)
 }
 
 // 건물 모델은 작은 조각(메시)이 수십~수백 개라 조각마다 그리기 명령이 하나씩 나간다(멀리 보면 1000번 넘게).
@@ -2714,9 +2837,10 @@ function loadPlaceModelInto(entry) {
       });
       model.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
-      const floorY = MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
+      // 단차가 들어간 모델(terrain: "baked")은 모델의 y=0이 곧 장소 좌표 자리의 땅 높이 — 가장 낮은 점으로 맞추지 않는다
+      const floorY = entry.place.terrain === "baked" ? 0 : MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
       model.position.y -= floorY;
-      model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
+      if (entry.place.terrain !== "baked") model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
       settleBuildingBase(entry, model);
       entry.group.add(model);
       entry.loadedModel = model;
@@ -2795,8 +2919,11 @@ function buildPlaces() {
     // 바뀌는 곳이 많아서(금호동 특성상), 중심점 높이 하나로 앉히면 가파른 곳에서 바닥이 땅을
     // 뚫고 올라오거나 떠 보이는 문제가 생겼다(2026-11-26, 행당대림108동 등에서 확인). 도로·보도·
     // 캐릭터는 계속 지형을 따라가게 두고, 건물만 이 평지 가정으로 되돌렸다(사용자 결정).
+    // 실제 지형(GameMap.glb)이 있으면 장소 좌표(x, z) 자리의 지형 높이에 앉힌다 — 맵 에디터 "위치+고도 뽑기"가
+    // 알려주는 고도와 같은 값이다. 고저차가 큰 곳은 단차가 들어간 모델(terrain: "baked")로 바꿔 넣으면 된다.
+    const terrainY = getTerrainY(px, pz);
     const group = new THREE.Group();
-    group.position.y = groundY + baseLift;
+    group.position.y = terrainY + groundY + baseLift;
     scene.add(group);
     if (groundY !== 0) {
       const skirtH = Math.abs(groundY + baseLift);
@@ -2820,7 +2947,7 @@ function buildPlaces() {
       const cos = Math.cos(colRot);
       const sin = Math.sin(colRot);
       if (groundY !== 0) {
-        groundPlatforms.push({ cx: px, cz: pz, cos, sin, halfW: (colW * 1.4) / 2, halfD: (colD * 1.4) / 2, y: groundY + baseLift });
+        groundPlatforms.push({ cx: px, cz: pz, cos, sin, halfW: (colW * 1.4) / 2, halfD: (colD * 1.4) / 2, y: groundY + baseLift }); // 지형 위로 더 얹는 높이(상대값)
       }
 
       // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동 등)은 캐릭터가 가까워지면 불러와 쓴다
@@ -2837,7 +2964,7 @@ function buildPlaces() {
         placeholder.add(mesh);
       }
       group.add(placeholder);
-      modelStreamEntries.push({ place, px, pz, rotY, placeholder, group, groundY, loadedModel: null, loading: false, inRange: true, baseDecided: null });
+      modelStreamEntries.push({ place, px, pz, rotY, placeholder, group, groundY, terrainY, loadedModel: null, loading: false, inRange: true, baseDecided: null });
 
       // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
       if (place.church) {
@@ -2863,7 +2990,7 @@ function buildPlaces() {
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
     const terrainLift = terrainAt(px, pz); // (예전) 금호파크힐스 구역 단차 — 이름표는 그림 셰이더가 아니라서 직접 올린다
-    label.position.set(px, groundY + terrainLift + height + 1.1, pz);
+    label.position.set(px, terrainY + groundY + terrainLift + height + 1.1, pz);
     label.userData.placeId = place.id; // updateLabelVisibility에서 거리·목적지 판정에 쓴다
     scene.add(label);
 
@@ -2872,7 +2999,7 @@ function buildPlaces() {
       new THREE.SpriteMaterial({ map: highlightTexture(), color: 0x3fa9ff, transparent: true, opacity: 0, depthTest: false })
     );
     highlight.scale.set(5, 5, 1);
-    highlight.position.set(px, groundY + terrainLift + height + 1.1, pz);
+    highlight.position.set(px, terrainY + groundY + terrainLift + height + 1.1, pz);
     highlight.renderOrder = 998;
     highlight.visible = false;
     scene.add(highlight);
@@ -3026,9 +3153,10 @@ function spawnItems() {
   for (let i = 0; i < ITEM_COUNT; i++) {
     const [x, z] = randomStreetSpot();
     const mesh = makeCoin();
-    mesh.position.set(x, 0.9, z);
+    const baseY = groundHeightAt(x, z) + 0.9; // 실제 지형 높이 위로
+    mesh.position.set(x, baseY, z);
     scene.add(mesh);
-    items.push({ mesh, taken: false });
+    items.push({ mesh, taken: false, baseY });
   }
 }
 
@@ -3177,7 +3305,7 @@ function updatePickups(dt) {
   items.forEach((it) => {
     if (it.taken) return;
     it.mesh.rotation.y += dt * 2.2;
-    it.mesh.position.y = 0.9 + Math.sin(performance.now() / 300 + it.mesh.id) * 0.1;
+    it.mesh.position.y = (it.baseY ?? 0.9) + Math.sin(performance.now() / 300 + it.mesh.id) * 0.1;
     if (cp.distanceTo(it.mesh.position) < PICKUP_RADIUS) {
       it.taken = true;
       scene.remove(it.mesh);
@@ -3458,7 +3586,7 @@ function onMomClick() {
 // 심부름을 마치고 집으로 돌아올 때, 엄마가 집 앞에 미리 나와서 손을 흔들며 기다리고 있다
 function spawnErrandMom() {
   ensureMomLoaded(() => {
-    mom.position.set(2 * WORLD_SCALE, 0, 3);
+    mom.position.set(2 * WORLD_SCALE, groundHeightAt(2 * WORLD_SCALE, 3), 3);
     mom.rotation.y = Math.PI;
     mom.visible = true;
     const greet = momActions["Wave_for_Help_4"];
@@ -4179,31 +4307,33 @@ function buildTrafficSignals() {
     const baseRaw = [c.stopX + r[0] * (c.half + 0.9), c.stopZ + r[1] * (c.half + 0.9)];
     const armLenRaw = c.half * 0.75 + 0.9;
     const B = [baseRaw[0] * W, baseRaw[1] * W];
-    poles.push({ x: B[0], z: B[1], h: VEH_SIGNAL_POLE_H });
+    const gyV = groundHeightAt(B[0], B[1]); // 이 차량 신호등 한 벌이 서는 높이
+    poles.push({ x: B[0], z: B[1], h: VEH_SIGNAL_POLE_H, gy: gyV });
     const armMid = [B[0] - r[0] * (armLenRaw * W) / 2, B[1] - r[1] * (armLenRaw * W) / 2];
-    arms.push({ x: armMid[0], z: armMid[1], y: VEH_SIGNAL_POLE_H - 0.02, len: armLenRaw * W, yaw: yawFacing(-h[0], -h[1]) });
+    arms.push({ x: armMid[0], z: armMid[1], y: VEH_SIGNAL_POLE_H - 0.02, len: armLenRaw * W, yaw: yawFacing(-h[0], -h[1]), gy: gyV });
     const headPos = [B[0] - r[0] * (armLenRaw - 0.5) * W, B[1] - r[1] * (armLenRaw - 0.5) * W];
     const headY = VEH_SIGNAL_POLE_H - 0.07;
     const faceYaw = yawFacing(-h[0], -h[1]);
-    heads.push({ x: headPos[0], y: headY, z: headPos[1], sx: 0.17, sy: 0.055, sz: 0.04, yaw: faceYaw });
+    heads.push({ x: headPos[0], y: headY, z: headPos[1], sx: 0.17, sy: 0.055, sz: 0.04, yaw: faceYaw, gy: gyV });
     // 운전자 기준 왼쪽부터 빨강·노랑·초록(가로형)
     [["vR", -0.052], ["vY", 0], ["vG", 0.052]].forEach(([kind, o]) => {
       lamps.push({
         x: headPos[0] + r[0] * o - h[0] * 0.021, y: headY, z: headPos[1] + r[1] * o - h[1] * 0.021,
-        yaw: faceYaw, r: 0.018, arm: c, kind,
+        yaw: faceYaw, r: 0.018, arm: c, kind, gy: gyV,
       });
     });
     // 보행 신호등: 횡단보도 양끝(도로 양쪽 길가), 길 건너편을 바라봄. 위 빨강(서 있는 사람), 아래 초록
     // (길 중간 횡단보도는 방향마다 기록이 둘이라 보행 신호등은 첫 기록에만 — pedSignals)
     if (c.pedSignals !== false) [1, -1].forEach((side) => {
       const E = [(c.x + r[0] * side * (c.half + 0.7)) * W, (c.z + r[1] * side * (c.half + 0.7)) * W];
-      poles.push({ x: E[0], z: E[1], h: PED_SIGNAL_POLE_H });
+      const gyP = groundHeightAt(E[0], E[1]);
+      poles.push({ x: E[0], z: E[1], h: PED_SIGNAL_POLE_H, gy: gyP });
       const face = [-r[0] * side, -r[1] * side];
       const fy = yawFacing(face[0], face[1]);
       const hy = PED_SIGNAL_POLE_H + 0.02;
-      heads.push({ x: E[0], y: hy, z: E[1], sx: 0.05, sy: 0.085, sz: 0.035, yaw: fy });
+      heads.push({ x: E[0], y: hy, z: E[1], sx: 0.05, sy: 0.085, sz: 0.035, yaw: fy, gy: gyP });
       [["pR", 0.021], ["pG", -0.021]].forEach(([kind, dy]) => {
-        lamps.push({ x: E[0] + face[0] * 0.019, y: hy + dy, z: E[1] + face[1] * 0.019, yaw: fy, r: 0.016, arm: c, kind });
+        lamps.push({ x: E[0] + face[0] * 0.019, y: hy + dy, z: E[1] + face[1] * 0.019, yaw: fy, r: 0.016, arm: c, kind, gy: gyP });
       });
     });
   });
@@ -4212,7 +4342,7 @@ function buildTrafficSignals() {
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.6, metalness: 0.3 });
   const poleMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.012, 0.014, 1, 6), darkMat, poles.length);
   poles.forEach((p, i) => {
-    dummy.position.set(p.x, SIDEWALK_TOP_Y + p.h / 2, p.z);
+    dummy.position.set(p.x, p.gy + p.h / 2, p.z);
     dummy.rotation.set(0, 0, 0);
     dummy.scale.set(1, p.h, 1);
     dummy.updateMatrix();
@@ -4220,7 +4350,7 @@ function buildTrafficSignals() {
   });
   const armMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), darkMat, arms.length);
   arms.forEach((a, i) => {
-    dummy.position.set(a.x, SIDEWALK_TOP_Y + a.y, a.z);
+    dummy.position.set(a.x, a.gy + a.y, a.z);
     dummy.rotation.set(0, a.yaw, 0);
     dummy.scale.set(a.len, 0.018, 0.018); // 로컬 X(=오른쪽 r 방향)로 길게
     dummy.updateMatrix();
@@ -4228,7 +4358,7 @@ function buildTrafficSignals() {
   });
   const headMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x1d2024, roughness: 0.7 }), heads.length);
   heads.forEach((hh, i) => {
-    dummy.position.set(hh.x, SIDEWALK_TOP_Y + hh.y, hh.z);
+    dummy.position.set(hh.x, hh.gy + hh.y, hh.z);
     dummy.rotation.set(0, hh.yaw, 0);
     dummy.scale.set(hh.sx, hh.sy, hh.sz);
     dummy.updateMatrix();
@@ -4236,7 +4366,7 @@ function buildTrafficSignals() {
   });
   const lampMesh = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 10), new THREE.MeshBasicMaterial({ color: 0xffffff }), lamps.length);
   lamps.forEach((l, i) => {
-    dummy.position.set(l.x, SIDEWALK_TOP_Y + l.y, l.z);
+    dummy.position.set(l.x, l.gy + l.y, l.z);
     dummy.rotation.set(0, l.yaw, 0);
     dummy.scale.set(l.r, l.r, 1);
     dummy.updateMatrix();
@@ -4896,7 +5026,8 @@ function updateCars(dt) {
   // 그리기(종류별로 활성인 것만 앞쪽 칸에 모아서)
   const { body, cabin, wheels, shadow, buses, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams } = carMeshes;
   const m = new THREE.Matrix4(), part = new THREE.Matrix4(), base = new THREE.Matrix4(), sc = new THREE.Matrix4();
-  const y0 = 0.012;
+  const y0 = ROAD_LAYER_BASE_Y + 0.006; // 도로 표면 바로 위(그림자 판 높이) — 실제 높이는 그 자리 지형을 더한다
+  const pitchM = new THREE.Matrix4();
   let nCar = 0, nAll = 0, nW = 0, nMoto = 0, nHead = 0, nTail = 0;
   const nBus = BUS_TYPES.map(() => 0);
   // 밤엔 전조등·미등을 켜고 차 앞 도로를 비춘다(낮에는 아예 그리지 않는다)
@@ -4906,7 +5037,10 @@ function updateCars(dt) {
   const lamp = (mesh, idx, x, y, z) => { mesh.setMatrixAt(idx, m.multiplyMatrices(base, part.makeTranslation(x, y, z))); };
   cars.forEach((car) => {
     if (!car.active) return;
-    base.makeRotationY(Math.atan2(car.fx, car.fz)).setPosition(car.x, y0, car.z);
+    // 실제 지형: 차 앞뒤 끝의 높이로 앞뒤 기울기, 가운데 높이로 위치
+    const hl = car.len * 0.5;
+    const hF = getTerrainY(car.x + car.fx * hl, car.z + car.fz * hl), hB = getTerrainY(car.x - car.fx * hl, car.z - car.fz * hl);
+    base.makeRotationY(Math.atan2(car.fx, car.fz)).multiply(pitchM.makeRotationX(-Math.atan2(hF - hB, car.len))).setPosition(car.x, y0 + (hF + hB) / 2, car.z);
     shadow.setMatrixAt(nAll, m.multiplyMatrices(base, part.makeScale(car.wid * 0.75, 1, car.len * 0.62)));
     if (lampsOn) {
       const ahead = car.type === "bus" ? BUS_LEN / 2 + 0.6 : car.type === "moto" ? 0.55 : CAR_LEN / 2 + 0.55;
@@ -5359,7 +5493,7 @@ function buildShopSigns() {
     const cos = Math.cos(rot), sin = Math.sin(rot);
     const inside = (qx, qz) => insideRect(qx, qz, px, pz, cos, sin, halfW, halfD);
     // 길이 지나가서 보도가 내려앉은 자리(횡단 구간)도 피한다
-    const q = nearestPedPathPoint(px, pz, 9, (qx, qz) => inside(qx, qz) || groundHeightAt(qx, qz) < SIDEWALK_TOP_Y - 0.01);
+    const q = nearestPedPathPoint(px, pz, 9, (qx, qz) => inside(qx, qz) || groundHeightAt(qx, qz) - getTerrainY(qx, qz) < SIDEWALK_TOP_Y - 0.01);
     if (!q) return;
     // 가게 쪽(보도 바깥 가장자리)으로 비켜 세우고, 앞뒤 판이 보도를 오가는 사람을 보게 한다
     let nx = -q.tz, nz = q.tx;
@@ -5449,7 +5583,7 @@ function fitShopToModel(entry) {
       pedPathsNear(entry.px, entry.pz, 9).forEach((path) => {
         const pts = path.pts;
         for (let i = 0; i < pts.length - 1; i += 2) {
-          if (path.ys && path.ys[i] < SIDEWALK_TOP_Y - 0.01) continue; // 내려앉은 보도(길 건너는 자리)는 빼고
+          if (path.ys && path.ys[i] - getTerrainY(pts[i][0], pts[i][1]) < SIDEWALK_TOP_Y - 0.01) continue; // 내려앉은 보도(길 건너는 자리)는 빼고
           const a = pts[i], b = pts[i + 1];
           const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
           const d = Math.hypot(a[0] - entry.px, a[1] - entry.pz);
@@ -6164,8 +6298,9 @@ function updateSunFollow() {
   const texel = (SHADOW_HALF * 2) / sunLight.shadow.mapSize.x;
   const tx = Math.round(character.position.x / texel) * texel;
   const tz = Math.round(character.position.z / texel) * texel;
-  sunLight.target.position.set(tx, 0, tz);
-  sunLight.position.set(tx + SUN_OFFSET.x, SUN_OFFSET.y, tz + SUN_OFFSET.z);
+  const ty = character.position.y; // 실제 지형에서 높은 곳에 가도 그림자 범위가 따라오게
+  sunLight.target.position.set(tx, ty, tz);
+  sunLight.position.set(tx + SUN_OFFSET.x, ty + SUN_OFFSET.y, tz + SUN_OFFSET.z);
   sunLight.target.updateMatrixWorld();
 }
 
