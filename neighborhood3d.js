@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261126u";
+import * as MAP_DATA from "./map_data.js?v=20261126v";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261126b";
+const ASSET_VERSION = "20261126c";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -1144,21 +1144,37 @@ function overlayRetainingStoneRelief(ctx, W, H, cols, rows, alpha) {
 
 // 금북초 경사로 서쪽(좌측) 옹벽 벽화 (아래→교문 방향, 거리뷰 참고: 연두·노랑·흰색 사선 패널,
 // 나무·재주넘기 아이들·"소중한 나, 소중한 너, 함께 가는 우리"·연필 로켓·"서울금북초등학교")
+// 교문 쪽으로 갈수록 벽 높이가 낮아지는 사다리꼴 형태에 맞춰 모든 글씨·인물·로켓이 초록 보행로 위에 온전히 보이도록 배치한다.
 function createGeumbukLeftMuralTexture() {
   const W = 2048, H = 512;
   const cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
   const ctx = cv.getContext("2d");
 
-  // 1. 배경: 연두(상단)·노랑(하단) + 사선 흰색 패널들
+  // 초록 보행로 경사선(u=0..1, 5.2m 기준 캔버스 Y): 이 선 위쪽이 실제 화면에 온전히 보이는 영역
+  const floorY = (u) => {
+    // u=0(z=104): 512, u=0.14(z=96): 512, u=0.54(z=74): 345, u=1.0(z=48): 0
+    if (u <= 0.28) return H;
+    return Math.max(0, Math.min(H, H * (1 - (u - 0.28) / 0.72)));
+  };
+
+  // 1. 배경: 상단 연두 돌벽 + 초록 보행로 경사선을 따라 흐르는 노란 하단 띠
   ctx.fillStyle = "#B6D645";
   ctx.fillRect(0, 0, W, H);
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  ctx.lineTo(0, 260);
+  ctx.lineTo(W * 0.28, 260);
+  ctx.lineTo(W * 0.96, 10);
+  ctx.lineTo(W, 0);
+  ctx.lineTo(W, H);
+  ctx.closePath();
   ctx.fillStyle = "#F0CE4D";
-  ctx.fillRect(0, H * 0.42, W, H * 0.58);
+  ctx.fill();
 
   // 상단 밝은 연두 띠(벽돌 담장 바로 아래)
-  ctx.fillStyle = "#C1DE52";
-  ctx.fillRect(0, 0, W, 38);
+  ctx.fillStyle = "#C3DF56";
+  ctx.fillRect(0, 0, W, 24);
 
   const poly = (pts, fill) => {
     ctx.beginPath();
@@ -1167,187 +1183,179 @@ function createGeumbukLeftMuralTexture() {
     ctx.fillStyle = fill;
     ctx.fill();
   };
-  // 흰색 사선 패널 4개 (참고 사진 구도)
-  poly([[200, 170], [380, 145], [350, 495], [160, 495]], "#F2F4F2");
-  poly([[415, 75], [690, 28], [765, 435], [465, 490]], "#F3F5F3");
-  poly([[860, 22], [1110, 22], [1200, 480], [920, 480]], "#F3F5F3");
-  poly([[1135, 38], [1405, 38], [1510, 485], [1220, 485]], "#F2F4F2");
+  // 흰색 사선 패널들 (경사선 위쪽에 자연스럽게 걸치게 배치)
+  poly([[175, 160], [320, 140], [295, 495], [140, 495]], "#F2F4F2");
+  poly([[350, 45], [565, 22], [625, 430], [390, 475]], "#F3F5F3");
+  poly([[815, 22], [1035, 22], [1110, 390], [860, 415]], "#F3F5F3");
+  poly([[1055, 28], [1285, 28], [1345, 305], [1115, 335]], "#F2F4F2");
 
-  // 2. 좌측 끝 나무 (초록 잎 + 갈색 줄기)
+  // 2. 좌측 끝 나무 (초록 잎 + 갈색 줄기, u~0.03..0.11)
   ctx.fillStyle = "#6F4334";
   ctx.beginPath();
-  ctx.moveTo(95, 485); ctx.lineTo(120, 225); ctx.lineTo(148, 225); ctx.lineTo(155, 485);
+  ctx.moveTo(82, 485); ctx.lineTo(104, 220); ctx.lineTo(130, 220); ctx.lineTo(138, 485);
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = "#6E9A54";
   ctx.beginPath();
-  ctx.moveTo(50, 265); ctx.lineTo(42, 65); ctx.lineTo(225, 58); ctx.lineTo(212, 245); ctx.lineTo(155, 290);
+  ctx.moveTo(42, 255); ctx.lineTo(36, 55); ctx.lineTo(195, 50); ctx.lineTo(185, 238); ctx.lineTo(136, 280);
   ctx.closePath(); ctx.fill();
   ctx.strokeStyle = "#3E5C2F"; ctx.lineWidth = 4; ctx.stroke();
 
-  // 3. 작은 청회색 거꾸로 매달린 아이 (u~0.14)
+  // 3. 작은 청회색 거꾸로 매달린 아이 (u~0.12)
   ctx.strokeStyle = "#36455E"; ctx.fillStyle = "#5B6E8C"; ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.arc(275, 330, 18, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.arc(240, 315, 17, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.fillStyle = "#F5D7B2";
-  ctx.beginPath(); ctx.arc(275, 330, 11, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = "#5B6E8C"; ctx.lineWidth = 18; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(240, 315, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#5B6E8C"; ctx.lineWidth = 16; ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(275, 210); ctx.lineTo(275, 305);
-  ctx.moveTo(275, 348); ctx.quadraticCurveTo(255, 420, 232, 395);
-  ctx.moveTo(275, 348); ctx.quadraticCurveTo(300, 420, 318, 390);
+  ctx.moveTo(240, 200); ctx.lineTo(240, 290);
+  ctx.moveTo(240, 332); ctx.quadraticCurveTo(222, 400, 200, 376);
+  ctx.moveTo(240, 332); ctx.quadraticCurveTo(262, 400, 278, 372);
   ctx.stroke();
 
-  // 4. 물구나무·재주넘기 황토색 아이 (u~0.28)
+  // 4. 물구나무·재주넘기 황토색 아이 (u~0.18..0.28)
   ctx.save();
-  ctx.strokeStyle = "#5C4722"; ctx.fillStyle = "#C69F4E"; ctx.lineWidth = 24; ctx.lineCap = "round";
+  ctx.strokeStyle = "#5C4722"; ctx.fillStyle = "#C69F4E"; ctx.lineWidth = 22; ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(615, 78); ctx.quadraticCurveTo(585, 165, 592, 265); // 위로 뻗은 다리+몸통
-  ctx.moveTo(586, 250); ctx.lineTo(478, 285); // 왼쪽 팔
-  ctx.moveTo(596, 280); ctx.lineTo(656, 355); ctx.lineTo(632, 412); // 오른쪽 팔
-  ctx.moveTo(586, 290); ctx.lineTo(548, 435); // 땅 짚은 팔
+  ctx.moveTo(495, 55); ctx.quadraticCurveTo(470, 140, 476, 230);
+  ctx.moveTo(470, 215); ctx.lineTo(382, 250);
+  ctx.moveTo(480, 244); ctx.lineTo(532, 315); ctx.lineTo(510, 368);
+  ctx.moveTo(470, 252); ctx.lineTo(438, 385);
   ctx.stroke();
-  ctx.strokeStyle = "#C69F4E"; ctx.lineWidth = 18;
+  ctx.strokeStyle = "#C69F4E"; ctx.lineWidth = 16;
   ctx.stroke();
   ctx.fillStyle = "#E6C78A"; ctx.strokeStyle = "#4A3A1E"; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.arc(602, 372, 28, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(485, 326, 25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.fillStyle = "#3E2F1C";
-  ctx.beginPath(); ctx.arc(593, 368, 3.5, 0, Math.PI * 2); ctx.arc(611, 368, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(477, 322, 3.2, 0, Math.PI * 2); ctx.arc(493, 322, 3.2, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // 5. "소중한 나, 소중한 너," 말풍선 + "함께 가는 우리" 손글씨 (u~0.39)
+  // 5. "소중한 나, 소중한 너," + "함께 가는 우리" (u~0.28..0.41 — 전체가 경사선보다 훨씬 위에 온전히 노출)
   ctx.save();
   ctx.fillStyle = "#FFFFFF"; ctx.strokeStyle = "#D4D8DC"; ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.roundRect(705, 138, 206, 46, 22);
+  ctx.roundRect(576, 82, 224, 48, 24);
   ctx.fill(); ctx.stroke();
-  ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillStyle = "#7E4B8A"; ctx.fillText("소중한 나,", 762, 162);
-  ctx.fillStyle = "#D65047"; ctx.fillText("소중한 너,", 856, 162);
-  // "함께 가는 우리"
-  ctx.font = "900 44px sans-serif";
-  ctx.lineWidth = 8; ctx.strokeStyle = "#D87A2A"; ctx.fillStyle = "#2E6FB3";
-  ctx.strokeText("함께 가는", 765, 278); ctx.fillText("함께 가는", 765, 278);
-  ctx.font = "900 58px sans-serif";
-  ctx.strokeText("우리", 825, 365); ctx.fillText("우리", 825, 365);
+  ctx.font = "bold 21px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "#7E4B8A"; ctx.fillText("소중한 나,", 638, 107);
+  ctx.fillStyle = "#D65047"; ctx.fillText("소중한 너,", 738, 107);
+  // "함께 가는 우리" (윗줄 y=190, 아랫줄 "우리" y=268 — 바닥 y_floor(0.41)~425 대비 충분한 여유)
+  ctx.font = "900 48px sans-serif";
+  ctx.lineWidth = 9; ctx.strokeStyle = "#D87A2A"; ctx.fillStyle = "#2E6FB3";
+  ctx.strokeText("함께 가는", 682, 190); ctx.fillText("함께 가는", 682, 190);
+  ctx.font = "900 60px sans-serif";
+  ctx.strokeText("우리", 718, 268); ctx.fillText("우리", 718, 268);
   ctx.restore();
 
-  // 6. 자주·빨강 활기찬 아이 (u~0.49)
+  // 6. 자주·빨강 활기찬 아이 (u~0.42..0.51)
   ctx.save();
-  ctx.strokeStyle = "#9C2E3F"; ctx.lineWidth = 22; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.strokeStyle = "#9C2E3F"; ctx.lineWidth = 19; ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.beginPath();
-  ctx.moveTo(985, 195); ctx.lineTo(1040, 295); // 몸통
-  ctx.moveTo(998, 202); ctx.lineTo(1115, 148); // 뻗은 팔
-  ctx.moveTo(985, 205); ctx.quadraticCurveTo(910, 225, 938, 175); ctx.lineTo(975, 180); // 굽힌 팔
-  ctx.moveTo(1038, 295); ctx.lineTo(955, 425); // 왼다리
-  ctx.moveTo(1042, 295); ctx.lineTo(1130, 420); // 오른다리
+  ctx.moveTo(910, 145); ctx.lineTo(955, 225);
+  ctx.moveTo(920, 152); ctx.lineTo(1018, 108);
+  ctx.moveTo(910, 155); ctx.quadraticCurveTo(850, 172, 872, 130); ctx.lineTo(902, 134);
+  ctx.moveTo(954, 225); ctx.lineTo(888, 326);
+  ctx.moveTo(958, 225); ctx.lineTo(1025, 318);
   ctx.stroke();
-  ctx.fillStyle = "#F4D6B2"; ctx.strokeStyle = "#3E2E2E"; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.arc(1015, 155, 23, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#F4D6B2"; ctx.strokeStyle = "#3E2E2E"; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.arc(935, 112, 20, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.fillStyle = "#2C3540";
-  ctx.beginPath(); ctx.ellipse(1002, 125, 14, 24, -0.35, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(924, 86, 12, 20, -0.35, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // 7. 청회색 앉아 손 흔드는 아이 (u~0.57)
+  // 7. 청회색 앉아 손 흔드는 아이 (u~0.52)
   ctx.save();
-  ctx.fillStyle = "#6C8D96"; ctx.strokeStyle = "#324950"; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.ellipse(1165, 370, 32, 48, 0.1, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(1162, 330); ctx.lineTo(1182, 125); ctx.lineWidth = 10; ctx.strokeStyle = "#6C8D96"; ctx.stroke();
+  ctx.fillStyle = "#6C8D96"; ctx.strokeStyle = "#324950"; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.ellipse(1078, 268, 24, 34, 0.1, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(1076, 238); ctx.lineTo(1092, 92); ctx.lineWidth = 9; ctx.strokeStyle = "#6C8D96"; ctx.stroke();
   ctx.fillStyle = "#F3D7B6"; ctx.lineWidth = 3; ctx.strokeStyle = "#324950";
-  ctx.beginPath(); ctx.arc(1168, 315, 18, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(1080, 226, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.restore();
 
-  // 8. 노랑-빨강 줄무늬 큰 대자(★) 점프 아이 (u~0.65)
+  // 8. 노랑-빨강 줄무늬 큰 대자(★) 점프 아이 (u~0.55..0.63)
   ctx.save();
-  ctx.strokeStyle = "#5C4326"; ctx.lineWidth = 28; ctx.lineCap = "round";
   const drawLimb = (x1, y1, x2, y2) => {
-    ctx.strokeStyle = "#5C4326"; ctx.lineWidth = 26;
+    ctx.strokeStyle = "#5C4326"; ctx.lineWidth = 22; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    ctx.strokeStyle = "#E4BC63"; ctx.lineWidth = 20;
+    ctx.strokeStyle = "#E4BC63"; ctx.lineWidth = 16;
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   };
-  drawLimb(1310, 275, 1255, 118); // 좌상 다리
-  drawLimb(1310, 275, 1225, 425); // 좌하 다리
-  drawLimb(1310, 275, 1405, 255); // 몸통
-  drawLimb(1405, 255, 1470, 155); // 우상 팔
-  drawLimb(1405, 255, 1455, 385); // 우하 팔
-  // 빨간 신발 2짝
+  drawLimb(1188, 178, 1146, 72);
+  drawLimb(1188, 178, 1126, 278);
+  drawLimb(1188, 178, 1254, 165);
+  drawLimb(1254, 165, 1300, 96);
+  drawLimb(1254, 165, 1290, 248);
   ctx.fillStyle = "#C63F3A";
-  ctx.beginPath(); ctx.ellipse(1250, 108, 22, 11, -0.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(1215, 434, 24, 11, 0.4, 0, Math.PI * 2); ctx.fill();
-  // 얼굴
-  ctx.fillStyle = "#E8C388"; ctx.strokeStyle = "#4A3A20"; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.arc(1432, 248, 25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(1142, 66, 18, 9, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(1120, 284, 19, 9, 0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#E8C388"; ctx.strokeStyle = "#4A3A20"; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.arc(1272, 160, 20, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.restore();
 
-  // 9. 구름 + 삐죽머리 웃는 아이 + 노란 연필 로켓 (u~0.72..0.93 — 교문 쪽 높아지는 바닥 위로 잘 보이게 상단 배치)
+  // 9. 구름 + 삐죽머리 웃는 아이 + 노란 연필 로켓 (u~0.64..0.84 — 경사선 위쪽 가시 영역에 꼭 맞게 배치)
   ctx.save();
-  // 하얀 뭉게구름
-  ctx.fillStyle = "#F5F7F5"; ctx.strokeStyle = "#445258"; ctx.lineWidth = 5;
+  // 하얀 뭉게구름 꼬리(왼쪽 아래→오른쪽 위 로켓으로)
+  ctx.fillStyle = "#F5F7F5"; ctx.strokeStyle = "#445258"; ctx.lineWidth = 4;
+  const cloudCircles = [[1378, 160, 58], [1438, 168, 48], [1490, 162, 36], [1532, 148, 26]];
   ctx.beginPath();
-  ctx.arc(1545, 255, 86, 0, Math.PI * 2);
-  ctx.arc(1622, 268, 72, 0, Math.PI * 2);
-  ctx.arc(1690, 264, 54, 0, Math.PI * 2);
-  ctx.arc(1742, 245, 38, 0, Math.PI * 2);
+  cloudCircles.forEach(([cx, cy, r]) => { ctx.moveTo(cx + r, cy); ctx.arc(cx, cy, r, 0, Math.PI * 2); });
   ctx.fill(); ctx.stroke();
   ctx.fillStyle = "#F5F7F5";
   ctx.beginPath();
-  ctx.arc(1545, 255, 83, 0, Math.PI * 2);
-  ctx.arc(1622, 268, 69, 0, Math.PI * 2);
-  ctx.arc(1690, 264, 51, 0, Math.PI * 2);
-  ctx.arc(1742, 245, 35, 0, Math.PI * 2);
+  cloudCircles.forEach(([cx, cy, r]) => { ctx.moveTo(cx + r - 3, cy); ctx.arc(cx, cy, r - 3, 0, Math.PI * 2); });
   ctx.fill();
 
   // 구름 속 삐죽머리 아이 (분홍 티 + 노란 치마 + 초록 장갑)
-  ctx.fillStyle = "#E88B8C"; ctx.strokeStyle = "#4A3832"; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.roundRect(1552, 225, 56, 46, 8); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#E88B8C"; ctx.strokeStyle = "#4A3832"; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.roundRect(1386, 134, 42, 34, 6); ctx.fill(); ctx.stroke();
   ctx.fillStyle = "#F0CA44";
-  ctx.beginPath(); ctx.moveTo(1562, 268); ctx.lineTo(1632, 260); ctx.lineTo(1644, 330); ctx.lineTo(1574, 336); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(1394, 166); ctx.lineTo(1446, 160); ctx.lineTo(1454, 206); ctx.lineTo(1402, 210); ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.fillStyle = "#F2CA99";
-  ctx.beginPath(); ctx.arc(1540, 245, 30, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(1374, 150, 22, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.fillStyle = "#22252A";
   ctx.beginPath();
-  ctx.moveTo(1515, 228); ctx.lineTo(1478, 208); ctx.lineTo(1508, 236);
-  ctx.lineTo(1470, 238); ctx.lineTo(1506, 250);
-  ctx.lineTo(1475, 266); ctx.lineTo(1512, 264); ctx.lineTo(1518, 276);
+  ctx.moveTo(1356, 136); ctx.lineTo(1328, 122); ctx.lineTo(1350, 144);
+  ctx.lineTo(1322, 146); ctx.lineTo(1348, 154);
+  ctx.lineTo(1326, 166); ctx.lineTo(1354, 164); ctx.lineTo(1358, 174);
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = "#5B8752";
-  ctx.beginPath(); ctx.arc(1576, 188, 15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.arc(1524, 306, 15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(1404, 108, 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(1366, 194, 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-  // 노란 연필 로켓 (대각선 위를 향해 발사!)
-  ctx.translate(1822, 208);
-  ctx.rotate(-0.38);
-  ctx.fillStyle = "#D44234"; ctx.strokeStyle = "#6B1E18"; ctx.lineWidth = 3;
+  // 노란 연필 로켓 (대각선 위를 향해 발사 — u~0.76..0.84, y=82..145로 경사선 위 완전 노출)
+  ctx.translate(1612, 120);
+  ctx.rotate(-0.34);
+  ctx.fillStyle = "#D44234"; ctx.strokeStyle = "#6B1E18"; ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.moveTo(-64, 0); ctx.lineTo(-94, -20); ctx.lineTo(-84, 0); ctx.lineTo(-98, 20); ctx.closePath();
+  ctx.moveTo(-48, 0); ctx.lineTo(-72, -14); ctx.lineTo(-64, 0); ctx.lineTo(-74, 14); ctx.closePath();
   ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#F3D34B"; ctx.strokeStyle = "#4A3E1C"; ctx.lineWidth = 4;
-  ctx.fillRect(-64, -24, 108, 48); ctx.strokeRect(-64, -24, 108, 48);
+  ctx.fillStyle = "#F3D34B"; ctx.strokeStyle = "#4A3E1C"; ctx.lineWidth = 3.5;
+  ctx.fillRect(-48, -18, 82, 36); ctx.strokeRect(-48, -18, 82, 36);
   ctx.fillStyle = "#F4ECE0";
-  ctx.beginPath(); ctx.moveTo(44, -24); ctx.lineTo(86, 0); ctx.lineTo(44, 24); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(34, -18); ctx.lineTo(66, 0); ctx.lineTo(34, 18); ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.fillStyle = "#2E3338";
-  ctx.beginPath(); ctx.moveTo(71, -9); ctx.lineTo(86, 0); ctx.lineTo(71, 9); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(54, -7); ctx.lineTo(66, 0); ctx.lineTo(54, 7); ctx.closePath(); ctx.fill();
   ctx.fillStyle = "#FFFFFF";
-  ctx.fillRect(-18, -12, 30, 24); ctx.strokeRect(-18, -12, 30, 24);
+  ctx.fillRect(-14, -9, 24, 18); ctx.strokeRect(-14, -9, 24, 18);
   ctx.fillStyle = "#F5CCA0";
-  ctx.beginPath(); ctx.arc(-3, 2, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-2, 1, 7, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // 10. 상단 "서울금북초등학교" 교표·간판 + 책 위 어린이들 (u~0.76..0.97)
+  // 10. 상단 "▲ 서울금북초등학교" 교표·간판 + 책 위 어린이들 (u~0.68..0.87, y=22..68 — 교문 앞 완전 노출!)
   ctx.save();
   ctx.fillStyle = "#23783B"; ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(1612, 54); ctx.lineTo(1634, 94); ctx.lineTo(1590, 94); ctx.closePath();
+  ctx.beginPath(); ctx.moveTo(1446, 26); ctx.lineTo(1466, 62); ctx.lineTo(1426, 62); ctx.closePath();
   ctx.stroke(); ctx.fill();
-  ctx.font = "900 42px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-  ctx.lineWidth = 8; ctx.strokeStyle = "#FFFFFF"; ctx.fillStyle = "#2B6B38";
-  ctx.strokeText("서울금북초등학교", 1646, 78);
-  ctx.fillText("서울금북초등학교", 1646, 78);
-  // 책 위 두 아이 실루엣
-  ctx.fillStyle = "#4E78A8"; ctx.fillRect(1934, 110, 58, 14);
+  ctx.font = "900 38px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.lineWidth = 7; ctx.strokeStyle = "#FFFFFF"; ctx.fillStyle = "#2B6B38";
+  ctx.strokeText("서울금북초등학교", 1476, 48);
+  ctx.fillText("서울금북초등학교", 1476, 48);
+  // 책 위 두 아이 실루엣 (간판 우측)
+  ctx.fillStyle = "#4E78A8"; ctx.fillRect(1774, 74, 48, 11);
   ctx.fillStyle = "#E8B97E";
-  ctx.beginPath(); ctx.arc(1951, 68, 13, 0, Math.PI * 2); ctx.arc(1978, 70, 12, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#D4646E"; ctx.fillRect(1941, 82, 19, 28);
-  ctx.fillStyle = "#4E68A6"; ctx.fillRect(1968, 84, 19, 26);
+  ctx.beginPath(); ctx.arc(1788, 40, 10, 0, Math.PI * 2); ctx.arc(1810, 42, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#D4646E"; ctx.fillRect(1780, 50, 15, 24);
+  ctx.fillStyle = "#4E68A6"; ctx.fillRect(1802, 52, 15, 22);
   ctx.restore();
 
   // 11. 전체 위에 거친 돌블록 질감 오버레이
@@ -1565,12 +1573,12 @@ function buildTerrainShapeWalls() {
   };
   const EPS = 0.25 * W, STEP = 1.5 * W, MIN = SHAPE_WALL_MIN_RAW * W, CAPW = 0.35 * W;
   const GB_OX = -133.9, GB_OZ = -481.3; // 금북초 원점(raw m)
-  // 동쪽 옹벽 벽화 연속 U좌표: 남쪽 계단 끝(68.9, 86.6) -> 커브 -> 교문 -> 남동측 옹벽 북쪽(-17.5)까지 단조 증가
+  // 동쪽 옹벽 벽화 연속 U좌표: 남쪽 계단 끝(61.14, 103.96) -> 커브 -> 교문 -> 남동측 옹벽 북쪽(-17.5)까지 단조 증가
   const eastMuralU = (wx, wz) => {
     const rx = wx / W - GB_OX, rz = wz / W - GB_OZ;
-    const s = rz > 80.09
-      ? Math.hypot(rx - 68.9, rz - 86.59)
-      : 12.20 + (80.09 - rz) * 1.04;
+    const s = rz > 98.09
+      ? Math.hypot(rx - 61.14, rz - 103.96)
+      : 8.27 + (98.09 - rz) * 1.04;
     return s / 36.0;
   };
   terrainShapes.forEach((S, si) => {
@@ -1610,18 +1618,18 @@ function buildTerrainShapeWalls() {
         const midRawX = (A.x + B.x) / (2 * W) - GB_OX;
         const midRawZ = (A.z + B.z) / (2 * W) - GB_OZ;
 
-        // ① 경사로 서쪽(좌측) 벽화: 상단(교정 높이) 기준 고정 비율로 매핑해 교문 쪽에서 찌그러지지 않게 처리
-        if (isGeumbukCampus && nx > 0.3 && midRawX >= 44.0 && midRawX <= 52.5 && midRawZ >= 47.5 && midRawZ <= 88.5) {
+        // ① 경사로 서쪽(좌측) 벽화: 상단(교정 높이) 기준 고정 비율(5.2m)로 매핑해 교문~옹벽 끝까지 온전히 노출
+        if (isGeumbukCampus && nx > 0.3 && midRawX >= 41.0 && midRawX <= 52.5 && midRawZ >= 47.5 && midRawZ <= 104.5) {
           const zA = A.z / W - GB_OZ, zB = B.z / W - GB_OZ;
-          const uA = Math.max(0, Math.min(1, (88.0 - zA) / (88.0 - 48.0)));
-          const uB = Math.max(0, Math.min(1, (88.0 - zB) / (88.0 - 48.0)));
-          const vBA = Math.max(0, 1 - (tA - bA) / (6.0 * W));
-          const vBB = Math.max(0, 1 - (tB - bB) / (6.0 * W));
+          const uA = Math.max(0, Math.min(1, (104.0 - zA) / (104.0 - 48.0)));
+          const uB = Math.max(0, Math.min(1, (104.0 - zB) / (104.0 - 48.0)));
+          const vBA = Math.max(0, 1 - (tA - bA) / (5.2 * W));
+          const vBB = Math.max(0, 1 - (tB - bB) / (5.2 * W));
           quad(leftMural, [pA[0], bA, pA[1]], [pB[0], bB, pB[1]], [pB[0], tB, pB[1]], [pA[0], tA, pA[1]],
             [[uA, vBA], [uB, vBB], [uB, 1], [uA, 1]]);
         // ② 경사로 아래 동쪽 옹벽 + 이어지는 남동측 옹벽 벽화 (분홍 돌벽 + 파랑 물결 띠 + 하늘·아이들)
         } else if (
-          (isGeumbukRamp && midRawX >= 57.5 && (nx > 0.1 || nz < -0.1)) ||
+          (isGeumbukRamp && midRawX >= 54.0 && (nx > 0.1 || nz < -0.1)) ||
           (isGeumbukCampus && midRawX >= 62.5 && midRawZ >= -18.5 && midRawZ <= 48.5 && (nx > 0.15 || nz > 0.15))
         ) {
           const uA = eastMuralU(A.x, A.z);

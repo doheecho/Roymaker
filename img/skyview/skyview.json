@@ -433,11 +433,11 @@
  },
  "models/place_금북초.glb": {
   "file": "img/skyview/place_금북초.webp",
-  "hash": "c8cf98085e",
+  "hash": "8e9966c38f",
   "minX": -62.364,
   "minZ": -58.62,
-  "width": 163.434,
-  "depth": 171.005
+  "width": 163.503,
+  "depth": 174.161
  },
  "models/place_금북초앞주택가.glb": {
   "file": "img/skyview/place_금북초앞주택가.webp",

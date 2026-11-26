@@ -2424,11 +2424,11 @@
     // (교문에서 직진 후 좌측/동쪽으로 둥글게 틀어져 어린이 보호구역 도로 보도로 합류)
     // ---------------------------------------------------------
     (() => {
-      const Cx = 63.307, Cz = 80.952;
+      const Cx = 60.034, Cz = 98.952;
       const aStart = Math.atan2(-0.1788854, -0.9838699) + Math.PI * 2; // ~190.30 deg
       const aEnd   = Math.atan2(0.9901475, -0.1400280);                 // ~98.05 deg
-      const etx = 0.9901475, etz = 0.1400280;                           // 동쪽 도로 보도 수직 합류 방향
-      const leadLen = 6.33;
+      const etx = 0.9901475, etz = 0.1400280;                           // 동쪽 도로 보도 방향
+      const leadLen = 1.80;
       const R_GR = 16.5, R_RD = 14.5, R_ST = 8.1, R_IN = 4.8;
       const N_ARC = 16;
 
@@ -2439,7 +2439,7 @@
         const gx = 51.8 + (63.5 - 51.8) * u;
         if (topExtendZ !== 0) pts.push([gx, 48.0 + topExtendZ]);
         pts.push([gx, 48.0]);
-        pts.push([47.8 + (59.18 - 47.8) * u, 74.0 + (76.09 - 74.0) * u]);
+        pts.push([47.8 + (58.86 - 47.8) * u, 74.0 + (76.09 - 74.0) * u]);
         for (let i = 0; i <= arcSteps; i++) {
           const a = aStart + (aEnd - aStart) * (i / arcSteps);
           pts.push([Cx + R * Math.cos(a), Cz + R * Math.sin(a)]);
