@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261126c";
+const ASSET_VERSION = "20261126d";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -3946,7 +3946,7 @@ function settleBuildingBase(entry, model) {
     if (skirt) {
       entry.group.add(skirt);
     }
-    if (!overlapsRoad && !isRoadGate && finalBaseY > terrainY && shapeIndexAt(entry.px, entry.pz) < 0) {
+    if (!overlapsRoad && !isRoadGate && !isParkHillsSingleDong && finalBaseY > terrainY && finalBaseY - terrainY <= 0.5 * W && shapeIndexAt(entry.px, entry.pz) < 0) {
       loops.forEach((hull) => addPolyPlatform(hull, finalBaseY - terrainY));
     }
   }
