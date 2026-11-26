@@ -264,11 +264,13 @@ let rafId = null;
 let ready = false;
 let loading = false;
 let canvasEl, loadingEl, danceBtnEl, walkBtnEl, runBtnEl, jumpBtnEl, momBtnEl, hudEl, toastEl, resetBtnEl, dpadEl;
+let joystickEl, joystickKnobEl;
 let wrapEl, fullscreenBtnEl, exitFullscreenBtnEl, topZoneEl, exitBtnHideTimer = null;
 let mom = null;
 let momMixer = null;
 let momActions = {};
 let momLoading = false;
+let momPendingCallback = null;
 // 엄마 심부름(main.js의 runMomErrand)과 주고받는 상태 — phase: "toStore"|"awaitingDialog"|"toHome"
 let currentErrand = null;
 const placeHighlights = {}; // place.id -> 목적지 표시용 파란 점멸 스프라이트
@@ -277,6 +279,14 @@ let moveMode = "walk"; // "walk" | "run"
 let dancing = false;
 let danceLoaded = false;
 let jumping = false;
+let jumpVelY = 0;
+let jumpAirTime = 0;
+let jumpLaunchDirX = 0;
+let jumpLaunchDirZ = 0;
+let jumpLaunchSpeed = 0;
+const JUMP_VEL = 4.6; // 도약 초기 상승 속도 (최고점 ≈ 0.78 월드단위 ≈ 5.2m raw — 난간·울타리·옹벽 턱을 훌쩍 넘음)
+const JUMP_GRAVITY = 13.5; // 중력 가속도 (평지 체공 약 0.68초)
+const JUMP_FORWARD_BOOST = 1.25; // 앞방향 누른 채 점프할 때 앞으로 힘차게 도약하는 배율
 let toastTimer = null;
 
 let items = [];
@@ -549,6 +559,7 @@ async function buildStaticScene() {
   buildSky();
   buildCars();
   buildPedestrians();
+  buildGeumbukCrowd();
   buildShopSigns();
   buildSchoolZoneBoards();
   buildAlleyMouths();
@@ -4347,6 +4358,7 @@ function playAction(name, { loop = true, onFinished } = {}) {
   const next = actions[name];
   if (!next || next === currentAction) return;
   if (currentAction) currentAction.fadeOut(0.2);
+  next.timeScale = 1;
   next.reset().setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
   next.clampWhenFinished = !loop;
   next.fadeIn(0.2).play();
@@ -4367,16 +4379,48 @@ function setMoveMode(mode) {
   runBtnEl?.classList.toggle("active", mode === "run");
 }
 
+function getMoveInput() {
+  const keyForward = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
+  const keyRight = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  const forward = keyForward !== 0 ? keyForward : touchMoveY;
+  const right = keyRight !== 0 ? keyRight : touchMoveX;
+  const mag = Math.min(1, Math.hypot(forward, right));
+  return { forward, right, mag };
+}
+
 function triggerJump() {
   if (!character || !mixer || dancing || jumping || !actions["Regular_Jump"]) return;
+  if (currentErrand?.phase === "awaitingDialog") return;
   jumping = true;
-  playAction("Regular_Jump", {
-    loop: false,
-    onFinished: () => {
-      jumping = false;
-      playAction("Idle_02");
-    },
-  });
+  jumpVelY = JUMP_VEL;
+  jumpAirTime = 0;
+  // 앞방향 등 이동 입력을 누른 채 점프하면 그 방향으로 힘차게 도약해 구조물을 뛰어넘는다
+  const { forward, right, mag } = getMoveInput();
+  if (mag > 0.05) {
+    const fx = -Math.sin(camYaw);
+    const fz = -Math.cos(camYaw);
+    const rx = Math.cos(camYaw);
+    const rz = -Math.sin(camYaw);
+    const dx = fx * forward + rx * right;
+    const dz = fz * forward + rz * right;
+    const len = Math.hypot(dx, dz) || 1;
+    jumpLaunchDirX = dx / len;
+    jumpLaunchDirZ = dz / len;
+    jumpLaunchSpeed = (moveMode === "run" ? RUN_SPEED : WALK_SPEED) * Math.max(0.75, mag) * JUMP_FORWARD_BOOST;
+    character.rotation.y = Math.atan2(jumpLaunchDirX, jumpLaunchDirZ);
+  } else {
+    jumpLaunchDirX = 0;
+    jumpLaunchDirZ = 0;
+    jumpLaunchSpeed = 0;
+  }
+  const jumpAct = actions["Regular_Jump"];
+  if (currentAction && currentAction !== jumpAct) currentAction.fadeOut(0.1);
+  jumpAct.reset().setLoop(THREE.LoopOnce, 1);
+  jumpAct.clampWhenFinished = true;
+  jumpAct.timeScale = 1.65;
+  jumpAct.time = 0.22; // 앞쪽 웅크리기 구간을 살짝 건너뛰어 바로 뛰어오르게
+  jumpAct.fadeIn(0.08).play();
+  currentAction = jumpAct;
 }
 
 function pickRandomDance() {
@@ -4452,15 +4496,37 @@ function onDanceClick() {
   );
 }
 
-// "엄마 부르기"를 누르면 이로이 옆(바라보는 방향 기준 오른쪽으로 살짝 떨어진 자리)에 엄마를 세운다.
-// 모델은 처음 누를 때만 불러오고(춤 동작과 같은 지연 로딩 방식), 그다음부터는 부를 때마다
+// "엄마 부르기"를 누르면 이로이 옆(바라보는 방향 기준 오른쪽, 지형 단차가 크면 반대편·앞뒤로
+// 자동 보정)에 엄마를 세운다. 모델은 처음 누를 때만 불러오고, 그다음부터는 부를 때마다
 // 이로이 옆자리로 다시 옮겨 세운다.
 function placeMomBesideCharacter() {
   if (!mom || !character) return;
+  const cx = character.position.x;
+  const cz = character.position.z;
+  const baseY = groundHeightAt(cx, cz);
   const rotY = character.rotation.y;
   const rightX = Math.cos(rotY);
   const rightZ = -Math.sin(rotY);
-  mom.position.set(character.position.x + rightX * 0.9, character.position.y, character.position.z + rightZ * 0.9);
+  const fwdX = Math.sin(rotY);
+  const fwdZ = Math.cos(rotY);
+  const dist = 0.55;
+  const candidates = [
+    [cx + rightX * dist, cz + rightZ * dist],
+    [cx - rightX * dist, cz - rightZ * dist],
+    [cx + fwdX * dist, cz + fwdZ * dist],
+    [cx - fwdX * dist, cz - fwdZ * dist],
+  ];
+  let chosen = candidates[0];
+  let chosenY = groundHeightAt(chosen[0], chosen[1]);
+  for (const [mx, mz] of candidates) {
+    const my = groundHeightAt(mx, mz);
+    if (Math.abs(my - baseY) <= TERRAIN_STEP_MAX) {
+      chosen = [mx, mz];
+      chosenY = my;
+      break;
+    }
+  }
+  mom.position.set(chosen[0], chosenY, chosen[1]);
   mom.rotation.y = rotY;
   mom.visible = true;
 }
@@ -4495,9 +4561,18 @@ function ensureMomLoaded(onReady) {
     onReady();
     return;
   }
-  if (momLoading) return;
+  if (momLoading) {
+    momPendingCallback = onReady;
+    showToast("엄마를 부르는 중… 👩", 2500);
+    return;
+  }
   momLoading = true;
-  if (momBtnEl) momBtnEl.disabled = true;
+  momPendingCallback = onReady;
+  if (momBtnEl) {
+    momBtnEl.disabled = true;
+    momBtnEl.textContent = "👩 부르는 중…";
+  }
+  showToast("엄마를 부르는 중… 👩", 4000);
   gltfLoader.load(
     `models/mom.glb?v=${ASSET_VERSION}`,
     (gltf) => {
@@ -4512,14 +4587,24 @@ function ensureMomLoaded(onReady) {
         momActions[clip.name] = momMixer.clipAction(clip);
       });
       momLoading = false;
-      if (momBtnEl) momBtnEl.disabled = false;
-      onReady();
+      if (momBtnEl) {
+        momBtnEl.disabled = false;
+        momBtnEl.textContent = "👩 엄마 부르기";
+      }
+      const cb = momPendingCallback;
+      momPendingCallback = null;
+      if (cb) cb();
     },
     undefined,
     (err) => {
       console.warn("엄마 모델을 못 불러왔다", err);
       momLoading = false;
-      if (momBtnEl) momBtnEl.disabled = false;
+      momPendingCallback = null;
+      if (momBtnEl) {
+        momBtnEl.disabled = false;
+        momBtnEl.textContent = "👩 엄마 부르기";
+      }
+      showToast("엄마를 불러오지 못했어요. 다시 눌러 주세요!", 2500);
     }
   );
 }
@@ -4528,6 +4613,7 @@ function onMomClick() {
   ensureMomLoaded(() => {
     placeMomBesideCharacter();
     playMomGreeting();
+    showToast("엄마가 달려왔어! 👩");
   });
 }
 
@@ -4545,37 +4631,54 @@ function spawnErrandMom() {
   });
 }
 
-// 방향키는 "월드 기준 앞/뒤/좌/우"가 아니라, 지금 마우스로 돌려 둔 카메라가 보는 방향을 기준으로
-// 움직인다 — 카메라를 오른쪽으로 돌렸으면 위쪽 키가 그 돌린 방향으로 가도록, camYaw를 매 프레임
-// 그대로 반영한다.
+// 방향키·WASD·화면 왼쪽 절반 터치 조이스틱은 모두 "지금 카메라가 보는 방향(camYaw)"을 기준으로 움직인다.
 const TERRAIN_STEP_MAX = 1.0 * WORLD_SCALE; // 한 걸음에 오르내릴 수 있는 땅 높이 차(raw 1m) — 경사로는 되고 옹벽은 안 된다
 function updateMovement(dt) {
   characterMoving = false;
   if (!character || dancing) return;
   if (currentErrand?.phase === "awaitingDialog") return; // 편의점 대화 중엔 멈춰 선다
-  const inputForward = (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
-  const inputRight = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-  const moving = inputForward !== 0 || inputRight !== 0;
-  characterMoving = moving;
+  const { forward: inputForward, right: inputRight, mag: inputMag } = getMoveInput();
+  const moving = inputMag > 0.05;
+  characterMoving = moving || (jumping && jumpLaunchSpeed > 0);
+  let moveDirX = 0;
+  let moveDirZ = 0;
+  let moveSpeed = 0;
   if (moving) {
     const fx = -Math.sin(camYaw);
     const fz = -Math.cos(camYaw);
     const rx = Math.cos(camYaw);
     const rz = -Math.sin(camYaw);
-    const dir = new THREE.Vector3(fx * inputForward + rx * inputRight, 0, fz * inputForward + rz * inputRight);
-    dir.normalize();
-    const speed = moveMode === "run" ? RUN_SPEED : WALK_SPEED;
+    const dx = fx * inputForward + rx * inputRight;
+    const dz = fz * inputForward + rz * inputRight;
+    const len = Math.hypot(dx, dz) || 1;
+    moveDirX = dx / len;
+    moveDirZ = dz / len;
+    moveSpeed = (moveMode === "run" ? RUN_SPEED : WALK_SPEED) * inputMag * (jumping ? JUMP_FORWARD_BOOST : 1);
+    if (jumping) {
+      jumpLaunchDirX = moveDirX;
+      jumpLaunchDirZ = moveDirZ;
+      jumpLaunchSpeed = moveSpeed;
+    }
+  } else if (jumping && jumpLaunchSpeed > 0) {
+    moveDirX = jumpLaunchDirX;
+    moveDirZ = jumpLaunchDirZ;
+    moveSpeed = jumpLaunchSpeed;
+  }
+  if (moveSpeed > 0) {
     const curX = character.position.x;
     const curZ = character.position.z;
     // 건물을 막는 벽으로 쓰지 않아서, 건물 자리든 어디든 그냥 뚫고 지나다닐 수 있다.
-    let nx = curX + dir.x * speed * dt;
-    let nz = curZ + dir.z * speed * dt;
+    let nx = curX + moveDirX * moveSpeed * dt;
+    let nz = curZ + moveDirZ * moveSpeed * dt;
     nx = Math.max(AREA_MIN_X + 1, Math.min(AREA_MAX_X - 1, nx));
     nz = Math.max(AREA_MIN_Z + 1, Math.min(AREA_MAX_Z - 1, nz));
-    // 옹벽(땅 높이가 갑자기 1m 넘게 바뀌는 곳)은 못 넘는다 — 벽을 따라 미끄러지듯 한쪽 방향으로만 움직여 본다
+    // 평소 걸을 때는 옹벽(높이 차 > 1m)을 못 넘지만, 점프해서 발이 공중에 떠 있는 동안에는
+    // 현재 발 높이(character.position.y + TERRAIN_STEP_MAX) 이하의 구조물·옹벽 턱을 훌쩍 넘어갈 수 있다
     if (terrainZones.length || glbTerrain) {
       const t0 = groundHeightAt(curX, curZ);
-      const ok = (x, z) => Math.abs(groundHeightAt(x, z) - t0) <= TERRAIN_STEP_MAX;
+      const ok = jumping
+        ? (x, z) => groundHeightAt(x, z) <= character.position.y + TERRAIN_STEP_MAX
+        : (x, z) => Math.abs(groundHeightAt(x, z) - t0) <= TERRAIN_STEP_MAX;
       if (!ok(nx, nz)) {
         if (ok(nx, curZ)) nz = curZ;
         else if (ok(curX, nz)) nx = curX;
@@ -4584,15 +4687,27 @@ function updateMovement(dt) {
     }
     character.position.x = nx;
     character.position.z = nz;
-    character.rotation.y = Math.atan2(dir.x, dir.z);
+    character.rotation.y = Math.atan2(moveDirX, moveDirZ);
   }
-  // 서 있는 자리의 지면 높이(단차 있는 건물의 발판 위인지)에 맞춰 매 프레임 조금씩 따라가게
-  // 해서, 뚝 끊기지 않고 비탈을 오르내리듯 자연스럽게 높이가 바뀌게 한다.
+  // 점프 중에는 포물선 물리(속도·중력)로 높이가 바뀌고, 바닥에 닿는 순간 착지한다.
+  // 평상시에는 서 있는 자리의 지면 높이를 부드럽게 따라간다.
   const targetGroundY = groundHeightAt(character.position.x, character.position.z);
-  character.position.y += (targetGroundY - character.position.y) * Math.min(1, dt * 6);
-  // 점프 중엔 애니메이션은 점프 동작을 그대로 유지하고, 이동/방향 전환만 반영한다
-  // (방향키+점프를 같이 누르면 그 방향으로 가며 점프하게)
-  if (jumping) return;
+  if (jumping) {
+    jumpAirTime += dt;
+    jumpVelY -= JUMP_GRAVITY * dt;
+    character.position.y += jumpVelY * dt;
+    if ((jumpVelY <= 0 && character.position.y <= targetGroundY) || jumpAirTime > 4.0) {
+      character.position.y = targetGroundY;
+      jumpVelY = 0;
+      jumpAirTime = 0;
+      jumpLaunchSpeed = 0;
+      jumping = false;
+    } else {
+      return;
+    }
+  } else {
+    character.position.y += (targetGroundY - character.position.y) * Math.min(1, dt * 10);
+  }
   if (moving) {
     playAction(moveMode === "run" ? "Running" : "Walking");
   } else {
@@ -4600,42 +4715,114 @@ function updateMovement(dt) {
   }
 }
 
-// 모바일에서 손가락 두 개로 벌리고 좁혀서 확대/축소할 수 있게, 지금 눌려 있는 포인터들을
-// pointerId별로 기록해 둔다. 손가락이 하나면 기존처럼 드래그 회전, 두 개가 되면 그 사이 거리
-// 변화로 줌을 하고(핀치), 한 손가락 드래그 회전은 그동안 멈춘다.
-const activePointers = new Map();
+// 화면 좌우 분할 터치/드래그 조작 (모바일 3D 게임 표준):
+// - 왼쪽 절반: 터치한 지점을 중심으로 가상 조이스틱(전후좌우 360° 이동)
+// - 오른쪽 절반: 한 손가락 드래그로 360° 시점 회전
+// - 멀티터치: 왼손 이동 + 오른손 시점 회전이 동시에 동작하며, 같은 쪽에 두 손가락을 대면 핀치 줌
+const camPointers = new Map();
+let movePointerId = null;
+let moveOrigin = { x: 0, y: 0 };
+let moveLastPos = { x: 0, y: 0 };
+let touchMoveX = 0; // -1(좌) ~ +1(우)
+let touchMoveY = 0; // -1(뒤) ~ +1(앞)
+const JOYSTICK_MAX_R = 48;
+const JOYSTICK_DEADZONE = 6;
 let pinchStartDist = 0;
 let pinchStartCamDistance = 0;
 
 function pinchDistance() {
-  const pts = [...activePointers.values()];
+  const pts = [...camPointers.values()];
+  if (pts.length < 2) return 0;
   return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+}
+
+function updateJoystickVisual(visible, originX = 0, originY = 0, dx = 0, dy = 0) {
+  if (!joystickEl || !joystickKnobEl || !wrapEl) return;
+  if (!visible) {
+    joystickEl.hidden = true;
+    return;
+  }
+  const wrapRect = wrapEl.getBoundingClientRect();
+  joystickEl.hidden = false;
+  joystickEl.style.left = `${originX - wrapRect.left}px`;
+  joystickEl.style.top = `${originY - wrapRect.top}px`;
+  const dist = Math.hypot(dx, dy);
+  const scale = dist > JOYSTICK_MAX_R ? JOYSTICK_MAX_R / dist : 1;
+  joystickKnobEl.style.transform = `translate(${(dx * scale).toFixed(1)}px, ${(dy * scale).toFixed(1)}px)`;
+}
+
+function clearMovePointer() {
+  movePointerId = null;
+  touchMoveX = 0;
+  touchMoveY = 0;
+  updateJoystickVisual(false);
 }
 
 function wireOrbitControls() {
   canvasEl.addEventListener("pointerdown", (ev) => {
-    activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-    // setPointerCapture가 실패해도(일부 환경에서 예외를 던질 수 있다) 핀치 줌 상태 기록은 반드시 되어야 한다
+    ev.preventDefault();
+    const rect = canvasEl.getBoundingClientRect();
+    const isLeftHalf = ev.clientX < rect.left + rect.width / 2;
     try {
       canvasEl.setPointerCapture(ev.pointerId);
     } catch (err) {
       /* 캡처 실패는 무시 — 드래그/핀치 자체는 아래 로직으로 계속 동작한다 */
     }
-    if (activePointers.size === 2) {
+    if (isLeftHalf) {
+      if (movePointerId === null && camPointers.size < 2) {
+        movePointerId = ev.pointerId;
+        moveOrigin = { x: ev.clientX, y: ev.clientY };
+        moveLastPos = { x: ev.clientX, y: ev.clientY };
+        touchMoveX = 0;
+        touchMoveY = 0;
+        updateJoystickVisual(true, ev.clientX, ev.clientY, 0, 0);
+        return;
+      }
+      // 왼쪽에 이미 손가락 하나가 있고 오른쪽엔 없을 때 두 번째 손가락이 닿으면 핀치 줌으로 전환
+      if (movePointerId !== null && camPointers.size === 0) {
+        const prevId = movePointerId;
+        const prevPos = { ...moveLastPos };
+        clearMovePointer();
+        camPointers.set(prevId, prevPos);
+        camPointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+        dragging = false;
+        pinchStartDist = pinchDistance();
+        pinchStartCamDistance = camDistance;
+        return;
+      }
+    }
+    camPointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (camPointers.size >= 2) {
       dragging = false;
       pinchStartDist = pinchDistance();
       pinchStartCamDistance = camDistance;
-    } else if (activePointers.size === 1) {
+    } else if (camPointers.size === 1) {
       dragging = true;
       lastPointer = { x: ev.clientX, y: ev.clientY };
     }
   });
   canvasEl.addEventListener("pointermove", (ev) => {
-    if (!activePointers.has(ev.pointerId)) return;
-    activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-    if (activePointers.size === 2) {
+    if (ev.pointerId === movePointerId) {
+      moveLastPos = { x: ev.clientX, y: ev.clientY };
+      const dx = ev.clientX - moveOrigin.x;
+      const dy = ev.clientY - moveOrigin.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < JOYSTICK_DEADZONE) {
+        touchMoveX = 0;
+        touchMoveY = 0;
+      } else {
+        const strength = Math.min(1, (dist - JOYSTICK_DEADZONE) / (JOYSTICK_MAX_R - JOYSTICK_DEADZONE));
+        touchMoveX = (dx / dist) * strength;
+        touchMoveY = (-dy / dist) * strength;
+      }
+      updateJoystickVisual(true, moveOrigin.x, moveOrigin.y, dx, dy);
+      return;
+    }
+    if (!camPointers.has(ev.pointerId)) return;
+    camPointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (camPointers.size >= 2) {
       const dist = pinchDistance();
-      const ratio = pinchStartDist > 0 ? pinchStartDist / dist : 1;
+      const ratio = pinchStartDist > 0 && dist > 0 ? pinchStartDist / dist : 1;
       camDistance = Math.min(CAM_DIST_MAX, Math.max(CAM_DIST_MIN, pinchStartCamDistance * ratio));
       return;
     }
@@ -4646,19 +4833,30 @@ function wireOrbitControls() {
     camYaw -= dx * 0.006;
     camPitch = Math.min(CAM_PITCH_MAX, Math.max(CAM_PITCH_MIN, camPitch + dy * 0.006));
   });
-  const stopDrag = (ev) => {
-    activePointers.delete(ev.pointerId);
-    if (activePointers.size === 1) {
-      const [remaining] = activePointers.values();
+  const stopPointer = (ev) => {
+    if (ev.pointerId === movePointerId) {
+      clearMovePointer();
+      return;
+    }
+    if (!camPointers.has(ev.pointerId)) return;
+    camPointers.delete(ev.pointerId);
+    if (camPointers.size === 1) {
+      const [remaining] = camPointers.values();
       dragging = true;
       lastPointer = { x: remaining.x, y: remaining.y };
     } else {
       dragging = false;
     }
   };
-  canvasEl.addEventListener("pointerup", stopDrag);
-  canvasEl.addEventListener("pointercancel", stopDrag);
-  canvasEl.addEventListener("pointerleave", stopDrag);
+  canvasEl.addEventListener("pointerup", stopPointer);
+  canvasEl.addEventListener("pointercancel", stopPointer);
+  canvasEl.addEventListener("lostpointercapture", stopPointer);
+  window.addEventListener("blur", () => {
+    clearMovePointer();
+    camPointers.clear();
+    dragging = false;
+    keys.up = keys.down = keys.left = keys.right = false;
+  });
   canvasEl.addEventListener(
     "wheel",
     (ev) => {
@@ -4683,10 +4881,12 @@ function wireDpad() {
 function updateCamera() {
   if (!character) return;
   // 지형 단차가 있는 곳에선 캐릭터가 그려지는 높이(땅 높이만큼 올라감)를 따라간다
-  const ty = character.position.y + terrainAt(character.position.x, character.position.z);
+  const terrOff = terrainAt(character.position.x, character.position.z);
+  const groundTy = groundHeightAt(character.position.x, character.position.z) + terrOff;
+  const ty = character.position.y + terrOff;
   const x = character.position.x + camDistance * Math.cos(camPitch) * Math.sin(camYaw);
   // 아래를 볼 때(pitch < 0)는 카메라가 땅 밑으로 내려가지 않게 바닥 위에 머문다
-  const y = Math.max(0.25 + ty - character.position.y, ty + camDistance * Math.sin(camPitch) + CAM_LOOK_Y);
+  const y = Math.max(0.25 + groundTy, ty + camDistance * Math.sin(camPitch) + CAM_LOOK_Y);
   const z = character.position.z + camDistance * Math.cos(camPitch) * Math.cos(camYaw);
   camera.position.set(x, y, z);
   camera.lookAt(character.position.x, ty + CAM_LOOK_Y, character.position.z);
@@ -4710,6 +4910,7 @@ function animate() {
   updateAlleyEvent(dt);
   updateCars(dt);
   updatePedestrians(dt);
+  updateGeumbukCrowd(dt);
   updateSchoolZone(dt);
   updateSound(dt);
   updateLabelScales();
@@ -6357,6 +6558,652 @@ function updatePedestrians(dt) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// ── 금북초등학교 등교~하교 시간(08:30~16:30) 교정·운동장 활동 군중 & 축구 경기 ──
+// 인조잔디 축구장 6대6 경기 + 굴러다니는 축구공, 육상 트랙 달리기, 남측 농구장 놀이,
+// 동측 광장·본관 앞·교문 보행로를 오가는 학생·선생님들을 InstancedMesh로 가볍게 그린다.
+// ════════════════════════════════════════════════════════════════════════════
+const GB_ORIGIN_X = -133.9;
+const GB_ORIGIN_Z = -481.3;
+const GB_FIELD_CX = -5.45;
+const GB_FIELD_CZ = 32.312;
+const GB_NORTH_GOAL_Z = -8.22;
+const GB_SOUTH_GOAL_Z = 72.84;
+let gbCrowd = null; // { meshes, actors, soccerBall, soccerBallShadow, basketBall, basketBallShadow, ball, bball, celebTimer, lastGroundReady }
+
+function makeSoccerBallTexture() {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 64;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#f8fafc";
+  ctx.fillRect(0, 0, 128, 64);
+  ctx.fillStyle = "#111827";
+  const spots = [
+    [16, 16], [48, 14], [80, 16], [112, 14],
+    [32, 34], [64, 32], [96, 34],
+    [16, 52], [48, 50], [80, 52], [112, 50],
+  ];
+  spots.forEach(([x, y]) => {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = (i * Math.PI * 2) / 5 - Math.PI / 2;
+      const px = x + Math.cos(a) * 7.5;
+      const py = y + Math.sin(a) * 7.5;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  });
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeBasketballTexture() {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 64;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#ea580c";
+  ctx.fillRect(0, 0, 128, 64);
+  ctx.strokeStyle = "#1f130a";
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, 32); ctx.lineTo(128, 32); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(32, 0); ctx.lineTo(32, 64); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(96, 0); ctx.lineTo(96, 64); ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// 육상 트랙(둥근 경기장 모양) 둘레를 따라 위치(로컬 raw m)를 구한다
+function gbTrackPoint(t) {
+  const xMin = -35.8, xMax = 24.9;
+  const zMin = -12.6, zMax = 77.2;
+  const r = 16.5;
+  const straightX = (xMax - xMin) - 2 * r;
+  const straightZ = (zMax - zMin) - 2 * r;
+  const arcLen = Math.PI * 0.5 * r;
+  const total = 2 * straightX + 2 * straightZ + 4 * arcLen;
+  let s = (((t % 1) + 1) % 1) * total;
+  const cxL = xMin + r, cxR = xMax - r;
+  const czT = zMin + r, czB = zMax - r;
+  if (s < straightZ) return [xMax, czT + s];
+  s -= straightZ;
+  if (s < arcLen) { const a = (s / arcLen) * (Math.PI / 2); return [cxR + Math.cos(a) * r, czB + Math.sin(a) * r]; }
+  s -= arcLen;
+  if (s < straightX) return [cxR - s, zMax];
+  s -= straightX;
+  if (s < arcLen) { const a = Math.PI / 2 + (s / arcLen) * (Math.PI / 2); return [cxL + Math.cos(a) * r, czB + Math.sin(a) * r]; }
+  s -= arcLen;
+  if (s < straightZ) return [xMin, czB - s];
+  s -= straightZ;
+  if (s < arcLen) { const a = Math.PI + (s / arcLen) * (Math.PI / 2); return [cxL + Math.cos(a) * r, czT + Math.sin(a) * r]; }
+  s -= arcLen;
+  if (s < straightX) return [cxL + s, zMin];
+  s -= straightX;
+  const a = Math.PI * 1.5 + (s / arcLen) * (Math.PI / 2);
+  return [cxR + Math.cos(a) * r, czT + Math.sin(a) * r];
+}
+
+function gbPickZonePoint(zone) {
+  if (zone === "plaza") {
+    const lz = -13 + Math.random() * 54;
+    const maxX = Math.min(62, 62 - Math.max(0, lz + 10) * 0.25);
+    return [31 + Math.random() * Math.max(6, maxX - 31), lz];
+  }
+  if (zone === "front") {
+    return [-33 + Math.random() * 88, -18.2 + Math.random() * 2.8];
+  }
+  if (zone === "west") {
+    return [-38.8 + Math.random() * 2.8, -8 + Math.random() * 68];
+  }
+  // eastGate: 동측 스탠드·벤치 앞~교문 안쪽 보행로
+  return [28 + Math.random() * 17, 20 + Math.random() * 50];
+}
+
+function buildGeumbukCrowd() {
+  gbCrowd = null;
+  const W = WORLD_SCALE;
+  const toWX = (lx) => (GB_ORIGIN_X + lx) * W;
+  const toWZ = (lz) => (GB_ORIGIN_Z + lz) * W;
+  const actors = [];
+
+  // 1) 인조잔디 축구 경기: 빨강 팀 6명(북→남 공격) vs 파랑 팀 6명(남→북 공격)
+  const soccerSetup = [
+    // Red team (team: 0, defends North -8.2, attacks South +72.8)
+    { team: 0, role: "gk", hx: GB_FIELD_CX, hz: -5.5 },
+    { team: 0, role: "df", hx: GB_FIELD_CX - 11, hz: 10 },
+    { team: 0, role: "df", hx: GB_FIELD_CX + 11, hz: 12 },
+    { team: 0, role: "mf", hx: GB_FIELD_CX - 9, hz: 28 },
+    { team: 0, role: "mf", hx: GB_FIELD_CX + 9, hz: 32 },
+    { team: 0, role: "fw", hx: GB_FIELD_CX + 2, hz: 48 },
+    // Blue team (team: 1, defends South +72.8, attacks North -8.2)
+    { team: 1, role: "gk", hx: GB_FIELD_CX, hz: 70.0 },
+    { team: 1, role: "df", hx: GB_FIELD_CX - 11, hz: 54 },
+    { team: 1, role: "df", hx: GB_FIELD_CX + 11, hz: 52 },
+    { team: 1, role: "mf", hx: GB_FIELD_CX - 9, hz: 36 },
+    { team: 1, role: "mf", hx: GB_FIELD_CX + 9, hz: 34 },
+    { team: 1, role: "fw", hx: GB_FIELD_CX - 2, hz: 18 },
+  ];
+  soccerSetup.forEach((p, idx) => {
+    const shirt = p.role === "gk"
+      ? (p.team === 0 ? 0xfacc15 : 0x22c55e)
+      : (p.team === 0 ? 0xe53935 : 0x1e88e5);
+    const pants = p.team === 0 ? 0xf8fafc : 0x1e293b;
+    actors.push({
+      kind: "soccer",
+      team: p.team,
+      role: p.role,
+      hx: p.hx,
+      hz: p.hz,
+      lx: p.hx,
+      lz: p.hz,
+      fx: 0,
+      fz: p.team === 0 ? 1 : -1,
+      speed: 0,
+      phase: idx * 1.1,
+      kid: true,
+      hasPack: false,
+      yOff: 0.014,
+      shirt,
+      pants,
+      skin: PED_SKIN[idx % PED_SKIN.length],
+      pack: 0,
+    });
+  });
+
+  // 2) 육상 트랙 달리기 아이들 8명
+  for (let i = 0; i < 8; i++) {
+    const t0 = i / 8 + Math.random() * 0.04;
+    const [lx, lz] = gbTrackPoint(t0);
+    actors.push({
+      kind: "track",
+      t: t0,
+      laneOff: ((i % 3) - 1) * 1.1,
+      tSpeed: 0.015 + (i % 3) * 0.0035,
+      lx,
+      lz,
+      fx: 0,
+      fz: 1,
+      phase: i * 0.9,
+      kid: true,
+      hasPack: false,
+      yOff: 0.013,
+      shirt: KID_SHIRTS[(i * 2 + 1) % KID_SHIRTS.length],
+      pants: KID_PANTS[(i * 3) % KID_PANTS.length],
+      skin: PED_SKIN[(i * 5) % PED_SKIN.length],
+      pack: 0,
+    });
+  }
+
+  // 3) 남측 소형 농구장 아이들 6명
+  const bballHome = [
+    [-16, 91], [-10, 98], [-3, 94],
+    [1, 93], [7, 98], [11, 92],
+  ];
+  bballHome.forEach(([hx, hz], i) => {
+    actors.push({
+      kind: "bball",
+      team: i < 3 ? 0 : 1,
+      hx,
+      hz,
+      lx: hx,
+      lz: hz,
+      tx: hx,
+      tz: hz,
+      fx: i < 3 ? 1 : -1,
+      fz: 0,
+      pause: Math.random() * 0.8,
+      phase: i * 1.3,
+      kid: true,
+      hasPack: false,
+      yOff: 0.013,
+      shirt: i < 3 ? 0xf97316 : 0x16a34a,
+      pants: 0x1e293b,
+      skin: PED_SKIN[(i * 3 + 1) % PED_SKIN.length],
+      pack: 0,
+    });
+  });
+
+  // 4) 교정 안쪽(동측 광장·본관 앞·서측 보행로·교문 안쪽)을 오가는 학생 25명 + 선생님 5명
+  const zones = ["plaza", "plaza", "plaza", "front", "front", "eastGate", "eastGate", "west"];
+  for (let i = 0; i < 30; i++) {
+    const zone = zones[i % zones.length];
+    const [lx, lz] = gbPickZonePoint(zone);
+    const [tx, tz] = gbPickZonePoint(zone);
+    const isTeacher = i >= 25;
+    actors.push({
+      kind: "walk",
+      zone,
+      lx,
+      lz,
+      tx,
+      tz,
+      fx: 0,
+      fz: 1,
+      walkSpeed: isTeacher ? 2.6 + Math.random() * 0.8 : 3.0 + Math.random() * 1.6, // raw m/s
+      pause: Math.random() * 2.5,
+      phase: Math.random() * 6,
+      kid: !isTeacher,
+      hasPack: !isTeacher && i % 4 !== 0,
+      yOff: zone === "plaza" ? 0.008 : 0.004,
+      shirt: isTeacher ? PED_SHIRTS[(i * 3) % PED_SHIRTS.length] : KID_SHIRTS[(i * 3) % KID_SHIRTS.length],
+      pants: isTeacher ? PED_PANTS[(i * 2) % PED_PANTS.length] : KID_PANTS[(i * 5) % KID_PANTS.length],
+      skin: PED_SKIN[(i * 7) % PED_SKIN.length],
+      pack: KID_PACKS[(i * 4) % KID_PACKS.length],
+    });
+  }
+
+  const total = actors.length;
+  const packCount = actors.filter((a) => a.hasPack).length;
+  const mk = (geo, color, count) => {
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.8 }), Math.max(1, count));
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    scene.add(mesh);
+    return mesh;
+  };
+  const torsoGeo = new THREE.BoxGeometry(0.12, 0.15, 0.07);
+  const headGeo = new THREE.SphereGeometry(0.045, 10, 8);
+  const legGeo = new THREE.BoxGeometry(0.042, 0.17, 0.045);
+  legGeo.translate(0, -0.085, 0);
+  const armGeo = new THREE.BoxGeometry(0.03, 0.14, 0.034);
+  armGeo.translate(0, -0.07, 0);
+  const packGeo = new THREE.BoxGeometry(0.1, 0.12, 0.05);
+  const shadowGeo = new THREE.CircleGeometry(0.075, 12);
+  shadowGeo.rotateX(-Math.PI / 2);
+
+  const meshes = {
+    torso: mk(torsoGeo, 0xffffff, total),
+    head: mk(headGeo, 0xffffff, total),
+    legs: mk(legGeo, 0xffffff, total * 2),
+    arms: mk(armGeo, 0xffffff, total * 2),
+    pack: mk(packGeo, 0xffffff, packCount),
+    shadow: (() => {
+      const s = new THREE.InstancedMesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }), total);
+      s.frustumCulled = false;
+      s.count = 0;
+      scene.add(s);
+      return s;
+    })(),
+  };
+
+  let pkIdx = 0;
+  actors.forEach((a, i) => {
+    const cShirt = new THREE.Color(a.shirt);
+    const cPants = new THREE.Color(a.pants);
+    const cSkin = new THREE.Color(a.skin);
+    meshes.torso.setColorAt(i, cShirt);
+    meshes.head.setColorAt(i, cSkin);
+    meshes.legs.setColorAt(i * 2, cPants);
+    meshes.legs.setColorAt(i * 2 + 1, cPants);
+    meshes.arms.setColorAt(i * 2, cShirt);
+    meshes.arms.setColorAt(i * 2 + 1, cShirt);
+    if (a.hasPack) {
+      a.packIdx = pkIdx;
+      meshes.pack.setColorAt(pkIdx, new THREE.Color(a.pack));
+      pkIdx++;
+    }
+  });
+  ["torso", "head", "legs", "arms", "pack"].forEach((k) => {
+    if (meshes[k].instanceColor) meshes[k].instanceColor.needsUpdate = true;
+  });
+
+  // 축구공 & 농구공
+  const ballR = 0.058;
+  const soccerBall = new THREE.Mesh(
+    new THREE.SphereGeometry(ballR, 12, 10),
+    new THREE.MeshStandardMaterial({ map: makeSoccerBallTexture(), roughness: 0.5 })
+  );
+  soccerBall.castShadow = true;
+  soccerBall.visible = false;
+  scene.add(soccerBall);
+
+  const ballShadowGeo = new THREE.CircleGeometry(ballR * 1.15, 10);
+  ballShadowGeo.rotateX(-Math.PI / 2);
+  const ballShadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
+  const soccerBallShadow = new THREE.Mesh(ballShadowGeo, ballShadowMat);
+  soccerBallShadow.visible = false;
+  scene.add(soccerBallShadow);
+
+  const basketBall = new THREE.Mesh(
+    new THREE.SphereGeometry(ballR, 10, 8),
+    new THREE.MeshStandardMaterial({ map: makeBasketballTexture(), roughness: 0.65 })
+  );
+  basketBall.castShadow = true;
+  basketBall.visible = false;
+  scene.add(basketBall);
+
+  const basketBallShadow = new THREE.Mesh(ballShadowGeo, ballShadowMat);
+  basketBallShadow.visible = false;
+  scene.add(basketBallShadow);
+
+  gbCrowd = {
+    meshes,
+    actors,
+    toWX,
+    toWZ,
+    soccerBall,
+    soccerBallShadow,
+    basketBall,
+    basketBallShadow,
+    ballR,
+    ball: { lx: GB_FIELD_CX, lz: GB_FIELD_CZ, y: 0, vx: 6.5, vz: 8.0, vy: 2.0, kickCooldown: 0 },
+    bball: { lx: -4, lz: 94.5, y: 0, vx: 4.5, vz: 1.5, vy: 4.0, timer: 0 },
+    celebTimer: 0,
+    celebTeam: -1,
+    centerWX: toWX(GB_FIELD_CX),
+    centerWZ: toWZ(GB_FIELD_CZ),
+    matM: new THREE.Matrix4(),
+    matBase: new THREE.Matrix4(),
+    matPart: new THREE.Matrix4(),
+    matRot: new THREE.Matrix4(),
+    kidScale: new THREE.Matrix4().makeScale(KID_SCALE, KID_SCALE, KID_SCALE),
+  };
+}
+
+function updateGeumbukCrowd(dt) {
+  if (!gbCrowd || !character) return;
+  const W = WORLD_SCALE;
+  const h = ((worldHour % 24) + 24) % 24;
+  const isSchoolTime = h >= 8.5 && h <= 16.5;
+  const distToSchool = Math.hypot(character.position.x - gbCrowd.centerWX, character.position.z - gbCrowd.centerWZ);
+  const visible = isSchoolTime && distToSchool < 260 * W;
+  const { meshes, actors, toWX, toWZ, soccerBall, soccerBallShadow, basketBall, basketBallShadow, ball, bball, ballR } = gbCrowd;
+
+  if (!visible) {
+    if (meshes.torso.count !== 0) {
+      meshes.torso.count = meshes.head.count = meshes.shadow.count = 0;
+      meshes.legs.count = meshes.arms.count = meshes.pack.count = 0;
+      soccerBall.visible = soccerBallShadow.visible = false;
+      basketBall.visible = basketBallShadow.visible = false;
+    }
+    return;
+  }
+
+  // ── 1. 축구공 물리 & 6대6 축구 경기 AI ──
+  const soccerPlayers = actors.filter((a) => a.kind === "soccer");
+  if (gbCrowd.celebTimer > 0) {
+    gbCrowd.celebTimer -= dt;
+    if (gbCrowd.celebTimer <= 0) {
+      ball.lx = GB_FIELD_CX;
+      ball.lz = GB_FIELD_CZ;
+      ball.y = 0;
+      ball.vx = (Math.random() - 0.5) * 9;
+      ball.vz = (gbCrowd.celebTeam === 0 ? -1 : 1) * (5 + Math.random() * 4);
+      ball.vy = 1.8;
+      gbCrowd.celebTeam = -1;
+    }
+  } else {
+    ball.kickCooldown = Math.max(0, ball.kickCooldown - dt);
+    ball.lx += ball.vx * dt;
+    ball.lz += ball.vz * dt;
+    ball.vy -= 14.0 * dt;
+    ball.y += ball.vy * dt;
+    if (ball.y <= 0) {
+      ball.y = 0;
+      if (Math.abs(ball.vy) > 0.6) ball.vy = -ball.vy * 0.52;
+      else ball.vy = 0;
+      const damp = Math.pow(0.28, dt);
+      ball.vx *= damp;
+      ball.vz *= damp;
+    }
+    // 경기장 경계 반사 및 골 판정
+    const minX = -30.5, maxX = 19.5;
+    if (ball.lx < minX) { ball.lx = minX; ball.vx = Math.abs(ball.vx) * 0.75 + 2.5; }
+    if (ball.lx > maxX) { ball.lx = maxX; ball.vx = -Math.abs(ball.vx) * 0.75 - 2.5; }
+    const inGoalX = Math.abs(ball.lx - GB_FIELD_CX) < 3.6;
+    if (ball.lz < GB_NORTH_GOAL_Z + 0.5) {
+      if (inGoalX) {
+        gbCrowd.celebTimer = 1.4;
+        gbCrowd.celebTeam = 1; // 파랑 팀 골!
+        ball.vx = ball.vz = ball.vy = 0;
+      } else {
+        ball.lz = GB_NORTH_GOAL_Z + 0.5;
+        ball.vz = Math.abs(ball.vz) * 0.75 + 3.0;
+      }
+    } else if (ball.lz > GB_SOUTH_GOAL_Z - 0.5) {
+      if (inGoalX) {
+        gbCrowd.celebTimer = 1.4;
+        gbCrowd.celebTeam = 0; // 빨강 팀 골!
+        ball.vx = ball.vz = ball.vy = 0;
+      } else {
+        ball.lz = GB_SOUTH_GOAL_Z - 0.5;
+        ball.vz = -Math.abs(ball.vz) * 0.75 - 3.0;
+      }
+    }
+    // 공이 멈추려 하면 살짝 굴러가게 유지
+    if (Math.hypot(ball.vx, ball.vz) < 0.6 && ball.y === 0) {
+      ball.vx += (GB_FIELD_CX - ball.lx) * 0.15;
+      ball.vz += (GB_FIELD_CZ - ball.lz) * 0.15;
+    }
+
+    // 각 팀에서 공에 가장 가까운 필드 플레이어 2명이 적극 추격
+    const chasers = new Set();
+    [0, 1].forEach((team) => {
+      const fielders = soccerPlayers
+        .filter((p) => p.team === team && p.role !== "gk")
+        .sort((a, b) => Math.hypot(a.lx - ball.lx, a.lz - ball.lz) - Math.hypot(b.lx - ball.lx, b.lz - ball.lz));
+      if (fielders[0]) chasers.add(fielders[0]);
+      if (fielders[1]) chasers.add(fielders[1]);
+    });
+
+    soccerPlayers.forEach((p) => {
+      let tx = p.hx;
+      let tz = p.hz;
+      let maxSpd = 6.2; // raw m/s
+      if (p.role === "gk") {
+        tx = Math.max(GB_FIELD_CX - 4.2, Math.min(GB_FIELD_CX + 4.2, ball.lx));
+        tz = p.hz;
+        maxSpd = 5.0;
+      } else if (chasers.has(p)) {
+        tx = ball.lx;
+        tz = ball.lz;
+        maxSpd = 7.6;
+      } else {
+        // 공 위치에 맞춰 진형 전체가 살짝 따라 이동
+        tx = p.hx + (ball.lx - GB_FIELD_CX) * 0.35;
+        tz = p.hz + (ball.lz - GB_FIELD_CZ) * 0.32;
+        tx = Math.max(-29, Math.min(18, tx));
+        tz = Math.max(-3, Math.min(68, tz));
+        maxSpd = 5.4;
+      }
+      const dx = tx - p.lx;
+      const dz = tz - p.lz;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.35) {
+        const step = Math.min(dist, maxSpd * dt);
+        p.lx += (dx / dist) * step;
+        p.lz += (dz / dist) * step;
+        p.fx = dx / dist;
+        p.fz = dz / dist;
+        p.speed = step / Math.max(dt, 1e-4);
+        p.phase += p.speed * W * dt * 13;
+      } else {
+        p.speed = 0;
+        const bdx = ball.lx - p.lx, bdz = ball.lz - p.lz;
+        const bd = Math.hypot(bdx, bdz);
+        if (bd > 0.1) { p.fx = bdx / bd; p.fz = bdz / bd; }
+      }
+      // 공에 닿으면 패스 또는 슈팅!
+      if (ball.kickCooldown <= 0 && Math.hypot(p.lx - ball.lx, p.lz - ball.lz) < 1.8 && ball.y < 1.2) {
+        const targetGoalZ = p.team === 0 ? GB_SOUTH_GOAL_Z : GB_NORTH_GOAL_Z;
+        const goalDist = Math.abs(targetGoalZ - p.lz);
+        let aimX = GB_FIELD_CX + (Math.random() - 0.5) * 6.0;
+        let aimZ = targetGoalZ;
+        let power = 15 + Math.random() * 6;
+        // 골대에서 멀면 전방 동료에게 패스할 확률 높임
+        if (goalDist > 26 && Math.random() < 0.65) {
+          const mates = soccerPlayers.filter((m) => m !== p && m.team === p.team && m.role !== "gk");
+          const forwardMates = mates.filter((m) => (p.team === 0 ? m.lz > p.lz - 4 : m.lz < p.lz + 4));
+          const pickPool = forwardMates.length ? forwardMates : mates;
+          const mate = pickPool[Math.floor(Math.random() * pickPool.length)];
+          if (mate) {
+            aimX = mate.lx + (Math.random() - 0.5) * 5;
+            aimZ = mate.lz + (p.team === 0 ? 5 : -5);
+            power = 12 + Math.random() * 5;
+          }
+        }
+        const adx = aimX - ball.lx, adz = aimZ - ball.lz;
+        const alen = Math.hypot(adx, adz) || 1;
+        ball.vx = (adx / alen) * power;
+        ball.vz = (adz / alen) * power;
+        ball.vy = 2.6 + Math.random() * 3.8;
+        ball.kickCooldown = 0.35;
+        p.fx = adx / alen;
+        p.fz = adz / alen;
+      }
+    });
+  }
+
+  // ── 2. 트랙 달리기 · 농구장 · 교정 산책 ──
+  const bballPlayers = actors.filter((a) => a.kind === "bball");
+  bball.timer += dt;
+  bball.lx += bball.vx * dt;
+  bball.lz += bball.vz * dt;
+  bball.vy -= 14.5 * dt;
+  bball.y += bball.vy * dt;
+  if (bball.y <= 0) {
+    bball.y = 0;
+    bball.vy = 3.8 + Math.random() * 1.4;
+  }
+  if (bball.lx < -21 || bball.lx > 11) bball.vx *= -1;
+  if (bball.lz < 88 || bball.lz > 101) bball.vz *= -1;
+  if (bball.timer > 2.2) {
+    bball.timer = 0;
+    const tgt = bballPlayers[Math.floor(Math.random() * bballPlayers.length)];
+    if (tgt) {
+      const dx = tgt.lx - bball.lx, dz = tgt.lz - bball.lz;
+      const d = Math.hypot(dx, dz) || 1;
+      bball.vx = (dx / d) * 6.5;
+      bball.vz = (dz / d) * 6.5;
+    }
+  }
+
+  actors.forEach((a) => {
+    if (a.kind === "soccer") return;
+    if (a.kind === "track") {
+      a.t = (a.t + a.tSpeed * dt) % 1;
+      const [nx, nz] = gbTrackPoint(a.t);
+      const dx = nx - a.lx, dz = nz - a.lz;
+      const d = Math.hypot(dx, dz);
+      if (d > 1e-4) {
+        a.fx = dx / d;
+        a.fz = dz / d;
+        a.phase += (d / Math.max(dt, 1e-4)) * W * dt * 13;
+      }
+      a.lx = nx + a.fz * a.laneOff * 0.2;
+      a.lz = nz - a.fx * a.laneOff * 0.2;
+      a.speed = 6.0;
+      return;
+    }
+    if (a.kind === "bball") {
+      const dx = a.tx - a.lx, dz = a.tz - a.lz;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 0.6) {
+        a.pause -= dt;
+        a.speed = 0;
+        const bdx = bball.lx - a.lx, bdz = bball.lz - a.lz;
+        const bd = Math.hypot(bdx, bdz) || 1;
+        a.fx = bdx / bd; a.fz = bdz / bd;
+        if (a.pause <= 0) {
+          a.tx = Math.max(-22, Math.min(12, a.hx + (Math.random() - 0.5) * 12));
+          a.tz = Math.max(87.5, Math.min(101.5, a.hz + (Math.random() - 0.5) * 10));
+          a.pause = 0.5 + Math.random() * 1.2;
+        }
+      } else {
+        const spd = 5.0;
+        const step = Math.min(dist, spd * dt);
+        a.lx += (dx / dist) * step;
+        a.lz += (dz / dist) * step;
+        a.fx = dx / dist;
+        a.fz = dz / dist;
+        a.speed = spd;
+        a.phase += spd * W * dt * 13;
+      }
+      return;
+    }
+    // kind === "walk" (교정 광장·본관 앞·보행로)
+    const dx = a.tx - a.lx, dz = a.tz - a.lz;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.5) {
+      a.pause -= dt;
+      a.speed = 0;
+      if (a.pause <= 0) {
+        const [ntx, ntz] = gbPickZonePoint(a.zone);
+        a.tx = ntx;
+        a.tz = ntz;
+        a.pause = 1.0 + Math.random() * 2.5;
+      }
+    } else {
+      const step = Math.min(dist, a.walkSpeed * dt);
+      a.lx += (dx / dist) * step;
+      a.lz += (dz / dist) * step;
+      a.fx = dx / dist;
+      a.fz = dz / dist;
+      a.speed = a.walkSpeed;
+      a.phase += a.walkSpeed * W * dt * 11;
+    }
+  });
+
+  // ── 3. InstancedMesh 행렬 업데이트 ──
+  const { matM: m, matBase: base, matPart: part, matRot: rot, kidScale } = gbCrowd;
+  const { torso, head, legs, arms, pack, shadow } = meshes;
+  let pkCount = 0;
+  actors.forEach((a, i) => {
+    const wx = toWX(a.lx);
+    const wz = toWZ(a.lz);
+    const gy = groundHeightAt(wx, wz) + a.yOff;
+    const celebrating = a.kind === "soccer" && gbCrowd.celebTimer > 0 && a.team === gbCrowd.celebTeam;
+    const movingNow = a.speed > 0.2;
+    const swing = celebrating ? Math.sin(gbCrowd.celebTimer * 18) * 0.4 : (movingNow ? Math.sin(a.phase) * 0.55 : 0);
+    const hop = celebrating ? Math.abs(Math.sin(gbCrowd.celebTimer * 12)) * 0.08 : (movingNow ? Math.abs(Math.cos(a.phase)) * 0.009 : 0);
+    base.makeRotationY(Math.atan2(a.fx, a.fz)).setPosition(wx, gy + hop, wz);
+    if (a.kid) base.multiply(kidScale);
+    torso.setMatrixAt(i, m.multiplyMatrices(base, part.makeTranslation(0, 0.245, 0)));
+    head.setMatrixAt(i, m.multiplyMatrices(base, part.makeTranslation(0, 0.37, 0)));
+    shadow.setMatrixAt(i, m.multiplyMatrices(base, part.makeTranslation(0, 0.003 - hop, 0)));
+    [-1, 1].forEach((sideSign, li) => {
+      const legSwing = swing * sideSign;
+      m.multiplyMatrices(base, part.makeTranslation(sideSign * 0.03, 0.17, 0));
+      m.multiply(rot.makeRotationX(legSwing));
+      legs.setMatrixAt(i * 2 + li, m);
+      m.multiplyMatrices(base, part.makeTranslation(sideSign * 0.077, 0.31, 0));
+      m.multiply(rot.makeRotationX(celebrating ? -2.4 : -legSwing * 0.85));
+      arms.setMatrixAt(i * 2 + li, m);
+    });
+    if (a.hasPack) {
+      pack.setMatrixAt(a.packIdx, m.multiplyMatrices(base, part.makeTranslation(0, 0.255, -0.06)));
+      pkCount++;
+    }
+  });
+  torso.count = head.count = shadow.count = actors.length;
+  legs.count = arms.count = actors.length * 2;
+  pack.count = pkCount;
+  [torso, head, legs, arms, pack, shadow].forEach((mesh) => { mesh.instanceMatrix.needsUpdate = true; });
+
+  // 공 위치·회전 갱신
+  const bwx = toWX(ball.lx), bwz = toWZ(ball.lz);
+  const bgy = groundHeightAt(bwx, bwz) + 0.015;
+  soccerBall.position.set(bwx, bgy + ballR + ball.y * W, bwz);
+  soccerBall.rotation.x += ball.vz * W * dt * 14;
+  soccerBall.rotation.z -= ball.vx * W * dt * 14;
+  soccerBall.visible = true;
+  soccerBallShadow.position.set(bwx, bgy + 0.004, bwz);
+  soccerBallShadow.visible = true;
+
+  const bbwx = toWX(bball.lx), bbwz = toWZ(bball.lz);
+  const bbgy = groundHeightAt(bbwx, bbwz) + 0.014;
+  basketBall.position.set(bbwx, bbgy + ballR + bball.y * W, bbwz);
+  basketBall.rotation.x += bball.vz * W * dt * 10;
+  basketBall.visible = true;
+  basketBallShadow.position.set(bbwx, bbgy + 0.004, bbwz);
+  basketBallShadow.visible = true;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // ── 가게 입간판: 편의점·카페·식당·마트·학원 앞 보도에 "영업 중 / 준비 중" ──
 // 가게 자리에서 가장 가까운 보도(행인이 걷는 보도 중앙선)를 찾아 가게 쪽 가장자리에 A자 입간판을 세운다.
 // 영업시간(OPEN_HOURS)에 맞춰 초록 "영업 중"(밤에도 환하게 빛남) / 회색 "준비 중"으로 바뀐다 — 모양은 하나라
@@ -7272,6 +8119,8 @@ async function initNeighborhood3D() {
   toastEl = document.getElementById("neighborhood3d-toast");
   resetBtnEl = document.getElementById("neighborhood3d-reset-btn");
   dpadEl = document.getElementById("neighborhood3d-dpad");
+  joystickEl = document.getElementById("neighborhood3d-joystick");
+  joystickKnobEl = joystickEl?.querySelector(".neighborhood3d-joystick-knob") || null;
   wrapEl = document.getElementById("neighborhood3d-wrap");
   fullscreenBtnEl = document.getElementById("neighborhood3d-fullscreen-btn");
   exitFullscreenBtnEl = document.getElementById("neighborhood3d-exit-fullscreen-btn");
@@ -7295,7 +8144,17 @@ async function initNeighborhood3D() {
     clock = new THREE.Clock();
     await buildStaticScene();
     // [임시 디버그 — GLB 지형 실험 끝나면 지울 것] 브라우저 콘솔에서 바로 scene·camera를 들여다보려고
-    window.__nbDebug = { scene, camera, renderer, getTerrainY, groundHeightAt, keys, getCharacter: () => character, THREE, terrainTriIndex: () => terrainTriIndex };
+    window.__nbDebug = {
+      scene, camera, renderer, getTerrainY, groundHeightAt, keys,
+      getCharacter: () => character,
+      getMom: () => mom,
+      getCameraState: () => ({ yaw: camYaw, pitch: camPitch, distance: camDistance }),
+      getJumpState: () => ({ jumping, jumpVelY }),
+      getGeumbukCrowd: () => gbCrowd,
+      setHour: (h) => setWorldHour(h, false),
+      THREE,
+      terrainTriIndex: () => terrainTriIndex,
+    };
     await loadCharacter();
     // 113동 중 북서쪽으로 뻗은 날개(WingA)가 건물 중심 쪽(동)·북쪽 모서리에서 북동쪽을 보고
     // 있는 1-2호 출입구 앞 — 실제 모델(place_금파힐113.glb)을 rotationDeg(67.4°) 그대로 적용해
@@ -7313,7 +8172,14 @@ async function initNeighborhood3D() {
     danceBtnEl?.addEventListener("click", onDanceClick);
     walkBtnEl?.addEventListener("click", () => setMoveMode("walk"));
     runBtnEl?.addEventListener("click", () => setMoveMode("run"));
-    jumpBtnEl?.addEventListener("click", triggerJump);
+    jumpBtnEl?.addEventListener("pointerdown", (ev) => {
+      ev.preventDefault();
+      jumpBtnEl.blur();
+      triggerJump();
+    });
+    jumpBtnEl?.addEventListener("click", (ev) => {
+      if (ev.detail === 0) triggerJump();
+    });
     momBtnEl?.addEventListener("click", onMomClick);
     resetBtnEl?.addEventListener("click", startAdventure);
     fullscreenBtnEl?.addEventListener("click", requestWrapFullscreen);

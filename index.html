@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261125b">
+<link rel="stylesheet" href="style.css?v=20261126a">
 </head>
 <body>
   <header>
@@ -233,10 +233,13 @@
             <button type="button" class="help-btn" data-help="neighborhood3d" data-title="⚔️ 거리 모험">❓ 설명보기</button>
           </span>
         </div>
-        <template id="help-neighborhood3d"><p>이로이가 사는 <b>진짜 동네(금호파크힐스 단지 주변)</b>를 본떠 만든 거리를 돌아다니며 <b>동전을 줍고 불량배를 혼내주면 용돈</b>을 번다. 방향키(←↑↓→)·WASD·화면 안 방향 버튼으로 이로이를 움직이고(지금 보고 있는 화면 방향 기준으로 움직인다), <b>스페이스바</b>로 점프한다. 방향키와 스페이스바를 같이 누르면 그 방향으로 이동하며 점프한다. 화면을 마우스로 눌러 돌리거나 휠로(모바일에서는 손가락 두 개로 벌리고 좁혀서) 확대/축소할 수 있다. 걷기/뛰기를 고르고, "엄마 부르기"를 누르면 엄마가 이로이 옆에 와서 선다. 동전과 불량배를 다 치우면 "다시 하기"로 새로 시작할 수 있다. 오른쪽 위 "⛶ 전체화면"을 누르면 화면 해상도에 맞춰 꽉 채워 볼 수 있고, 화면 맨 위쪽을 터치하면 "축소" 버튼이 다시 나타난다.</p><p>위쪽 <b>시간 버튼</b>(☀️ 낮 13:00)으로 아침·낮·저녁·밤·새벽을 고를 수 있다. 밤에는 가로등·창문·차 불빛이 켜지고, 시간에 따라 거리를 오가는 사람 수(등하교 시간엔 학교 앞에 아이들)와 가게 앞 입간판(영업 중/준비 중)이 바뀐다. <b>🔊 소리</b> 버튼으로 동네 소리(차·오토바이·새·풀벌레·학교 종·횡단보도 신호음)를 켜고 끈다. 빨간 <b>어린이 보호구역</b>에서는 차들이 천천히 달리고, 입구의 전광판이 다가오는 차의 속도를 보여 준다. 큰길을 걷다 <b>골목 입구</b>에서 차가 나오면 멈춰서 좌우를 살피자 — 잘 멈추면 용돈을 받는다!</p></template>
+        <template id="help-neighborhood3d"><p>이로이가 사는 <b>진짜 동네(금호파크힐스 단지 주변)</b>를 본떠 만든 거리를 돌아다니며 <b>동전을 줍고 불량배를 혼내주면 용돈</b>을 번다. 화면 <b>왼쪽 절반</b>을 터치·드래그하거나 왼쪽 아래 방향 버튼·키보드 방향키(←↑↓→)·WASD로 이로이를 움직이고(지금 보고 있는 화면 방향 기준으로 움직인다), 화면 <b>오른쪽 절반</b>을 드래그해 360° 시점을 돌린다. 휠이나 두 손가락 핀치로 확대/축소할 수 있다. 오른쪽 아래 <b>걷기·뛰기·점프·춤추기</b> 버튼과 <b>스페이스바</b>로 점프하며, 앞방향을 누른 채 점프하면 앞으로 뛰어올라 옹벽·난간 등 구조물을 넘어갈 수 있다. "엄마 부르기"를 누르면 엄마가 이로이 옆에 와서 선다. 동전과 불량배를 다 치우면 "다시 하기"로 새로 시작할 수 있다. 오른쪽 위 "⛶ 전체화면"을 누르면 화면 해상도에 맞춰 꽉 채워 볼 수 있고, 화면 맨 위쪽을 터치하면 "축소" 버튼이 다시 나타난다.</p><p>위쪽 <b>시간 버튼</b>(☀️ 낮 13:00)으로 아침·낮·저녁·밤·새벽을 고를 수 있다. 밤에는 가로등·창문·차 불빛이 켜지고, 시간에 따라 거리를 오가는 사람 수(등하교·수업 시간엔 금북초 운동장과 학교 안에 아이들이 뛰어놀고 축구를 한다)와 가게 앞 입간판(영업 중/준비 중)이 바뀐다. <b>🔊 소리</b> 버튼으로 동네 소리(차·오토바이·새·풀벌레·학교 종·횡단보도 신호음)를 켜고 끈다. 빨간 <b>어린이 보호구역</b>에서는 차들이 천천히 달리고, 입구의 전광판이 다가오는 차의 속도를 보여 준다. 큰길을 걷다 <b>골목 입구</b>에서 차가 나오면 멈춰서 좌우를 살피자 — 잘 멈추면 용돈을 받는다!</p></template>
         <div id="neighborhood3d-wrap">
           <div id="neighborhood3d-top-zone"></div>
           <canvas id="neighborhood3d-canvas"></canvas>
+          <div id="neighborhood3d-joystick" class="neighborhood3d-joystick" hidden aria-hidden="true">
+            <div class="neighborhood3d-joystick-knob"></div>
+          </div>
           <p id="neighborhood3d-loading" class="muted">불러오는 중…</p>
           <p id="neighborhood3d-hud" class="neighborhood3d-hud" hidden></p>
           <p id="neighborhood3d-toast" class="neighborhood3d-toast" hidden></p>
@@ -362,7 +365,7 @@
       }
     }
   </script>
-  <script type="module" src="neighborhood3d.js?v=20261126m"></script>
+  <script type="module" src="neighborhood3d.js?v=20261126n"></script>
   <script src="main.js?v=20261125a"></script>
   <script>
     if ("serviceWorker" in navigator) {
