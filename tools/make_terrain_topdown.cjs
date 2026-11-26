@@ -11,7 +11,9 @@
 //
 // 결과물:
 //   img/gamemap_topdown.webp   — 위에서 내려다본 그림(위쪽 = -z, 오른쪽 = +x, map_editor/게임과 같은 방향)
-//   img/gamemap_topdown.json   — 이 그림이 raw 좌표계에서 어느 범위(minX·minZ·width·depth)를 덮는지.
+//   img/gamemap_topdown.json   — 이 그림이 "지형 모델 좌표"에서 어느 범위(minX·minZ·width·depth)를 덮는지.
+//                                 (2026-11-26) 지형 모델 좌표는 네이버 지도 기준 raw 좌표와 크기·위치가 달라서,
+//                                 게임·맵 에디터가 terrain_align.js 값(×scale + offset)으로 옮겨서 쓴다.
 //                                 GameMap.glb 자체 단위가 이미 PLACES/ROAD_SEGMENTS의 raw 단위와
 //                                 그대로 맞아서(2026-11-25 확인, WORLD_SCALE만 곱하면 게임 장면에
 //                                 맞음 — raw끼리는 추가 보정 없이 바로 겹침) 별도 앵커 보정이 필요 없다.

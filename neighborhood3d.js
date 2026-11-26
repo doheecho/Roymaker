@@ -10,6 +10,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import * as MAP_DATA from "./map_data.js?v=20261125u";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
+import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
 
 const { PLACES, ROAD_SEGMENTS, TREES, PARKS } = MAP_DATA;
 // 길 중간 횡단보도·신호등(맵 에디터 "🚦 신호등 추가"로 찍은 곳) — 예전 map_data.js에는 이 목록이 없을 수 있어서
@@ -966,7 +967,10 @@ function buildGlbTerrain(scene) {
       `${GLB_TERRAIN_FILE}?v=${ASSET_VERSION}`,
       (gltf) => {
         const terrain = gltf.scene;
-        terrain.scale.multiplyScalar(WORLD_SCALE);
+        // 네이버 지도 기준 raw 좌표에 맞춘다(terrain_align.js) — 크기를 키우고 옮긴 뒤 게임 단위(WORLD_SCALE)로
+        terrain.scale.multiplyScalar(WORLD_SCALE * TERRAIN_ALIGN.scale);
+        terrain.position.x += TERRAIN_ALIGN.offsetX * WORLD_SCALE;
+        terrain.position.z += TERRAIN_ALIGN.offsetZ * WORLD_SCALE;
         let terrainMesh = null;
         terrain.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = false; if (!terrainMesh) terrainMesh = o; } });
         terrain.updateMatrixWorld(true);

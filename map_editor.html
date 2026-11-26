@@ -661,15 +661,24 @@
 
   // ── 실제 지형(GameMap.glb) 위에서 찍은 그림 — tools/make_terrain_topdown.cjs로 만듦.
   // 이 그림의 raw 범위(gamemap_topdown.json)를 기존 rawToPx로 그대로 변환해서 깐다 — 이 지형의
-  // 자체 좌표가 이미 PLACES/ROAD_SEGMENTS와 같은 raw 단위라서(2026-11-25 확인) 별도 보정이 필요
+  // 자체 좌표를 terrain_align.js 값으로 키우고 옮겨서 네이버 지도 기준 raw 좌표에 맞춘다(2026-11-26) — 보정이 필요
   // 없다. 맨 처음 레이어(가장 아래)로 넣어서 건물·도로·공원이 항상 그 위에 보인다.
+  // 지형 모델 좌표 → 네이버 지도 기준 raw 좌표(게임과 같은 terrain_align.js 값)
+  let terrainAlignCache = null;
+  async function terrainAlign() {
+    if (!terrainAlignCache) {
+      try { terrainAlignCache = (await import("./terrain_align.js?v=20261126a")).TERRAIN_ALIGN; } catch (err) { terrainAlignCache = { scale: 1, offsetX: 0, offsetZ: 0 }; }
+    }
+    return terrainAlignCache;
+  }
   const terrainBgImg = el("image", { class: "terrain-bg-img", preserveAspectRatio: "none", visibility: "hidden" });
   svg.insertBefore(terrainBgImg, svg.firstChild);
   (async () => {
     try {
       const info = await (await fetch("img/gamemap_topdown.json", { cache: "no-store" })).json();
-      const [x0, y0] = rawToPx(info.minX, info.minZ);
-      const [x1, y1] = rawToPx(info.minX + info.width, info.minZ + info.depth);
+      const A = await terrainAlign();
+      const [x0, y0] = rawToPx(info.minX * A.scale + A.offsetX, info.minZ * A.scale + A.offsetZ);
+      const [x1, y1] = rawToPx((info.minX + info.width) * A.scale + A.offsetX, (info.minZ + info.depth) * A.scale + A.offsetZ);
       terrainBgImg.setAttribute("href", "img/gamemap_topdown.webp");
       terrainBgImg.setAttribute("x", Math.min(x0, x1));
       terrainBgImg.setAttribute("y", Math.min(y0, y1));
@@ -704,10 +713,12 @@
       const terrainMesh = gltf.scene;
       terrainMesh.updateMatrixWorld(true);
       const ray = new THREE.Raycaster();
+      const A = await terrainAlign();
+      // (x, z)는 네이버 지도 기준 raw 좌표 — 지형 모델 좌표로 되돌려서 재고, 높이는 게임과 같게 scale배
       sampleTerrainRaw = (x, z) => {
-        ray.set(new THREE.Vector3(x, 1e6, z), new THREE.Vector3(0, -1, 0));
+        ray.set(new THREE.Vector3((x - A.offsetX) / A.scale, 1e6, (z - A.offsetZ) / A.scale), new THREE.Vector3(0, -1, 0));
         const hits = ray.intersectObject(terrainMesh, true);
-        return hits.length ? hits[0].point.y : null;
+        return hits.length ? hits[0].point.y * A.scale : null;
       };
       terrainOriginRawY = sampleTerrainRaw(0, 0) ?? 0;
     } catch (err) {
