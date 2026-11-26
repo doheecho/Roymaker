@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261126s";
+import * as MAP_DATA from "./map_data.js?v=20261126t";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261125b";
+const ASSET_VERSION = "20261126a";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -1043,7 +1043,9 @@ function terrainRegionAt(x, z) {
   }
   return terrainTriAt(x, z);
 }
-// 지형 메시를 구역 근처에서 잘게 나눠(구역 가장자리를 걸치는 삼각형은 raw 약 1m까지) 꼭짓점 높이를 구역 높이로 바꾼다.
+const SHAPE_WALL_MIN_RAW = 0.3;
+// 지형 메시를 구역 근처에서 잘게 나눠(구역 가장자리를 걸치는 삼각형은 raw 약 0.6m까지) 꼭짓점 높이를 구역 높이로 바꾼다.
+// 옹벽 경계에 걸치는 삼각형은 높은 쪽 꼭짓점이 돌 옹벽 밖으로 뚫고 나오지 않게 낮은 높이로 맞춘다.
 // 원래 지형 높이 조회(terrainTriIndex)는 그대로 두고 그림만 바꾼다.
 function refineTerrainMeshForShapes(mesh) {
   const W = WORLD_SCALE;
@@ -1067,7 +1069,7 @@ function refineTerrainMeshForShapes(mesh) {
     UV.push(uv ? [uv.getX(i), uv.getY(i)] : [0, 0]);
   }
   const outP = [], outUV = [];
-  const BIG = 6 * W, SMALL = 1 * W;
+  const BIG = 6 * W, SMALL = 0.6 * W, WALL_MIN = SHAPE_WALL_MIN_RAW * W;
   const len2 = (A, B) => (A[0] - B[0]) ** 2 + (A[2] - B[2]) ** 2;
   const mid = (A, B) => [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2, (A[2] + B[2]) / 2];
   const midUV = (A, B) => [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];
@@ -1080,9 +1082,12 @@ function refineTerrainMeshForShapes(mesh) {
       else if (m > SMALL * SMALL) { const ra = region(A); split = ra !== region(B) || ra !== region(C); }
     }
     if (!split) {
-      [[A, ua], [B, ub], [C, uc]].forEach(([V, U]) => {
-        const y = near ? getTerrainY(V[0], V[2]) : V[1];
-        outP.push(V[0], y, V[2]);
+      const ys = near ? [getTerrainY(A[0], A[2]), getTerrainY(B[0], B[2]), getTerrainY(C[0], C[2])] : [A[1], B[1], C[1]];
+      const minY = Math.min(ys[0], ys[1], ys[2]);
+      const maxY = Math.max(ys[0], ys[1], ys[2]);
+      const wallStraddle = near && maxY - minY >= WALL_MIN && (region(A) !== region(B) || region(A) !== region(C));
+      [[A, ua], [B, ub], [C, uc]].forEach(([V, U], k) => {
+        outP.push(V[0], wallStraddle ? minY : ys[k], V[2]);
         outUV.push(U[0], U[1]);
       });
       return;
@@ -1110,8 +1115,7 @@ function refineTerrainMeshForShapes(mesh) {
 }
 // 구역 가장자리 옹벽: 가장자리를 따라 raw 1.5m마다 안(구역 높이)·밖(다른 구역이나 실제 지형) 높이를 재서, 차이가 나는
 // 곳에 그 사이를 막는 돌 옹벽 + 위에 두겁석을 세운다(구역이 높은 곳·낮은 곳 둘 다). 경사로와 운동장처럼 맞닿은
-// 구역끼리는 높이가 같아서 벽이 생기지 않는다.
-const SHAPE_WALL_MIN_RAW = 0.3;
+// 구역끼리는 높이가 같으면 벽이 생기지 않고, 높이가 다른 공유 경계도 앞선 구역 한쪽만 세워 중복 옹벽을 막는다.
 function buildTerrainShapeWalls() {
   if (!terrainShapes.length) return;
   const W = WORLD_SCALE;
@@ -1146,6 +1150,9 @@ function buildTerrainShapeWalls() {
       for (let k = 0; k < n; k++) {
         const A = sample(k / n), B = sample((k + 1) / n);
         if (Math.abs(A.hin - A.hout) < MIN && Math.abs(B.hin - B.hout) < MIN) continue;
+        // 인접한 두 TERRAIN_SHAPES 공유 경계는 앞선 구역 한쪽만 옹벽을 세운다(중복 옹벽·깜빡임 방지)
+        const midOut = shapeHitAt((A.x + B.x) / 2 + nx * EPS, (A.z + B.z) / 2 + nz * EPS, si);
+        if (midOut && terrainShapes[midOut.si].walls && midOut.si < si) continue;
         const tA = Math.max(A.hin, A.hout), bA = Math.min(A.hin, A.hout) - 0.02;
         const tB = Math.max(B.hin, B.hout), bB = Math.min(B.hin, B.hout) - 0.02;
         const dA = along + (L * k) / n, dB = along + (L * (k + 1)) / n;
@@ -1202,7 +1209,16 @@ function buildGlbTerrain(scene) {
         terrain.position.x += TERRAIN_ALIGN.offsetX * WORLD_SCALE;
         terrain.position.z += TERRAIN_ALIGN.offsetZ * WORLD_SCALE;
         let terrainMesh = null;
-        terrain.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = false; if (!terrainMesh) terrainMesh = o; } });
+        terrain.traverse((o) => {
+          if (o.isMesh) {
+            o.receiveShadow = true;
+            o.castShadow = false;
+            (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+              if (m) { m.polygonOffset = true; m.polygonOffsetFactor = 2; m.polygonOffsetUnits = 2; }
+            });
+            if (!terrainMesh) terrainMesh = o;
+          }
+        });
         terrain.updateMatrixWorld(true);
         glbTerrain = terrain;
         terrainTriIndex = buildTerrainTriIndex(terrainMesh);
@@ -3048,6 +3064,205 @@ function mergeModelMeshes(model) {
   return { before, after };
 }
 
+// 경사 구역(TERRAIN_SHAPES 중 평지가 아닌 곳) 위에 걸치는 모델 조각(금북초 교문 앞 초록 보행로·빨간 길·
+// 흰 차선·베이지 계단 보행로·우측 금속 울타리 등, InstancedMesh 포함)을 경사면에 밀착시킨다.
+// 좌측 벽돌 담장·교문 기둥처럼 평지 구역 경계에 걸친 조각은 높은 교정 평지를 그대로 유지한다.
+function conformModelToSlopedShapes(model, baseY) {
+  if (!terrainShapes.length) return;
+  const sloped = terrainShapes.filter((S) => !S.flat);
+  if (!sloped.length) return;
+  const flatShapes = terrainShapes.filter((S) => S.flat);
+  const W = WORLD_SCALE;
+  const SNAP = 0.35 * W; // 경사 구역 가장자리 바로 바깥(우측 금속 울타리·계단 끝)을 경사면에 붙이는 여유
+  const MESH_FLAT_GUARD = 1.2 * W; // 평지 구역 경계에 걸친 담장·교문 기둥·현판을 보호하는 여유
+  const INST_FLAT_GUARD = 0.35 * W; // 평지 구역 경계 위 벽돌 담장 창살(InstancedMesh) 보호 여유
+  const MIN_EDGE = 1.0 * W;
+  const MAX_EDGE = 3.0 * W;
+
+  const closestOnPoly = (x, z, poly) => {
+    let bestD2 = Infinity, bx = x, bz = z;
+    for (let i = 0; i < poly.length; i++) {
+      const [ax, az] = poly[i], [cx, cz] = poly[(i + 1) % poly.length];
+      const dx = cx - ax, dz = cz - az, l2 = dx * dx + dz * dz;
+      const t = l2 > 1e-12 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+      const px = ax + dx * t, pz = az + dz * t;
+      const d2 = (x - px) ** 2 + (z - pz) ** 2;
+      if (d2 < bestD2) { bestD2 = d2; bx = px; bz = pz; }
+    }
+    return { d2: bestD2, x: bx, z: bz };
+  };
+  const dist2ToPoly = (x, z, poly) => (pointInPoly2(x, z, poly) ? 0 : closestOnPoly(x, z, poly).d2);
+  const nearFlat = (x, z, guard) => {
+    const g2 = guard * guard;
+    for (const F of flatShapes) {
+      const [x0, z0, x1, z1] = F.box;
+      if (x < x0 - guard || x > x1 + guard || z < z0 - guard || z > z1 + guard) continue;
+      if (dist2ToPoly(x, z, F.poly) <= g2) return true;
+    }
+    return false;
+  };
+  const evalSloped = (S, x, z) => {
+    let best = null, bestOut = Infinity;
+    for (let ti = 0; ti < S.tris.length; ti++) {
+      const [ia, ib, ic] = S.tris[ti];
+      const [ax, az] = S.poly[ia], [bx, bz] = S.poly[ib], [cx, cz] = S.poly[ic];
+      const v0x = bx - ax, v0z = bz - az, v1x = cx - ax, v1z = cz - az, v2x = x - ax, v2z = z - az;
+      const den = v0x * v1z - v1x * v0z;
+      if (Math.abs(den) < 1e-12) continue;
+      const v = (v2x * v1z - v1x * v2z) / den, w = (v0x * v2z - v2x * v0z) / den, u = 1 - v - w;
+      const out = Math.max(0, -u, -v, -w);
+      if (out < bestOut) { bestOut = out; best = { ti, u, v, w }; }
+      if (out === 0) break;
+    }
+    if (!best) return null;
+    const [ia, ib, ic] = S.tris[best.ti];
+    const u = Math.max(0, best.u), v = Math.max(0, best.v), w = Math.max(0, best.w), sum = u + v + w || 1;
+    return { y: (S.hs[ia] * u + S.hs[ib] * v + S.hs[ic] * w) / sum, ti: best.ti };
+  };
+  const slopedAt = (x, z) => {
+    const snap2 = SNAP * SNAP;
+    for (let si = sloped.length - 1; si >= 0; si--) {
+      const S = sloped[si];
+      const [x0, z0, x1, z1] = S.box;
+      if (x < x0 - SNAP || x > x1 + SNAP || z < z0 - SNAP || z > z1 + SNAP) continue;
+      if (pointInPoly2(x, z, S.poly)) {
+        const r = evalSloped(S, x, z);
+        if (r) return { y: r.y, reg: si * 1000 + r.ti };
+      } else {
+        const c = closestOnPoly(x, z, S.poly);
+        if (c.d2 <= snap2) {
+          const r = evalSloped(S, c.x, c.z);
+          if (r) return { y: r.y, reg: si * 1000 + r.ti };
+        }
+      }
+    }
+    return null;
+  };
+  const overlapsSloped = (x0, z0, x1, z1) => sloped.some(({ box: [bx0, bz0, bx1, bz1] }) =>
+    x1 >= bx0 - SNAP && x0 <= bx1 + SNAP && z1 >= bz0 - SNAP && z0 <= bz1 + SNAP
+  );
+
+  model.updateMatrixWorld(true);
+  const modelBox = new THREE.Box3().setFromObject(model);
+  if (!overlapsSloped(modelBox.min.x, modelBox.min.z, modelBox.max.x, modelBox.max.z)) return;
+
+  const inv = new THREE.Matrix4(), instMat = new THREE.Matrix4(), worldMat = new THREE.Matrix4();
+  const v = new THREE.Vector3(), gc = new THREE.Vector3();
+  let meshCount = 0, instCount = 0;
+
+  model.traverse((o) => {
+    if (!o.isMesh || !o.visible || o.isSkinnedMesh || !o.geometry?.attributes?.position) return;
+
+    // InstancedMesh(우측 금속 울타리 기둥·받침·창살·금색 링 등): 인스턴스별 세계 XZ로 경사 높이 적용
+    if (o.isInstancedMesh) {
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      o.geometry.boundingBox.getCenter(gc);
+      inv.copy(o.matrixWorld).invert();
+      let changed = false;
+      for (let k = 0; k < o.count; k++) {
+        o.getMatrixAt(k, instMat);
+        worldMat.multiplyMatrices(o.matrixWorld, instMat);
+        v.copy(gc).applyMatrix4(worldMat);
+        if (nearFlat(v.x, v.z, INST_FLAT_GUARD)) continue;
+        const hit = slopedAt(v.x, v.z);
+        if (!hit) continue;
+        const dy = hit.y - baseY;
+        if (Math.abs(dy) < 1e-6) continue;
+        worldMat.elements[13] += dy;
+        instMat.multiplyMatrices(inv, worldMat);
+        o.setMatrixAt(k, instMat);
+        changed = true;
+        instCount++;
+      }
+      if (changed) {
+        o.instanceMatrix.needsUpdate = true;
+        o.computeBoundingBox();
+        o.computeBoundingSphere();
+      }
+      return;
+    }
+
+    const src = o.geometry;
+    if (src.groups.length > 1 || Object.keys(src.morphAttributes || {}).length) return;
+    const posAttr = src.attributes.position;
+    let ox0 = Infinity, oz0 = Infinity, ox1 = -Infinity, oz1 = -Infinity;
+    for (let i = 0; i < posAttr.count; i++) {
+      v.fromBufferAttribute(posAttr, i).applyMatrix4(o.matrixWorld);
+      if (v.x < ox0) ox0 = v.x; if (v.x > ox1) ox1 = v.x;
+      if (v.z < oz0) oz0 = v.z; if (v.z > oz1) oz1 = v.z;
+    }
+    if (!overlapsSloped(ox0, oz0, ox1, oz1)) return;
+    const cx = (ox0 + ox1) / 2, cz = (oz0 + oz1) / 2;
+    if (nearFlat(cx, cz, MESH_FLAT_GUARD)) return;
+    if (!slopedAt(cx, cz)) return;
+
+    // 압축(quantize) 정점을 Float32로 풀고 삼각형을 세분화한 뒤 경사면에 밀착시킨다
+    const flt = toFloatGeometry(src);
+    const g = flt.index ? flt.toNonIndexed() : flt;
+    if (g !== flt) flt.dispose();
+    const names = Object.keys(g.attributes);
+    const attrs = names.map((n) => g.attributes[n]);
+    const pi = names.indexOf("position");
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    const out = attrs.map(() => []);
+    const vert = (i) => attrs.map((at) => { const r = []; for (let c = 0; c < at.itemSize; c++) r.push(at.array[i * at.itemSize + c]); return r; });
+    const mid = (A, B) => A.map((va, k) => va.map((x, c) => (x + B[k][c]) / 2));
+    const xzLen2 = (A, B) => { const p = A[pi], q = B[pi]; return (p[0] - q[0]) ** 2 + (p[2] - q[2]) ** 2; };
+    const atY = (x, z) => { const h = slopedAt(x, z); return h ? h.y : baseY; };
+    const regOf = (V) => { const h = slopedAt(V[pi][0], V[pi][2]); return h ? h.reg : -1; };
+    const chordErr = (A, B, C) => {
+      const pa = A[pi], pb = B[pi], pc = C[pi];
+      const ha = atY(pa[0], pa[2]), hb = atY(pb[0], pb[2]), hc = atY(pc[0], pc[2]);
+      return Math.max(
+        Math.abs(atY((pa[0] + pb[0]) / 2, (pa[2] + pb[2]) / 2) - (ha + hb) / 2),
+        Math.abs(atY((pb[0] + pc[0]) / 2, (pb[2] + pc[2]) / 2) - (hb + hc) / 2),
+        Math.abs(atY((pc[0] + pa[0]) / 2, (pc[2] + pa[2]) / 2) - (hc + ha) / 2),
+        Math.abs(atY((pa[0] + pb[0] + pc[0]) / 3, (pa[2] + pb[2] + pc[2]) / 3) - (ha + hb + hc) / 3)
+      );
+    };
+    const emit = (A, B, C, depth) => {
+      const ab = xzLen2(A, B), bc = xzLen2(B, C), ca = xzLen2(C, A);
+      const m = Math.max(ab, bc, ca);
+      const needSplit = depth < 16 && (
+        m > MAX_EDGE * MAX_EDGE ||
+        (m > MIN_EDGE * MIN_EDGE && (regOf(A) !== regOf(B) || regOf(A) !== regOf(C) || chordErr(A, B, C) >= CONFORM_TOLERANCE))
+      );
+      if (!needSplit) {
+        [A, B, C].forEach((V) => V.forEach((val, k) => out[k].push(...val)));
+        return;
+      }
+      if (m === ab) { const M = mid(A, B); emit(A, M, C, depth + 1); emit(M, B, C, depth + 1); }
+      else if (m === bc) { const M = mid(B, C); emit(A, B, M, depth + 1); emit(A, M, C, depth + 1); }
+      else { const M = mid(C, A); emit(A, B, M, depth + 1); emit(M, B, C, depth + 1); }
+    };
+    for (let i = 0; i < pos.count; i += 3) emit(vert(i), vert(i + 1), vert(i + 2), 0);
+
+    inv.copy(o.matrixWorld).invert();
+    const P = out[pi];
+    for (let i = 0; i < P.length; i += 3) {
+      const dy = atY(P[i], P[i + 2]) - baseY;
+      v.set(P[i], P[i + 1] + dy, P[i + 2]).applyMatrix4(inv);
+      P[i] = v.x; P[i + 1] = v.y; P[i + 2] = v.z;
+    }
+    const geo = new THREE.BufferGeometry();
+    names.forEach((n, k) => geo.setAttribute(n, new THREE.Float32BufferAttribute(out[k], attrs[k].itemSize)));
+    if (geo.attributes.normal) geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    geo.computeBoundingBox();
+    o.geometry = geo;
+    src.dispose();
+    g.dispose();
+    meshCount++;
+  });
+  if (meshCount || instCount) {
+    console.info(`[지형] 모델 경사 구역 밀착: 메시 ${meshCount}개, 인스턴스 ${instCount}개`);
+  }
+}
+
 function loadPlaceModelInto(entry) {
   entry.loading = true;
   gltfLoader.load(
@@ -3058,11 +3273,20 @@ function loadPlaceModelInto(entry) {
       const curDist = character ? Math.hypot(character.position.x - entry.px, character.position.z - entry.pz) : Infinity;
       if (curDist > modelUnloadRangeFor(entry.place.id)) return;
       const model = gltf.scene;
-      mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(회전·크기 넣기 전, 모델 기준 좌표로)
       const modelScale = WORLD_SCALE * (entry.place.scaleRatio ?? 1);
       model.scale.setScalar(modelScale);
       model.position.set(entry.px, 0, entry.pz);
       model.rotation.y = entry.place.rotationDeg != null ? THREE.MathUtils.degToRad(entry.place.rotationDeg) : entry.rotY;
+      model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model);
+      // 단차가 들어간 모델(terrain: "baked")은 모델의 y=0이 곧 장소 좌표 자리의 땅 높이 — 가장 낮은 점으로 맞추지 않는다
+      const floorY = entry.place.terrain === "baked" ? 0 : MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
+      model.position.y -= floorY;
+      if (entry.place.terrain !== "baked") model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
+      entry.group.add(model);
+      entry.group.updateMatrixWorld(true);
+      conformModelToSlopedShapes(model, entry.group.position.y + model.position.y);
+      mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(경사 밀착 후)
       model.traverse((o) => {
         if (o.isMesh) {
           o.castShadow = true;
@@ -3073,14 +3297,7 @@ function loadPlaceModelInto(entry) {
           }
         }
       });
-      model.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(model);
-      // 단차가 들어간 모델(terrain: "baked")은 모델의 y=0이 곧 장소 좌표 자리의 땅 높이 — 가장 낮은 점으로 맞추지 않는다
-      const floorY = entry.place.terrain === "baked" ? 0 : MODEL_FLOOR_OVERRIDE[entry.place.id] ?? box.min.y;
-      model.position.y -= floorY;
-      if (entry.place.terrain !== "baked") model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
       settleBuildingBase(entry, model);
-      entry.group.add(model);
       entry.loadedModel = model;
       registerBuildingGlass(entry, model); // 밤에 창문 불빛
       fitShopToModel(entry); // 입간판이 건물 안에 들어갔으면 옮기고, 문 닫은 시간엔 셔터
