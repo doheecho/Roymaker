@@ -64,7 +64,7 @@ export const PLACES = [
   { id: 24, name: "성동아이사랑복합문화센터", floors: 4, type: "기타", x: 153.5, z: 287.9 },
   { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 117.4, z: -98, model: "models/3D_place_taekwondo.glb", rotationDeg: 0, scaleRatio: 1.5 },
   { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 111.2, z: -152.8, diagonal: true, model: "models/place_홍일빌딩.glb", rotationDeg: 0, scaleRatio: 1.5 },
-  { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 638.2, z: -370.4, model: "models/place_롯데마트.glb", rotationDeg: 31.9, scaleRatio: 1.9 },
+  { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 638.2, z: -370.4, model: "models/place_롯데마트.glb", rotationDeg: 31.9, scaleRatio: 1.9, terrain: "baked" },
   { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 50, z: -227.6, diagonal: true, model: "models/3D_place_megacoffee.glb", rotationDeg: 0, scaleRatio: 1.7 },
   { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -91.4, z: -230.5, model: "models/place_adamleeds.glb", scaleRatio: 1.5 },
   { id: 30, name: "분식집", floors: 4, type: "식당", x: -31, z: -224.7, model: "models/place_bunsik.glb", scaleRatio: 1.1 },

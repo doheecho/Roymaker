@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261126w";
+import * as MAP_DATA from "./map_data.js?v=20261126x";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -3368,9 +3368,9 @@ function insideRect(x, z, cx, cz, cos, sin, halfW, halfD) {
 }
 // 캐릭터가 서 있는 자리의 지면 높이 — 단차가 있는 건물의 발판 위면 그 높이, 아니면 기본(0)
 // 다각형 발판(교차로 모서리 보도, 건물 바닥 외곽) — 겉 사각형(bbox)을 같이 둬서 멀리 있는 건 바로 건너뛴다
-function addPolyPlatform(poly, y) {
+function addPolyPlatform(poly, y, fn = null) {
   const xs = poly.map((q) => q[0]), zs = poly.map((q) => q[1]);
-  groundPlatforms.push({ poly, y, minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs) });
+  groundPlatforms.push({ poly, y, fn, minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs) });
 }
 function groundHeightAt(x, z) {
   // 실제 지형(GLB)이 있으면 그 자리 실측 높이가 기준(base)이고, 아래의 발판·단차 턱들은
@@ -3380,7 +3380,7 @@ function groundHeightAt(x, z) {
   for (const p of groundPlatforms) {
     if (p.poly) {
       if (x < p.minx || x > p.maxx || z < p.minz || z > p.maxz) continue;
-      if (pointInPolygon(x, z, p.poly)) return base + p.y;
+      if (pointInPolygon(x, z, p.poly)) return p.fn ? p.fn(x, z, base) : base + p.y;
     } else if (insideRect(x, z, p.cx, p.cz, p.cos, p.sin, p.halfW, p.halfD)) return base + p.y;
   }
   // 다른 도로가 지나가서 내려앉았거나 경사진 보도
@@ -3766,6 +3766,293 @@ function conformModelToSlopedShapes(model, baseY) {
   }
 }
 
+// ── 롯데마트 행당점(place_롯데마트.glb, id=27) 지형 단차 밀착 ──
+// 실제 대지는 서북쪽 행당역 앞 큰도로(행당로, 약 41~49m)가 낮고, 동남쪽 고객 주차장·
+// 빨간 LOTTE Mart 매장입구·주차장 출입구 쪽(약 58~64m)이 4층가량 높다.
+// 평지 기준으로 만들어진 place_롯데마트.glb를 불러올 때:
+//  1) 본관·서북쪽 전면 상가(롯데리아·달다곰이·파리바게뜨·WELCOME!)는 행당로 높이(47.2m)에 앉히고
+//     아래로 화강석 기초 받침벽을 내려 비탈(특히 북동쪽 롯데리아 아래)에서 뜨지 않게 한다.
+//  2) 동남쪽 매장입구 빨간 캐노피·후면 상가(커피에반하다·한솔약국 등)·상단 간판(더블와이짐·
+//     강태욱피부과·행당부동산)·동측 커브 지하주차장 출입구는 동남쪽 주차장 높이(61.4m)로 올린다.
+//  3) 서북·서측·동남쪽 보도와 동남쪽 야외 주차장·주차선·주차 차량·나무·외곽 담장/롯데마트
+//     지주간판은 실제 지형(GameMap.glb)에 부드럽게 밀착시켜 양쪽 도로가 모두 땅에 닿게 만든다.
+function adaptLotteMartToTerrain(entry, model) {
+  if (!glbTerrain) return;
+  const W = WORLD_SCALE;
+  const sr = entry.place.scaleRatio ?? 1;
+  const rad = THREE.MathUtils.degToRad(entry.place.rotationDeg ?? 0);
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  const NW_BASE_RAW = 47.2; // 서북쪽 행당로 전면 기준 고도(raw m)
+  const SE_BASE_RAW = 61.4; // 동남쪽 주차장·매장입구 기준 고도(raw m — 서북보다 +14.2m ≈ 4층 높음)
+  const SE_LIFT = (SE_BASE_RAW - NW_BASE_RAW) / sr; // 모델 로컬 Y 상승량(≈ +7.47)
+
+  entry.group.position.y = NW_BASE_RAW * W;
+  model.position.y = 0;
+  entry.group.updateMatrixWorld(true);
+
+  const toWorldXZ = (mx, mz) => [
+    (entry.place.x + (mx * cos + mz * sin) * sr) * W,
+    (entry.place.z + (-mx * sin + mz * cos) * sr) * W,
+  ];
+  const terrainRawAt = (mx, mz) => {
+    const [wx, wz] = toWorldXZ(mx, mz);
+    return getTerrainY(wx, wz) / W;
+  };
+  const terrainLift = (mx, mz, extraRaw = 0.12) => (terrainRawAt(mx, mz) + extraRaw - NW_BASE_RAW) / sr;
+  const seLift = (mx, mz, extraRaw = 0.12) => (Math.max(SE_BASE_RAW, terrainRawAt(mx, mz) + extraRaw) - NW_BASE_RAW) / sr;
+  const surfaceLift = (mx, mz, extraRaw = 0.12) => (mz >= 11.5 && mx >= -26.2 ? seLift(mx, mz, extraRaw) : terrainLift(mx, mz, extraRaw));
+
+  const root = model.children[0] || model;
+  const invModel = model.matrixWorld.clone().invert();
+  const tmpV = new THREE.Vector3();
+
+  function meshModelBox(obj) {
+    const box = new THREE.Box3();
+    obj.updateMatrixWorld(true);
+    obj.traverse((m) => {
+      if (!m.isMesh || !m.geometry?.attributes?.position) return;
+      const mat = invModel.clone().multiply(m.matrixWorld);
+      const pos = m.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        tmpV.fromBufferAttribute(pos, i).applyMatrix4(mat);
+        box.expandByPoint(tmpV);
+      }
+    });
+    return box;
+  }
+
+  function shiftObjectModelY(obj, dyModel) {
+    obj.position.y += dyModel;
+  }
+
+  function conformMeshVertices(mesh, liftFn, byCluster = false) {
+    if (!mesh.isMesh || !mesh.geometry?.attributes?.position) return;
+    mesh.updateMatrixWorld(true);
+    const matToModel = invModel.clone().multiply(mesh.matrixWorld);
+    const matFromModel = matToModel.clone().invert();
+    const g = toFloatGeometry(mesh.geometry);
+    const pos = g.attributes.position;
+    const n = pos.count;
+    const pts = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      tmpV.fromBufferAttribute(pos, i).applyMatrix4(matToModel);
+      pts[i * 3] = tmpV.x;
+      pts[i * 3 + 1] = tmpV.y;
+      pts[i * 3 + 2] = tmpV.z;
+    }
+    if (!byCluster) {
+      for (let i = 0; i < n; i++) {
+        pts[i * 3 + 1] += liftFn(pts[i * 3], pts[i * 3 + 2]);
+      }
+    } else {
+      // 연결된 삼각형 섬(개별 나무·개별 차량/바퀴) 단위로 같은 높이를 적용해 기울어지지 않게 유지
+      const parent = new Int32Array(n);
+      for (let i = 0; i < n; i++) parent[i] = i;
+      const find = (a) => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+      const unite = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[a] = b; };
+      const idx = g.index ? g.index.array : null;
+      const triCount = idx ? idx.length / 3 : Math.floor(n / 3);
+      const posMap = new Map();
+      for (let i = 0; i < n; i++) {
+        const key = `${Math.round(pts[i * 3] * 10)},${Math.round(pts[i * 3 + 1] * 10)},${Math.round(pts[i * 3 + 2] * 10)}`;
+        const prev = posMap.get(key);
+        if (prev !== undefined) unite(i, prev);
+        else posMap.set(key, i);
+      }
+      for (let t = 0; t < triCount; t++) {
+        const a = idx ? idx[t * 3] : t * 3;
+        const b = idx ? idx[t * 3 + 1] : t * 3 + 1;
+        const c = idx ? idx[t * 3 + 2] : t * 3 + 2;
+        unite(a, b); unite(b, c);
+      }
+      const sumX = new Map(), sumZ = new Map(), cnt = new Map();
+      for (let i = 0; i < n; i++) {
+        const r = find(i);
+        sumX.set(r, (sumX.get(r) || 0) + pts[i * 3]);
+        sumZ.set(r, (sumZ.get(r) || 0) + pts[i * 3 + 2]);
+        cnt.set(r, (cnt.get(r) || 0) + 1);
+      }
+      const liftMap = new Map();
+      cnt.forEach((c, r) => {
+        liftMap.set(r, liftFn(sumX.get(r) / c, sumZ.get(r) / c));
+      });
+      for (let i = 0; i < n; i++) {
+        pts[i * 3 + 1] += liftMap.get(find(i)) || 0;
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      tmpV.set(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2]).applyMatrix4(matFromModel);
+      pos.setXYZ(i, tmpV.x, tmpV.y, tmpV.z);
+    }
+    pos.needsUpdate = true;
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
+    mesh.geometry = g;
+  }
+
+  function replaceConformedSlab(mesh, segX, segZ, liftFn, skirtMat = null) {
+    const b = meshModelBox(mesh);
+    if (b.isEmpty()) return;
+    const w = b.max.x - b.min.x;
+    const d = b.max.z - b.min.z;
+    const cx = (b.min.x + b.max.x) / 2;
+    const cz = (b.min.z + b.max.z) / 2;
+    const topY = b.max.y;
+    const topMat = Array.isArray(mesh.material) ? (mesh.material[2] || mesh.material[0]) : mesh.material;
+
+    const plane = new THREE.PlaneGeometry(w, d, segX, segZ);
+    plane.rotateX(-Math.PI / 2);
+    const pos = plane.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const mx = cx + pos.getX(i);
+      const mz = cz + pos.getZ(i);
+      pos.setXYZ(i, mx, topY + liftFn(mx, mz), mz);
+    }
+    plane.computeVertexNormals();
+    const slabMesh = new THREE.Mesh(plane, topMat);
+    slabMesh.receiveShadow = true;
+    root.add(slabMesh);
+
+    if (skirtMat) {
+      // 주차장 외곽 4변에서 지형 아래까지 내려오는 옹벽 스커트 — 내리막(동·북측)에서 뜨지 않게
+      const ring = [];
+      for (let i = 0; i <= segX; i++) ring.push([b.min.x + (w * i) / segX, b.min.z]);
+      for (let j = 1; j <= segZ; j++) ring.push([b.max.x, b.min.z + (d * j) / segZ]);
+      for (let i = segX - 1; i >= 0; i--) ring.push([b.min.x + (w * i) / segX, b.max.z]);
+      for (let j = segZ - 1; j >= 0; j--) ring.push([b.min.x, b.min.z + (d * j) / segZ]);
+      const verts = [];
+      for (let k = 0; k < ring.length - 1; k++) {
+        const [x0, z0] = ring[k], [x1, z1] = ring[k + 1];
+        const y0Top = topY + liftFn(x0, z0), y1Top = topY + liftFn(x1, z1);
+        const y0Bot = Math.min(y0Top - 0.4, terrainLift(x0, z0, -2.5));
+        const y1Bot = Math.min(y1Top - 0.4, terrainLift(x1, z1, -2.5));
+        verts.push(x0, y0Top, z0, x0, y0Bot, z0, x1, y1Top, z1);
+        verts.push(x1, y1Top, z1, x0, y0Bot, z0, x1, y1Bot, z1);
+      }
+      const sg = new THREE.BufferGeometry();
+      sg.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+      sg.computeVertexNormals();
+      const skirtMesh = new THREE.Mesh(sg, skirtMat);
+      skirtMesh.receiveShadow = true;
+      skirtMesh.castShadow = true;
+      root.add(skirtMesh);
+    }
+    mesh.parent?.remove(mesh);
+  }
+
+  // 화강석 기초 받침벽 재질(본관 톤과 맞춤)
+  const graniteMat = new THREE.MeshStandardMaterial({ color: 0xc2c0ba, roughness: 0.88, side: THREE.DoubleSide });
+  const rampWallMat = new THREE.MeshStandardMaterial({ color: 0x9b9994, roughness: 0.9, side: THREE.DoubleSide });
+
+  // 1) 본관·서남 유리탑·롯데리아 전면 화단 아래로 화강석 기초 받침벽 연장 (y = -6.5 ~ 0.05)
+  const addFoundation = (x0, x1, z0, z1, y0 = -6.5, y1 = 0.05, mat = graniteMat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat);
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    root.add(m);
+  };
+  addFoundation(-26.0, 26.8, -12.0, 12.0, -6.8, 0.06, graniteMat);
+  addFoundation(-28.0, -26.0, -12.0, -4.2, -6.8, 0.06, graniteMat);
+  addFoundation(16.8, 25.5, -13.7, -12.0, -5.5, 0.42, graniteMat); // 롯데리아 앞 석재 화단 받침(사진2)
+
+  // 2) 그룹별 지형 높이 반영
+  const grpMain = root.getObjectByName("MainBuilding_5F_Granite");
+  if (grpMain) {
+    grpMain.children.forEach((child) => {
+      if (child.name === "NW_Front_NonMissionStructure" || child.name === "Main_5F_NotchedGraniteMass") return;
+      const b = meshModelBox(child);
+      // 후면(z > 11.9) 1~2층 상가·간판·어닝·의자만 동남쪽 주차장 높이(+SE_LIFT)로 올린다
+      if (!b.isEmpty() && b.min.z > 11.9 && b.max.y < 15.0) {
+        shiftObjectModelY(child, SE_LIFT);
+      }
+    });
+  }
+
+  const grpSE = root.getObjectByName("SE_LotteMart_Entrance_And_OuterWallMonument");
+  if (grpSE) {
+    grpSE.children.forEach((child) => {
+      const b = meshModelBox(child);
+      if (b.isEmpty()) return;
+      // 본관 전체 높이로 솟아 있는 유리 엘리베이터 탑(max.y > 20)은 본관 기준 유지
+      if (b.max.y > 20.0) return;
+      const cx = (b.min.x + b.max.x) / 2;
+      const cz = (b.min.z + b.max.z) / 2;
+      if (cz >= 22.0) {
+        // 외곽 석재 담장·롯데마트 고객주차장 지주간판·볼라드 등은 경사진 주차장 외곽선에 밀착
+        shiftObjectModelY(child, seLift(cx, cz, 0.12));
+      } else {
+        // 빨간 LOTTE Mart 캐노피·매장 로비·향나무 화단·스쿠터·상단 간판(더블와이짐·강태욱피부과·행당부동산)
+        shiftObjectModelY(child, SE_LIFT);
+      }
+    });
+  }
+
+  const grpSW = root.getObjectByName("SW_GlassTower_And_ChurchSpire");
+  if (grpSW) {
+    grpSW.children.forEach((child) => {
+      const b = meshModelBox(child);
+      if (b.isEmpty()) return;
+      // 서측 뒤쪽 옹벽·약국 간판(z > 5.0)은 서쪽 비탈 지형에 맞춰 올린다
+      if (b.min.z > 5.0 && b.max.y < 10.0) {
+        const cx = (b.min.x + b.max.x) / 2;
+        const cz = (b.min.z + b.max.z) / 2;
+        shiftObjectModelY(child, terrainLift(cx, cz, 0.1));
+      }
+    });
+  }
+
+  const grpPark = root.getObjectByName("RearParking_And_EastCurvedRamp");
+  if (grpPark) {
+    [...grpPark.children].forEach((child) => {
+      if (child.name === "Rear_Open_AsphaltParkingLot") {
+        replaceConformedSlab(child, 18, 12, (mx, mz) => seLift(mx, mz, 0.12), rampWallMat);
+        return;
+      }
+      if (child.name === "Merged_Park_Lines" || child.name === "Merged_Park_YellowDash") {
+        conformMeshVertices(child, (mx, mz) => seLift(mx, mz, 0.18), false);
+        return;
+      }
+      // 동측 커브 지하주차장 출입구 포털·램프·옹벽·차단봉은 동남쪽 주차장 높이(+SE_LIFT)로
+      shiftObjectModelY(child, SE_LIFT);
+    });
+    // 동측 커브 램프 아래가 동쪽 경사면 위에서 뜨지 않게 받침 옹벽 추가(램프 바닥 슬래브 -1.38 아래로)
+    addFoundation(19.4, 35.4, 3.2, 17.5, -2.5, SE_LIFT - 1.45, rampWallMat);
+  }
+
+  const grpEnv = root.getObjectByName("Sidewalk_Trees_ParkedCars");
+  if (grpEnv) {
+    [...grpEnv.children].forEach((child) => {
+      if (child.name === "NW_Front_Sidewalk") {
+        replaceConformedSlab(child, 18, 3, (mx, mz) => terrainLift(mx, mz, 0.12), null);
+      } else if (child.name === "SW_West_Sidewalk") {
+        replaceConformedSlab(child, 3, 18, (mx, mz) => terrainLift(mx, mz, 0.14), null);
+      } else if (child.name === "SE_Outer_RoadsideWalk") {
+        replaceConformedSlab(child, 18, 3, (mx, mz) => seLift(mx, mz, 0.12), null);
+      } else if (child.name === "Merged_Env_Curbs" || child.name === "Merged_Env_Tactile" || child.name === "Merged_OuterWall_Shrubs") {
+        conformMeshVertices(child, (mx, mz) => surfaceLift(mx, mz, 0.15), false);
+      } else {
+        // 나무(Trunks/Leaves) 및 주차된 차량·타이어·유리 — 각 개체(섬) 단위로 지면/주차장에 밀착
+        conformMeshVertices(child, (mx, mz) => surfaceLift(mx, mz, 0.14), true);
+      }
+    });
+  }
+
+  // 3) 동남쪽 고지대 주차장 데크를 보행 가능한 발판으로 등록(반대편 도로에서 주차장으로 걸어 들어갈 수 있게)
+  if (!entry.lottePlatformAdded) {
+    entry.lottePlatformAdded = true;
+    const deckPoly = [
+      toWorldXZ(-26.75, 12.0),
+      toWorldXZ(28.75, 12.0),
+      toWorldXZ(28.75, 31.6),
+      toWorldXZ(-26.75, 31.6),
+    ];
+    addPolyPlatform(deckPoly, 0, (x, z, base) => Math.max(SE_BASE_RAW * W, base));
+  }
+
+  entry.group.updateMatrixWorld(true);
+}
+
 function loadPlaceModelInto(entry) {
   entry.loading = true;
   gltfLoader.load(
@@ -3788,7 +4075,11 @@ function loadPlaceModelInto(entry) {
       if (entry.place.terrain !== "baked") model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
       entry.group.add(model);
       entry.group.updateMatrixWorld(true);
-      conformModelToSlopedShapes(model, entry.group.position.y + model.position.y);
+      if (entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb")) {
+        adaptLotteMartToTerrain(entry, model);
+      } else {
+        conformModelToSlopedShapes(model, entry.group.position.y + model.position.y);
+      }
       mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(경사 밀착 후)
       model.traverse((o) => {
         if (o.isMesh) {
