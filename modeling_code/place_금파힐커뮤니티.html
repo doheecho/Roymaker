@@ -60,6 +60,7 @@
     <button onclick="setView('shop_105')">105동 상가 (이마트24·신협)</button>
     <button onclick="setView('ramp')">보행자 산책길 경사로</button>
     <button onclick="setView('portal_ne')">동북 주차장 입구 (출입구3)</button>
+    <button onclick="setView('portal_e')">동측 주차장 입구 (출입구2)</button>
     <button onclick="setView('portal_s')">남측 주차장 입구 (출입구1)</button>
     <button onclick="setView('nw_wall')">서북 외벽·옥상공원</button>
     <button onclick="setView('south_wall')">남측·동측 외벽</button>
@@ -1134,7 +1135,7 @@
 
     // Community_south.glb 실측 참조 지하주차장 진입 포털 빌더
     // (로컬 +Z 방향으로 도로 쪽을 바라보며, -Z 방향으로 데크 안쪽 터널이 들어간다)
-    function createParkingEntrancePortal(rawX, rawZ, facingDeg, name, { apronLen = 14.0, gateLabel = '출입구 1' } = {}) {
+    function createParkingEntrancePortal(rawX, rawZ, facingDeg, name, { apronLen = 14.0, gateLabel = '출입구 1', tunnelD = 7.2, openH = 3.6, totalH = UPPER_DECK_Y } = {}) {
       const [lx, lz] = toLocal(rawX, rawZ);
       const grp = new THREE.Group();
       grp.name = name;
@@ -1142,11 +1143,8 @@
       grp.rotation.y = THREE.MathUtils.degToRad(facingDeg);
 
       const openW = 7.4;    // 터널 개구부 폭 (Community_south.glb 실측 7.4m)
-      const openH = 3.6;    // 차량 통과 높이 (3.6m)
-      const totalH = UPPER_DECK_Y; // 6.0m (상단 커뮤니티 데크 높이에 딱 맞춤)
       const pierW = 2.1;    // 좌우 흰색/밝은 화강석 기둥 폭
       const totalW = openW + pierW * 2; // 11.6m
-      const tunnelD = 7.2;  // 터널 안쪽 깊이
 
       // 1) 진입부 아스팔트 도로판 + 중앙 노란선 (Community_south.glb Mesh_302/303)
       const roadSlab = new THREE.Mesh(new THREE.BoxGeometry(openW + 1.6, 0.1, apronLen + tunnelD), portalAsphaltMat);
@@ -1229,9 +1227,10 @@
       tCeil.position.set(0, openH - 0.12, -tunnelD * 0.5 + 0.3);
       grp.add(tCeil);
 
+      const ledLen = Math.min(3.6, Math.max(1.8, tunnelD - 1.0));
       [-1.7, 1.7].forEach((lxLed) => {
-        const led = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 3.6), portalLedMat);
-        led.position.set(lxLed, openH - 0.26, -2.6);
+        const led = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, ledLen), portalLedMat);
+        led.position.set(lxLed, openH - 0.26, -Math.min(2.6, tunnelD * 0.45));
         grp.add(led);
       });
 
@@ -1429,9 +1428,16 @@
     addEdgeCopingAndRailing(lowerGroup, LOWER_OUTER.slice(0, 11), LOWER_DECK_Y, { closed: false, withFence: true });
     addEdgeCopingAndRailing(lowerGroup, LOWER_OUTER.slice(14), LOWER_DECK_Y, { closed: false, withFence: true });
 
-    // 동측 113동~114동 대로 지하주차장 진입 노치: 상단 평판 뚜껑 대신 땅 아래(-5.15m)로 내려간 주차장 입구(출입구 2) 배치
-    const eastPortal = createParkingEntrancePortal(20.6, -51.7, 85, 'Parking_Portal_East', { apronLen: 20.0, gateLabel: '출입구 2' });
-    eastPortal.position.y = LOWER_DECK_Y - 5.2;
+    // 동측 113동~114동 대로 지하주차장 진입 노치: 안쪽 옹벽보다 앞쪽(raw 25.0, -51.7)에 깊이 -7.0m·터널깊이 4.2m로 배치해 터널 개구부가 벽에 가리지 않고 또렷하게 보이게 함
+    const eastPortal = createParkingEntrancePortal(25.0, -51.7, 85, 'Parking_Portal_East', {
+      apronLen: 16.0, gateLabel: '출입구 2', tunnelD: 4.2, openH: 4.0, totalH: 7.0
+    });
+    eastPortal.position.y = LOWER_DECK_Y - 7.0;
+    const eastRoofBridge = new THREE.Mesh(new THREE.BoxGeometry(16.0, 0.4, 7.6), paverMat);
+    eastRoofBridge.position.set(0, 6.8, -3.8);
+    eastRoofBridge.castShadow = true;
+    eastRoofBridge.receiveShadow = true;
+    eastPortal.add(eastRoofBridge);
     lowerGroup.add(eastPortal);
 
     // ---------------------------------------------------------
@@ -2307,6 +2313,9 @@
       } else if (mode === 'portal_ne') {
         camera.position.set(118, 25, -125);
         controls.target.set(84, 12, -88);
+      } else if (mode === 'portal_e') {
+        camera.position.set(228, 12, -46);
+        controls.target.set(185, 2.5, -52);
       } else if (mode === 'portal_s') {
         camera.position.set(-55, 16, 128);
         controls.target.set(-55, 3, 72);
