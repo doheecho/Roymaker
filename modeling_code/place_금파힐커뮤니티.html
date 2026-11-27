@@ -1429,8 +1429,10 @@
     addEdgeCopingAndRailing(lowerGroup, LOWER_OUTER.slice(0, 11), LOWER_DECK_Y, { closed: false, withFence: true });
     addEdgeCopingAndRailing(lowerGroup, LOWER_OUTER.slice(14), LOWER_DECK_Y, { closed: false, withFence: true });
 
-    const eastNotchPts = [toLocal(38.5, -40.6), toLocal(20.9, -45.2), toLocal(17.8, -49.2), toLocal(20.9, -58.8), toLocal(39.9, -59.8)];
-    lowerGroup.add(createFlatDeckMesh(eastNotchPts, LOWER_DECK_Y + 0.03, roadMat, 'East_Entrance_Notch_Apron'));
+    // 동측 113동~114동 대로 지하주차장 진입 노치: 상단 평판 뚜껑 대신 땅 아래(-5.15m)로 내려간 주차장 입구(출입구 2) 배치
+    const eastPortal = createParkingEntrancePortal(20.6, -51.7, 85, 'Parking_Portal_East', { apronLen: 20.0, gateLabel: '출입구 2' });
+    eastPortal.position.y = LOWER_DECK_Y - 5.2;
+    lowerGroup.add(eastPortal);
 
     // ---------------------------------------------------------
     // [PART B] 서북 통합 커뮤니티 데크 (Y = +6.0m 2층 단차)
