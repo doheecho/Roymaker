@@ -51,7 +51,7 @@ export const PLACES = [
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -253.5, z: 114.3, model: "models/place_금파힐110.glb", rotationDeg: -3.6, scaleRatio: 1.3 },
   { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -164.6, z: 120.5, model: "models/place_금파힐111.glb", rotationDeg: -1.2, scaleRatio: 1.3 },
   { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -67.2, z: 55.3, model: "models/place_금파힐112.glb", rotationDeg: -4.3, scaleRatio: 1.3 },
-  { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 11.2, z: -96, model: "models/place_금파힐114.glb", rotationDeg: 0, scaleRatio: 1.3 },
+  { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 7.5, z: -101.6, model: "models/place_금파힐114.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -22.9, z: -142.2, model: "models/place_금파힐115.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -39.4, z: 109.5, model: "models/place_금파힐116.glb", rotationDeg: -4.2, scaleRatio: 1.3 },
   { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 35.7, z: -155.8, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: -4, scaleRatio: 1.5 },
