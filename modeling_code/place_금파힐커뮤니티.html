@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>금호파크힐스 통합 커뮤니티·지하주차장 데크 3D 모델링 (서북 2층 커뮤니티 · 남동 정문높이 지하주차장 외벽)</title>
+  <title>금호파크힐스 통합 커뮤니티·지하주차장 데크 3D 모델링 v2 (보행자 산책길 경사로 · 지하주차장 입구 2곳 · 스카이뷰 공원/보행로)</title>
   <style>
     body { margin: 0; overflow: hidden; background: #1f242b; }
     #info {
@@ -10,7 +10,7 @@
       font-family: 'Malgun Gothic', sans-serif; font-size: 12.5px;
       background: rgba(18, 21, 26, 0.88); padding: 11px 15px;
       border-radius: 9px; border: 1px solid rgba(255,255,255,0.18);
-      pointer-events: none; line-height: 1.55; max-width: 660px;
+      pointer-events: none; line-height: 1.55; max-width: 680px;
     }
     #info code {
       background: rgba(255,255,255,0.12); padding: 1px 5px; border-radius: 4px;
@@ -47,22 +47,23 @@
 </head>
 <body>
   <div id="info">
-    <strong>금호파크힐스 통합 커뮤니티 센터 &amp; 지하주차장 데크 (img/금파힐 커뮤니티 경계.png 실측)</strong><br/>
-    · <b>하단 지하주차장 데크 (남~동 외곽 노란선)</b>: <code>Y = 0.0m</code> (단지 정문 높이 유지 · 하부 B1~B3 검정 화강석 외벽 <code>-14.0m</code>)<br/>
-    · <b>서북 통합 커뮤니티 데크 (북·남커뮤 노란선)</b>: <code>Y = +6.0m</code> (단지 내 2층 단차 · 남동 정면 2층 유리 커뮤니티 파사드)<br/>
-    · <b>map_data.js 배치 좌표</b>: <code>x: -160.0, z: 0.0, rotationDeg: 0, scaleRatio: 1</code> (실측 1:1 raw m · 동 가이드/노란선은 GLB 추출 시 자동 제외)<br/>
-    마우스 좌클릭 드래그: 회전 | 우클릭 드래그: 이동 | 휠: 확대·축소 (위: 북 -Z / 아래: 남 +Z / 우: 동 +X / 좌: 서 -X)
+    <strong>금호파크힐스 통합 커뮤니티 센터 &amp; 지하주차장 데크 v2</strong><br/>
+    · <b>하단 지하주차장 데크 (남~동 외곽)</b>: <code>Y = 0.0m</code> (정문 높이 유지 · 검정 화강석 B1~B3 외벽 <code>-14.0m</code>)<br/>
+    · <b>서북 통합 커뮤니티 데크</b>: <code>Y = +6.0m</code> (2층 단차 · 남동 2층 유리 커뮤니티 파사드 · 지하주차장 입구 2곳)<br/>
+    · <b>단지내 산책용 보행자길</b>: 동북쪽(<code>Y = 0m</code>) → 중앙 놀이터 부근 완만 경사(<code>Y = +6m</code>) → 90° 꺾어 서북단 연결<br/>
+    · <b>map_data.js 배치 좌표</b>: <code>x: -160.0, z: 0.0, rotationDeg: 0, scaleRatio: 1</code> (실측 1:1 raw m · 노란선은 GLB 추출 시 제외)
   </div>
 
   <div id="controls-ui">
     <button class="highlight-btn" onclick="setView('top')">스카이뷰 (Top)</button>
-    <button onclick="setView('se_comm')">남동 커뮤니티 정면 (2층 단차)</button>
-    <button onclick="setView('plaza')">단지 중앙 광장 (눈높이)</button>
+    <button onclick="setView('ramp')">보행자 산책길 경사로</button>
+    <button onclick="setView('portal_ne')">동북 주차장 입구</button>
+    <button onclick="setView('portal_s')">남측 주차장 입구</button>
+    <button onclick="setView('se_comm')">남동 커뮤니티 정면</button>
     <button onclick="setView('nw_wall')">서북 외벽·옥상공원</button>
-    <button onclick="setView('south_wall')">남측 외벽 (정문~111동)</button>
-    <button onclick="setView('east_wall')">동측 외벽 (112~114동)</button>
-    <button id="btnDongGuide" class="toggle-btn" onclick="toggleDongGuide()">🏢 동 위치 가이드 ON</button>
-    <button id="btnYellowLine" class="toggle-btn" onclick="toggleYellowLine()">📐 노란 경계선 ON</button>
+    <button onclick="setView('south_wall')">남측 외벽</button>
+    <button onclick="setView('east_wall')">동측 외벽</button>
+    <button id="btnYellowLine" class="toggle-btn off" onclick="toggleYellowLine()">📐 노란 경계선 OFF</button>
     <button class="export-btn" onclick="exportGLB()">3D 파일 추출 (.glb)</button>
   </div>
 
@@ -74,13 +75,12 @@
     // =========================================================
     // 1. 실측 좌표 기준 & 높이 파라미터 (1 unit = 1 raw m)
     // =========================================================
-    // map_data.js 배치 기준 원점: raw (-160.0, 0.0) -> local (0, 0)
     const ORIGIN_RAW_X = -160.0;
     const ORIGIN_RAW_Z = 0.0;
 
-    const LOWER_DECK_Y = 0.0;      // 남~동 지하주차장 데크 상면 = 단지 정문 높이 (기준 0m)
+    const LOWER_DECK_Y = 0.0;      // 남~동 지하주차장 데크 상면 = 단지 정문 높이 (1층 0m)
     const UPPER_DECK_Y = 6.0;      // 서북 커뮤니티 통합 데크 상면 = 단지 내 2층 높이 (+6.0m)
-    const BASE_BOTTOM_Y = -14.0;   // 외곽 옹벽/지하주차장 외벽 하단 깊이 (GameMap.glb 최저 골짜기 -11.1m 아래까지 매립)
+    const BASE_BOTTOM_Y = -14.0;   // 외곽 옹벽/지하주차장 외벽 하단 깊이 (-14.0m)
     const COPING_H = 0.24;
     const FENCE_H = 1.05;
 
@@ -91,10 +91,10 @@
     // =========================================================
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x9fb8d1);
-    scene.fog = new THREE.Fog(0x9fb8d1, 450, 1100);
+    scene.fog = new THREE.Fog(0x9fb8d1, 460, 1150);
 
     const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.5, 2500);
-    camera.position.set(140, 220, 290);
+    camera.position.set(135, 225, 285);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -109,10 +109,10 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
-    controls.maxDistance = 900;
+    controls.maxDistance = 950;
     controls.target.set(0, 2, 0);
 
-    const hemiLight = new THREE.HemisphereLight(0xeef6ff, 0x6b6f75, 0.85);
+    const hemiLight = new THREE.HemisphereLight(0xeef6ff, 0x6b6f75, 0.86);
     scene.add(hemiLight);
 
     const sunLight = new THREE.DirectionalLight(0xfff7e8, 1.35);
@@ -128,30 +128,24 @@
     sunLight.shadow.bias = -0.0005;
     scene.add(sunLight);
 
-    const fillLight = new THREE.DirectionalLight(0xcbdcff, 0.4);
+    const fillLight = new THREE.DirectionalLight(0xcbdcff, 0.42);
     fillLight.position.set(-180, 120, -160);
     scene.add(fillLight);
 
     // =========================================================
-    // 3. 프로시저럴 텍스처 & 재질 (place_금파힐113.html B1/B2 외벽 동일 스타일)
+    // 3. 프로시저럴 텍스처 & 재질 (place_금파힐113.html B1/B2 · Community_south.glb 동일 스타일)
     // =========================================================
-    // 3-1) 금호파크힐스 아파트 지하 1~2층 / 1~3층 동일 검정 화강석 외벽 텍스처
     function createRetainingStoneTexture(repeatU = 1, repeatV = 1) {
-      const cw = 256;
-      const ch = 384;
+      const cw = 256, ch = 384;
       const canvas = document.createElement('canvas');
-      canvas.width = cw;
-      canvas.height = ch;
+      canvas.width = cw; canvas.height = ch;
       const ctx = canvas.getContext('2d');
 
       ctx.fillStyle = '#2B2F35';
       ctx.fillRect(0, 0, cw, ch);
 
-      const floors = 2;
-      const subRows = 7;
-      const floorPx = ch / floors;
-      const subRowH = floorPx / subRows;
-      const colW = 64;
+      const floors = 2, subRows = 7;
+      const floorPx = ch / floors, subRowH = floorPx / subRows, colW = 64;
 
       for (let f = 0; f < floors; f++) {
         const fy = f * floorPx;
@@ -163,7 +157,6 @@
             ctx.fillRect(x + 1, ry + 1, colW - 2, subRowH - 2);
           }
         }
-        // 층간 밝은 석재 띠 몰딩 (금파힐 1~3층·지하 동일 디자인)
         ctx.fillStyle = '#9EA5AE';
         ctx.fillRect(0, fy, cw, 4);
         for (let r = 1; r < subRows; r++) {
@@ -175,31 +168,28 @@
 
       const tex = new THREE.CanvasTexture(canvas);
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.RepeatWrapping;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
       tex.repeat.set(repeatU, repeatV);
       return tex;
     }
 
-    // 3-2) 단지 보행광장 밝은 회색 화강석 블록 포장 텍스처 (스카이뷰 Community_north/south 톤 일치)
-    function createPaverTexture(tileSize = 6.0) {
+    function createPaverTexture(tileSize = 6.0, tint = [180, 182, 186]) {
       const s = 256;
       const c = document.createElement('canvas');
       c.width = s; c.height = s;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#b4b8be';
+      ctx.fillStyle = `rgb(${tint[0]},${tint[1]},${tint[2]})`;
       ctx.fillRect(0, 0, s, s);
       const n = 8, cell = s / n;
       for (let r = 0; r < n; r++) {
         const off = (r % 2) * (cell / 2);
         for (let col = -1; col <= n; col++) {
           const d = ((r * 19 + (col + 3) * 31) % 9) - 4;
-          const v = 180 + d * 3;
-          ctx.fillStyle = `rgb(${v},${v + 2},${v + 5})`;
+          ctx.fillStyle = `rgb(${tint[0] + d * 3},${tint[1] + d * 3},${tint[2] + d * 3})`;
           ctx.fillRect(col * cell + off + 1, r * cell + 1, cell - 2, cell - 2);
         }
       }
-      ctx.strokeStyle = 'rgba(95, 100, 108, 0.25)';
+      ctx.strokeStyle = 'rgba(90, 95, 102, 0.24)';
       ctx.lineWidth = 1;
       for (let i = 0; i <= n; i++) {
         ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(s, i * cell); ctx.stroke();
@@ -211,27 +201,54 @@
       return tex;
     }
 
-    // 3-3) 단지 내 순환도로 아스팔트·패턴 블록 도로 텍스처
+    // 산책용 메인 보행자길(밝은 화강석 보도블록 + 양쪽 장식 띠)
+    function createPromenadeTexture() {
+      const s = 256;
+      const c = document.createElement('canvas');
+      c.width = s; c.height = s;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#d8d4ca';
+      ctx.fillRect(0, 0, s, s);
+      // 양쪽 어두운 화강석 경계 띠
+      ctx.fillStyle = '#8d9299';
+      ctx.fillRect(0, 0, 22, s);
+      ctx.fillRect(s - 22, 0, 22, s);
+      // 중앙 밝은 대형 판석 줄눈
+      const rows = 8, cols = 6;
+      const rh = s / rows, cw = (s - 44) / cols;
+      for (let r = 0; r < rows; r++) {
+        const off = (r % 2) * (cw * 0.5);
+        for (let k = -1; k <= cols; k++) {
+          const d = ((r * 13 + (k + 2) * 19) % 7) - 3;
+          const v = 216 + d * 3;
+          ctx.fillStyle = `rgb(${v},${v - 3},${v - 8})`;
+          const x = Math.max(22, 22 + k * cw + off);
+          const x2 = Math.min(s - 22, 22 + (k + 1) * cw + off);
+          if (x2 > x + 2) ctx.fillRect(x + 1, r * rh + 1, x2 - x - 2, rh - 2);
+        }
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
     function createRoadTexture() {
       const s = 256;
       const c = document.createElement('canvas');
       c.width = s; c.height = s;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#52575f';
+      ctx.fillStyle = '#4e535b';
       ctx.fillRect(0, 0, s, s);
       for (let i = 0; i < 900; i++) {
-        const x = (i * 73) % s;
-        const y = (i * 137) % s;
-        const v = 74 + (i % 19);
+        const x = (i * 73) % s, y = (i * 137) % s, v = 70 + (i % 19);
         ctx.fillStyle = `rgb(${v},${v + 2},${v + 5})`;
         ctx.fillRect(x, y, 2, 2);
       }
-      // 양쪽 흰 가장자리 차선
       ctx.fillStyle = 'rgba(235, 238, 242, 0.72)';
       ctx.fillRect(10, 0, 5, s);
       ctx.fillRect(s - 15, 0, 5, s);
-      // 중앙 점선
-      ctx.fillStyle = 'rgba(240, 210, 110, 0.78)';
+      ctx.fillStyle = 'rgba(233, 178, 17, 0.85)';
       ctx.fillRect(s / 2 - 3, 18, 6, 86);
       ctx.fillRect(s / 2 - 3, 146, 6, 86);
       const tex = new THREE.CanvasTexture(c);
@@ -240,19 +257,16 @@
       return tex;
     }
 
-    // 3-4) 잔디/조경 텍스처
     function createGrassTexture() {
       const s = 256;
       const c = document.createElement('canvas');
       c.width = s; c.height = s;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#4f7a3c';
+      ctx.fillStyle = '#4c7539';
       ctx.fillRect(0, 0, s, s);
-      for (let i = 0; i < 1400; i++) {
-        const x = (i * 97) % s;
-        const y = (i * 193) % s;
-        const g = 104 + (i % 34);
-        ctx.fillStyle = `rgb(${Math.round(g * 0.62)}, ${g}, ${Math.round(g * 0.45)})`;
+      for (let i = 0; i < 1600; i++) {
+        const x = (i * 97) % s, y = (i * 193) % s, g = 98 + (i % 38);
+        ctx.fillStyle = `rgb(${Math.round(g * 0.6)}, ${g}, ${Math.round(g * 0.44)})`;
         ctx.fillRect(x, y, 3, 3);
       }
       const tex = new THREE.CanvasTexture(c);
@@ -262,28 +276,18 @@
       return tex;
     }
 
-    // 3-5) 커뮤니티 센터 2층 유리 커튼월 파사드 텍스처 (1층 로비·피트니스 + 2층 독서실·골프·라운지)
     function createCommunityFacadeTexture() {
       const cw = 512, ch = 384;
       const c = document.createElement('canvas');
       c.width = cw; c.height = ch;
       const ctx = c.getContext('2d');
-
-      // 기본 다크 화강석 기둥/스팬드럴
       ctx.fillStyle = '#2B2F35';
       ctx.fillRect(0, 0, cw, ch);
-
-      // 상단 코핑 띠
       ctx.fillStyle = '#A7AEB7';
       ctx.fillRect(0, 0, cw, 16);
 
-      // 2개 층 유리 커튼월 베이 (상단 2F + 하단 1F)
-      const bays = [
-        { y: 32, h: 146 }, // 2F 커뮤니티 (라운지·독서실·GX)
-        { y: 204, h: 164 }, // 1F 커뮤니티 (로비·피트니스·카페)
-      ];
+      const bays = [{ y: 32, h: 146 }, { y: 204, h: 164 }];
       for (const bay of bays) {
-        // 좌우 화강석 기둥 여유(24px) 제외하고 유리창
         const gx = 26, gw = cw - 52;
         const grad = ctx.createLinearGradient(0, bay.y, 0, bay.y + bay.h);
         grad.addColorStop(0, '#2a3d4f');
@@ -292,32 +296,23 @@
         ctx.fillStyle = grad;
         ctx.fillRect(gx, bay.y, gw, bay.h);
 
-        // 은은한 실내 간접조명(따뜻한 아이보리 실내 느낌)
         ctx.fillStyle = 'rgba(255, 224, 170, 0.16)';
         ctx.fillRect(gx + 10, bay.y + 16, gw - 20, 26);
         ctx.fillStyle = 'rgba(255, 232, 188, 0.11)';
         ctx.fillRect(gx + 10, bay.y + bay.h - 46, gw - 20, 32);
 
-        // 수직 멀리언 (4분할)
         ctx.fillStyle = '#1e2228';
-        for (let k = 0; k <= 4; k++) {
-          const mx = gx + (gw / 4) * k;
-          ctx.fillRect(mx - 3, bay.y, 6, bay.h);
-        }
-        // 수평 트랜섬
+        for (let k = 0; k <= 4; k++) ctx.fillRect(gx + (gw / 4) * k - 3, bay.y, 6, bay.h);
         ctx.fillRect(gx, bay.y, gw, 5);
         ctx.fillRect(gx, bay.y + bay.h - 5, gw, 5);
         ctx.fillRect(gx, bay.y + Math.round(bay.h * 0.3), gw, 4);
       }
 
-      // 1~2층 중간 화강석 슬래브 띠 (알루미늄 루버 몰딩 포함)
       ctx.fillStyle = '#343940';
       ctx.fillRect(0, 178, cw, 26);
       ctx.fillStyle = '#9EA5AE';
       ctx.fillRect(0, 178, cw, 4);
       ctx.fillRect(0, 200, cw, 4);
-
-      // 좌우 화강석 기둥 석재 줄눈
       ctx.fillStyle = '#5D646E';
       for (let y = 24; y < ch; y += 28) {
         ctx.fillRect(0, y, 24, 1.5);
@@ -331,7 +326,6 @@
       return tex;
     }
 
-    // 3-6) 지하주차장 환기 루버 그릴 텍스처
     function createLouverTexture() {
       const c = document.createElement('canvas');
       c.width = 128; c.height = 64;
@@ -350,35 +344,66 @@
       return tex;
     }
 
+    // 주차장 입구 상단 간판 텍스처 (Community_south.glb 스타일)
+    function createParkingSignTexture(titleText = '지하주차장 입구') {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 96;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#24282e';
+      ctx.fillRect(0, 0, 512, 96);
+      ctx.strokeStyle = '#68707b';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(2, 2, 508, 92);
+      // 좌측 파란 P 마크
+      ctx.fillStyle = '#234fd7';
+      ctx.fillRect(24, 18, 60, 60);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 42px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('P', 54, 50);
+      // 중앙 한글 표기
+      ctx.fillStyle = '#f3f4f6';
+      ctx.font = 'bold 34px Malgun Gothic, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(titleText, 102, 42);
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 20px Malgun Gothic, sans-serif';
+      ctx.fillText('높이제한 2.3m  ·  서행  ·  IN / OUT', 102, 74);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
     // 공통 재질
     const darkStoneSolidMat = new THREE.MeshStandardMaterial({ color: 0x2f343a, roughness: 0.74 });
     const retainingWallMat = new THREE.MeshStandardMaterial({
-      map: createRetainingStoneTexture(1 / 4.2, 1 / 5.3), // 4.2m × 2층(5.3m) 타일링 — 113동 지하와 동일 비율
-      roughness: 0.74,
-      metalness: 0.04,
-      side: THREE.DoubleSide
+      map: createRetainingStoneTexture(1 / 4.2, 1 / 5.3),
+      roughness: 0.74, metalness: 0.04, side: THREE.DoubleSide
     });
     const commFacadeMat = new THREE.MeshStandardMaterial({
       map: createCommunityFacadeTexture(),
-      roughness: 0.36,
-      metalness: 0.22,
-      side: THREE.DoubleSide
+      roughness: 0.36, metalness: 0.22, side: THREE.DoubleSide
     });
     const paverMat = new THREE.MeshStandardMaterial({
-      map: createPaverTexture(5.5),
-      roughness: 0.86,
-      metalness: 0.02
+      map: createPaverTexture(5.5, [178, 181, 186]),
+      roughness: 0.86, metalness: 0.02
     });
     const upperPaverMat = new THREE.MeshStandardMaterial({
-      map: createPaverTexture(4.8),
-      color: 0xf4f3ef,
-      roughness: 0.84,
-      metalness: 0.02
+      map: createPaverTexture(4.8, [190, 192, 194]),
+      roughness: 0.84, metalness: 0.02
+    });
+    const promenadeMat = new THREE.MeshStandardMaterial({
+      map: createPromenadeTexture(),
+      roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide
+    });
+    const secondaryWalkMat = new THREE.MeshStandardMaterial({
+      map: createPaverTexture(2.6, [206, 203, 196]),
+      roughness: 0.82, metalness: 0.02
     });
     const roadMat = new THREE.MeshStandardMaterial({
       map: createRoadTexture(),
-      roughness: 0.88,
-      metalness: 0.02
+      roughness: 0.88, metalness: 0.02
     });
     const grassMat = new THREE.MeshStandardMaterial({
       map: createGrassTexture(),
@@ -403,59 +428,112 @@
     const whiteLineMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.7 });
     const canopyMetalMat = new THREE.MeshStandardMaterial({ color: 0x2d333b, roughness: 0.4, metalness: 0.5 });
 
+    // Community_south.glb 주차장 입구 전용 재질
+    const portalFasciaMat = new THREE.MeshStandardMaterial({ color: 0x272a30, roughness: 0.55, metalness: 0.18 });
+    const portalPierWhiteMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.62 });
+    const portalTunnelMat = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.95 });
+    const portalLedMat = new THREE.MeshStandardMaterial({ color: 0xfffbea, emissive: 0xfff4c2, emissiveIntensity: 0.85, roughness: 0.3 });
+    const portalAsphaltMat = new THREE.MeshStandardMaterial({ color: 0x3d4148, roughness: 0.9 });
+    const portalYellowLineMat = new THREE.MeshStandardMaterial({ color: 0xe9b211, roughness: 0.7 });
+    const portalRedSignMat = new THREE.MeshStandardMaterial({ color: 0xdb2a2a, emissive: 0x6b0f0f, emissiveIntensity: 0.35, roughness: 0.4 });
+    const portalBlueSignMat = new THREE.MeshStandardMaterial({ color: 0x234fd7, emissive: 0x102568, emissiveIntensity: 0.35, roughness: 0.4 });
+    const portalGoldTrimMat = new THREE.MeshStandardMaterial({ color: 0xa58d5c, roughness: 0.35, metalness: 0.6 });
+    const portalDoorGlassMat = new THREE.MeshStandardMaterial({ color: 0xd7ebf8, roughness: 0.18, metalness: 0.25 });
+    const portalSignMat = new THREE.MeshStandardMaterial({ map: createParkingSignTexture('지하주차장 입구'), roughness: 0.45 });
+
     // =========================================================
-    // 4. img/금파힐 커뮤니티 경계.png 실측 추출 노란 경계선 (raw m)
+    // 4. 실측 경계선 (전체 모양 유지 + 보행자 산책길 경사로 홈 컷아웃)
     // =========================================================
-    // 4-1) 서북 통합 커뮤니티 데크 (기존 북커뮤 + 남커뮤 통합, Y = +6.0m)
-    const UPPER_POLY_RAW = [
-      [-341.4,   12.0], // 0: SW 도로변 끝 (102동 서측)
-      [-290.1,  -32.3], // 1: NW 곡선도로 꺾임
-      [-255.6,  -85.0], // 2: 주민센터 남측
-      [-227.3, -112.2], // 3: 주민센터 안쪽 코너
-      [-241.2, -141.5], // 4: 주민센터 북측 모서리
-      [-232.2, -148.3], // 5: 옥상 녹지공원 서북 모서리
-      [-212.2, -156.7], // 6: 북측 곡선
-      [-184.2, -161.7], // 7: 북측 최상단
-      [ -88.6, -157.5], // 8: 105동 동북 모서리
-      [ -90.0, -121.2], // 9: 105동 동측 내려옴
-      [ -91.8, -101.6], // 10: 106동 진입 사선 시작
-      [ -73.3,  -82.8], // 11: 106동 북측 사선 끝
-      [ -60.5,  -74.4], // 12: 106동 돌출 코너
-      [ -52.1,  -82.1], // 13: 106동 북동 돌출
-      [ -41.6,  -72.8], // 14: 106동 동측 끝
-      [ -49.1,  -63.3], // 15: 106동 남동 안쪽
-      [ -50.0,  -44.9], // 16: ★ 남동 2층 커뮤니티 센터 정면 파사드 북동 끝
-      [-180.7,   74.4], // 17: ★ 남동 2층 커뮤니티 센터 정면 파사드 중앙 코너 (108동 남측)
-      [-329.6,   63.9], // 18: ★ 남측 2층 커뮤니티 옹벽 서측 끝 (102동 남측)
+    // 산책용 메인 보행자길 3개 기준점 (img/금파힐_커뮤니티_단지내도로.png 실측)
+    // · RAMP_START_RAW: 동북쪽 1층 높이(Y = 0.0m) 시작점
+    // · RAMP_TOP_RAW  : 중앙 놀이터 부근에서 2층 높이(Y = +6.0m) 도달점
+    // · WALK_ELBOW_RAW: 2층 높이(Y = +6.0m) 유지하며 90° 꺾이는 지점
+    // · WALK_NW_END_RAW: 90° 서북방향 끝점 (Y = +6.0m, 서북 외곽 경계선 도달)
+    const RAMP_START_RAW = [ -70.5, -118.0];
+    const RAMP_TOP_RAW   = [-150.0,  -47.0];
+    const WALK_ELBOW_RAW = [-233.3,   26.7];
+    const WALK_NW_END_RAW = [-291.0, -31.4];
+    const PROMENADE_W = 8.6; // 보행자길 폭 (m)
+
+    // 경사로 방향 단위벡터 & 수직벡터 (NW 방향)
+    const rdx = RAMP_TOP_RAW[0] - RAMP_START_RAW[0];
+    const rdz = RAMP_TOP_RAW[1] - RAMP_START_RAW[1];
+    const rLen = Math.hypot(rdx, rdz);
+    const rux = rdx / rLen, ruz = rdz / rLen;
+    const rnx = -ruz, rnz = rux; // NW쪽 수직 단위벡터
+    const halfPW = PROMENADE_W * 0.5;
+
+    // 경사로가 상단 데크 NE 벽(raw X ≈ -90.8)을 통과하는 진입 위치 계산
+    const tEntry = (-90.8 - RAMP_START_RAW[0]) / rdx; // ~0.255
+    const entryCX = RAMP_START_RAW[0] + rdx * tEntry;
+    const entryCZ = RAMP_START_RAW[1] + rdz * tEntry;
+    const entryY = LOWER_DECK_Y + (UPPER_DECK_Y - LOWER_DECK_Y) * tEntry;
+
+    // 상단 데크 경사로 컷아웃(홈) 4모서리 (raw)
+    const TRENCH_NE_NW = [entryCX + rnx * halfPW, entryCZ + rnz * halfPW];
+    const TRENCH_TOP_NW = [RAMP_TOP_RAW[0] + rnx * halfPW, RAMP_TOP_RAW[1] + rnz * halfPW];
+    const TRENCH_TOP_SE = [RAMP_TOP_RAW[0] - rnx * halfPW, RAMP_TOP_RAW[1] - rnz * halfPW];
+    const TRENCH_NE_SE = [entryCX - rnx * halfPW, entryCZ - rnz * halfPW];
+
+    // 서북 통합 커뮤니티 데크 원본 외곽선 (노란 경계선 100% 유지)
+    const UPPER_OUTLINE_RAW = [
+      [-341.4,   12.0], // 0
+      [-290.1,  -32.3], // 1 (서북 보행길 끝 도달)
+      [-255.6,  -85.0], // 2
+      [-227.3, -112.2], // 3
+      [-241.2, -141.5], // 4
+      [-232.2, -148.3], // 5
+      [-212.2, -156.7], // 6
+      [-184.2, -161.7], // 7
+      [ -88.6, -157.5], // 8
+      [ -90.0, -121.2], // 9
+      [ -91.8, -101.6], // 10
+      [ -73.3,  -82.8], // 11
+      [ -60.5,  -74.4], // 12
+      [ -52.1,  -82.1], // 13
+      [ -41.6,  -72.8], // 14
+      [ -49.1,  -63.3], // 15
+      [ -50.0,  -44.9], // 16
+      [-180.7,   74.4], // 17
+      [-329.6,   63.9], // 18
     ];
 
-    // 4-2) 남~동 지하주차장 하단 데크 (Y = 0.0m = 단지 정문 높이)
+    // 상단 데크 상면 바닥 폴리곤 (경사로가 파고 들어오는 홈을 깔끔하게 비워 Z-fighting 없음)
+    const UPPER_DECK_SURFACE_RAW = [
+      ...UPPER_OUTLINE_RAW.slice(0, 10), // 0..9 (-90.0, -121.2)
+      TRENCH_NE_NW,
+      TRENCH_TOP_NW,
+      TRENCH_TOP_SE,
+      TRENCH_NE_SE,
+      ...UPPER_OUTLINE_RAW.slice(11),    // 11..18 (-73.3, -82.8 .. -329.6, 63.9)
+    ];
+
+    // 남~동 지하주차장 하단 데크 외곽선 (노란 경계선 100% 유지)
     const LOWER_OUTER_RAW = [
-      [-335.5,  154.8], // 0: SW 정문 옆 109동 남서 코너
-      [-284.5,  157.0], // 1: 109동 남측
-      [-279.8,  130.3], // 2: 109~110동 사이 꺾임
-      [-147.0,  137.8], // 3: 110~111동 남측 외벽
-      [-143.0,  122.0], // 4: 111동 동측 단차 꺾임
+      [-335.5,  154.8], // 0
+      [-284.5,  157.0], // 1
+      [-279.8,  130.3], // 2
+      [-147.0,  137.8], // 3
+      [-143.0,  122.0], // 4
       [-140.0,  117.7], // 5
-      [ -21.1,  124.1], // 6: 116동 남측 외벽
+      [ -21.1,  124.1], // 6
       [ -18.5,  122.0], // 7
-      [ -12.9,   52.5], // 8: 112동 동측 북상
-      [  31.5,   52.7], // 9: 113동 남동 코너
-      [  38.5,  -40.6], // 10: 113동 동측 외벽 (금호로변)
-      [  20.9,  -45.2], // 11: 동측 출입구(지하/보행) 노치 남측
-      [  17.8,  -49.2], // 12: 노치 안쪽 남
-      [  20.9,  -58.8], // 13: 노치 안쪽 북
-      [  39.9,  -59.8], // 14: 노치 북측
-      [  45.5, -118.9], // 15: 114동 동북 코너
-      [  19.0, -122.5], // 16: 114동 북측
+      [ -12.9,   52.5], // 8
+      [  31.5,   52.7], // 9
+      [  38.5,  -40.6], // 10
+      [  20.9,  -45.2], // 11 (동측 출입구 노치)
+      [  17.8,  -49.2], // 12
+      [  20.9,  -58.8], // 13
+      [  39.9,  -59.8], // 14
+      [  45.5, -118.9], // 15
+      [  19.0, -122.5], // 16
     ];
 
-    // 하단 데크 닫힌 폴리곤 (남~동 외벽 + 북동 후문변 + 상단 커뮤니티 경계 + 서남 정문변)
     const LOWER_POLY_RAW = [
       ...LOWER_OUTER_RAW,
-      [  10.0, -155.0], // 115동 북동
-      [ -25.0, -158.0], // 115동 북측
-      [ -88.6, -157.5], // 상단 커뮤니티 NE 접합
+      [  10.0, -155.0],
+      [ -25.0, -158.0],
+      [ -88.6, -157.5],
       [ -90.0, -121.2],
       [ -91.8, -101.6],
       [ -73.3,  -82.8],
@@ -466,17 +544,17 @@
       [ -50.0,  -44.9],
       [-180.7,   74.4],
       [-329.6,   63.9],
-      [-345.0,   98.0], // 정문 진입로 변
+      [-345.0,   98.0],
     ];
 
-    const UPPER_POLY = UPPER_POLY_RAW.map(([x, z]) => toLocal(x, z));
+    const UPPER_OUTLINE = UPPER_OUTLINE_RAW.map(([x, z]) => toLocal(x, z));
+    const UPPER_SURFACE = UPPER_DECK_SURFACE_RAW.map(([x, z]) => toLocal(x, z));
     const LOWER_POLY = LOWER_POLY_RAW.map(([x, z]) => toLocal(x, z));
     const LOWER_OUTER = LOWER_OUTER_RAW.map(([x, z]) => toLocal(x, z));
 
     // =========================================================
     // 5. 지오메트리 빌더 유틸리티
     // =========================================================
-    // 2D XZ 폴리곤 -> THREE.Shape (rotateX(Math.PI/2) 시 Shape(x, y) -> World(x, 0, y)가 되도록 y = z 사용)
     function makeXZShape(pts) {
       const shape = new THREE.Shape();
       pts.forEach(([x, z], i) => {
@@ -487,11 +565,9 @@
       return shape;
     }
 
-    // 윗면 평판 메시 (UV가 실제 월드 m 단위로 입혀짐)
     function createFlatDeckMesh(pts, topY, mat, name) {
       const geo = new THREE.ShapeGeometry(makeXZShape(pts));
-      geo.rotateX(Math.PI / 2); // Shape (x, y) -> (x, 0, y), 단 노말이 -Y가 되므로 아래에서 뒤집어 +Y 보장
-      // 노말을 확실히 +Y로 맞추기 위해 인덱스 와인딩 반전
+      geo.rotateX(Math.PI / 2);
       const idx = geo.index;
       if (idx) {
         const arr = idx.array;
@@ -501,7 +577,6 @@
         idx.needsUpdate = true;
       }
       geo.computeVertexNormals();
-      // UV를 월드 XZ 좌표 그대로 설정
       const pos = geo.attributes.position;
       const uvs = new Float32Array(pos.count * 2);
       for (let i = 0; i < pos.count; i++) {
@@ -516,29 +591,21 @@
       return mesh;
     }
 
-    // 폴리라인을 따라 수직 외벽(석재 기단 / 커뮤니티 파사드) 생성 — UV가 벽 길이(uDist)와 높이(h)에 비례
     function createPolylineWall(pts, yTop, yBot, mat, name, { closed = false, tileU = 1, tileV = 1, uvFullHeight = false } = {}) {
-      const verts = [];
-      const uvs = [];
+      const verts = [], uvs = [];
       let uDist = 0;
       const count = closed ? pts.length : pts.length - 1;
       for (let i = 0; i < count; i++) {
-        const [x0, z0] = pts[i];
-        const [x1, z1] = pts[(i + 1) % pts.length];
+        const [x0, z0] = pts[i], [x1, z1] = pts[(i + 1) % pts.length];
         const len = Math.hypot(x1 - x0, z1 - z0);
         if (len < 0.05) continue;
-        const u0 = uDist / tileU;
-        const u1 = (uDist + len) / tileU;
+        const u0 = uDist / tileU, u1 = (uDist + len) / tileU;
         const vTop = uvFullHeight ? 1 : (yTop - yBot) / tileV;
-        const vBot = 0;
         verts.push(
           x0, yTop, z0,  x0, yBot, z0,  x1, yTop, z1,
           x1, yTop, z1,  x0, yBot, z0,  x1, yBot, z1
         );
-        uvs.push(
-          u0, vTop,  u0, vBot,  u1, vTop,
-          u1, vTop,  u0, vBot,  u1, vBot
-        );
+        uvs.push(u0, vTop, u0, 0, u1, vTop, u1, vTop, u0, 0, u1, 0);
         uDist += len;
       }
       const geo = new THREE.BufferGeometry();
@@ -552,21 +619,41 @@
       return mesh;
     }
 
-    // 폴리라인 상단 석재 코핑 + 난간/울타리
+    // 경사진 사다리꼴 수직 측벽 생성 (경사로 좌우 옹벽용)
+    function createSlopedQuadWall(p0, p1, yTop0, yBot0, yTop1, yBot1, mat, name) {
+      const [x0, z0] = p0, [x1, z1] = p1;
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      const verts = [
+        x0, yTop0, z0,  x0, yBot0, z0,  x1, yTop1, z1,
+        x1, yTop1, z1,  x0, yBot0, z0,  x1, yBot1, z1
+      ];
+      const uvs = [
+        0, yTop0 - yBot0,  0, 0,  len, yTop1 - yBot1,
+        len, yTop1 - yBot1,  0, 0,  len, 0
+      ];
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.name = name;
+      return mesh;
+    }
+
     function addEdgeCopingAndRailing(parent, pts, topY, { closed = false, copingW = 0.55, withGlassRail = false, withFence = true } = {}) {
       const grp = new THREE.Group();
       grp.name = withGlassRail ? 'Upper_Coping_GlassRail' : 'Lower_Coping_Fence';
       const count = closed ? pts.length : pts.length - 1;
       for (let i = 0; i < count; i++) {
-        const [x0, z0] = pts[i];
-        const [x1, z1] = pts[(i + 1) % pts.length];
+        const [x0, z0] = pts[i], [x1, z1] = pts[(i + 1) % pts.length];
         const dx = x1 - x0, dz = z1 - z0;
         const len = Math.hypot(dx, dz);
         if (len < 0.3) continue;
         const ang = Math.atan2(dx, dz);
         const mx = (x0 + x1) * 0.5, mz = (z0 + z1) * 0.5;
 
-        // 상단 화강석 두겁석(Coping)
         const cop = new THREE.Mesh(new THREE.BoxGeometry(copingW, COPING_H, len + 0.15), copingMat);
         cop.position.set(mx, topY + COPING_H * 0.5, mz);
         cop.rotation.y = ang;
@@ -575,7 +662,6 @@
         grp.add(cop);
 
         if (withGlassRail) {
-          // 2층 커뮤니티 데크 상단 강화유리 안전난간
           const glass = new THREE.Mesh(new THREE.BoxGeometry(0.06, FENCE_H, len), glassRailMat);
           glass.position.set(mx, topY + COPING_H + FENCE_H * 0.5, mz);
           glass.rotation.y = ang;
@@ -586,7 +672,6 @@
           topBar.rotation.y = ang;
           grp.add(topBar);
         } else if (withFence) {
-          // 단지 외곽 다크 메탈 울타리 (상·하 레일 + 기둥)
           const topBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, len), darkMetalMat);
           topBar.position.set(mx, topY + COPING_H + FENCE_H, mz);
           topBar.rotation.y = ang;
@@ -598,7 +683,6 @@
           grp.add(midBar);
         }
 
-        // 난간 수직 포스트 (4m 간격)
         const posts = Math.max(2, Math.floor(len / 4.5));
         for (let k = 0; k <= posts; k++) {
           const t = k / posts;
@@ -610,22 +694,19 @@
       parent.add(grp);
     }
 
-    // 곡선 도로 리본 (CatmullRomCurve3 -> 아스팔트 도로 + 양측 화강석 연석)
-    function createCurvedRoad(rawPts, width, y, name) {
+    // 곡선 도로 리본
+    function createCurvedRoad(rawPts, width, y, name, { mat = roadMat, withCrosswalks = true, uvLen = 9.0, curb = true } = {}) {
       const curvePts = rawPts.map(([rx, rz]) => {
         const [lx, lz] = toLocal(rx, rz);
         return new THREE.Vector3(lx, y, lz);
       });
       const curve = new THREE.CatmullRomCurve3(curvePts, false, 'centripetal', 0.4);
-      const segs = 90;
+      const segs = Math.max(24, rawPts.length * 8);
       const halfW = width * 0.5;
-      const verts = [];
-      const uvs = [];
-      const indices = [];
-      let dist = 0;
-      let prev = curve.getPoint(0);
-
+      const verts = [], uvs = [], indices = [];
+      let dist = 0, prev = curve.getPoint(0);
       const leftEdge = [], rightEdge = [];
+
       for (let i = 0; i <= segs; i++) {
         const t = i / segs;
         const pt = curve.getPoint(t);
@@ -633,14 +714,12 @@
         const nx = -tan.z, nz = tan.x;
         if (i > 0) dist += pt.distanceTo(prev);
         prev = pt;
-
         const lx = pt.x + nx * halfW, lz = pt.z + nz * halfW;
         const rx = pt.x - nx * halfW, rz = pt.z - nz * halfW;
         leftEdge.push([lx, lz]);
         rightEdge.push([rx, rz]);
-
-        verts.push(lx, y + 0.04, lz, rx, y + 0.04, rz);
-        uvs.push(0, dist / 9.0, 1, dist / 9.0);
+        verts.push(lx, y + 0.045, lz, rx, y + 0.045, rz);
+        uvs.push(0, dist / uvLen, 1, dist / uvLen);
         if (i < segs) {
           const b = i * 2;
           indices.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
@@ -654,58 +733,243 @@
 
       const grp = new THREE.Group();
       grp.name = name;
-      const roadMesh = new THREE.Mesh(geo, roadMat);
-      roadMesh.receiveShadow = true;
-      roadMesh.name = `${name}_Asphalt`;
-      grp.add(roadMesh);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.receiveShadow = true;
+      grp.add(mesh);
 
-      // 양측 연석 띠
-      [leftEdge, rightEdge].forEach((edge, ei) => {
-        const cVerts = [], cIdx = [];
-        const cw = 0.28, ch = 0.14;
-        for (let i = 0; i < edge.length - 1; i++) {
-          const [ax, az] = edge[i], [bx, bz] = edge[i + 1];
-          const dx = bx - ax, dz = bz - az;
-          const l = Math.hypot(dx, dz) || 1;
-          const ox = (-dz / l) * (ei === 0 ? cw : -cw);
-          const oz = (dx / l) * (ei === 0 ? cw : -cw);
-          const base = cVerts.length / 3;
-          cVerts.push(
-            ax, y + ch, az,  ax + ox, y + ch, az + oz,
-            bx, y + ch, bz,  bx + ox, y + ch, bz + oz
-          );
-          cIdx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+      if (curb) {
+        [leftEdge, rightEdge].forEach((edge, ei) => {
+          const cVerts = [], cIdx = [];
+          const cw = 0.24, ch = 0.12;
+          for (let i = 0; i < edge.length - 1; i++) {
+            const [ax, az] = edge[i], [bx, bz] = edge[i + 1];
+            const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz) || 1;
+            const ox = (-dz / l) * (ei === 0 ? cw : -cw);
+            const oz = (dx / l) * (ei === 0 ? cw : -cw);
+            const base = cVerts.length / 3;
+            cVerts.push(ax, y + ch, az, ax + ox, y + ch, az + oz, bx, y + ch, bz, bx + ox, y + ch, bz + oz);
+            cIdx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+          }
+          const cGeo = new THREE.BufferGeometry();
+          cGeo.setAttribute('position', new THREE.Float32BufferAttribute(cVerts, 3));
+          cGeo.setIndex(cIdx);
+          cGeo.computeVertexNormals();
+          const cMesh = new THREE.Mesh(cGeo, curbMat);
+          cMesh.receiveShadow = true;
+          grp.add(cMesh);
+        });
+      }
+
+      if (withCrosswalks) {
+        [0.08, 0.42, 0.72, 0.92].forEach((t, ci) => {
+          const pt = curve.getPoint(t);
+          const tan = curve.getTangent(t).normalize();
+          const ang = Math.atan2(tan.x, tan.z);
+          const cwGrp = new THREE.Group();
+          cwGrp.position.set(pt.x, y + 0.06, pt.z);
+          cwGrp.rotation.y = ang;
+          for (let s = -3; s <= 3; s++) {
+            const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.01, 2.4), whiteLineMat);
+            stripe.position.set(s * 0.85, 0, 0);
+            cwGrp.add(stripe);
+          }
+          cwGrp.name = `Crosswalk_${ci}`;
+          grp.add(cwGrp);
+        });
+      }
+
+      return grp;
+    }
+
+    // 직선/꺾임 보행자 산책로 스트립 (3D 점 배열 [[rx, y, rz], ...] 지원 -> 경사 포함!)
+    function createWalkwayStrip3D(pts3Raw, width, mat, name, { withCurbs = true, tileLen = 5.0 } = {}) {
+      const grp = new THREE.Group();
+      grp.name = name;
+      const halfW = width * 0.5;
+      let dist = 0;
+
+      for (let i = 0; i < pts3Raw.length - 1; i++) {
+        const [ax, ay, az] = pts3Raw[i];
+        const [bx, by, bz] = pts3Raw[i + 1];
+        const [lax, laz] = toLocal(ax, az);
+        const [lbx, lbz] = toLocal(bx, bz);
+        const dx = lbx - lax, dz = lbz - laz;
+        const len = Math.hypot(dx, dz);
+        if (len < 0.1) continue;
+        const nx = -dz / len, nz = dx / len;
+
+        // 이음새 틈 방지용 끝단 0.15m 연장 (코너 겹침 시 평탄 연결)
+        const lx0 = lax + nx * halfW, lz0 = laz + nz * halfW;
+        const rx0 = lax - nx * halfW, rz0 = laz - nz * halfW;
+        const lx1 = lbx + nx * halfW, lz1 = lbz + nz * halfW;
+        const rx1 = lbx - nx * halfW, rz1 = lbz - nz * halfW;
+
+        const verts = [
+          lx0, ay, lz0,  rx0, ay, rz0,  lx1, by, lz1,
+          rx0, ay, rz0,  rx1, by, rz1,  lx1, by, lz1
+        ];
+        const u0 = dist / tileLen, u1 = (dist + len) / tileLen;
+        const uvs = [0, u0, 1, u0, 0, u1, 1, u0, 1, u1, 0, u1];
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geo.computeVertexNormals();
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        grp.add(mesh);
+
+        if (withCurbs) {
+          // 양쪽 화강석 경계석 (3D 경사 추종)
+          const cw = 0.25, ch = 0.16;
+          [[lx0, lz0, lx1, lz1, 1], [rx0, rz0, rx1, rz1, -1]].forEach(([sx0, sz0, sx1, sz1, sign]) => {
+            const ox = nx * cw * sign, oz = nz * cw * sign;
+            const cVerts = [
+              sx0, ay + ch, sz0,  sx0 + ox, ay + ch, sz0 + oz,  sx1, by + ch, sz1,
+              sx0 + ox, ay + ch, sz0 + oz,  sx1 + ox, by + ch, sz1 + oz,  sx1, by + ch, sz1,
+              sx0, ay + ch, sz0,  sx0, ay, sz0,  sx1, by + ch, sz1,
+              sx1, by + ch, sz1,  sx0, ay, sz0,  sx1, by, sz1,
+            ];
+            const cg = new THREE.BufferGeometry();
+            cg.setAttribute('position', new THREE.Float32BufferAttribute(cVerts, 3));
+            cg.computeVertexNormals();
+            const cm = new THREE.Mesh(cg, curbMat);
+            cm.receiveShadow = true;
+            grp.add(cm);
+          });
         }
-        const cGeo = new THREE.BufferGeometry();
-        cGeo.setAttribute('position', new THREE.Float32BufferAttribute(cVerts, 3));
-        cGeo.setIndex(cIdx);
-        cGeo.computeVertexNormals();
-        const cMesh = new THREE.Mesh(cGeo, curbMat);
-        cMesh.receiveShadow = true;
-        grp.add(cMesh);
+        dist += len;
+      }
+
+      // 꺾임 코너 사각 패드(90도 회전부 깔끔한 마감)
+      for (let i = 1; i < pts3Raw.length - 1; i++) {
+        const [cx, cy, cz] = pts3Raw[i];
+        const [lcx, lcz] = toLocal(cx, cz);
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(halfW + 0.12, halfW + 0.12, 0.08, 16), secondaryWalkMat);
+        cap.position.set(lcx, cy - 0.03, lcz);
+        cap.receiveShadow = true;
+        grp.add(cap);
+      }
+
+      return grp;
+    }
+
+    // Community_south.glb 실측 참조 지하주차장 진입 포털 빌더
+    // (로컬 +Z 방향으로 도로 쪽을 바라보며, -Z 방향으로 데크 안쪽 터널이 들어간다)
+    function createParkingEntrancePortal(rawX, rawZ, facingDeg, name, { apronLen = 14.0 } = {}) {
+      const [lx, lz] = toLocal(rawX, rawZ);
+      const grp = new THREE.Group();
+      grp.name = name;
+      grp.position.set(lx, LOWER_DECK_Y, lz);
+      grp.rotation.y = THREE.MathUtils.degToRad(facingDeg);
+
+      const openW = 7.4;    // 터널 개구부 폭 (Community_south.glb 실측 7.4m)
+      const openH = 3.6;    // 차량 통과 높이 (3.6m)
+      const totalH = UPPER_DECK_Y; // 6.0m (상단 커뮤니티 데크 높이에 딱 맞춤)
+      const pierW = 2.1;    // 좌우 흰색/밝은 화강석 기둥 폭
+      const totalW = openW + pierW * 2; // 11.6m
+      const tunnelD = 7.2;  // 터널 안쪽 깊이
+
+      // 1) 진입부 아스팔트 도로판 + 중앙 노란선 (Community_south.glb Mesh_302/303)
+      const roadSlab = new THREE.Mesh(new THREE.BoxGeometry(openW + 1.6, 0.1, apronLen + tunnelD), portalAsphaltMat);
+      roadSlab.position.set(0, 0.05, (apronLen - tunnelD) * 0.5);
+      roadSlab.receiveShadow = true;
+      grp.add(roadSlab);
+
+      const yLine = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, apronLen + tunnelD - 1.5), portalYellowLineMat);
+      yLine.position.set(0, 0.06, (apronLen - tunnelD) * 0.5);
+      grp.add(yLine);
+
+      // 양쪽 흰 차선 + 진입 화살표
+      [-openW * 0.44, openW * 0.44].forEach((sx) => {
+        const wl = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, apronLen), whiteLineMat);
+        wl.position.set(sx, 0.06, apronLen * 0.5);
+        grp.add(wl);
       });
 
-      // 횡단보도 몇 군데 (정문 진입, 중앙 광장, 후문 진입)
-      [0.08, 0.42, 0.72, 0.92].forEach((t, ci) => {
-        const pt = curve.getPoint(t);
-        const tan = curve.getTangent(t).normalize();
-        const ang = Math.atan2(tan.x, tan.z);
-        const cwGrp = new THREE.Group();
-        cwGrp.position.set(pt.x, y + 0.055, pt.z);
-        cwGrp.rotation.y = ang;
-        for (let s = -3; s <= 3; s++) {
-          const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.01, 2.4), whiteLineMat);
-          stripe.position.set(s * 0.85, 0, 0);
-          cwGrp.add(stripe);
-        }
-        cwGrp.name = `Crosswalk_${ci}`;
-        grp.add(cwGrp);
+      // 2) 좌우 밝은 화강석 포털 기둥 (Community_south.glb Mesh_293/294)
+      [-1, 1].forEach((side) => {
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(pierW, openH, 2.2), portalPierWhiteMat);
+        pier.position.set(side * (openW * 0.5 + pierW * 0.5), openH * 0.5, 0);
+        pier.castShadow = true;
+        pier.receiveShadow = true;
+        grp.add(pier);
+
+        // 기둥 옆 보행자 출입 로비 프레임 (다크차콜 + 골드트림 + 유리문, Community_south.glb Mesh_277~289)
+        const sideBox = new THREE.Mesh(new THREE.BoxGeometry(3.2, totalH, 1.4), darkStoneSolidMat);
+        sideBox.position.set(side * (totalW * 0.5 + 1.6), totalH * 0.5, -0.4);
+        sideBox.castShadow = true;
+        grp.add(sideBox);
+
+        const doorGlass = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.6, 0.12), portalDoorGlassMat);
+        doorGlass.position.set(side * (totalW * 0.5 + 1.6), 1.35, 0.32);
+        grp.add(doorGlass);
+
+        const goldTrim = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.12, 0.18), portalGoldTrimMat);
+        goldTrim.position.set(side * (totalW * 0.5 + 1.6), 2.75, 0.34);
+        grp.add(goldTrim);
+      });
+
+      // 3) 상부 다크차콜 린텔·파사드 빔 (Y = 3.6m ~ 6.0m, Community_south.glb Mesh_292)
+      const fasciaH = totalH - openH;
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(totalW + 0.4, fasciaH, 2.6), portalFasciaMat);
+      lintel.position.set(0, openH + fasciaH * 0.5, 0.15);
+      lintel.castShadow = true;
+      lintel.receiveShadow = true;
+      grp.add(lintel);
+
+      // 상단 "지하주차장 입구 · P · 높이제한 2.3m" 간판 패널 (Community_south.glb Mesh_299)
+      const signPanel = new THREE.Mesh(new THREE.BoxGeometry(7.8, 1.35, 0.18), portalSignMat);
+      signPanel.position.set(0, openH + fasciaH * 0.48, 1.48);
+      grp.add(signPanel);
+
+      // 상단 화강석 두겁석
+      const topCap = new THREE.Mesh(new THREE.BoxGeometry(totalW + 6.8, 0.25, 2.8), copingMat);
+      topCap.position.set(0, totalH + 0.12, 0.15);
+      topCap.castShadow = true;
+      grp.add(topCap);
+
+      // 4) 어두운 터널 내부 + 천장 소핏 + 2개 웜화이트 LED 조명 (Community_south.glb Mesh_295~298)
+      const tunnelBack = new THREE.Mesh(new THREE.BoxGeometry(openW, openH, 0.4), portalTunnelMat);
+      tunnelBack.position.set(0, openH * 0.5, -tunnelD);
+      grp.add(tunnelBack);
+
+      [-1, 1].forEach((side) => {
+        const tWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, openH, tunnelD), portalTunnelMat);
+        tWall.position.set(side * (openW * 0.5), openH * 0.5, -tunnelD * 0.5);
+        grp.add(tWall);
+      });
+
+      const tCeil = new THREE.Mesh(new THREE.BoxGeometry(openW + 0.6, 0.25, tunnelD + 1.0), portalTunnelMat);
+      tCeil.position.set(0, openH - 0.12, -tunnelD * 0.5 + 0.3);
+      grp.add(tCeil);
+
+      [-1.7, 1.7].forEach((lxLed) => {
+        const led = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 3.6), portalLedMat);
+        led.position.set(lxLed, openH - 0.26, -2.6);
+        grp.add(led);
+      });
+
+      // 5) 좌측 기둥 빨강(출차주의) / 파랑(P) 표지판 (Community_south.glb Mesh_300/301)
+      const redSign = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.65, 0.16), portalRedSignMat);
+      redSign.position.set(-(openW * 0.5 + pierW * 0.5), 2.35, 1.15);
+      grp.add(redSign);
+
+      const blueSign = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.72, 0.16), portalBlueSignMat);
+      blueSign.position.set(-(openW * 0.5 + pierW * 0.5), 1.35, 1.15);
+      grp.add(blueSign);
+
+      // 6) 진입 양측 경계석(연석)
+      [-1, 1].forEach((side) => {
+        const sideCurb = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.22, apronLen), curbMat);
+        sideCurb.position.set(side * (openW * 0.5 + 0.8), 0.11, apronLen * 0.5);
+        sideCurb.receiveShadow = true;
+        grp.add(sideCurb);
       });
 
       return grp;
     }
 
-    // 조경수 (활엽수 / 소나무)
     function addTree(parent, rx, rz, baseY, type = 'deciduous', scale = 1.0) {
       const [lx, lz] = toLocal(rx, rz);
       const t = new THREE.Group();
@@ -740,8 +1004,7 @@
       parent.add(t);
     }
 
-    // 화강석 연석이 둘러진 잔디 화단 (사각형)
-    function addLawnPlanter(parent, rx, rz, w, d, rotDeg, baseY, h = 0.32) {
+    function addLawnPlanter(parent, rx, rz, w, d, rotDeg, baseY, h = 0.32, { withBenches = false, withPergola = false } = {}) {
       const [lx, lz] = toLocal(rx, rz);
       const g = new THREE.Group();
       g.position.set(lx, baseY, lz);
@@ -758,10 +1021,34 @@
       lawn.receiveShadow = true;
       g.add(lawn);
 
+      if (withBenches) {
+        [-w * 0.22, w * 0.22].forEach((bx) => {
+          const bench = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.48, 0.7), woodMat);
+          bench.position.set(bx, h + 0.26, d * 0.5 + 0.85);
+          bench.castShadow = true;
+          g.add(bench);
+        });
+      }
+
+      if (withPergola) {
+        const pH = 2.8, pW = 4.2, pD = 3.2;
+        [[-pW / 2, -pD / 2], [pW / 2, -pD / 2], [-pW / 2, pD / 2], [pW / 2, pD / 2]].forEach(([cx, cz]) => {
+          const col = new THREE.Mesh(new THREE.BoxGeometry(0.18, pH, 0.18), woodMat);
+          col.position.set(cx, h + pH * 0.5, cz);
+          col.castShadow = true;
+          g.add(col);
+        });
+        for (let k = -3; k <= 3; k++) {
+          const slat = new THREE.Mesh(new THREE.BoxGeometry(pW + 0.6, 0.12, 0.18), woodMat);
+          slat.position.set(0, h + pH + 0.06, k * 0.5);
+          slat.castShadow = true;
+          g.add(slat);
+        }
+      }
+
       parent.add(g);
     }
 
-    // 놀이터 (스카이뷰 EPDM 탄성 바닥 + 조합놀이대 + 벤치)
     function addPlayground(parent, rx, rz, w, d, rotDeg, baseY, name) {
       const [lx, lz] = toLocal(rx, rz);
       const pg = new THREE.Group();
@@ -769,7 +1056,6 @@
       pg.position.set(lx, baseY, lz);
       pg.rotation.y = THREE.MathUtils.degToRad(rotDeg);
 
-      // 베이지 테두리 + 파랑/주황 탄성매트
       const pad = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, d), epdmBeigeMat);
       pad.position.y = 0.07;
       pad.receiveShadow = true;
@@ -784,7 +1070,6 @@
       accent.position.set(w * 0.2, 0.09, d * 0.1);
       pg.add(accent);
 
-      // 조합놀이대 타워 + 파란 지붕 + 미끄럼틀
       const deck = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.25, 2.6), woodMat);
       deck.position.set(-0.5, 1.8, -0.3);
       deck.castShadow = true;
@@ -806,7 +1091,6 @@
       slide.rotation.y = 0.5;
       pg.add(slide);
 
-      // 목재 벤치 2개
       [[-w * 0.36, d * 0.32], [w * 0.34, -d * 0.32]].forEach(([bx, bz]) => {
         const bench = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.48, 0.65), woodMat);
         bench.position.set(bx, 0.34, bz);
@@ -818,7 +1102,7 @@
     }
 
     // =========================================================
-    // 6. 메인 조립 루트 (GLB 추출 대상 — 가이드 제외)
+    // 6. 메인 조립 루트 (GLB 추출 대상)
     // =========================================================
     const communityRoot = new THREE.Group();
     communityRoot.name = 'KumhoParkHills_Community_Base';
@@ -831,96 +1115,76 @@
     lowerGroup.name = 'Lower_Parking_Deck';
     communityRoot.add(lowerGroup);
 
-    // 1) 하단 데크 상면 바닥 (Y = 0.0m)
     lowerGroup.add(createFlatDeckMesh(LOWER_POLY, LOWER_DECK_Y, paverMat, 'Lower_Deck_TopSurface'));
-
-    // 2) 하단 데크 남~동 외곽 지하주차장 외벽 (Y = 0.0m ~ -14.0m, 금파힐 B1~B2 동일 검정 화강석)
-    lowerGroup.add(
-      createPolylineWall(LOWER_OUTER, LOWER_DECK_Y, BASE_BOTTOM_Y, retainingWallMat, 'Lower_SouthEast_RetainingWall', {
-        closed: false, tileU: 1.0, tileV: 1.0 // UV 단위 = 1m (texture repeat가 1/4.2, 1/5.3 처리)
-      })
-    );
-    // 나머지 닫힘 변(북동 후문·서남 정문) 하부 마감 벽
+    lowerGroup.add(createPolylineWall(LOWER_OUTER, LOWER_DECK_Y, BASE_BOTTOM_Y, retainingWallMat, 'Lower_SouthEast_RetainingWall', { closed: false }));
     const lowerCloseNorth = [LOWER_POLY[16], LOWER_POLY[17], LOWER_POLY[18], LOWER_POLY[19]];
     const lowerCloseSW = [LOWER_POLY[LOWER_POLY.length - 2], LOWER_POLY[LOWER_POLY.length - 1], LOWER_POLY[0]];
     lowerGroup.add(createPolylineWall(lowerCloseNorth, LOWER_DECK_Y, BASE_BOTTOM_Y, retainingWallMat, 'Lower_NE_EndWall', { closed: false }));
     lowerGroup.add(createPolylineWall(lowerCloseSW, LOWER_DECK_Y, BASE_BOTTOM_Y, retainingWallMat, 'Lower_SW_EndWall', { closed: false }));
 
-    // 남측 외벽 지하주차장 환기 루버(그릴) 디테일 (110~111동 남측 긴 외벽 & 116동 남측 외벽)
+    // 남·동측 외벽 지하주차장 환기 루버
     const louverSpans = [
       [toLocal(-270, 131.5), toLocal(-155, 137.2), 5],
       [toLocal(-132, 118.4), toLocal(-28, 123.6), 4],
       [toLocal(32.5, 44.0), toLocal(37.5, -34.0), 4],
     ];
     louverSpans.forEach(([a, b, cnt], si) => {
-      const dx = b[0] - a[0], dz = b[1] - a[1];
-      const len = Math.hypot(dx, dz);
-      const ang = Math.atan2(dx, dz);
-      const nx = -dz / len, nz = dx / len; // 남측(+Z)·동측(+X) 외곽 방향
+      const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz), ang = Math.atan2(dx, dz);
+      const nx = -dz / len, nz = dx / len;
       for (let k = 1; k <= cnt; k++) {
         const t = k / (cnt + 1);
-        const lx = a[0] + dx * t + nx * 0.14;
-        const lz = a[1] + dz * t + nz * 0.14;
         const grille = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.5, 4.4), louverMat);
-        grille.position.set(lx, LOWER_DECK_Y - 2.4, lz);
+        grille.position.set(a[0] + dx * t + nx * 0.14, LOWER_DECK_Y - 2.4, a[1] + dz * t + nz * 0.14);
         grille.rotation.y = ang;
         grille.name = `Lower_Parking_Louver_${si}_${k}`;
         lowerGroup.add(grille);
       }
     });
 
-    // 남~동 외곽 상단 두겁석 + 울타리 (동측 출입구 노치 구간 제외)
     addEdgeCopingAndRailing(lowerGroup, LOWER_OUTER.slice(0, 11), LOWER_DECK_Y, { closed: false, withFence: true });
     addEdgeCopingAndRailing(lowerGroup, LOWER_OUTER.slice(14), LOWER_DECK_Y, { closed: false, withFence: true });
 
-    // 동측 출입구 노치(11~14번 점) 바닥 아스팔트 램프 진입부
     const eastNotchPts = [toLocal(38.5, -40.6), toLocal(20.9, -45.2), toLocal(17.8, -49.2), toLocal(20.9, -58.8), toLocal(39.9, -59.8)];
     lowerGroup.add(createFlatDeckMesh(eastNotchPts, LOWER_DECK_Y + 0.03, roadMat, 'East_Entrance_Notch_Apron'));
 
     // ---------------------------------------------------------
-    // [PART B] 서북 통합 커뮤니티 데크 (북·남커뮤 노란선, Y = +6.0m 2층 단차)
+    // [PART B] 서북 통합 커뮤니티 데크 (Y = +6.0m 2층 단차)
     // ---------------------------------------------------------
     const upperGroup = new THREE.Group();
     upperGroup.name = 'Upper_Community_Deck';
     communityRoot.add(upperGroup);
 
-    // 1) 상단 커뮤니티 데크 상면 바닥 (Y = +6.0m)
-    upperGroup.add(createFlatDeckMesh(UPPER_POLY, UPPER_DECK_Y, upperPaverMat, 'Upper_Deck_TopSurface'));
+    // 1) 상단 데크 바닥면 (경사로 진입 홈 컷아웃 반영)
+    upperGroup.add(createFlatDeckMesh(UPPER_SURFACE, UPPER_DECK_Y, upperPaverMat, 'Upper_Deck_TopSurface'));
 
-    // 2) 서북쪽 외곽 옹벽 (Y = +6.0m ~ -14.0m, 검정 화강석 B1~B2 동일 외벽)
-    const upperNWOuter = UPPER_POLY.slice(0, 17); // 0..16번 점 (도로변 ~ 주민센터 노치 ~ 옥상공원 ~ 105~106동 NE)
-    const upperSWClose = [UPPER_POLY[18], UPPER_POLY[0]];
-    upperGroup.add(createPolylineWall(upperNWOuter, UPPER_DECK_Y, BASE_BOTTOM_Y, retainingWallMat, 'Upper_NW_RetainingWall', { closed: false }));
+    // 2) 서북 외곽 옹벽 (경사로 진입 구간만 비우고 좌·우 외벽 마감)
+    const upperNWLeft = UPPER_OUTLINE.slice(0, 10); // 0..9 (-90.0, -121.2)
+    const upperNERight = [toLocal(...TRENCH_NE_SE), ...UPPER_OUTLINE.slice(11, 17)]; // 경사로 남측 ~ 106동 SE
+    const upperSWClose = [UPPER_OUTLINE[18], UPPER_OUTLINE[0]];
+    upperGroup.add(createPolylineWall(upperNWLeft, UPPER_DECK_Y, BASE_BOTTOM_Y, retainingWallMat, 'Upper_NW_RetainingWall', { closed: false }));
+    upperGroup.add(createPolylineWall([UPPER_OUTLINE[9], toLocal(...TRENCH_NE_NW)], UPPER_DECK_Y, BASE_BOTTOM_Y, retainingWallMat, 'Upper_NE_NorthWall', { closed: false }));
+    upperGroup.add(createPolylineWall(upperNERight, UPPER_DECK_Y, BASE_BOTTOM_Y, retainingWallMat, 'Upper_NE_106Wall', { closed: false }));
     upperGroup.add(createPolylineWall(upperSWClose, UPPER_DECK_Y, BASE_BOTTOM_Y, retainingWallMat, 'Upper_SW_RetainingWall', { closed: false }));
 
-    // 3) ★ 차별화된 남동쪽 2층 커뮤니티 센터 정면 파사드 (Y = 0.0m ~ +6.0m 유리 커튼월 + 화강석 기둥 + 캐노피)
-    const commSEFrontPts = [UPPER_POLY[16], UPPER_POLY[17], UPPER_POLY[18]]; // 106동 SE -> 108동 남측 코너 -> 102동 남측
+    // 3) ★ 남동쪽 2층 커뮤니티 센터 정면 파사드 (중앙 외부 계단은 제외!)
+    const commSEFrontPts = [UPPER_OUTLINE[16], UPPER_OUTLINE[17], UPPER_OUTLINE[18]];
     const commFacadeGroup = new THREE.Group();
     commFacadeGroup.name = 'Community_Center_SE_Facade';
     communityRoot.add(commFacadeGroup);
 
-    // 3-a) 하단 데크 아래 기초부 (Y = 0.0m ~ -6.0m)
     commFacadeGroup.add(createPolylineWall(commSEFrontPts, LOWER_DECK_Y, -6.0, retainingWallMat, 'Community_SE_SubBase', { closed: false }));
-
-    // 3-b) 2층 커뮤니티 센터 유리 파사드 (Y = 0.0m ~ +6.0m, 8.5m당 1베이 반복)
     commFacadeGroup.add(
       createPolylineWall(commSEFrontPts, UPPER_DECK_Y, LOWER_DECK_Y, commFacadeMat, 'Community_SE_2F_GlassFacade', {
         closed: false, tileU: 8.5, uvFullHeight: true
       })
     );
 
-    // 3-c) 2층 커뮤니티 정면 돌출 화강석 기둥 + 1층 상부 다크메탈 캐노피 처마
     for (let seg = 0; seg < commSEFrontPts.length - 1; seg++) {
-      const [x0, z0] = commSEFrontPts[seg];
-      const [x1, z1] = commSEFrontPts[seg + 1];
-      const dx = x1 - x0, dz = z1 - z0;
-      const len = Math.hypot(dx, dz);
-      const ang = Math.atan2(dx, dz);
-      // 남동쪽(단지 안쪽) 법선 벡터
+      const [x0, z0] = commSEFrontPts[seg], [x1, z1] = commSEFrontPts[seg + 1];
+      const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz), ang = Math.atan2(dx, dz);
       const nx = dz / len, nz = -dx / len;
       const mx = (x0 + x1) * 0.5, mz = (z0 + z1) * 0.5;
 
-      // 1층 상부(Y=+3.1m) 돌출 캐노피 띠
       const canopy = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.28, len), canopyMetalMat);
       canopy.position.set(mx + nx * 0.72, LOWER_DECK_Y + 3.12, mz + nz * 0.72);
       canopy.rotation.y = ang;
@@ -928,14 +1192,12 @@
       canopy.receiveShadow = true;
       commFacadeGroup.add(canopy);
 
-      // 상단 지붕 처마 돌출(Y=+5.95m)
       const eave = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.35, len + 0.4), darkStoneSolidMat);
       eave.position.set(mx + nx * 0.4, UPPER_DECK_Y - 0.12, mz + nz * 0.4);
       eave.rotation.y = ang;
       eave.castShadow = true;
       commFacadeGroup.add(eave);
 
-      // 8.5m 간격 돌출 화강석 기둥(Pilaster)
       const bays = Math.max(2, Math.round(len / 8.5));
       for (let k = 0; k <= bays; k++) {
         const t = k / bays;
@@ -947,52 +1209,86 @@
       }
     }
 
-    // 3-d) 중앙 반원형 선큰 광장 & 계단 (스카이뷰 Community_south 남동 중앙에 보이는 부채꼴 광장)
+    // 남동 중앙 반원형 광장 & 로비 캐노피 (계단 제외!)
     const plazaGroup = new THREE.Group();
-    plazaGroup.name = 'Community_SE_SunkenPlaza_Stairs';
-    // NE -> SW 순서로 잡으면 로컬 +X가 정확히 남동쪽(단지 중앙 광장 방향)을 향한다
+    plazaGroup.name = 'Community_SE_SunkenPlaza';
     const [pA, pB] = [toLocal(-112.0, 12.0), toLocal(-170.0, 64.5)];
     const pdx = pB[0] - pA[0], pdz = pB[1] - pA[1];
-    const pAng = Math.atan2(pdx, pdz);
-    const pmx = (pA[0] + pB[0]) * 0.5, pmz = (pA[1] + pB[1]) * 0.5;
-    plazaGroup.position.set(pmx, LOWER_DECK_Y, pmz);
-    plazaGroup.rotation.y = pAng;
+    plazaGroup.position.set((pA[0] + pB[0]) * 0.5, LOWER_DECK_Y, (pA[1] + pB[1]) * 0.5);
+    plazaGroup.rotation.y = Math.atan2(pdx, pdz);
 
-    // 반원형 석재 단차 광장 + 외부 계단(하단 0m -> 상단 +6m 연결)
-    const fanGeo = new THREE.CylinderGeometry(20, 21, 0.25, 24, 1, false, 0, Math.PI);
-    const fanMesh = new THREE.Mesh(fanGeo, upperPaverMat);
-    fanMesh.position.set(0, 0.14, 0);
+    const fanMesh = new THREE.Mesh(new THREE.CylinderGeometry(20, 21, 0.22, 24, 1, false, 0, Math.PI), upperPaverMat);
+    fanMesh.position.set(0, 0.11, 0);
     fanMesh.receiveShadow = true;
     plazaGroup.add(fanMesh);
 
-    const stepCount = 16;
-    for (let s = 0; s < stepCount; s++) {
-      const sh = (UPPER_DECK_Y / stepCount) * (s + 1);
-      const step = new THREE.Mesh(new THREE.BoxGeometry(0.9, UPPER_DECK_Y / stepCount + 0.05, 8.5), copingMat);
-      step.position.set(14.5 - s * 0.85, sh - (UPPER_DECK_Y / stepCount) * 0.5, -14.0);
-      step.castShadow = true;
-      step.receiveShadow = true;
-      plazaGroup.add(step);
-    }
-    // 커뮤니티 센터 메인 로비 포털 캐노피
     const portalCanopy = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.35, 11.0), canopyMetalMat);
     portalCanopy.position.set(2.3, 3.6, 2.0);
     portalCanopy.castShadow = true;
     plazaGroup.add(portalCanopy);
     commFacadeGroup.add(plazaGroup);
 
-    // 4) 상단 커뮤니티 데크 외곽 두겁석 + 유리 안전난간 / 울타리
+    // 상단 데크 외곽 두겁석 + 유리 안전난간 / 울타리
     addEdgeCopingAndRailing(upperGroup, commSEFrontPts, UPPER_DECK_Y, { closed: false, withGlassRail: true, withFence: false });
-    addEdgeCopingAndRailing(upperGroup, upperNWOuter, UPPER_DECK_Y, { closed: false, withGlassRail: false, withFence: true });
+    addEdgeCopingAndRailing(upperGroup, upperNWLeft, UPPER_DECK_Y, { closed: false, withGlassRail: false, withFence: true });
+    addEdgeCopingAndRailing(upperGroup, upperNERight, UPPER_DECK_Y, { closed: false, withGlassRail: false, withFence: true });
 
     // ---------------------------------------------------------
-    // [PART C] 단지 내 도로 & 보행로 (스카이뷰 img/금파힐 커뮤니티 경계.png 기준)
+    // [PART C] 주황색 지하주차장 진입 통로 2곳 (Community_south.glb 실측 디자인)
+    // ---------------------------------------------------------
+    const parkingPortalGroup = new THREE.Group();
+    parkingPortalGroup.name = 'Underground_Parking_Portals';
+    communityRoot.add(parkingPortalGroup);
+
+    // 1) 동북쪽 주차장 입구 (106동 북서측 벽면, NE 방향 동북 순환도로 연결)
+    // 벽면 (-91.8,-101.6)->(-60.5,-74.4)의 외측 법선은 NE(약 +41° -> atan2(0.65,-0.76) ≈ 139°)
+    parkingPortalGroup.add(createParkingEntrancePortal(-76.5, -88.2, 139, 'Parking_Portal_NE', { apronLen: 15.0 }));
+
+    // 2) 남쪽 주차장 입구 (108동 남측 벽면, 벽면 법선 -4° 방향 남측 순환도로 연결)
+    parkingPortalGroup.add(createParkingEntrancePortal(-215.2, 71.9, -4, 'Parking_Portal_South', { apronLen: 16.0 }));
+
+    // ---------------------------------------------------------
+    // [PART D] 하얀색 단지 내 산책용 보행자길 (동북 1F 0m -> 중앙 놀이터 2F +6m -> 90° 서북)
+    // ---------------------------------------------------------
+    const promenadeGroup = new THREE.Group();
+    promenadeGroup.name = 'Main_Pedestrian_Promenade_Ramp';
+    communityRoot.add(promenadeGroup);
+
+    // 1) 완만 경사로 구간 (동북 1F Y=0.05m -> 중앙 놀이터 부근 2F Y=6.05m) + 2F 평탄 직선 -> 90° 서북
+    const mainPromenade3D = [
+      [RAMP_START_RAW[0], LOWER_DECK_Y + 0.06, RAMP_START_RAW[1]],
+      [RAMP_TOP_RAW[0],   UPPER_DECK_Y + 0.05, RAMP_TOP_RAW[1]],
+      [WALK_ELBOW_RAW[0], UPPER_DECK_Y + 0.05, WALK_ELBOW_RAW[1]],
+      [WALK_NW_END_RAW[0], UPPER_DECK_Y + 0.05, WALK_NW_END_RAW[1]],
+    ];
+    promenadeGroup.add(createWalkwayStrip3D(mainPromenade3D, PROMENADE_W, promenadeMat, 'Promenade_Main_L_Path', { withCurbs: true, tileLen: 6.0 }));
+
+    // 2) 경사로 좌우 옹벽(상단 데크 컷아웃 양측 벽면: 경사로 바닥 -> +6.0m 상단 데크까지 마감)
+    const pStartNW = toLocal(RAMP_START_RAW[0] + rnx * halfPW, RAMP_START_RAW[1] + rnz * halfPW);
+    const pStartSE = toLocal(RAMP_START_RAW[0] - rnx * halfPW, RAMP_START_RAW[1] - rnz * halfPW);
+    const pEntryNW = toLocal(...TRENCH_NE_NW);
+    const pEntrySE = toLocal(...TRENCH_NE_SE);
+    const pTopNW   = toLocal(...TRENCH_TOP_NW);
+    const pTopSE   = toLocal(...TRENCH_TOP_SE);
+
+    // 2-a) 상단 데크 내부 컷아웃 양쪽 경사 옹벽 (경사로 높이가 6m에 가까워질수록 자연스럽게 0m로 수렴)
+    promenadeGroup.add(createSlopedQuadWall(pEntryNW, pTopNW, UPPER_DECK_Y, entryY, UPPER_DECK_Y, UPPER_DECK_Y, retainingWallMat, 'Ramp_TrenchWall_NW'));
+    promenadeGroup.add(createSlopedQuadWall(pTopSE, pEntrySE, UPPER_DECK_Y, UPPER_DECK_Y, UPPER_DECK_Y, entryY, retainingWallMat, 'Ramp_TrenchWall_SE'));
+    // 2-b) 상단 데크 진입 전(외부 구간) 경사로 하부 받침벽 (Y = 0 ~ entryY)
+    promenadeGroup.add(createSlopedQuadWall(pStartNW, pEntryNW, LOWER_DECK_Y + 0.06, LOWER_DECK_Y, entryY, LOWER_DECK_Y, retainingWallMat, 'Ramp_OuterBase_NW'));
+    promenadeGroup.add(createSlopedQuadWall(pEntrySE, pStartSE, entryY, LOWER_DECK_Y, LOWER_DECK_Y + 0.06, LOWER_DECK_Y, retainingWallMat, 'Ramp_OuterBase_SE'));
+    // 2-c) 컷아웃 상단 안전 유리난간 (보행자 추락 방지)
+    addEdgeCopingAndRailing(promenadeGroup, [pEntryNW, pTopNW], UPPER_DECK_Y, { closed: false, withGlassRail: true, withFence: false });
+    addEdgeCopingAndRailing(promenadeGroup, [pEntrySE, pTopSE], UPPER_DECK_Y, { closed: false, withGlassRail: true, withFence: false });
+
+    // ---------------------------------------------------------
+    // [PART E] 스카이뷰 기준 단지 내 순환도로 & 모든 보조 보행자길
     // ---------------------------------------------------------
     const roadGroup = new THREE.Group();
-    roadGroup.name = 'Internal_Roads_Walkways';
+    roadGroup.name = 'Internal_Roads_And_Walkways';
     communityRoot.add(roadGroup);
 
-    // 메인 순환도로: 정문(SW) -> 108/110동 사이 -> 중앙 반원 광장 앞 -> 106/112동 사이 -> 114/105동 사이 -> 후문(NE)
+    // 하단 메인 순환도로 (정문 -> 중앙 광장 -> 후문)
     const mainRoadRaw = [
       [-342.0,  104.0],
       [-285.0,   94.0],
@@ -1009,70 +1305,93 @@
     ];
     roadGroup.add(createCurvedRoad(mainRoadRaw, 7.2, LOWER_DECK_Y, 'Main_Loop_Road'));
 
-    // 남측 보조 보행/차량 연결로 (중앙 광장 -> 111/116/112동 사이)
-    const southBranchRaw = [
-      [-148.0,   86.0],
-      [-105.0,   90.0],
-      [ -65.0,   92.0],
-      [ -32.0,   90.0],
-    ];
-    roadGroup.add(createCurvedRoad(southBranchRaw, 5.0, LOWER_DECK_Y, 'South_Branch_Walk'));
+    // 하단 남측 연결 보행로 (중앙 광장 -> 111/116/112동 사이)
+    roadGroup.add(createCurvedRoad(
+      [[-148.0, 86.0], [-105.0, 90.0], [-65.0, 92.0], [-28.0, 88.0]],
+      4.4, LOWER_DECK_Y, 'Lower_South_Walkway', { mat: secondaryWalkMat, withCrosswalks: false, uvLen: 4.5 }
+    ));
+    // 하단 동측 산책 보행로 (112~113~114동 중앙 공원 경유)
+    roadGroup.add(createCurvedRoad(
+      [[-50.0, 88.0], [-42.0, 44.0], [-48.0, 12.0], [-28.0, -24.0], [-14.0, -76.0], [-10.0, -124.0]],
+      3.6, LOWER_DECK_Y, 'Lower_East_Park_Walkway', { mat: secondaryWalkMat, withCrosswalks: false, uvLen: 4.0 }
+    ));
+    // 하단 남측 외곽 공원 산책길 (109~110~111~116동 남쪽 녹지 따라)
+    roadGroup.add(createCurvedRoad(
+      [[-310.0, 146.0], [-252.0, 129.0], [-182.0, 132.0], [-110.0, 117.0], [-40.0, 120.0]],
+      3.0, LOWER_DECK_Y, 'Lower_South_Perimeter_Walk', { mat: secondaryWalkMat, withCrosswalks: false, uvLen: 3.5 }
+    ));
+
+    // 상단 커뮤니티 데크 내부 보행도로망 (스카이뷰 img/금파힐 커뮤니티 경계.png 동 사이 산책길 그대로!)
+    // 1) 남동 커뮤니티 전망 산책로 (108동 남측 -> 107동 앞 -> 배드민턴장 -> 106동 앞)
+    roadGroup.add(createCurvedRoad(
+      [[-310.0, 56.0], [-240.0, 62.0], [-178.0, 66.0], [-134.0, 26.0], [-94.0, -14.0], [-58.0, -48.0]],
+      3.8, UPPER_DECK_Y, 'Upper_SE_Overlook_Walk', { mat: secondaryWalkMat, withCrosswalks: false, uvLen: 4.0 }
+    ));
+    // 2) 서북 외곽 산책로 (102동 서측 -> 103동 서측 -> 104동 서측 -> 옥상 녹지공원 -> 105동 북측)
+    roadGroup.add(createCurvedRoad(
+      [[-324.0, 18.0], [-282.0, -24.0], [-244.0, -78.0], [-216.0, -118.0], [-186.0, -144.0], [-135.0, -148.0], [-96.0, -144.0]],
+      3.4, UPPER_DECK_Y, 'Upper_NW_Perimeter_Walk', { mat: secondaryWalkMat, withCrosswalks: false, uvLen: 4.0 }
+    ));
+    // 3) 북측 중앙 연결 보행로 (중앙 메인 산책길 -> 북측 놀이터 -> 옥상 녹지공원)
+    roadGroup.add(createCurvedRoad(
+      [[-150.0, -47.0], [-156.0, -82.0], [-162.0, -108.0], [-184.0, -132.0]],
+      3.6, UPPER_DECK_Y, 'Upper_North_Park_Connector', { mat: secondaryWalkMat, withCrosswalks: false, uvLen: 4.0 }
+    ));
+    // 4) 남서 놀이터 연결 보행로 (90° 엘보 -> SW 놀이터 -> 102동 앞)
+    roadGroup.add(createCurvedRoad(
+      [[-233.3, 26.7], [-258.0, 42.0], [-290.0, 54.0]],
+      3.4, UPPER_DECK_Y, 'Upper_SW_Playground_Walk', { mat: secondaryWalkMat, withCrosswalks: false, uvLen: 4.0 }
+    ));
+    // 5) 107~108동 사이 보행 연결로 (메인 산책길 -> 남동 전망 산책로)
+    roadGroup.add(createCurvedRoad(
+      [[-190.0, -10.0], [-166.0, 18.0], [-148.0, 42.0]],
+      3.2, UPPER_DECK_Y, 'Upper_Mid_Cross_Walk', { mat: secondaryWalkMat, withCrosswalks: false, uvLen: 4.0 }
+    ));
 
     // ---------------------------------------------------------
-    // [PART D] 단지 내 공원 · 옥상녹지 · 놀이터 · 배드민턴장 · 조경수 (스카이뷰 실측 배치)
+    // [PART F] 스카이뷰 기준 공원 · 녹지 · 놀이터 · 배드민턴장 · 조경수
     // ---------------------------------------------------------
     const parkGroup = new THREE.Group();
     parkGroup.name = 'Parks_Playgrounds_Trees';
     communityRoot.add(parkGroup);
 
-    // D-1) 서북쪽 옥상 녹지공원 (img/금파힐 커뮤니티 경계.png 상단 좌측 + Community_north.webp 기준)
+    // F-1) 서북쪽 옥상 녹지공원 (V자 산책로 + 벤치 + 조경수)
     const ecoRoofGroup = new THREE.Group();
     ecoRoofGroup.name = 'NW_Community_RoofGarden';
     const ecoCenter = toLocal(-204.0, -138.0);
     ecoRoofGroup.position.set(ecoCenter[0], UPPER_DECK_Y, ecoCenter[1]);
     ecoRoofGroup.rotation.y = THREE.MathUtils.degToRad(13);
     const ecoBase = new THREE.Mesh(new THREE.BoxGeometry(46, 0.35, 22), curbMat);
-    ecoBase.position.y = 0.175;
-    ecoBase.receiveShadow = true;
+    ecoBase.position.y = 0.175; ecoBase.receiveShadow = true;
     ecoRoofGroup.add(ecoBase);
     const ecoLawn = new THREE.Mesh(new THREE.BoxGeometry(44, 0.4, 20), grassMat);
-    ecoLawn.position.y = 0.2;
-    ecoLawn.receiveShadow = true;
+    ecoLawn.position.y = 0.2; ecoLawn.receiveShadow = true;
     ecoRoofGroup.add(ecoLawn);
-    // 위성사진 속 특징적인 V자/대각선 산책로
     const path1 = new THREE.Mesh(new THREE.BoxGeometry(22, 0.44, 2.2), upperPaverMat);
-    path1.position.set(-7, 0.22, 0);
-    path1.rotation.y = 0.48;
+    path1.position.set(-7, 0.22, 0); path1.rotation.y = 0.48;
     ecoRoofGroup.add(path1);
     const path2 = new THREE.Mesh(new THREE.BoxGeometry(18, 0.44, 2.2), upperPaverMat);
-    path2.position.set(9, 0.22, -1);
-    path2.rotation.y = -0.52;
+    path2.position.set(9, 0.22, -1); path2.rotation.y = -0.52;
     ecoRoofGroup.add(path2);
     parkGroup.add(ecoRoofGroup);
 
-    // D-2) 상단 북측 어린이놀이터 (104동~105동 사이, Community_north.webp 기준)
+    // F-2) 놀이터 3곳 (상단 북측 · 상단 남서측 · 하단 중앙 공원)
     addPlayground(parkGroup, -158.0, -104.0, 18.0, 14.0, -35, UPPER_DECK_Y, 'Upper_North_Playground');
+    addPlayground(parkGroup, -262.0,   44.0, 20.0, 16.0,  -8, UPPER_DECK_Y, 'Upper_SW_Playground');
+    addPlayground(parkGroup,  -54.0,   14.0, 19.0, 15.0, -32, LOWER_DECK_Y, 'Lower_Central_Playground');
 
-    // D-3) 상단 남서측 어린이놀이터 (102동~108동 사이, 스카이뷰 & Community_south.webp 기준)
-    addPlayground(parkGroup, -262.0, 44.0, 20.0, 16.0, -8, UPPER_DECK_Y, 'Upper_SW_Playground');
-
-    // D-4) 상단 멀티 스포츠·배드민턴장 (106동~107동 사이, 스카이뷰 & Community_south.webp 기준)
+    // F-3) 상단 배드민턴장 (106~107동 사이)
     const courtGrp = new THREE.Group();
     courtGrp.name = 'Upper_Badminton_Court';
     const cPos = toLocal(-98.0, -28.0);
     courtGrp.position.set(cPos[0], UPPER_DECK_Y, cPos[1]);
     courtGrp.rotation.y = THREE.MathUtils.degToRad(42);
     const courtFloor = new THREE.Mesh(new THREE.BoxGeometry(17.5, 0.14, 10.5), courtGreenMat);
-    courtFloor.position.y = 0.07;
-    courtFloor.receiveShadow = true;
+    courtFloor.position.y = 0.07; courtFloor.receiveShadow = true;
     courtGrp.add(courtFloor);
-    // 흰 코트 라인
     [
-      [15.2, 0.16, 0.16, 0, -4.1],
-      [15.2, 0.16, 0.16, 0,  4.1],
-      [0.16, 0.16, 8.2, -7.6, 0],
-      [0.16, 0.16, 8.2,  7.6, 0],
-      [0.16, 0.16, 8.2,  0,   0],
+      [15.2, 0.16, 0.16, 0, -4.1], [15.2, 0.16, 0.16, 0, 4.1],
+      [0.16, 0.16, 8.2, -7.6, 0],  [0.16, 0.16, 8.2, 7.6, 0], [0.16, 0.16, 8.2, 0, 0],
     ].forEach(([w, h, d, x, z]) => {
       const line = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), whiteLineMat);
       line.position.set(x, 0.08, z);
@@ -1080,133 +1399,72 @@
     });
     parkGroup.add(courtGrp);
 
-    // D-5) 하단 중앙 공원 & 놀이터 (112동~113동 사이, 스카이뷰 중앙 우측)
-    addPlayground(parkGroup, -54.0, 14.0, 19.0, 15.0, -32, LOWER_DECK_Y, 'Lower_Central_Playground');
+    // F-4) 스카이뷰 기준 단지 내 녹지 공원·잔디광장 (파고라·벤치 포함, 모든 동 자리 회피)
+    // 상단 커뮤니티 데크 공원들
+    addLawnPlanter(parkGroup, -220.0,  -12.0, 24, 12, 42, UPPER_DECK_Y, 0.34, { withBenches: true, withPergola: true });
+    addLawnPlanter(parkGroup, -172.0,  -54.0, 22, 11, 42, UPPER_DECK_Y, 0.34, { withBenches: true });
+    addLawnPlanter(parkGroup, -142.0,  -82.0, 18,  9, 42, UPPER_DECK_Y, 0.32, { withBenches: true });
+    addLawnPlanter(parkGroup, -256.0,  -56.0, 22,  8, 52, UPPER_DECK_Y, 0.32);
+    addLawnPlanter(parkGroup, -296.0,   -6.0, 24,  8, 45, UPPER_DECK_Y, 0.32);
+    addLawnPlanter(parkGroup, -140.0,   38.0, 26,  6.5, 43, UPPER_DECK_Y, 0.32, { withBenches: true });
+    addLawnPlanter(parkGroup,  -82.0,  -14.0, 24,  5.5, 43, UPPER_DECK_Y, 0.32);
+    addLawnPlanter(parkGroup, -124.0,  -16.0, 16,  9, 42, UPPER_DECK_Y, 0.32, { withPergola: true });
+    addLawnPlanter(parkGroup, -170.0,  -18.0, 18,  8, 42, UPPER_DECK_Y, 0.32);
+    addLawnPlanter(parkGroup, -262.0,   14.0, 16,  8, -45, UPPER_DECK_Y, 0.32);
+    addLawnPlanter(parkGroup, -148.0, -146.0, 34,  6, -3, UPPER_DECK_Y, 0.32);
 
-    // D-6) 상단 커뮤니티 데크 중앙 녹지 화단들 (동 사이 빈 공간만 배치)
-    addLawnPlanter(parkGroup, -214.0,  -3.0, 22, 11, 42, UPPER_DECK_Y);
-    addLawnPlanter(parkGroup, -148.0, -56.0, 20, 10, 42, UPPER_DECK_Y);
-    addLawnPlanter(parkGroup, -124.0, -82.0, 16,  9, 42, UPPER_DECK_Y);
-    addLawnPlanter(parkGroup, -248.0, -48.0, 18,  7, 52, UPPER_DECK_Y);
-    addLawnPlanter(parkGroup, -142.0,  36.0, 22,  6, 43, UPPER_DECK_Y);
-    addLawnPlanter(parkGroup,  -84.0, -14.0, 22,  5, 43, UPPER_DECK_Y);
+    // 하단 지하주차장 데크 공원들 (중앙 공원, 남측 공원 띠, 동측 공원 띠)
+    addLawnPlanter(parkGroup,  -72.0,   12.0, 16, 12, 32, LOWER_DECK_Y, 0.32, { withBenches: true, withPergola: true });
+    addLawnPlanter(parkGroup,  -36.0,   28.0, 14, 10, 18, LOWER_DECK_Y, 0.32);
+    addLawnPlanter(parkGroup, -215.0,  129.0, 52,  6, -3, LOWER_DECK_Y, 0.32, { withBenches: true });
+    addLawnPlanter(parkGroup,  -88.0,  117.0, 50,  6, -3, LOWER_DECK_Y, 0.32, { withBenches: true });
+    addLawnPlanter(parkGroup,  -28.0,   78.0, 18,  8, 10, LOWER_DECK_Y, 0.32);
+    addLawnPlanter(parkGroup,   24.0,  -88.0,  8, 28,  5, LOWER_DECK_Y, 0.32);
+    addLawnPlanter(parkGroup,   20.0,   38.0, 14, 10,  5, LOWER_DECK_Y, 0.32);
+    addLawnPlanter(parkGroup, -310.0,  112.0, 22,  7,  6, LOWER_DECK_Y, 0.32);
 
-    // D-7) 하단 지하주차장 데크 외곽 녹지 띠 (남측·동측 울타리 안쪽)
-    addLawnPlanter(parkGroup, -215.0, 129.0, 48, 5.5, -3, LOWER_DECK_Y);
-    addLawnPlanter(parkGroup,  -85.0, 117.0, 46, 5.5, -3, LOWER_DECK_Y);
-    addLawnPlanter(parkGroup,  -28.0,  78.0, 16, 7.0, 10, LOWER_DECK_Y);
-    addLawnPlanter(parkGroup,   24.0, -88.0,  7, 26.0,  5, LOWER_DECK_Y);
-
-    // D-8) 조경수 배치 (모든 아파트 동 102~116동 중심에서 충분히 떨어뜨려 동을 올릴 때 간섭 없음)
+    // F-5) 스카이뷰 공원 조경수 (모든 동 자리 102~116동 & 경사로에서 떨어뜨려 배치)
     const upperTrees = [
-      [-230, -134, 'pine', 1.1], [-186, -148, 'deciduous', 1.15], [-168, -146, 'pine', 1.0],
-      [-148, -144, 'deciduous', 1.0], [-102, -148, 'pine', 1.1],
-      [-222, -96, 'deciduous', 1.1], [-264, -52, 'pine', 1.15], [-292, -18, 'deciduous', 1.1],
-      [-322, 16, 'pine', 1.05], [-218, -6, 'deciduous', 1.2], [-206, 2, 'pine', 1.0],
-      [-152, -58, 'deciduous', 1.15], [-140, -52, 'pine', 1.05],
-      [-126, -86, 'deciduous', 1.05], [-102, -62, 'pine', 1.0],
-      [-150, 40, 'deciduous', 1.1], [-134, 28, 'pine', 1.05], [-92, -8, 'deciduous', 1.1],
-      [-76, -24, 'pine', 1.0], [-248, 52, 'deciduous', 1.0], [-280, 52, 'pine', 1.05],
+      [-232, -134, 'pine', 1.15], [-212, -146, 'deciduous', 1.1], [-186, -148, 'deciduous', 1.15],
+      [-168, -146, 'pine', 1.05], [-146, -146, 'deciduous', 1.05], [-102, -148, 'pine', 1.1],
+      [-224, -96, 'deciduous', 1.1], [-252, -62, 'pine', 1.15], [-264, -50, 'deciduous', 1.1],
+      [-292, -16, 'deciduous', 1.1], [-306, 2, 'pine', 1.1], [-324, 16, 'pine', 1.05],
+      [-224, -14, 'deciduous', 1.2], [-214, -6, 'pine', 1.05], [-176, -58, 'deciduous', 1.15],
+      [-164, -50, 'pine', 1.05], [-142, -84, 'deciduous', 1.05], [-172, -16, 'pine', 1.05],
+      [-124, -18, 'deciduous', 1.1], [-150, 40, 'deciduous', 1.1], [-134, 28, 'pine', 1.05],
+      [-92, -8, 'deciduous', 1.1], [-76, -24, 'pine', 1.05], [-248, 52, 'deciduous', 1.0],
+      [-280, 52, 'pine', 1.05], [-262, 16, 'deciduous', 1.05], [-274, 4, 'pine', 1.0],
     ];
     upperTrees.forEach(([x, z, tp, sc]) => addTree(parkGroup, x, z, UPPER_DECK_Y, tp, sc));
 
     const lowerTrees = [
-      [-320, 144, 'deciduous', 1.1], [-270, 126, 'pine', 1.05], [-225, 130, 'deciduous', 1.1],
-      [-190, 132, 'pine', 1.0], [-125, 114, 'deciduous', 1.15], [-92, 118, 'pine', 1.05],
-      [-65, 119, 'deciduous', 1.05], [-28, 76, 'pine', 1.1], [-46, 26, 'deciduous', 1.15],
-      [-64, 4, 'pine', 1.05], [-38, -2, 'deciduous', 1.0], [-82, 42, 'pine', 1.1],
-      [-104, 68, 'deciduous', 1.05], [24, 34, 'pine', 1.1], [28, -28, 'deciduous', 1.05],
-      [26, -78, 'pine', 1.1], [32, -110, 'deciduous', 1.05], [-66, -138, 'pine', 1.05],
+      [-322, 146, 'deciduous', 1.1], [-302, 114, 'pine', 1.05], [-270, 128, 'pine', 1.05],
+      [-225, 130, 'deciduous', 1.15], [-192, 132, 'pine', 1.05], [-125, 116, 'deciduous', 1.15],
+      [-94, 118, 'pine', 1.05], [-66, 119, 'deciduous', 1.1], [-28, 76, 'pine', 1.1],
+      [-74, 14, 'deciduous', 1.15], [-64, 4, 'pine', 1.05], [-44, 26, 'deciduous', 1.15],
+      [-34, 32, 'pine', 1.0], [-36, -2, 'deciduous', 1.05], [-84, 44, 'pine', 1.1],
+      [-104, 68, 'deciduous', 1.05], [22, 36, 'pine', 1.1], [28, -28, 'deciduous', 1.05],
+      [26, -78, 'pine', 1.1], [32, -110, 'deciduous', 1.05], [-62, -142, 'pine', 1.05],
     ];
     lowerTrees.forEach(([x, z, tp, sc]) => addTree(parkGroup, x, z, LOWER_DECK_Y, tp, sc));
 
     // =========================================================
-    // 7. 시각 확인용 가이드 (GLB 추출 시 제외 — communityRoot 바깥 scene에 배치)
+    // 7. 선택적 노란 경계선 참고 가이드 (기본 OFF, GLB 추출 제외)
     // =========================================================
-    const guideGroup = new THREE.Group();
-    guideGroup.name = 'Editor_Dong_Guides';
-    scene.add(guideGroup);
-
-    // map_data.js 기준 금호파크힐스 각 동 위치 (반투명 가이드 박스 + 동 번호 스프라이트)
-    const DONG_GUIDES = [
-      { name: '102동', x: -313.8, z:   41.4, w: 32, d: 28, y: UPPER_DECK_Y },
-      { name: '103동', x: -246.5, z:  -21.7, w: 36, d: 34, y: UPPER_DECK_Y },
-      { name: '104동', x: -192.6, z:  -81.1, w: 36, d: 36, y: UPPER_DECK_Y },
-      { name: '105동', x: -121.1, z: -124.9, w: 34, d: 32, y: UPPER_DECK_Y },
-      { name: '106동', x:  -58.3, z:  -61.9, w: 34, d: 34, y: UPPER_DECK_Y },
-      { name: '107동', x: -148.0, z:  -12.0, w: 36, d: 34, y: UPPER_DECK_Y },
-      { name: '108동', x: -206.0, z:   46.0, w: 36, d: 34, y: UPPER_DECK_Y },
-      { name: '109동', x: -311.9, z:  135.7, w: 22, d: 18, y: LOWER_DECK_Y },
-      { name: '110동', x: -253.5, z:  114.3, w: 46, d: 18, y: LOWER_DECK_Y },
-      { name: '111동', x: -164.6, z:  120.5, w: 28, d: 18, y: LOWER_DECK_Y },
-      { name: '112동', x:  -67.2, z:   55.3, w: 44, d: 38, y: LOWER_DECK_Y },
-      { name: '113동', x:    0.4, z:    1.6, w: 38, d: 48, y: LOWER_DECK_Y },
-      { name: '114동', x:   11.2, z:  -96.0, w: 32, d: 44, y: LOWER_DECK_Y },
-      { name: '115동', x:  -22.9, z: -142.2, w: 26, d: 18, y: LOWER_DECK_Y },
-      { name: '116동', x:  -39.4, z:  109.5, w: 18, d: 22, y: LOWER_DECK_Y },
-    ];
-
-    function makeTagSprite(text, bg) {
-      const c = document.createElement('canvas');
-      c.width = 192; c.height = 64;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = bg;
-      ctx.beginPath();
-      ctx.roundRect(4, 4, 184, 56, 14);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 30px Malgun Gothic, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(text, 96, 33);
-      const tex = new THREE.CanvasTexture(c);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
-      sp.scale.set(16, 5.3, 1);
-      return sp;
-    }
-
-    const ghostUpperMat = new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.22, wireframe: false });
-    const ghostLowerMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.22, wireframe: false });
-    DONG_GUIDES.forEach((d) => {
-      const [lx, lz] = toLocal(d.x, d.z);
-      const isUp = d.y > 0;
-      const h = 38;
-      const box = new THREE.Mesh(new THREE.BoxGeometry(d.w, h, d.d), isUp ? ghostUpperMat : ghostLowerMat);
-      box.position.set(lx, d.y + h * 0.5, lz);
-      guideGroup.add(box);
-
-      const edges = new THREE.LineSegments(
-        new THREE.EdgesGeometry(box.geometry),
-        new THREE.LineBasicMaterial({ color: isUp ? 0xfdba74 : 0x7dd3fc })
-      );
-      edges.position.copy(box.position);
-      guideGroup.add(edges);
-
-      const tag = makeTagSprite(d.name, isUp ? 'rgba(194,65,12,0.88)' : 'rgba(3,105,161,0.88)');
-      tag.position.set(lx, d.y + h + 4.5, lz);
-      guideGroup.add(tag);
-    });
-
-    // 노란 경계선 원본 대조 가이드 (img/금파힐 커뮤니티 경계.png의 노란선 그대로 공중에 표시)
     const yellowGuideGroup = new THREE.Group();
     yellowGuideGroup.name = 'Editor_Yellow_Boundary_Guide';
+    yellowGuideGroup.visible = false;
     scene.add(yellowGuideGroup);
 
     const yellowLineMat = new THREE.LineBasicMaterial({ color: 0xffee00 });
     function addYellowLine(pts, y) {
       const vecs = pts.map(([x, z]) => new THREE.Vector3(x, y, z));
-      const geo = new THREE.BufferGeometry().setFromPoints(vecs);
-      yellowGuideGroup.add(new THREE.Line(geo, yellowLineMat));
+      yellowGuideGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(vecs), yellowLineMat));
     }
-    addYellowLine(UPPER_POLY.slice(0, 17), UPPER_DECK_Y + 1.6);
-    addYellowLine([UPPER_POLY[16], UPPER_POLY[17], UPPER_POLY[18]], UPPER_DECK_Y + 1.6);
+    addYellowLine(UPPER_OUTLINE.slice(0, 17), UPPER_DECK_Y + 1.6);
+    addYellowLine([UPPER_OUTLINE[16], UPPER_OUTLINE[17], UPPER_OUTLINE[18]], UPPER_DECK_Y + 1.6);
     addYellowLine(LOWER_OUTER, LOWER_DECK_Y + 1.6);
 
-    // 배경 참고 바닥면 (GLB 추출 제외)
     const refGround = new THREE.Mesh(
       new THREE.PlaneGeometry(1400, 1400),
       new THREE.MeshStandardMaterial({ color: 0x5c6858, roughness: 0.98 })
@@ -1223,12 +1481,18 @@
       if (mode === 'top') {
         camera.position.set(0, 440, 10);
         controls.target.set(0, 0, 0);
+      } else if (mode === 'ramp') {
+        camera.position.set(120, 48, -145);
+        controls.target.set(35, 3, -75);
+      } else if (mode === 'portal_ne') {
+        camera.position.set(118, 16, -125);
+        controls.target.set(84, 3, -88);
+      } else if (mode === 'portal_s') {
+        camera.position.set(-55, 16, 128);
+        controls.target.set(-55, 3, 72);
       } else if (mode === 'se_comm') {
         camera.position.set(95, 52, 140);
         controls.target.set(-20, 4, 10);
-      } else if (mode === 'plaza') {
-        camera.position.set(38, 12, 72);
-        controls.target.set(-15, 6, 12);
       } else if (mode === 'nw_wall') {
         camera.position.set(-230, 80, -210);
         controls.target.set(-55, 2, -65);
@@ -1240,13 +1504,6 @@
         controls.target.set(170, -2, -20);
       }
       controls.update();
-    };
-
-    window.toggleDongGuide = () => {
-      guideGroup.visible = !guideGroup.visible;
-      const btn = document.getElementById('btnDongGuide');
-      btn.textContent = guideGroup.visible ? '🏢 동 위치 가이드 ON' : '🏢 동 위치 가이드 OFF';
-      btn.classList.toggle('off', !guideGroup.visible);
     };
 
     window.toggleYellowLine = () => {
