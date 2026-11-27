@@ -1828,9 +1828,26 @@
       panelBody.appendChild(fieldNum("층수", place.floors ?? 15, (v) => { place.floors = Math.round(v); }, { step: "1" }));
       panelBody.appendChild(fieldNum("x (raw)", place.x, (v) => { place.x = v; updatePlaceVisual(place.id); }));
       panelBody.appendChild(fieldNum("z (raw)", place.z, (v) => { place.z = v; updatePlaceVisual(place.id); }));
-      panelBody.appendChild(fieldNum("y · 단차 (raw, m)", place.y ?? 0, (v) => { place.y = v; }, {
-        step: "0.5", note: "0이면 기준 지면과 같은 높이. 양수면 그만큼 높게, 음수면 낮게 — 게임에서 그 높이까지 이어지는 벽이 자동으로 생깁니다.",
-      }));
+      const yField = fieldNum("y · 단차 (raw, m)", place.y ?? 0, (v) => { place.y = Math.round(v * 100) / 100; }, {
+        step: "0.1", note: "0이면 자동 1층(y=0) 맞춤 높이. 양수(+m)면 위로, 음수(-m)면 아래로 미세 조정됩니다. 3D 게임에서 Shift+H (또는 ?tune=1)로 실시간 확인 후 이 값을 입력하세요.",
+      });
+      const yBtns = document.createElement("div");
+      yBtns.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;";
+      [-1, -0.5, -0.1, 0, 0.1, 0.5, 1].forEach((delta) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = delta === 0 ? "0 초기화" : (delta > 0 ? `+${delta}` : `${delta}`);
+        b.style.cssText = "padding:3px 7px;font-size:11px;border-radius:6px;border:1px solid #3a404c;background:#232832;color:#e8ecf4;cursor:pointer;";
+        b.addEventListener("click", () => {
+          const next = delta === 0 ? 0 : Math.round(((place.y ?? 0) + delta) * 100) / 100;
+          place.y = next;
+          const inp = yField.querySelector("input");
+          if (inp) inp.value = String(next);
+        });
+        yBtns.appendChild(b);
+      });
+      yField.appendChild(yBtns);
+      panelBody.appendChild(yField);
       panelBody.appendChild(fieldText("model (glb 경로)", place.model, async (v) => {
         place.model = v.trim() || undefined;
         const n = placeNodes[place.id];
