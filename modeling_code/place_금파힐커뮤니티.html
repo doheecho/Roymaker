@@ -1256,19 +1256,57 @@
 
     function createEpyeonhanSignTexture() {
       const c = document.createElement('canvas');
-      c.width = 1024;
-      c.height = 256;
+      c.width = 768;
+      c.height = 192;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#1f2329';
-      ctx.fillRect(0, 0, c.width, c.height);
-      ctx.strokeStyle = '#5c6470';
-      ctx.lineWidth = 6;
-      ctx.strokeRect(8, 8, c.width - 16, c.height - 16);
-      ctx.fillStyle = '#f2f4f8';
-      ctx.font = 'bold 112px Malgun Gothic, Apple SD Gothic Neo, sans-serif';
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.font = 'bold 110px Malgun Gothic, Apple SD Gothic Neo, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('e편한세상', c.width * 0.5, c.height * 0.53);
+      ctx.fillStyle = 'rgba(42, 48, 56, 0.72)';
+      ctx.fillText('e편한세상', c.width * 0.5 + 6, c.height * 0.54 + 6);
+      ctx.fillStyle = '#f5f7fa';
+      ctx.fillText('e편한세상', c.width * 0.5, c.height * 0.54);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createEastGate2SignTexture() {
+      const c = document.createElement('canvas');
+      c.width = 1024;
+      c.height = 192;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#676d77';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.fillStyle = '#262b33';
+      ctx.fillRect(0, 0, c.width, 14);
+      ctx.fillRect(0, c.height - 14, c.width, 14);
+      ctx.strokeStyle = 'rgba(30, 35, 42, 0.45)';
+      ctx.lineWidth = 2;
+      for (let x = 170; x < c.width; x += 170) {
+        ctx.beginPath(); ctx.moveTo(x, 14); ctx.lineTo(x, c.height - 14); ctx.stroke();
+      }
+      ctx.fillStyle = '#d92a2a';
+      ctx.beginPath(); ctx.arc(138, 96, 28, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(122, 90, 32, 12);
+      ctx.font = 'bold 46px Malgun Gothic, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('출구 EXIT', 178, 98);
+      ctx.font = 'bold 58px Malgun Gothic, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('출입구 2', 512, 98);
+      ctx.font = 'bold 46px Malgun Gothic, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('입구 ENTER', 842, 98);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(886, 96, 30, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2b9348';
+      ctx.beginPath(); ctx.arc(886, 96, 25, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.moveTo(878, 82); ctx.lineTo(901, 96); ctx.lineTo(878, 110); ctx.closePath(); ctx.fill();
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
       return tex;
@@ -1285,7 +1323,7 @@
 
       const openW = 8.4;
       const openH = 3.65;
-      const tunnelD = 12.0;
+      const tunnelD = 12.5;
       const driveW = 8.6;
       const driveLen = 22.0;
       const riseH = 3.0;
@@ -1326,68 +1364,68 @@
       grp.add(slopedDriveway);
 
       // 3) 터널 좌·우·후면 벽 + 천장 + 4개 LED 천장등
-      const tBack = new THREE.Mesh(new THREE.BoxGeometry(openW + 0.8, openH + 0.4, 0.4), tunnelDarkMat);
+      const tBack = new THREE.Mesh(new THREE.BoxGeometry(openW + 0.6, openH + 0.4, 0.4), tunnelDarkMat);
       tBack.position.set(0, openH * 0.5, -tunnelD);
       grp.add(tBack);
       [-1, 1].forEach((side) => {
-        const tw = new THREE.Mesh(new THREE.BoxGeometry(0.4, openH + 0.4, tunnelD + 0.4), tunnelDarkMat);
-        tw.position.set(side * (openW * 0.5 + 0.2), openH * 0.5, -tunnelD * 0.5);
+        const tw = new THREE.Mesh(new THREE.BoxGeometry(0.46, openH + 0.4, tunnelD + 0.4), tunnelDarkMat);
+        tw.position.set(side * 4.35, openH * 0.5, -tunnelD * 0.5);
         grp.add(tw);
-        const pier = new THREE.Mesh(new THREE.BoxGeometry(0.95, openH, 1.15), darkTrimMat);
-        pier.position.set(side * (openW * 0.5 + 0.35), openH * 0.5, 0.12);
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(1.0, openH + 0.06, 0.76), darkTrimMat);
+        pier.position.set(side * 4.62, openH * 0.5, -0.22);
         pier.castShadow = true;
         grp.add(pier);
       });
-      const tCeil = new THREE.Mesh(new THREE.BoxGeometry(openW + 1.2, 0.3, tunnelD + 0.6), tunnelDarkMat);
-      tCeil.position.set(0, openH + 0.05, -tunnelD * 0.5);
+      const tCeil = new THREE.Mesh(new THREE.BoxGeometry(openW + 0.8, 0.3, tunnelD + 0.8), tunnelDarkMat);
+      tCeil.position.set(0, openH + 0.12, -tunnelD * 0.5 + 0.1);
       grp.add(tCeil);
-      [-2.1, 2.1].forEach((lxLed) => {
-        [-3.4, -7.8].forEach((lzLed) => {
-          const led = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.08, 2.7), portalLedMat);
-          led.position.set(lxLed, openH - 0.16, lzLed);
+      [-2.0, 2.0].forEach((lxLed) => {
+        [-3.0, -7.8].forEach((lzLed) => {
+          const led = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.08, 2.8), portalLedMat);
+          led.position.set(lxLed, openH - 0.06, lzLed);
           grp.add(led);
         });
       });
 
       // 4) 터널 내부 중앙 주차 차단기 + 좌·우 빨강 차단바
-      const gateBox = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.05, 0.45), darkTrimMat);
-      gateBox.position.set(0, 0.58, -3.8);
+      const gateBox = new THREE.Mesh(new THREE.BoxGeometry(0.36, 1.06, 0.36), darkTrimMat);
+      gateBox.position.set(0, 0.56, -4.20);
       grp.add(gateBox);
       [-1, 1].forEach((side) => {
         const bar = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.1, 0.08), barrierRedMat);
-        bar.position.set(side * 1.9, 0.92, -3.8);
+        bar.position.set(side * 1.85, 0.92, -4.20);
         grp.add(bar);
       });
 
-      // 5) 출입구 2 상단 간판 + 린텔 + 상부 "e편한세상" 브랜드 간판
-      const lintel = new THREE.Mesh(new THREE.BoxGeometry(openW + 1.4, 1.48, 0.55), darkTrimMat);
-      lintel.position.set(0, openH + 0.74, 0.2);
+      // 5) 출입구 2 메탈 슬레이트 간판 + 린텔 + 상부 투명 "e편한세상" 입체 문자 간판
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(9.56, 1.48, 0.52), darkTrimMat);
+      lintel.position.set(0, openH + 0.74, 0.18);
       grp.add(lintel);
-      const canopyLip = new THREE.Mesh(new THREE.BoxGeometry(openW + 1.6, 0.22, 0.8), darkTrimMat);
-      canopyLip.position.set(0, openH + 0.04, 0.35);
+      const canopyLip = new THREE.Mesh(new THREE.BoxGeometry(8.76, 0.22, 0.64), darkTrimMat);
+      canopyLip.position.set(0, openH + 0.08, 0.16);
       grp.add(canopyLip);
 
       const gateSignMat = new THREE.MeshStandardMaterial({
-        map: createParkingSignTexture('출입구 2'),
-        roughness: 0.42, metalness: 0.08,
+        map: createEastGate2SignTexture(),
+        roughness: 0.42, metalness: 0.12,
       });
-      const gateSign = new THREE.Mesh(new THREE.PlaneGeometry(openW + 0.8, 1.32), gateSignMat);
-      gateSign.position.set(0, openH + 0.74, 0.52);
+      const gateSign = new THREE.Mesh(new THREE.PlaneGeometry(9.44, 1.40), gateSignMat);
+      gateSign.position.set(0, openH + 0.74, 0.45);
       grp.add(gateSign);
 
       const epyeonhanMat = new THREE.MeshStandardMaterial({
         map: createEpyeonhanSignTexture(),
-        roughness: 0.42, metalness: 0.12,
+        transparent: true, alphaTest: 0.05, roughness: 0.35, metalness: 0.15,
       });
       const epyeonhanSign = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 1.42), epyeonhanMat);
-      epyeonhanSign.position.set(0, 5.95, 0.34);
+      epyeonhanSign.position.set(0, 5.95, 0.18);
       epyeonhanSign.name = 'EastPortal2_EpyeonhanSign';
       grp.add(epyeonhanSign);
 
       // 6) 차선·정지선·좌회전 화살표·횡단보도(9줄)·좌우 경사 연석
-      const tunnelYellow = new THREE.Mesh(new THREE.PlaneGeometry(0.22, tunnelD - 0.8), portalYellowLineMat);
+      const tunnelYellow = new THREE.Mesh(new THREE.PlaneGeometry(0.20, 11.5), portalYellowLineMat);
       tunnelYellow.rotation.x = -Math.PI / 2;
-      tunnelYellow.position.set(0, 0.09, -tunnelD * 0.5);
+      tunnelYellow.position.set(0, 0.09, -5.75);
       grp.add(tunnelYellow);
 
       const addSlopeMark = (w, len, cx, cz, mat) => {
@@ -1396,10 +1434,10 @@
         m.position.set(cx, slopeY(cz) + 0.03, cz);
         grp.add(m);
       };
-      addSlopeMark(0.22, 16.0, 0, 8.0, portalYellowLineMat);
-      addSlopeMark(0.16, 16.0, -3.85, 8.0, whiteLineMat);
-      addSlopeMark(0.16, 16.0, 3.85, 8.0, whiteLineMat);
-      addSlopeMark(3.6, 0.45, -2.05, 13.0, whiteLineMat); // 출차 정지선
+      addSlopeMark(0.20, 15.8, 0, 7.9, portalYellowLineMat);
+      addSlopeMark(0.16, 16.0, -3.86, 8.0, whiteLineMat);
+      addSlopeMark(0.16, 16.0, 3.86, 8.0, whiteLineMat);
+      addSlopeMark(3.53, 0.55, -2.01, 13.28, whiteLineMat); // 출차 정지선
       // 출차 차로 좌회전 화살표
       const arrowGrp = new THREE.Group();
       arrowGrp.position.set(-2.05, slopeY(9.2) + 0.03, 9.2);
@@ -1417,17 +1455,18 @@
       arrowGrp.add(aHead);
       grp.add(arrowGrp);
 
-      // 외곽 9줄 횡단보도
+      // 외곽 9줄 횡단보도 (Z = 16.6..19.8, 1.10m 간격)
       for (let i = -4; i <= 4; i++) {
-        addSlopeMark(0.52, 2.8, i * 0.92, 18.0, whiteLineMat);
+        addSlopeMark(0.54, 3.2, i * 1.10, 18.2, whiteLineMat);
       }
 
       // 좌·우 경사 콘크리트 연석
       [-1, 1].forEach((side) => {
-        const cLen = Math.hypot(20.6, (20.6 / driveLen) * riseH);
-        const curb = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.32, cLen), darkCurbMat);
+        const lenZ = side < 0 ? 21.0 : 18.6;
+        const cLen = Math.hypot(lenZ, (lenZ / driveLen) * riseH);
+        const curb = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.34, cLen), darkCurbMat);
         curb.rotation.x = -slopeAng;
-        curb.position.set(side * (hw + 0.19), slopeY(10.3) + 0.08, 10.3);
+        curb.position.set(side * 4.40, slopeY(lenZ * 0.5) + 0.08, lenZ * 0.5);
         curb.receiveShadow = true;
         grp.add(curb);
       });
@@ -1453,62 +1492,62 @@
       };
 
       grp.add(makeSlopedPlanter([
-        [-4.5, 0.0], [-5.04, 0.0], [-7.9, 4.18], [-6.9, 21.8], [-4.5, 21.5]
+        [-4.58, 0.0], [-5.04, 0.0], [-7.90, 4.18], [-6.90, 21.4], [-4.58, 21.4]
       ], 0.24, 'EastPortal2_LeftSlopedPlanter'));
 
       grp.add(makeSlopedPlanter([
-        [4.5, 0.0], [5.04, 0.0], [11.6, 17.8], [9.5, 20.5], [4.5, 21.5]
+        [4.58, 0.0], [5.04, 0.0], [11.68, 17.8], [4.58, 17.8]
       ], 0.24, 'EastPortal2_RightSlopedPlanter'));
 
-      // 좌측 경사 화단 표지 기둥·소화전 + 수목 4그루
-      const leftPost = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.3, 8), darkTrimMat);
-      leftPost.position.set(-5.4, slopeY(14.5) + 1.35, 14.5);
+      // 좌측 경사 화단 표지 기둥·소화전 + 좌·우 관목 8개
+      const leftPost = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.3, 8), darkTrimMat);
+      leftPost.position.set(-5.50, slopeY(14.80) + 1.48, 14.80);
       grp.add(leftPost);
       const redPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.95, 8), barrierRedMat);
-      redPost.position.set(-5.0, slopeY(13.2) + 0.65, 13.2);
+      redPost.position.set(-4.90, slopeY(13.60) + 0.58, 13.60);
       grp.add(redPost);
 
-      const addLocalBushTree = (tx, tz, sc = 1.0) => {
-        const y0 = slopeY(tz) + 0.22;
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14 * sc, 0.22 * sc, 1.8 * sc, 6), trunkMat);
-        trunk.position.set(tx, y0 + 0.9 * sc, tz);
-        trunk.castShadow = true;
-        grp.add(trunk);
-        const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.35 * sc, 1), leafDarkMat);
-        crown.position.set(tx, y0 + 2.35 * sc, tz);
-        crown.castShadow = true;
-        grp.add(crown);
-      };
-      [[-5.8, 3.8, 1.0], [-6.1, 7.2, 1.05], [-5.9, 10.6, 0.95], [-6.1, 13.4, 1.15]].forEach(([x, z, s]) => addLocalBushTree(x, z, s));
-      [[5.6, 4.4, 1.0], [6.2, 7.8, 1.05], [6.4, 11.4, 1.0], [7.8, 13.2, 0.95]].forEach(([x, z, s]) => addLocalBushTree(x, z, s));
+      [
+        [-5.20, 4.50, 1.08], [-5.50, 7.60, 1.18], [-5.30, 10.60, 1.04], [-6.20, 12.80, 1.22],
+        [5.30, 4.20, 1.08], [5.70, 7.20, 1.16], [6.30, 11.80, 1.08], [7.80, 12.50, 1.04],
+      ].forEach(([sx, sz, sr]) => {
+        const shrub = new THREE.Mesh(new THREE.DodecahedronGeometry(sr, 1), leafDarkMat);
+        shrub.position.set(sx, slopeY(sz) + sr * 0.85, sz);
+        shrub.castShadow = true;
+        grp.add(shrub);
+      });
 
-      // 우측 가로등 + 녹색 메쉬 펜스 설비/초소 박스
-      const lampPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 4.6, 8), darkTrimMat);
-      lampPole.position.set(5.2, slopeY(11.6) + 2.4, 11.6);
+      // 우측 북벽 환기 루버 + 가로등 + 녹색 메쉬 펜스 초소/설비 박스
+      const northLouver = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.85, 2.2), louverMat);
+      northLouver.position.set(7.72, 4.50, 7.46);
+      northLouver.rotation.y = Math.atan2(6.6, 17.8);
+      grp.add(northLouver);
+
+      const lampPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 4.6, 8), darkTrimMat);
+      lampPole.position.set(5.15, slopeY(10.60) + 2.65, 10.60);
       grp.add(lampPole);
-      const lampArm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.9), darkTrimMat);
-      lampArm.position.set(4.9, slopeY(11.6) + 4.65, 11.6);
+      const lampArm = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.16, 0.34), darkTrimMat);
+      lampArm.position.set(4.95, slopeY(10.60) + 4.96, 10.60);
       grp.add(lampArm);
 
-      const boothX = 7.4, boothZ = 17.0, boothY = slopeY(boothZ) + 0.2;
-      const boothBase = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.9, 3.6), boothDeckMat);
+      const boothX = 8.60, boothZ = 15.60, boothY = 2.38;
+      const boothBase = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.90, 3.6), boothDeckMat);
       boothBase.position.set(boothX, boothY + 0.45, boothZ);
       boothBase.castShadow = true;
       boothBase.receiveShadow = true;
       grp.add(boothBase);
-      const boothTopGrass = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.08, 3.2), grassMat);
+      const boothTopGrass = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.08, 3.1), grassMat);
       boothTopGrass.position.set(boothX, boothY + 0.92, boothZ);
       grp.add(boothTopGrass);
-      // 3면 녹색 울타리 + 기둥
-      const fFront = new THREE.Mesh(new THREE.BoxGeometry(4.0, 1.05, 0.08), boothFenceMat);
-      fFront.position.set(boothX, boothY + 1.45, boothZ + 1.72);
+      const fFront = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.05, 0.06), boothFenceMat);
+      fFront.position.set(boothX, boothY + 1.43, 17.35);
       grp.add(fFront);
-      const fSide = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.05, 3.45), boothFenceMat);
-      fSide.position.set(boothX - 1.98, boothY + 1.45, boothZ);
+      const fSide = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.05, 3.4), boothFenceMat);
+      fSide.position.set(6.45, boothY + 1.43, boothZ);
       grp.add(fSide);
-      [[-1.98, 1.72], [0, 1.72], [1.98, 1.72], [-1.98, 0], [-1.98, -1.72]].forEach(([px, pz]) => {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.12, 0.1), darkTrimMat);
-        post.position.set(boothX + px, boothY + 1.46, boothZ + pz);
+      [[6.45, 17.35], [8.60, 17.35], [10.70, 17.35], [6.45, 15.60], [6.45, 13.90]].forEach(([px, pz]) => {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.12, 0.08), darkTrimMat);
+        post.position.set(px, boothY + 1.44, pz);
         grp.add(post);
       });
 
@@ -1722,40 +1761,15 @@
 
     commFacadeGroup.add(createPolylineWall(commSEFrontPts, LOWER_DECK_Y, -6.0, retainingWallMat, 'Community_SE_SubBase', { closed: false }));
     commFacadeGroup.add(
-      createPolylineWall(commSEFrontPts, UPPER_DECK_Y, LOWER_DECK_Y, commFacadeMat, 'Community_SE_2F_GlassFacade', {
+      createPolylineWall([UPPER_OUTLINE[16], UPPER_OUTLINE[17]], UPPER_DECK_Y, LOWER_DECK_Y, commFacadeMat, 'Community_SE_1F_CurtainWallFacade', {
         closed: false, tileU: 8.5, uvFullHeight: true
       })
     );
-
-    for (let seg = 0; seg < commSEFrontPts.length - 1; seg++) {
-      const [x0, z0] = commSEFrontPts[seg], [x1, z1] = commSEFrontPts[seg + 1];
-      const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz), ang = Math.atan2(dx, dz);
-      const nx = dz / len, nz = -dx / len;
-      const mx = (x0 + x1) * 0.5, mz = (z0 + z1) * 0.5;
-
-      const canopy = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.28, len), canopyMetalMat);
-      canopy.position.set(mx + nx * 0.72, LOWER_DECK_Y + 3.12, mz + nz * 0.72);
-      canopy.rotation.y = ang;
-      canopy.castShadow = true;
-      canopy.receiveShadow = true;
-      commFacadeGroup.add(canopy);
-
-      const eave = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.35, len + 0.4), darkStoneSolidMat);
-      eave.position.set(mx + nx * 0.4, UPPER_DECK_Y - 0.12, mz + nz * 0.4);
-      eave.rotation.y = ang;
-      eave.castShadow = true;
-      commFacadeGroup.add(eave);
-
-      const bays = Math.max(2, Math.round(len / 8.5));
-      for (let k = 0; k <= bays; k++) {
-        const t = k / bays;
-        const pier = new THREE.Mesh(new THREE.BoxGeometry(0.65, UPPER_DECK_Y - LOWER_DECK_Y, 0.9), darkStoneSolidMat);
-        pier.position.set(x0 + dx * t + nx * 0.22, (UPPER_DECK_Y + LOWER_DECK_Y) * 0.5, z0 + dz * t + nz * 0.22);
-        pier.rotation.y = ang;
-        pier.castShadow = true;
-        commFacadeGroup.add(pier);
-      }
-    }
+    commFacadeGroup.add(
+      createPolylineWall([UPPER_OUTLINE[17], UPPER_OUTLINE[18]], UPPER_DECK_Y, LOWER_DECK_Y, retainingWallMat, 'Community_South_SolidGraniteWall', {
+        closed: false
+      })
+    );
 
     // 1) "커뮤니티센터 / Community Center" 입구 & 메인 파사드 간판 (기존 위치 동일 유지 · 계단 제외)
     const commEntranceGroup = new THREE.Group();
@@ -2008,173 +2022,223 @@
     commFacadeGroup.add(plazaGroup);
 
     // ---------------------------------------------------------
-    // [PART B-2] 105동 하부 2층 상가 (Community_north.glb 실측: 이마트24 · 신협 간판 및 2층 창문 래핑 광고)
-    // 위치: UPPER_OUTLINE[8] (-88.6,-157.5) -> [9] (-90.0,-121.2) 동측(+X) 도로변 벽면
+    // [PART B-2] 105동 동측 2층 상가 (Shop_105_Commercial: 다크 화강석·2F 파란 어닝 3곳·1F 흰 어닝·옥상 연결 12단 계단)
+    // 위치: rawX [-98.0 .. -87.2], rawZ [-157.2 .. -121.4], Y = 0.0 ~ 9.0m
     // ---------------------------------------------------------
     const shop105Group = new THREE.Group();
-    shop105Group.name = 'Shop_105_Emart24_Shinhyup';
-    const [sN, sS] = [UPPER_OUTLINE[8], UPPER_OUTLINE[9]];
+    shop105Group.name = 'Shop_105_Commercial';
+    const [sN, sS] = [toLocal(-87.2, -157.2), toLocal(-88.6, -121.4)];
     const sdx = sS[0] - sN[0], sdz = sS[1] - sN[1];
-    shop105Group.position.set((sN[0] + sS[0]) * 0.5, LOWER_DECK_Y, (sN[1] + sS[1]) * 0.5);
-    shop105Group.rotation.y = Math.atan2(sdx, sdz); // 로컬 +X = 동쪽(도로 정면), +Z = 남쪽, -Z = 북쪽
+    const shopEastLen = Math.hypot(sdx, sdz);
+    const shopEastAng = Math.atan2(sdx, sdz);
 
-    // 상가 전면 보도블록 에이프런 & 2층 건축 파사드 본체 (폭 30.0m, 높이 6.0m, 깊이 1.4m)
-    const shopSidewalk = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.14, 32.0), upperPaverMat);
-    shopSidewalk.position.set(3.2, 0.07, -0.5);
-    shopSidewalk.receiveShadow = true;
-    shop105Group.add(shopSidewalk);
+    const shopDarkFrameMat = new THREE.MeshStandardMaterial({ color: 0x16191f, roughness: 0.48, metalness: 0.35 });
+    const shop2FGlassMat = new THREE.MeshStandardMaterial({ color: 0x526474, roughness: 0.16, metalness: 0.25 });
+    const shop1FGlassMat = new THREE.MeshStandardMaterial({ color: 0x1d242c, roughness: 0.16, metalness: 0.22 });
+    const shopBlueAwningMat = new THREE.MeshStandardMaterial({ color: 0x0c1b4d, roughness: 0.65 });
+    const shopWhiteAwningMat = new THREE.MeshStandardMaterial({ color: 0x9aa3b0, roughness: 0.62 });
+    const shopDoorLightMat = new THREE.MeshStandardMaterial({ color: 0xafb7be, roughness: 0.45, metalness: 0.2 });
+    const shopStairMat = new THREE.MeshStandardMaterial({ color: 0x77808d, roughness: 0.78 });
 
-    const shopShell = new THREE.Mesh(new THREE.BoxGeometry(1.4, UPPER_DECK_Y, 30.0), darkStoneSolidMat);
-    shopShell.position.set(0.7, UPPER_DECK_Y * 0.5, -0.5);
-    shopShell.castShadow = true;
-    shopShell.receiveShadow = true;
-    shop105Group.add(shopShell);
+    // 전면 보도블록 에이프런 (rawX -88.7 .. -82.1, rawZ -157.7 .. -120.7)
+    const eastApron = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.14, shopEastLen + 1.0), upperPaverMat);
+    eastApron.position.set((sN[0] + sS[0]) * 0.5 + 3.0, LOWER_DECK_Y + 0.07, (sN[1] + sS[1]) * 0.5);
+    eastApron.rotation.y = shopEastAng;
+    eastApron.receiveShadow = true;
+    shop105Group.add(eastApron);
 
-    // 층간 수평 슬래브 밴드 & 상단 두겁석
-    const shopMidBand = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.28, 30.2), darkMetalMat);
-    shopMidBand.position.set(0.78, 3.0, -0.5);
-    shop105Group.add(shopMidBand);
+    // 외벽(동측 정면·남측 측면·서측 상단 후벽) + +9.0m 옥상 바닥판 + 유리 난간
+    const shop105RoofPoly = [
+      toLocal(-87.2, -157.2), toLocal(-88.6, -121.4),
+      toLocal(-98.0, -121.8), toLocal(-96.9, -157.2),
+    ];
+    shop105Group.add(createFlatDeckMesh(shop105RoofPoly, 9.0, upperPaverMat, 'Shop105_RoofTerrace'));
+    shop105Group.add(createPolylineWall([toLocal(-87.2, -157.2), toLocal(-88.6, -121.4)], 9.0, 0.0, retainingWallMat, 'Shop105_FrontGraniteSkin', { closed: false }));
+    shop105Group.add(createPolylineWall([toLocal(-88.6, -121.4), toLocal(-98.0, -121.8)], 9.0, 0.0, retainingWallMat, 'Shop105_SouthGraniteSide', { closed: false }));
+    shop105Group.add(createPolylineWall([toLocal(-98.0, -121.8), toLocal(-96.9, -149.2)], 9.0, UPPER_DECK_Y, retainingWallMat, 'Shop105_WestRearWall', { closed: false }));
 
-    const shopTopCap = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.24, 30.4), copingMat);
-    shopTopCap.position.set(0.82, UPPER_DECK_Y + 0.12, -0.5);
-    shop105Group.add(shopTopCap);
+    const addStorefrontBay = (parent, pA, pB, yBot, yTop, glassMat, mullCols = 5, transomY = null) => {
+      const dx = pB[0] - pA[0], dz = pB[1] - pA[1], len = Math.hypot(dx, dz), ang = Math.atan2(dx, dz);
+      const nx = dz / len, nz = -dx / len; // 정면 바깥쪽 법선
+      const mx = (pA[0] + pB[0]) * 0.5, mz = (pA[1] + pB[1]) * 0.5;
+      const h = yTop - yBot, my = (yBot + yTop) * 0.5;
+      const bg = new THREE.Mesh(new THREE.BoxGeometry(0.16, h + 0.08, len + 0.08), shopDarkFrameMat);
+      bg.position.set(mx + nx * 0.06, my, mz + nz * 0.06);
+      bg.rotation.y = ang;
+      parent.add(bg);
+      const gl = new THREE.Mesh(new THREE.BoxGeometry(0.08, h - 0.12, len - 0.14), glassMat);
+      gl.position.set(mx + nx * 0.13, my, mz + nz * 0.13);
+      gl.rotation.y = ang;
+      parent.add(gl);
+      for (let k = 0; k <= mullCols; k++) {
+        const t = k / mullCols;
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.14, h, 0.10), shopDarkFrameMat);
+        m.position.set(pA[0] + dx * t + nx * 0.14, my, pA[1] + dz * t + nz * 0.14);
+        m.rotation.y = ang;
+        parent.add(m);
+      }
+      if (transomY != null) {
+        const tr = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, len), shopDarkFrameMat);
+        tr.position.set(mx + nx * 0.14, transomY, mz + nz * 0.14);
+        tr.rotation.y = ang;
+        parent.add(tr);
+      }
+    };
 
-    // ── 북측 절반 (z = -15.0 .. -1.0, 폭 14.0m): 1F 이마트24 + 2F 신협 ──
-    const emartGlow = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.68, 12.8), emartStoreGlowMat);
-    emartGlow.position.set(1.32, 1.38, -8.0);
-    shop105Group.add(emartGlow);
+    const eastLerp = (rawZ) => {
+      const t = (rawZ - (-157.2)) / (-121.4 - (-157.2));
+      return toLocal(-87.2 + (-88.6 - (-87.2)) * t, rawZ);
+    };
 
-    const emartGlass = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.66, 12.6), shopGlassMat);
-    emartGlass.position.set(1.44, 1.38, -8.0);
-    shop105Group.add(emartGlass);
-
-    // 이마트24 1층 기둥 프레임 & 자동출입문 프레임
-    [-14.3, -10.8, -8.0, -5.2, -1.7].forEach((mz) => {
-      const mull = new THREE.Mesh(new THREE.BoxGeometry(0.22, 2.86, 0.16), darkMetalMat);
-      mull.position.set(1.45, 1.43, mz);
-      shop105Group.add(mull);
+    // 2F 창호 3베이 + 파란 어닝 3개 (Shop105_2F_BlueAwning_0..2)
+    [
+      [-132.6, -123.0, 0],
+      [-144.1, -134.5, 1],
+      [-155.6, -146.0, 2],
+    ].forEach(([z0, z1, idx]) => {
+      const pA = eastLerp(z0), pB = eastLerp(z1);
+      addStorefrontBay(shop105Group, pA, pB, 4.50, 7.10, shop2FGlassMat, 5, 5.15);
+      const awGrp = new THREE.Group();
+      awGrp.name = `Shop105_2F_BlueAwning_${idx}`;
+      const mx = (pA[0] + pB[0]) * 0.5, mz = (pA[1] + pB[1]) * 0.5, len = Math.hypot(pB[0] - pA[0], pB[1] - pA[1]);
+      const aw = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.34, len + 0.12), shopBlueAwningMat);
+      aw.position.set(mx + 0.62, 7.30, mz);
+      aw.rotation.y = shopEastAng;
+      aw.rotation.z = -0.18;
+      aw.castShadow = true;
+      awGrp.add(aw);
+      shop105Group.add(awGrp);
     });
 
-    // 이마트24 흰색 돌출 캐노피/어닝
-    const emartCanopy = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.24, 13.8), whitePlanterMat);
-    emartCanopy.position.set(1.88, 2.82, -8.0);
-    emartCanopy.castShadow = true;
-    shop105Group.add(emartCanopy);
+    // 1F 창호 2베이 + 흰 어닝 (Shop105_1F_WhiteAwning) + 남측 출입문
+    addStorefrontBay(shop105Group, eastLerp(-144.1), eastLerp(-134.5), 0.15, 3.29, shop1FGlassMat, 5, 2.58);
+    addStorefrontBay(shop105Group, eastLerp(-155.6), eastLerp(-146.0), 0.15, 3.29, shop1FGlassMat, 5, 2.58);
+    const whiteAwGrp = new THREE.Group();
+    whiteAwGrp.name = 'Shop105_1F_WhiteAwning';
+    const waA = eastLerp(-155.7), waB = eastLerp(-134.3);
+    const whiteAw = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.24, Math.hypot(waB[0] - waA[0], waB[1] - waA[1])), shopWhiteAwningMat);
+    whiteAw.position.set((waA[0] + waB[0]) * 0.5 + 0.78, 3.46, (waA[1] + waB[1]) * 0.5);
+    whiteAw.rotation.y = shopEastAng;
+    whiteAw.rotation.z = -0.10;
+    whiteAw.castShadow = true;
+    whiteAwGrp.add(whiteAw);
+    shop105Group.add(whiteAwGrp);
 
-    // 이마트24 메인 가로 간판 (캐노피 전면 상단)
-    const emartSignBack = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.06, 11.4), darkMetalMat);
-    emartSignBack.position.set(2.36, 3.22, -8.0);
-    emartSignBack.castShadow = true;
-    shop105Group.add(emartSignBack);
+    // 남측 1F 출입문 (rawZ -131.9 .. -129.5)
+    addStorefrontBay(shop105Group, eastLerp(-131.9), eastLerp(-129.5), 0.14, 2.78, shopDoorLightMat, 2, null);
 
-    const emartSignFace = new THREE.Mesh(new THREE.PlaneGeometry(11.1, 0.96), emartMainSignMat);
-    emartSignFace.position.set(2.50, 3.22, -8.0);
-    emartSignFace.rotation.y = Math.PI / 2;
-    shop105Group.add(emartSignFace);
-
-    // 이마트24 노란 세로 배너 기둥 ("이마트24") 2곳
-    [-13.5, -2.5].forEach((bz) => {
-      const back = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.38, 0.72), darkMetalMat);
-      back.position.set(1.50, 1.38, bz);
-      shop105Group.add(back);
-      const face = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 2.28), emartYellowBannerMat);
-      face.position.set(1.59, 1.38, bz);
-      face.rotation.y = Math.PI / 2;
-      shop105Group.add(face);
-    });
-
-    // 이마트24 주황 세로 행사 포스터 ("24 행사중") 2곳
-    [-11.6, -4.4].forEach((pz) => {
-      const face = new THREE.Mesh(new THREE.PlaneGeometry(0.70, 2.08), emartOrangePosterMat);
-      face.position.set(1.53, 1.34, pz);
-      face.rotation.y = Math.PI / 2;
-      shop105Group.add(face);
-    });
-
-    // 2F 북측 신협 창호 & 대형 파란 간판 ("신협 금호동 지점 · 365코너")
-    const north2FGlass = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.92, 13.0), shopGlassMat);
-    north2FGlass.position.set(1.42, 4.02, -8.0);
-    shop105Group.add(north2FGlass);
-    for (let k = 0; k <= 6; k++) {
-      const m2 = new THREE.Mesh(new THREE.BoxGeometry(0.20, 2.02, 0.12), darkMetalMat);
-      m2.position.set(1.44, 4.02, -14.5 + k * 2.16);
-      shop105Group.add(m2);
+    // 상단 데크(6.0m) -> 105동 상가 옥상(9.0m) 12단 외부 계단 (rawX -101.1..-97.3, rawZ -139.6..-134.9)
+    for (let st = 0; st < 12; st++) {
+      const sh = (st + 1) * 0.25;
+      const sx = -100.85 + st * 0.30;
+      const [slx, slz] = toLocal(sx, -137.25);
+      const step = new THREE.Mesh(new THREE.BoxGeometry(0.45, sh, 4.65), shopStairMat);
+      step.position.set(slx, UPPER_DECK_Y + sh * 0.5, slz);
+      step.castShadow = true;
+      step.receiveShadow = true;
+      shop105Group.add(step);
     }
 
-    const shinhyupNorthBack = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.02, 10.6), shinhyupBlueMat);
-    shinhyupNorthBack.position.set(1.54, 5.42, -8.0);
-    shinhyupNorthBack.castShadow = true;
-    shop105Group.add(shinhyupNorthBack);
-    const shinhyupNorthFace = new THREE.Mesh(new THREE.PlaneGeometry(10.3, 0.94), shinhyupMainSignMat);
-    shinhyupNorthFace.position.set(1.68, 5.42, -8.0);
-    shinhyupNorthFace.rotation.y = Math.PI / 2;
-    shop105Group.add(shinhyupNorthFace);
-
-    // ── 남측 절반 (z = -1.0 .. +14.0, 폭 15.0m): 1F 신협 영업점/365코너 + 2F 신협 8칸 창문 래핑 광고 ──
-    const shinhyupSouthBack = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.02, 12.8), shinhyupBlueMat);
-    shinhyupSouthBack.position.set(1.54, 5.42, 6.5);
-    shinhyupSouthBack.castShadow = true;
-    shop105Group.add(shinhyupSouthBack);
-    const shinhyupSouthFace = new THREE.Mesh(new THREE.PlaneGeometry(12.4, 0.94), shinhyupMainSignMat);
-    shinhyupSouthFace.position.set(1.68, 5.42, 6.5);
-    shinhyupSouthFace.rotation.y = Math.PI / 2;
-    shop105Group.add(shinhyupSouthFace);
-
-    // 2F 신협 8칸 파란 유리창 래핑 광고 (동쪽에서 볼 때 좌->우 = 남(+Z)->북(-Z) 순서로 '금 호 동 신 LOGO HEART 행복 금융')
-    const SHINHYUP_PANELS = ['금', '호', '동', '신', 'LOGO', 'HEART', '행복', '금융'];
-    SHINHYUP_PANELS.forEach((item, idx) => {
-      const pz = 12.65 - idx * 1.76;
-      const pMat = new THREE.MeshStandardMaterial({
-        map: createShinhyupWindowPanelTexture(item),
-        roughness: 0.44, metalness: 0.05
-      });
-      const panel = new THREE.Mesh(new THREE.PlaneGeometry(1.64, 1.88), pMat);
-      panel.position.set(1.52, 4.00, pz);
-      panel.rotation.y = Math.PI / 2;
-      shop105Group.add(panel);
-
-      const mull = new THREE.Mesh(new THREE.BoxGeometry(0.20, 2.04, 0.12), darkMetalMat);
-      mull.position.set(1.46, 4.00, pz + 0.88);
-      shop105Group.add(mull);
-    });
-
-    // 1F 신협 영업점 파란 상단 띠 & 캐노피 & 출입 유리문 / 365코너 ATM 부스
-    const shinhyup1FBand = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.56, 14.2), shinhyupBlueMat);
-    shinhyup1FBand.position.set(1.48, 2.74, 6.5);
-    shop105Group.add(shinhyup1FBand);
-
-    const shinhyupCanopy = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.22, 14.2), whitePlanterMat);
-    shinhyupCanopy.position.set(1.86, 2.98, 6.5);
-    shinhyupCanopy.castShadow = true;
-    shop105Group.add(shinhyupCanopy);
-
-    const bankGlow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.46, 13.4), emartStoreGlowMat);
-    bankGlow.position.set(1.30, 1.25, 6.5);
-    shop105Group.add(bankGlow);
-
-    const bankGlass = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.44, 13.2), shopGlassMat);
-    bankGlass.position.set(1.44, 1.25, 6.5);
-    shop105Group.add(bankGlass);
-
-    [-0.1, 3.2, 6.5, 9.8, 13.1].forEach((mz) => {
-      const m1 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 2.52, 0.18), darkMetalMat);
-      m1.position.set(1.45, 1.26, mz);
-      shop105Group.add(m1);
-    });
-
-    // 365코너 ATM 파란 포인트 프레임
-    const atmFrame = new THREE.Mesh(new THREE.BoxGeometry(0.32, 2.46, 2.8), shinhyupBlueMat);
-    atmFrame.position.set(1.50, 1.25, 11.45);
-    shop105Group.add(atmFrame);
-    const atmGlass = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.1, 2.1), portalDoorGlassMat);
-    atmGlass.position.set(1.64, 1.18, 11.45);
-    shop105Group.add(atmGlass);
+    addEdgeCopingAndRailing(shop105Group, [
+      toLocal(-98.0, -121.8), toLocal(-88.6, -121.4), toLocal(-87.2, -157.2),
+    ], 9.0, { closed: false, withGlassRail: true, withFence: false });
 
     upperGroup.add(shop105Group);
 
-    // 상단 데크 외곽 두겁석 + 유리 안전난간 / 울타리
+    // ---------------------------------------------------------
+    // [PART B-3] 105동 북측 계단식 상가 (Shop_105_NorthSide_Stepped: rawX -144.5..-87.0, 경사 보도 + 14단 스커트)
+    // ---------------------------------------------------------
+    const northShopGroup = new THREE.Group();
+    northShopGroup.name = 'Shop_105_NorthSide_Stepped';
+
+    const nsFrontA = toLocal(-87.2, -157.45), nsFrontB = toLocal(-144.55, -159.97);
+    const nsRoofPoly = [
+      toLocal(-87.2, -157.45), toLocal(-144.55, -159.97),
+      toLocal(-144.92, -151.55), toLocal(-95.56, -149.38),
+    ];
+    northShopGroup.add(createFlatDeckMesh(nsRoofPoly, 9.0, upperPaverMat, 'NorthShop_RoofTerrace'));
+    northShopGroup.add(createPolylineWall([nsFrontA, nsFrontB], 9.0, 0.0, retainingWallMat, 'NorthShop_FrontGraniteSkin', { closed: false }));
+    northShopGroup.add(createPolylineWall([toLocal(-144.56, -159.96), toLocal(-144.93, -151.57)], 9.0, UPPER_DECK_Y, retainingWallMat, 'NorthShop_WestEndWall', { closed: false }));
+    northShopGroup.add(createPolylineWall([toLocal(-144.92, -151.55), toLocal(-95.56, -149.38)], 9.0, UPPER_DECK_Y, retainingWallMat, 'NorthShop_SouthRearWall', { closed: false }));
+
+    // 북측 경사 보도(NorthShop_SlopedSidewalk: 동측 -87.0 Y=0.06 -> 서측 -144.5 Y=4.76) + 14단 화강석 스커트
+    const nsWalkY = (rawX) => {
+      if (rawX >= -119.8) {
+        const t = (-87.0 - rawX) / (-87.0 - (-119.8));
+        return 0.06 + t * (4.48 - 0.06);
+      }
+      const t = (-119.8 - rawX) / (-119.8 - (-144.5));
+      return 4.48 + t * (4.76 - 4.48);
+    };
+    const nsFrontZ = (rawX) => -157.45 + ((-87.2 - rawX) / (-87.2 - (-144.55))) * (-159.97 - (-157.45));
+    const nsOuterZ = (rawX) => nsFrontZ(rawX) - 4.60;
+
+    const nsWalkPos = [], nsWalkUv = [], nsWalkIdx = [];
+    const nsCols = 14;
+    for (let i = 0; i <= nsCols; i++) {
+      const rx = -87.0 + (-144.5 - (-87.0)) * (i / nsCols);
+      const y = nsWalkY(rx);
+      const [lx0, lz0] = toLocal(rx, nsFrontZ(rx));
+      const [lx1, lz1] = toLocal(rx, nsOuterZ(rx));
+      nsWalkPos.push(lx0, y, lz0, lx1, y, lz1);
+      nsWalkUv.push(i, 0, i, 1);
+      if (i < nsCols) {
+        const b = i * 2;
+        nsWalkIdx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+      }
+    }
+    const nsWalkGeo = new THREE.BufferGeometry();
+    nsWalkGeo.setAttribute('position', new THREE.Float32BufferAttribute(nsWalkPos, 3));
+    nsWalkGeo.setAttribute('uv', new THREE.Float32BufferAttribute(nsWalkUv, 2));
+    nsWalkGeo.setIndex(nsWalkIdx);
+    nsWalkGeo.computeVertexNormals();
+    const nsWalkMesh = new THREE.Mesh(nsWalkGeo, upperPaverMat);
+    nsWalkMesh.receiveShadow = true;
+    nsWalkMesh.name = 'NorthShop_SlopedSidewalk';
+    northShopGroup.add(nsWalkMesh);
+
+    for (let i = 0; i < nsCols; i++) {
+      const rx0 = -87.0 + (-144.3 - (-87.0)) * (i / nsCols);
+      const rx1 = -87.0 + (-144.3 - (-87.0)) * ((i + 1) / nsCols);
+      const topH = nsWalkY((rx0 + rx1) * 0.5);
+      northShopGroup.add(createPolylineWall(
+        [toLocal(rx0, nsOuterZ(rx0)), toLocal(rx1, nsOuterZ(rx1))],
+        topH, -2.0, retainingWallMat, `NorthShop_SidewalkSkirt_${i}`, { closed: false }
+      ));
+    }
+
+    // 북측 상가 6개 유리 창호 베이 (북측 -Z 방향 정면: B -> A 순서로 넣으면 법선이 북쪽 -Z를 향함)
+    const nsPt = (rawX) => toLocal(rawX, nsFrontZ(rawX));
+    // 동측 1F+2F 베이 (-97.2 .. -90.0)
+    addStorefrontBay(northShopGroup, nsPt(-97.2), nsPt(-90.0), 0.30, 3.50, shop1FGlassMat, 4, 2.58);
+    addStorefrontBay(northShopGroup, nsPt(-97.2), nsPt(-90.0), 4.60, 7.40, shop2FGlassMat, 4, 6.58);
+    // 2번째 베이(-106.9 .. -99.1) + 하부 돌출 출입 캐노피
+    addStorefrontBay(northShopGroup, nsPt(-106.9), nsPt(-99.1), 4.60, 7.40, shop2FGlassMat, 4, 6.58);
+    const porchCenter = toLocal(-103.0, nsFrontZ(-103.0) - 0.85);
+    const porchBox = new THREE.Mesh(new THREE.BoxGeometry(8.4, 2.2, 1.6), darkStoneSolidMat);
+    porchBox.position.set(porchCenter[0], 3.45, porchCenter[1]);
+    porchBox.rotation.y = Math.atan2(nsFrontB[1] - nsFrontA[1], nsFrontB[0] - nsFrontA[0]);
+    northShopGroup.add(porchBox);
+    const porchFascia = new THREE.Mesh(new THREE.BoxGeometry(8.3, 1.24, 0.5), shopDarkFrameMat);
+    porchFascia.position.set(porchCenter[0], 4.95, porchCenter[1] - 0.55);
+    porchFascia.rotation.y = porchBox.rotation.y;
+    northShopGroup.add(porchFascia);
+    // 3번째 베이(-115.7 .. -108.9) + 실버 포인트 프레임
+    addStorefrontBay(northShopGroup, nsPt(-115.7), nsPt(-108.9), 4.60, 7.40, shop1FGlassMat, 3, 6.58);
+    // 4~6번째 서측 계단식 베이
+    addStorefrontBay(northShopGroup, nsPt(-125.3), nsPt(-117.9), 4.62, 7.46, shop1FGlassMat, 4, 6.64);
+    addStorefrontBay(northShopGroup, nsPt(-134.3), nsPt(-126.9), 4.62, 7.46, shop1FGlassMat, 4, 6.64);
+    addStorefrontBay(northShopGroup, nsPt(-142.8), nsPt(-135.8), 4.62, 7.46, shop1FGlassMat, 4, 6.64);
+
+    addEdgeCopingAndRailing(northShopGroup, [
+      toLocal(-87.2, -157.45), toLocal(-144.55, -159.97), toLocal(-144.92, -151.55),
+    ], 9.0, { closed: false, withGlassRail: true, withFence: false });
+
+    upperGroup.add(northShopGroup);
+
+    // 상단 데크 외곽 두겁석 + 유리 안전난간 / 울타리 (북측 상가 구간 -144.5..-88.6 제외)
     addEdgeCopingAndRailing(upperGroup, commSEFrontPts, UPPER_DECK_Y, { closed: false, withGlassRail: true, withFence: false });
-    addEdgeCopingAndRailing(upperGroup, upperNWLeft, UPPER_DECK_Y, { closed: false, withGlassRail: false, withFence: true });
+    addEdgeCopingAndRailing(upperGroup, [...UPPER_OUTLINE.slice(0, 8), toLocal(-144.55, -159.97)], UPPER_DECK_Y, { closed: false, withGlassRail: false, withFence: true });
     addEdgeCopingAndRailing(upperGroup, upperNERight, UPPER_DECK_Y, { closed: false, withGlassRail: false, withFence: true });
 
     // ---------------------------------------------------------
@@ -2392,6 +2456,14 @@
       [26, -78, 'pine', 1.1], [32, -110, 'deciduous', 1.05], [-62, -142, 'pine', 1.05],
     ];
     lowerTrees.forEach(([x, z, tp, sc]) => addTree(parkGroup, x, z, LOWER_DECK_Y, tp, sc));
+    // 동측 113~114동 지하주차장 진입 노치 좌·우 경사 화단 교목 5그루
+    [
+      [23.4, -46.3, -9.59, 'deciduous', 1.05],
+      [28.5, -44.4, -8.80, 'deciduous', 1.10],
+      [25.7, -58.0, -9.80, 'deciduous', 1.05],
+      [29.2, -57.8, -9.30, 'deciduous', 1.05],
+      [32.8, -58.6, -8.83, 'deciduous', 1.00],
+    ].forEach(([x, z, y, tp, sc]) => addTree(parkGroup, x, z, y, tp, sc));
 
     // =========================================================
     // 6-2. 정문(0m)~113동 평탄 + 북측(114·115동~후문 +15.2m) 실측 경사 베이크
