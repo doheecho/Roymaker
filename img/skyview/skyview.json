@@ -457,11 +457,11 @@
  },
  "models/place_금파힐101.glb": {
   "file": "img/skyview/place_금파힐101.webp",
-  "hash": "4628304702",
+  "hash": "446af0b5a8",
   "minX": -24.342,
-  "minZ": -20.391,
+  "minZ": -27.931,
   "width": 47.083,
-  "depth": 41
+  "depth": 48.583
  },
  "models/place_금파힐103.glb": {
   "file": "img/skyview/place_금파힐103.webp",
@@ -505,15 +505,15 @@
  },
  "models/place_금파힐111.glb": {
   "file": "img/skyview/place_금파힐111.webp",
-  "hash": "2deab50b9c",
-  "minX": -22.6,
+  "hash": "265173a1c7",
+  "minX": -16,
   "minZ": -13.001,
-  "width": 38.667,
+  "width": 32,
   "depth": 24.417
  },
  "models/place_금파힐112.glb": {
   "file": "img/skyview/place_금파힐112.webp",
-  "hash": "4a767e7501",
+  "hash": "f739cf7cb2",
   "minX": -27.752,
   "minZ": -30.868,
   "width": 52.833,
@@ -521,34 +521,34 @@
  },
  "models/place_금파힐113.glb": {
   "file": "img/skyview/place_금파힐113.webp",
-  "hash": "06677db772",
-  "minX": -18.756,
-  "minZ": -33.504,
-  "width": 39.083,
-  "depth": 59.333
+  "hash": "38832487c6",
+  "minX": -15.681,
+  "minZ": -29.073,
+  "width": 36,
+  "depth": 54.917
  },
  "models/place_금파힐114.glb": {
   "file": "img/skyview/place_금파힐114.webp",
-  "hash": "c2185c4e25",
-  "minX": -18.132,
+  "hash": "3c6417da63",
+  "minX": -17.53,
   "minZ": -23.78,
-  "width": 38.667,
-  "depth": 51.333
+  "width": 38,
+  "depth": 48.25
  },
  "models/place_금파힐115.glb": {
   "file": "img/skyview/place_금파힐115.webp",
-  "hash": "f14a962566",
+  "hash": "2791f9c2c2",
   "minX": -12.369,
-  "minZ": -11.54,
+  "minZ": -14.3,
   "width": 24.75,
-  "depth": 17.667
+  "depth": 20.417
  },
  "models/place_금파힐116.glb": {
   "file": "img/skyview/place_금파힐116.webp",
-  "hash": "3bb7be1563",
-  "minX": -11.04,
+  "hash": "b0636ebf5e",
+  "minX": -13.6,
   "minZ": -10.461,
-  "width": 16.667,
+  "width": 19.25,
   "depth": 21
  },
  "models/place_금파힐117동.glb": {
