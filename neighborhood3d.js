@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261126y";
+import * as MAP_DATA from "./map_data.js?v=20261126z";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261126e";
+const ASSET_VERSION = "20261126f";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -378,7 +378,7 @@ const LABEL_VISIBLE_RANGE = VISIBLE_RANGE_M * WORLD_SCALE;
 // 그 glb를 올려 둔 107동 자리 하나뿐이다. 가장 먼 모서리인 106동 쪽은 그 기준점에서 약
 // 323m 떨어져 있어서 기본 300m 범위를 살짝 넘어 — 106동 쪽에 서면 주변은 다 보이는데 이
 // 건물(모델+플레이스홀더)만 통째로 사라진다. 이 동만 범위를 여유 있게 늘려서 해결한다.
-const VISIBLE_RANGE_OVERRIDE_M = { 7: 400 };
+const VISIBLE_RANGE_OVERRIDE_M = { 7: 400, 244: 550 };
 function visibleRangeFor(id) {
   return (VISIBLE_RANGE_OVERRIDE_M[id] ?? VISIBLE_RANGE_M) * WORLD_SCALE;
 }
@@ -1574,6 +1574,7 @@ function buildTerrainShapeWalls() {
   if (!terrainShapes.length) return;
   const W = WORLD_SCALE;
   const wall = { pos: [], uv: [], idx: [] }, cap = { pos: [], idx: [] };
+  const parkHillsWall = { pos: [], uv: [], idx: [] };
   const leftMural = { pos: [], uv: [], idx: [] };
   const eastMural = { pos: [], uv: [], idx: [] };
   const quad = (st, a, b, c, d, uvs) => {
@@ -1596,6 +1597,7 @@ function buildTerrainShapeWalls() {
     if (!S.walls) return;
     const isGeumbukCampus = S.name.includes("금북초 교정");
     const isGeumbukRamp = S.name.includes("금북초 교문 진입로");
+    const isParkHillsDeck = S.name.includes("금파힐 커뮤니티");
     const P = S.poly;
     let along = 0;
     for (let i = 0; i < P.length; i++) {
@@ -1620,6 +1622,12 @@ function buildTerrainShapeWalls() {
         // 인접한 두 TERRAIN_SHAPES 공유 경계는 앞선 구역 한쪽만 옹벽을 세운다(중복 옹벽·깜빡임 방지)
         const midOut = shapeHitAt((A.x + B.x) / 2 + nx * EPS, (A.z + B.z) / 2 + nz * EPS, si);
         if (midOut && terrainShapes[midOut.si].walls && midOut.si < si) continue;
+        // 금파힐 커뮤니티 데크는 모델(place_금파힐커뮤니티.glb) 자체가 남·동측 외벽과 내부 6m 커뮤니티 파사드를
+        // 갖고 있으므로, 바깥 언덕이 데크보다 높은 절개지(hout > hin) 외곽 경계에만 다크 화강석 옹벽을 세운다.
+        if (isParkHillsDeck) {
+          if (midOut && terrainShapes[midOut.si].name.includes("금파힐 커뮤니티")) continue;
+          if (A.hout <= A.hin + MIN && B.hout <= B.hin + MIN) continue;
+        }
         const tA = Math.max(A.hin, A.hout), bA = Math.min(A.hin, A.hout) - 0.02;
         const tB = Math.max(B.hin, B.hout), bB = Math.min(B.hin, B.hout) - 0.02;
         const dA = along + (L * k) / n, dB = along + (L * (k + 1)) / n;
@@ -1629,8 +1637,11 @@ function buildTerrainShapeWalls() {
         const midRawX = (A.x + B.x) / (2 * W) - GB_OX;
         const midRawZ = (A.z + B.z) / (2 * W) - GB_OZ;
 
+        if (isParkHillsDeck) {
+          quad(parkHillsWall, [pA[0], bA, pA[1]], [pB[0], bB, pB[1]], [pB[0], tB, pB[1]], [pA[0], tA, pA[1]],
+            [[dA / (3.0 * W), bA / (3.0 * W)], [dB / (3.0 * W), bB / (3.0 * W)], [dB / (3.0 * W), tB / (3.0 * W)], [dA / (3.0 * W), tA / (3.0 * W)]]);
         // ① 경사로 서쪽(좌측) 벽화: 상단(교정 높이) 기준 고정 비율(5.2m)로 매핑해 교문~옹벽 끝까지 온전히 노출
-        if (isGeumbukCampus && nx > 0.3 && midRawX >= 41.0 && midRawX <= 52.5 && midRawZ >= 47.5 && midRawZ <= 104.5) {
+        } else if (isGeumbukCampus && nx > 0.3 && midRawX >= 41.0 && midRawX <= 52.5 && midRawZ >= 47.5 && midRawZ <= 104.5) {
           const zA = A.z / W - GB_OZ, zB = B.z / W - GB_OZ;
           const uA = Math.max(0, Math.min(1, (104.0 - zA) / (104.0 - 48.0)));
           const uB = Math.max(0, Math.min(1, (104.0 - zB) / (104.0 - 48.0)));
@@ -1678,6 +1689,9 @@ function buildTerrainShapeWalls() {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.needsUpdate = true;
   mk(wall, new THREE.MeshStandardMaterial({ map: tex, color: 0xe8e2d6, roughness: 0.9, side: THREE.DoubleSide }), true);
+  if (parkHillsWall.idx.length) {
+    mk(parkHillsWall, getParkHillsSkirtMaterial(), true);
+  }
   if (leftMural.idx.length) {
     mk(leftMural, new THREE.MeshStandardMaterial({ map: createGeumbukLeftMuralTexture(), roughness: 0.88, side: THREE.DoubleSide }), true);
   }
@@ -3895,8 +3909,20 @@ function settleBuildingBase(entry, model) {
   if (anchor1FXZ && !entry.place.y) {
     entry.group.position.y = getTerrainY(anchor1FXZ[0], anchor1FXZ[1]) + 0.02 * W;
   } else if (isParkHillsSingleDong && !entry.place.y) {
-    let maxEdgeTy = getTerrainY(entry.px, entry.pz);
+    const centerSi = shapeIndexAt(entry.px, entry.pz);
+    const onParkHillsDeck = centerSi >= 0 && terrainShapes[centerSi].name.includes("금파힐 커뮤니티");
+    const centerTy = getTerrainY(entry.px, entry.pz);
+    let maxEdgeTy = centerTy;
     const sampleStep = 2.0 * W;
+    const considerTy = (sx, sz) => {
+      if (onParkHillsDeck) {
+        const si = shapeIndexAt(sx, sz);
+        if (si < 0 || !terrainShapes[si].name.includes("금파힐 커뮤니티")) return;
+      }
+      const ty = getTerrainY(sx, sz);
+      if (onParkHillsDeck && Math.abs(ty - centerTy) > 3.5 * W) return; // 인접 6m 단차·바깥 언덕 무시
+      if (ty > maxEdgeTy) maxEdgeTy = ty;
+    };
     for (const loop of loops) {
       let cx = 0, cz = 0;
       for (let i = 0; i < loop.length; i++) {
@@ -3906,17 +3932,15 @@ function settleBuildingBase(entry, model) {
         const steps = Math.max(1, Math.ceil(len / sampleStep));
         for (let k = 0; k <= steps; k++) {
           const t = k / steps;
-          const ty = getTerrainY(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
-          if (ty > maxEdgeTy) maxEdgeTy = ty;
+          considerTy(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
         }
       }
       if (loop.length) {
-        const cty = getTerrainY(cx / loop.length, cz / loop.length);
-        if (cty > maxEdgeTy) maxEdgeTy = cty;
+        considerTy(cx / loop.length, cz / loop.length);
       }
     }
-    const targetY = maxEdgeTy + 0.05 * W;
-    if (targetY > entry.group.position.y) {
+    const targetY = maxEdgeTy + (onParkHillsDeck ? 0.12 * W : 0.05 * W);
+    if (onParkHillsDeck || targetY > entry.group.position.y) {
       entry.group.position.y = targetY;
     }
   }
@@ -4843,6 +4867,137 @@ function adaptLotteMartToTerrain(entry, model) {
   entry.group.updateMatrixWorld(true);
 }
 
+const PARKHILLS_Z_HINGE = 10.0;
+const PARKHILLS_Z_BACK = -168.7;
+const PARKHILLS_H_BACK = 15.2;
+const PARKHILLS_DECK_BASE_RAW_Y = 0.05; // 정문 입구 찻길(+0.09m)과 하단 데크(Y=0)가 자연스럽게 맞닿는 기준 고도
+
+function isParkHillsCommunityBaseModel(place) {
+  return !!place?.model && /place_금파힐커뮤니티\.glb/i.test(place.model);
+}
+
+function parkHillsCommunityLiftRaw(rawZ) {
+  if (rawZ >= PARKHILLS_Z_HINGE) return 0;
+  return PARKHILLS_H_BACK * Math.min(1, (PARKHILLS_Z_HINGE - rawZ) / (PARKHILLS_Z_HINGE - PARKHILLS_Z_BACK));
+}
+
+// 금파힐 커뮤니티 통합 데크(place_금파힐커뮤니티.glb)를 정문~113동 남측(Z >= 10)은 0m 평탄하게,
+// 북측(Z < 10 -> 후문 Z=-168.7)은 +15.2m까지 완만하게 오르도록 보정해 정문·후문 높이와 모두 정확히 맞춘다.
+function conformParkHillsCommunityModel(entry, model) {
+  const W = WORLD_SCALE;
+  const HINGE_W = PARKHILLS_Z_HINGE * W;
+  const STRUCTURAL_RE = /(?:Deck|Wall|Road|Walk|Promenade|Ramp|Facade|Fence|Rail|Coping|Curb|Shop|Canopy|Lintel|Apron|Planter|Plaza|Floor|RoofGarden|Playground|Court|Portal)/i;
+  model.updateMatrixWorld(true);
+  const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
+  const invMat = new THREE.Matrix4();
+
+  model.traverse((o) => {
+    if (!o.isMesh || !o.geometry?.attributes?.position) return;
+    const src = o.geometry;
+    const wm = o.matrixWorld;
+    // 빠른 영역 검사: 메쉬 전체가 평탄 남측(Z >= 10) 안에 있으면 보정할 필요가 없다
+    if (!src.boundingBox) src.computeBoundingBox();
+    const bb = src.boundingBox.clone().applyMatrix4(wm);
+    if (bb.min.z >= HINGE_W - 1e-5) return;
+
+    const zSpanRaw = (bb.max.z - bb.min.z) / W;
+    let ancNames = o.name || "";
+    let p = o.parent;
+    while (p && p !== model) {
+      if (p.name) ancNames += "/" + p.name;
+      p = p.parent;
+    }
+    const uniformUpright = zSpanRaw <= 4.5 && !STRUCTURAL_RE.test(ancNames);
+
+    const floatGeo = toFloatGeometry(src);
+    const nonIdx = floatGeo.index ? floatGeo.toNonIndexed() : floatGeo;
+    const pos = nonIdx.attributes.position;
+    const uv = nonIdx.attributes.uv || null;
+    invMat.copy(wm).invert();
+
+    if (uniformUpright) {
+      const midZRaw = ((bb.min.z + bb.max.z) * 0.5) / W;
+      const liftW = parkHillsCommunityLiftRaw(midZRaw) * W;
+      for (let i = 0; i < pos.count; i++) {
+        vA.fromBufferAttribute(pos, i).applyMatrix4(wm);
+        vA.y += liftW;
+        vA.applyMatrix4(invMat);
+        pos.setXYZ(i, vA.x, vA.y, vA.z);
+      }
+      pos.needsUpdate = true;
+      nonIdx.computeBoundingBox();
+      nonIdx.computeBoundingSphere();
+      o.geometry = nonIdx;
+      if (floatGeo !== nonIdx) floatGeo.dispose();
+      src.dispose();
+      return;
+    }
+
+    const outPos = [];
+    const outUv = uv ? [] : null;
+    const emitVert = (wx, wy, wz, u, v) => {
+      const liftedY = wy + parkHillsCommunityLiftRaw(wz / W) * W;
+      vA.set(wx, liftedY, wz).applyMatrix4(invMat);
+      outPos.push(vA.x, vA.y, vA.z);
+      if (outUv) outUv.push(u, v);
+    };
+    const emitTri = (a, b, c) => {
+      emitVert(a[0], a[1], a[2], a[3], a[4]);
+      emitVert(b[0], b[1], b[2], b[3], b[4]);
+      emitVert(c[0], c[1], c[2], c[3], c[4]);
+    };
+    const lerpV = (a, b, t) => [
+      a[0] + (b[0] - a[0]) * t,
+      a[1] + (b[1] - a[1]) * t,
+      a[2] + (b[2] - a[2]) * t,
+      a[3] + (b[3] - a[3]) * t,
+      a[4] + (b[4] - a[4]) * t,
+    ];
+
+    for (let i = 0; i < pos.count; i += 3) {
+      vA.fromBufferAttribute(pos, i).applyMatrix4(wm);
+      vB.fromBufferAttribute(pos, i + 1).applyMatrix4(wm);
+      vC.fromBufferAttribute(pos, i + 2).applyMatrix4(wm);
+      const A = [vA.x, vA.y, vA.z, uv ? uv.getX(i) : 0, uv ? uv.getY(i) : 0];
+      const B = [vB.x, vB.y, vB.z, uv ? uv.getX(i + 1) : 0, uv ? uv.getY(i + 1) : 0];
+      const C = [vC.x, vC.y, vC.z, uv ? uv.getX(i + 2) : 0, uv ? uv.getY(i + 2) : 0];
+
+      const da = A[2] - HINGE_W, db = B[2] - HINGE_W, dc = C[2] - HINGE_W;
+      const posA = da > 1e-6, posB = db > 1e-6, posC = dc > 1e-6;
+      const negA = da < -1e-6, negB = db < -1e-6, negC = dc < -1e-6;
+      if ((posA || posB || posC) && (negA || negB || negC)) {
+        // Z = HINGE_W 경계선을 정확히 분할(와인딩 순서 유지)
+        const sA = da >= 0, sB = db >= 0, sC = dc >= 0;
+        let v0, v1, v2;
+        if (sA !== sB && sA !== sC) { v0 = A; v1 = B; v2 = C; }
+        else if (sB !== sA && sB !== sC) { v0 = B; v1 = C; v2 = A; }
+        else { v0 = C; v1 = A; v2 = B; }
+        const t1 = (HINGE_W - v0[2]) / (v1[2] - v0[2]);
+        const t2 = (HINGE_W - v0[2]) / (v2[2] - v0[2]);
+        const m1 = lerpV(v0, v1, t1);
+        const m2 = lerpV(v0, v2, t2);
+        emitTri(v0, m1, m2);
+        emitTri(m1, v1, v2);
+        emitTri(m1, v2, m2);
+      } else {
+        emitTri(A, B, C);
+      }
+    }
+
+    const nextGeo = new THREE.BufferGeometry();
+    nextGeo.setAttribute("position", new THREE.Float32BufferAttribute(outPos, 3));
+    if (outUv) nextGeo.setAttribute("uv", new THREE.Float32BufferAttribute(outUv, 2));
+    nextGeo.computeVertexNormals();
+    nextGeo.computeBoundingBox();
+    nextGeo.computeBoundingSphere();
+    o.geometry = nextGeo;
+    if (floatGeo !== nonIdx) floatGeo.dispose();
+    nonIdx.dispose();
+    src.dispose();
+  });
+  entry.group.updateMatrixWorld(true);
+}
+
 function loadPlaceModelInto(entry) {
   entry.loading = true;
   gltfLoader.load(
@@ -4890,6 +5045,8 @@ function loadPlaceModelInto(entry) {
       entry.group.updateMatrixWorld(true);
       if (entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb")) {
         adaptLotteMartToTerrain(entry, model);
+      } else if (isParkHillsCommunityBaseModel(entry.place)) {
+        conformParkHillsCommunityModel(entry, model);
       } else {
         conformModelToSlopedShapes(model, entry.group.position.y + model.position.y);
         preparePlaceEnvCleanup(entry, model, modelScale);
@@ -4906,7 +5063,7 @@ function loadPlaceModelInto(entry) {
         }
       });
       settleBuildingBase(entry, model);
-      if (!(entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb"))) {
+      if (!(entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb")) && !isParkHillsCommunityBaseModel(entry.place)) {
         snapPlaceEnvPropsToTerrain(entry, model);
       }
       entry.loadedModel = model;
@@ -4979,16 +5136,22 @@ function buildPlaces() {
     // 쓰는 값 — group 자체를 그만큼 올리고/내리고, 그 자리 지형 표면까지 이어지는 벽(스커트)을
     // 세워서 "여기만 지대가 더 높다/낮다"는 느낌을 준다.
     const groundY = (place.y || 0) * WORLD_SCALE;
+    const isCommBase = isParkHillsCommunityBaseModel(place);
+    const deckSi = shapeIndexAt(px, pz);
+    const onParkHillsDeck = !isCommBase && deckSi >= 0 && terrainShapes[deckSi].name.includes("금파힐 커뮤니티");
     // 건물 바닥은 보도 높이(SIDEWALK_TOP_Y)에 맞춘다 — 도로는 그보다 낮다(문주 등 도로 위 시설은 예외)
     // 단차가 들어간 모델(terrain: "baked")은 모델의 y=0이 정확히 그 자리 땅 높이(보도 턱만큼 띄우지 않는다)
-    const baseLift = ROAD_LEVEL_PLACE_IDS.has(place.id) || place.terrain === "baked" ? 0 : SIDEWALK_TOP_Y;
+    // 금파힐 커뮤니티 데크 위에 올라가는 개별 동(102~116동)은 데크 표면(+0.12m)에 바로 밀착시킨다.
+    const baseLift = ROAD_LEVEL_PLACE_IDS.has(place.id) || place.terrain === "baked"
+      ? 0
+      : onParkHillsDeck ? 0.12 * WORLD_SCALE : SIDEWALK_TOP_Y;
     // 건물은 평지 기준으로 그대로 둔다(지형을 안 따라감) — 건물 폭 안에서도 실제 지형이 몇 m씩
     // 바뀌는 곳이 많아서(금호동 특성상), 중심점 높이 하나로 앉히면 가파른 곳에서 바닥이 땅을
     // 뚫고 올라오거나 떠 보이는 문제가 생겼다(2026-11-26, 행당대림108동 등에서 확인). 도로·보도·
     // 캐릭터는 계속 지형을 따라가게 두고, 건물만 이 평지 가정으로 되돌렸다(사용자 결정).
     // 실제 지형(GameMap.glb)이 있으면 장소 좌표(x, z) 자리의 지형 높이에 앉힌다 — 맵 에디터 "위치+고도 뽑기"가
     // 알려주는 고도와 같은 값이다. 고저차가 큰 곳은 단차가 들어간 모델(terrain: "baked")로 바꿔 넣으면 된다.
-    const terrainY = getTerrainY(px, pz);
+    const terrainY = isCommBase ? PARKHILLS_DECK_BASE_RAW_Y * WORLD_SCALE : getTerrainY(px, pz);
     const group = new THREE.Group();
     group.position.y = terrainY + groundY + baseLift;
     scene.add(group);
@@ -5019,18 +5182,22 @@ function buildPlaces() {
 
       // 실제 제작된 3D 모델이 있는 동(113동=우리집, 106동 등)은 캐릭터가 가까워지면 불러와 쓴다
       // (updateModelStreaming) — 그전엔 모델 없는 동과 같은 임시 매싱을 세워 둔다.
-      const placeholder = new THREE.Group();
-      if (place.type === "아파트") {
-        height = buildApartmentCluster(place, px, pz, floors, placeholder);
-      } else {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), new THREE.MeshStandardMaterial({ color }));
-        mesh.position.set(px, height / 2, pz);
-        mesh.rotation.y = rotY;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        placeholder.add(mesh);
+      // 금파힐 커뮤니티 통합 데크(place_금파힐커뮤니티.glb)는 단지 바닥면 자체이므로 가짜 박스 플레이스홀더를 세우지 않는다.
+      let placeholder = null;
+      if (!isCommBase) {
+        placeholder = new THREE.Group();
+        if (place.type === "아파트") {
+          height = buildApartmentCluster(place, px, pz, floors, placeholder);
+        } else {
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, height, d), new THREE.MeshStandardMaterial({ color }));
+          mesh.position.set(px, height / 2, pz);
+          mesh.rotation.y = rotY;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          placeholder.add(mesh);
+        }
+        group.add(placeholder);
       }
-      group.add(placeholder);
       modelStreamEntries.push({ place, px, pz, rotY, placeholder, group, groundY, terrainY, loadedModel: null, loading: false, inRange: true, baseDecided: null });
 
       // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
@@ -5053,6 +5220,8 @@ function buildPlaces() {
       // 모델이 없어도 group(스커트 포함)은 거리 기준으로 보이기/숨기기 대상에 그대로 올린다.
       placeVisibilityEntries.push({ place, px, pz, group });
     }
+
+    if (isCommBase) return; // 단지 통합 바닥면 모델은 공중 라벨을 띄우지 않는다
 
     const labelText = place.home ? "🏠 우리집" : place.name;
     const label = makeLabelSprite(labelText, place.home ? 0.065 : 0.045);
