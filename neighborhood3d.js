@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261126x";
+import * as MAP_DATA from "./map_data.js?v=20261126y";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261126d";
+const ASSET_VERSION = "20261126e";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -4065,6 +4065,7 @@ function preparePlaceEnvCleanup(entry, model, modelScale) {
   const baseWorldY = entry.group.position.y + model.position.y;
   const items = [];
   let modelMaxRelY = 0;
+  let modelMinRelY = 0;
 
   model.traverse((o) => {
     if (!o.isMesh || !o.visible || !o.geometry?.attributes?.position) return;
@@ -4076,6 +4077,7 @@ function preparePlaceEnvCleanup(entry, model, modelScale) {
     const dz = (box.max.z - box.min.z) / modelScale;
     const dy = relMaxY - relMinY;
     if (relMaxY > modelMaxRelY) modelMaxRelY = relMaxY;
+    if (relMinY < modelMinRelY) modelMinRelY = relMinY;
     const ancNames = [];
     let p = o.parent;
     while (p && p !== model) {
@@ -4113,7 +4115,10 @@ function preparePlaceEnvCleanup(entry, model, modelScale) {
   const hasBodyBox = bMaxX > bMinX && bMaxZ > bMinZ;
   const bAreaRaw = hasBodyBox ? ((bMaxX - bMinX) / modelScale) * ((bMaxZ - bMinZ) / modelScale) : 0;
   const isUnnamedOrGeneric = (name) => !name || /^Mesh_\d+(?:\.\d+)?$/i.test(name);
-  const isKeepFloorName = (name) => /(?:Floor|Deck|Terrace|Landing|Steps|Ramp|Playground)/i.test(name);
+  const isKeepFloorName = (name) => /(?:Floor|Deck|Terrace|Landing|Steps|Ramp|Playground|Walkway_1F|Garden_)/i.test(name);
+  // 지하 1~2층·옹벽 기단(y < -1.5m)이 이미 설계된 모델(예: 금파힐 111~116동)은
+  // 1층 보행 데크·화단·연석이 지하 기단 위에 의도적으로 얹힌 구조이므로 형상 기반 자동 숨김에서 제외한다.
+  const hasModeledBasement = modelMinRelY < -1.5;
 
   let hasBigSlab = false;
   // 1단계: 명시된 평면 바닥/보도/주차장 타일 및 무명 대형 평면 바닥판 숨김
@@ -4131,6 +4136,7 @@ function preparePlaceEnvCleanup(entry, model, modelScale) {
       it.hidden = true;
       hasBigSlab = true;
     } else if (
+      !hasModeledBasement &&
       !it.inst &&
       it.relMaxY <= 0.25 &&
       it.relMinY >= -0.45 &&
