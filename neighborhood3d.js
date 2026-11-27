@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261127d";
+import * as MAP_DATA from "./map_data.js?v=20261127e";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261127d";
+const ASSET_VERSION = "20261127e";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -549,6 +549,7 @@ async function buildStaticScene() {
   buildFences();
   buildTerrainWalls();
   buildTerrainShapeWalls(); // 평지·경사 구역 가장자리 옹벽
+  buildParkHillsEastRampSidewalks(); // 113~114동 동측 지하주차장 진입로 좌·우측 도보스타일 보도 마감
   tessellateForTerrain(scene.children.filter((o) => !before.has(o)));
   freezeStaticObjects([...(bg ? [bg] : []), ...scene.children.filter((o) => !before.has(o))]);
   buildPlaces();
@@ -887,8 +888,8 @@ function conformToTerrain(objects) {
         const ha = tY(A), hb = tY(B), hc = tY(C);
         const hMin = Math.min(ha, hb, hc);
         const hMax = Math.max(ha, hb, hc);
-        // 1.2m 이하 삼각형이 1.0m 넘는 수직 옹벽·단차를 걸치면 종유석처럼 솟지 않도록 낮은 쪽 바닥 높이에 평탄 밀착시킨다
-        const hs = hMax - hMin > 1.0 * WORLD_SCALE ? [hMin, hMin, hMin] : [ha, hb, hc];
+        // 다른 지형 영역(옹벽·단차 경계)을 걸치는 작은 삼각형만 낮은 쪽 바닥 높이에 밀착(매끈한 경사로 내부는 그대로 유지)
+        const hs = !same && Math.sqrt(m) <= 2.5 * WORLD_SCALE && hMax - hMin > 1.0 * WORLD_SCALE ? [hMin, hMin, hMin] : [ha, hb, hc];
         [A, B, C].forEach((V, vi) => {
           V.forEach((val, k) => {
             if (k === pi) out[k].push(val[0], val[1] + hs[vi], val[2]);
@@ -1607,7 +1608,8 @@ function buildTerrainShapeWalls() {
     if (!S.walls) return;
     const isGeumbukCampus = S.name.includes("금북초 교정");
     const isGeumbukRamp = S.name.includes("금북초 교문 진입로");
-    const isParkHillsDeck = S.name.includes("금파힐 커뮤니티");
+    const isParkHillsEastRamp = S.name.includes("금파힐 동측 지하주차장");
+    const isParkHillsDeck = S.name.includes("금파힐 커뮤니티") || isParkHillsEastRamp;
     const P = S.poly;
     let along = 0;
     for (let i = 0; i < P.length; i++) {
@@ -1632,14 +1634,15 @@ function buildTerrainShapeWalls() {
         // 인접한 두 TERRAIN_SHAPES 공유 경계는 앞선 구역 한쪽만 옹벽을 세운다(중복 옹벽·깜빡임 방지)
         const midOut = shapeHitAt((A.x + B.x) / 2 + nx * EPS, (A.z + B.z) / 2 + nz * EPS, si);
         if (midOut && terrainShapes[midOut.si].walls && midOut.si < si) continue;
-        // 금파힐 커뮤니티 데크는 모델(place_금파힐커뮤니티.glb) 자체가 남·동측 외벽과 내부 6m 커뮤니티 파사드를
-        // 갖고 있으므로, 바깥 언덕이 데크보다 높은 절개지(hout > hin) 외곽 경계에만 다크 화강석 옹벽을 세운다.
+        // 금파힐 커뮤니티 데크·동측 주차장 진입로는 바깥 언덕/보도가 더 높은 절개지(hout > hin) 외곽 경계에만 다크 화강석 옹벽을 세운다.
         if (isParkHillsDeck) {
-          if (midOut && terrainShapes[midOut.si].name.includes("금파힐 커뮤니티")) continue;
+          if (midOut && (terrainShapes[midOut.si].name.includes("금파힐 커뮤니티") || terrainShapes[midOut.si].name.includes("금파힐 동측 지하주차장"))) continue;
           if (A.hout <= A.hin + MIN && B.hout <= B.hin + MIN) continue;
         }
-        const tA = Math.max(A.hin, A.hout), bA = Math.min(A.hin, A.hout) - 0.02;
-        const tB = Math.max(B.hin, B.hout), bB = Math.min(B.hin, B.hout) - 0.02;
+        const botPad = isParkHillsEastRamp ? 0.55 * W : 0.02;
+        const topPad = isParkHillsEastRamp ? SIDEWALK_TOP_Y : 0;
+        const tA = Math.max(A.hin, A.hout) + topPad, bA = Math.min(A.hin, A.hout) - botPad;
+        const tB = Math.max(B.hin, B.hout) + topPad, bB = Math.min(B.hin, B.hout) - botPad;
         const dA = along + (L * k) / n, dB = along + (L * (k + 1)) / n;
         // 벽 면은 가장자리 바로 바깥(구역이 높으면 구역 쪽 흙을 받치고, 낮으면 바깥 언덕을 받친다)
         const o = 0.01 * W;
@@ -1710,6 +1713,132 @@ function buildTerrainShapeWalls() {
   }
   mk(cap, new THREE.MeshStandardMaterial({ color: 0xc9c3b6, roughness: 0.85, side: THREE.DoubleSide }), false);
 }
+
+// 113~114동 동측 지하주차장 진입로 좌·우측 보도 마감:
+// 1) 대로 보도와 진입로 절개 옹벽 사이의 빈 틈(상단 평지)을 대로 보도와 동일한 회색 블록 도보스타일로 이음매 없이 채우고,
+// 2) 차로 좌·우측 경사면에도 도보스타일 보도블록과 연석을 깔아 지하주차장 진입부 화단까지 자연스럽게 이어지게 한다.
+function buildParkHillsEastRampSidewalks() {
+  if (!terrainShapes.length) return;
+  const W = WORLD_SCALE;
+  const tileW = SIDEWALK_TILE_RAW * W;
+  const swPos = [], swUv = [], swIdx = [];
+  const curbPos = [], curbIdx = [];
+  const yelPos = [], yelIdx = [];
+
+  // 쿼드(p00-p10-p11-p01, raw 좌표)를 nu×nv 격자로 분할해 월드 정렬 보도블록 UV로 추가
+  const addQuad = (p00, p10, p11, p01, yFn, nu = 10, nv = 6) => {
+    const base = swPos.length / 3;
+    const cols = nu + 1;
+    for (let iv = 0; iv <= nv; iv++) {
+      const v = iv / nv;
+      for (let iu = 0; iu <= nu; iu++) {
+        const u = iu / nu;
+        const rx = (1 - v) * ((1 - u) * p00[0] + u * p10[0]) + v * ((1 - u) * p01[0] + u * p11[0]);
+        const rz = (1 - v) * ((1 - u) * p00[1] + u * p10[1]) + v * ((1 - u) * p01[1] + u * p11[1]);
+        const wx = rx * W, wz = rz * W;
+        swPos.push(wx, yFn(rx, rz), wz);
+        swUv.push(wx / tileW, wz / tileW);
+      }
+    }
+    for (let iv = 0; iv < nv; iv++) {
+      for (let iu = 0; iu < nu; iu++) {
+        const a = base + iv * cols + iu;
+        const b = a + 1;
+        const c = a + cols;
+        const d = c + 1;
+        swIdx.push(a, c, b, b, c, d);
+      }
+    }
+  };
+
+  // 폴리라인을 따라 연석(수직 턱) 추가
+  const addCurb = (rawPts, topYFn, botYFn, segs = 12) => {
+    for (let s = 0; s < rawPts.length - 1; s++) {
+      const a = rawPts[s], b = rawPts[s + 1];
+      const base = curbPos.length / 3;
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const rx = a[0] + (b[0] - a[0]) * t;
+        const rz = a[1] + (b[1] - a[1]) * t;
+        const wx = rx * W, wz = rz * W;
+        curbPos.push(wx, botYFn(rx, rz), wz, wx, topYFn(rx, rz), wz);
+      }
+      for (let i = 0; i < segs; i++) {
+        const k = base + i * 2;
+        curbIdx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+      }
+    }
+  };
+
+  // 상단 대로 보도 어깨선용 황색 점자 유도선 띠 추가
+  const addYellowLine = (a, b, inX, yFn, segs = 8) => {
+    const inset = SIDEWALK_YELLOW_INSET_RAW;
+    const lw = SIDEWALK_YELLOW_W_RAW;
+    const base = yelPos.length / 3;
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const rx0 = a[0] + (b[0] - a[0]) * t + inX * inset;
+      const rz0 = a[1] + (b[1] - a[1]) * t;
+      const rx1 = rx0 + inX * lw;
+      const wx0 = rx0 * W, wz0 = rz0 * W, wx1 = rx1 * W;
+      yelPos.push(wx0, yFn(rx0, rz0) + 0.0012, wz0, wx1, yFn(rx1, rz0) + 0.0012, wz0);
+    }
+    for (let i = 0; i < segs; i++) {
+      const k = base + i * 2;
+      yelIdx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+    }
+  };
+
+  // 상단 대로 보도(바깥 지형 그대로) 및 경사로 내부 보도(경계 오차 방지를 위해 차로 중심 쪽 0.25m 안쪽 높이 샘플)
+  const upperY = (rx, rz) => rawTerrainY(rx * W, rz * W) + SIDEWALK_TOP_Y - 0.002;
+  const upperBotY = (rx, rz) => rawTerrainY(rx * W, rz * W) - 0.05 * W;
+  const rampTerrainY = (rx, rz) => {
+    const sz = rz < -52.8 ? Math.min(-52.8, rz + 0.28) : Math.max(-52.8, rz - 0.28);
+    const eastMaxX = 52.6 + Math.max(0, Math.min(1, (-46.5 - rz) / 15.0)) * 1.1;
+    const sx = Math.min(eastMaxX - 0.08, rx);
+    return getTerrainY(sx * W, sz * W);
+  };
+  const rampWalkY = (rx, rz) => rampTerrainY(rx, rz) + SIDEWALK_TOP_Y + 0.02 * W;
+  const rampCurbBotY = (rx, rz) => rampTerrainY(rx, rz) - 0.08 * W;
+
+  // 1) 상단 대로 좌측(남측)·우측(북측) 보도 어깨 마감 (대로 기존 보도와 절개 옹벽 상단 사이 빈틈 제거)
+  addQuad([39.2, -46.5], [52.4, -46.5], [51.5, -36.5], [38.5, -36.5], upperY, 10, 8);
+  addCurb([[52.4, -46.5], [51.5, -36.5]], upperY, upperBotY, 8);
+  addYellowLine([52.4, -46.5], [51.5, -36.5], -1, upperY, 8);
+
+  addQuad([41.0, -65.2], [53.7, -61.5], [54.5, -69.5], [41.5, -69.5], upperY, 10, 8);
+  addCurb([[53.7, -61.5], [54.5, -69.5]], upperY, upperBotY, 8);
+  addYellowLine([53.7, -61.5], [54.5, -69.5], -1, upperY, 8);
+
+  // 2) 주차장 진입로 좌측(남측) 경사 도보스타일 보도 + 차로측 연석
+  addQuad([52.6, -46.55], [43.2, -46.55], [43.2, -48.15], [52.6, -48.35], rampWalkY, 12, 3);
+  addQuad([43.2, -46.55], [39.7, -46.05], [40.1, -48.45], [43.2, -48.15], rampWalkY, 5, 3);
+  addCurb([[52.6, -48.35], [43.2, -48.15], [40.1, -48.45]], rampWalkY, rampCurbBotY, 10);
+
+  // 3) 주차장 진입로 우측(북측) 경사 도보스타일 보도 + 차로측 연석
+  addQuad([53.7, -61.45], [43.5, -64.45], [43.5, -57.05], [53.7, -57.35], rampWalkY, 12, 6);
+  addQuad([43.5, -64.45], [41.1, -65.15], [41.2, -57.45], [43.5, -57.05], rampWalkY, 5, 6);
+  addCurb([[53.7, -57.35], [43.5, -57.05], [41.2, -57.45]], rampWalkY, rampCurbBotY, 10);
+
+  const addMesh = (posArr, uvArr, idxArr, mat) => {
+    if (!idxArr.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(posArr, 3));
+    if (uvArr) geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvArr, 2));
+    geo.setIndex(idxArr);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    mesh.userData.noConform = true;
+    mesh.userData.noTerrainTess = true;
+    scene.add(mesh);
+  };
+
+  addMesh(swPos, swUv, swIdx, new THREE.MeshStandardMaterial({ map: getSidewalkTexture("gray"), roughness: 1, side: THREE.DoubleSide }));
+  addMesh(curbPos, null, curbIdx, new THREE.MeshStandardMaterial({ color: CURB_COLOR, roughness: 1, side: THREE.DoubleSide }));
+  addMesh(yelPos, null, yelIdx, new THREE.MeshBasicMaterial({ color: LANE_YELLOW, side: THREE.DoubleSide }));
+}
+
 function shapeIndexAt(x, z) {
   const hit = terrainShapes.length ? shapeHitAt(x, z, -1) : null;
   return hit ? hit.si : -1;
@@ -5034,7 +5163,7 @@ function conformParkHillsCommunityModel(entry, model) {
   let alreadySloped = false;
   let hasEastPortal = false;
   model.traverse((o) => {
-    if (o.name === "East_Entrance_Notch_Apron") o.visible = false;
+    if (o.name === "East_Entrance_Notch_Apron" || o.name === "EastPortal2_OuterApproachSkirt") o.visible = false;
     if (o.name && /Parking_Portal_East/i.test(o.name)) hasEastPortal = true;
     if (o.name && /Sloped/i.test(o.name)) alreadySloped = true;
   });
