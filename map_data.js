@@ -38,7 +38,7 @@
 // 믿을 만했다). 높이(세로 치수)가 15층 건물의 실제 높이(약 45~58m)와 맞아떨어지는 걸로 봐서
 // scaleRatio 보정은 필요 없었다(기본 1).
 export const PLACES = [
-  { id: 0, name: "우리집", floors: 15, type: "아파트", x: 0.4, z: 1.6, home: true, model: "models/place_금파힐113.glb", rotationDeg: 0, scaleRatio: 1.3 },
+  { id: 0, name: "우리집", floors: 15, type: "아파트", x: -0.2, z: 1.3, home: true, model: "models/place_금파힐113.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -392.8, z: 75.6, model: "models/place_금파힐101.glb", rotationDeg: -7.3, scaleRatio: 1.3 },
   { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -313.8, z: 41.4 },
   { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -246.5, z: -21.7, rotationDeg: 0 },
@@ -50,10 +50,10 @@ export const PLACES = [
   { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -311.9, z: 135.7, model: "models/place_금파힐109.glb", rotationDeg: -2.7, scaleRatio: 1.3 },
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -253.5, z: 114.3, model: "models/place_금파힐110.glb", rotationDeg: -3.6, scaleRatio: 1.3 },
   { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -164.6, z: 120.5, model: "models/place_금파힐111.glb", rotationDeg: -1.2, scaleRatio: 1.3 },
-  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -70.2, z: 57.5, model: "models/place_금파힐112.glb", rotationDeg: -6.2, scaleRatio: 1.3 },
+  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -67.2, z: 55.3, model: "models/place_금파힐112.glb", rotationDeg: -4.3, scaleRatio: 1.3 },
   { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 11.2, z: -96, model: "models/place_금파힐114.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -22.9, z: -142.2, model: "models/place_금파힐115.glb", rotationDeg: 0, scaleRatio: 1.3 },
-  { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -44.4, z: 98.5, model: "models/place_금파힐116.glb", rotationDeg: -4.2, scaleRatio: 1.3 },
+  { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -39.4, z: 109.5, model: "models/place_금파힐116.glb", rotationDeg: -4.2, scaleRatio: 1.3 },
   { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 35.7, z: -155.8, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: -4, scaleRatio: 1.5 },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -240.1, z: -120.3, church: true, model: "models/place_대현교회.glb", rotationDeg: 20.8 },
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -60.2, z: 177.3 },
@@ -161,7 +161,7 @@ export const PLACES = [
   { id: 212, name: "신금호역 인근 상가", floors: 15, type: "기타", x: -540, z: -83, model: "models/place_신금호역5번출구앞상가.glb", rotationDeg: -3.2, scaleRatio: 1.3 },
   { id: 213, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -623.5, z: 22.2, model: "models/place_megacoffee2.glb", rotationDeg: -25.5, scaleRatio: 1.5 },
   { id: 214, name: "주택", floors: 5, type: "기타", x: 15.4, z: -226.6, model: "models/place_bagel.glb", rotationDeg: 0.8, scaleRatio: 1.4 },
-  { id: 216, name: "주택가", floors: 3, type: "기타", x: -79.5, z: -301.3, y: -3.0, model: "models/place_금북주택가2.glb", rotationDeg: -0.9, scaleRatio: 1.3 },
+  { id: 216, name: "주택가", floors: 3, type: "기타", x: -79.5, z: -301.3, y: -3, model: "models/place_금북주택가2.glb", rotationDeg: -0.9, scaleRatio: 1.3 },
   { id: 217, name: "금호1가동 주민센터", floors: 5, type: "아파트", x: -340.6, z: -63.2, model: "models/place_금호1가동주민센터.glb", rotationDeg: 28.9, scaleRatio: 1.5 },
   { id: 218, name: "GS25", floors: 15, type: "아파트", x: -21.8, z: -576.1, model: "models/place_gs25극미점.glb", scaleRatio: 1.8 },
   { id: 219, name: "상가", floors: 15, type: "기타", x: 2.6, z: -510.1, model: "models/place_산마을돈타운2.glb", scaleRatio: 1.4 },
@@ -347,7 +347,7 @@ export const ROAD_SEGMENTS = [
   { a: [377, -759.5], b: [348.4, -689.7], width: 10 },
   { a: [62.1, -482.8], b: [-37.5, -460.6], width: 10, curve: [-39, -481.3], sidewalk: 10, kind: "school", lanes: 1, signalA: false },
   { a: [72.4, -126.1], b: [65.4, -53.3], width: 25, curve: [68.7, -87.9], sidewalk: 10, lanes: 6, signalB: false },
-  { a: [65.4, -53.3], b: [57.9, 28], width: 25, curve: [61.3, -9.9], sidewalk: 10, lanes: 6, signalA: false },
+  { a: [65.4, -53.3], b: [57.9, 28], width: 25, sidewalk: 10, lanes: 6, signalA: false },
   { a: [475.2, -475.6], b: [348.4, -689.7], width: 10, sidewalk: 5 },
   { a: [269.1, -350.7], b: [189.1, -302.2], width: 10 },
   { a: [269.1, -350.7], b: [331.2, -252.5], width: 10 },
@@ -474,11 +474,11 @@ export const TERRAIN_POINTS = [
   { x: -311.9, z: 135.7, h: 0.25, name: "109동" },
   { x: -253.5, z: 114.3, h: 0.25, name: "110동" },
   { x: -164.6, z: 120.5, h: 0.25, name: "111동" },
-  { x: -70.2, z: 57.5, h: 0.75, name: "112동" },
-  { x: 0.4, z: 1.6, h: 0.75, name: "113동(우리집)" },
+  { x: -65.2, z: 43.1, h: 0, name: "112동" },
+  { x: 11.1, z: -10, h: 0, name: "113동(우리집)" },
   { x: 11.2, z: -96, h: 1.25, name: "114동" },
   { x: -22.9, z: -142.2, h: 1.75, name: "115동" },
-  { x: -44.4, z: 98.5, h: 0.25, name: "116동" },
+  { x: -39.1, z: 109.8, h: 0, name: "116동" },
 ];
 
 // 평지·경사 구역 — 실제 지형(GameMap.glb)이 담지 못하는 단차(학교 운동장 같은 평지, 교문 진입로 같은 경사로)를 덮어쓴다.
@@ -486,6 +486,6 @@ export const TERRAIN_POINTS = [
 // "위치+고도 뽑기"와 같은 기준). 꼭짓점 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이. walls: false면 옹벽 없음.
 // 가장자리에서 안팎 높이가 다르면 게임이 옹벽을 세우고, 캐릭터는 옹벽을 못 넘어 경사로로만 오르내린다.
 export const TERRAIN_SHAPES = [
-  { name: "금북초 교정(평지)", h: 20.5, pts: [[-82.1, -433.3], [-86.1, -407.3], [-90.1, -385.3], [-92.4, -369.3], [-118.9, -369.8], [-155.9, -371.3], [-169.4, -378.8], [-175.9, -399.3], [-175.9, -433.3], [-195.9, -434.8], [-195.9, -495.3], [-191.4, -508.8], [-177.9, -516.8], [-166.4, -517.8], [-166.4, -539.3], [-52.9, -539.3], [-50.9, -521.3], [-33.4, -515.3], [-33.4, -499.3], [-43.4, -498.8], [-66.4, -434.8], [-70.4, -433.98], [-73.7, -433.3]] },
-  { name: "금북초 교문 진입로(경사)", pts: [[-70.4, -433.98, 20.5], [-73.7, -433.3, 20.5], [-82.1, -433.3, 20.5], [-86.1, -407.3, 17.0], [-90.1, -385.3, 14.1], [-89.96, -378.7, 13.5], [-87.25, -372.69, 13.0], [-82.39, -368.22, 12.5], [-76.18, -366.01, 12.0], [-74.4, -365.76], [-72.76, -377.34], [-74.54, -377.6, 12.0], [-76.35, -378.24, 12.5], [-77.76, -379.54, 13.0], [-78.55, -381.29, 13.5], [-78.59, -383.21, 14.1], [-75.04, -405.21, 17.0]] },
+  { name: "금북초 교정(평지)", h: 20.5, pts: [[-82.1, -433.3], [-86.1, -407.3], [-90.1, -385.3], [-92.4, -369.3], [-118.9, -369.8], [-155.9, -371.3], [-169.4, -378.8], [-175.9, -399.3], [-175.9, -433.3], [-195.9, -434.8], [-195.9, -495.3], [-191.4, -508.8], [-177.9, -516.8], [-166.4, -517.8], [-166.4, -539.3], [-52.9, -539.3], [-50.9, -521.3], [-33.4, -515.3], [-33.4, -499.3], [-43.4, -498.8], [-66.4, -434.8], [-70.4, -434], [-73.7, -433.3]] },
+  { name: "금북초 교문 진입로(경사)", pts: [[-70.4, -434, 20.5], [-73.7, -433.3, 20.5], [-82.1, -433.3, 20.5], [-86.1, -407.3, 17], [-90.1, -385.3, 14.1], [-90, -378.7, 13.5], [-87.2, -372.7, 13], [-82.4, -368.2, 12.5], [-76.2, -366, 12], [-74.4, -365.8], [-72.8, -377.3], [-74.5, -377.6, 12], [-76.3, -378.2, 12.5], [-77.8, -379.5, 13], [-78.5, -381.3, 13.5], [-78.6, -383.2, 14.1], [-75, -405.2, 17]] },
 ];
