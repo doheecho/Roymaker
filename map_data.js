@@ -38,22 +38,9 @@
 // 믿을 만했다). 높이(세로 치수)가 15층 건물의 실제 높이(약 45~58m)와 맞아떨어지는 걸로 봐서
 // scaleRatio 보정은 필요 없었다(기본 1).
 export const PLACES = [
-  { id: 0, name: "우리집", floors: 15, type: "아파트", x: -0.2, z: 1.3, home: true, model: "models/place_금파힐113.glb", rotationDeg: 0, scaleRatio: 1.3 },
+  { id: 0, name: "우리집", floors: 15, type: "아파트", x: -0.2, z: 1.3, home: true, model: "models/place_금파힐113.glb11", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -392.8, z: 75.6, model: "models/place_금파힐101.glb", rotationDeg: -7.3, scaleRatio: 1.3 },
-  { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -313.8, z: 41.4 },
-  { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -246.5, z: -21.7, rotationDeg: 0 },
-  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -192.6, z: -81.1, model: "models/Community_north.glb1", rotationDeg: -2 },
-  { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -121.1, z: -124.9, rotationDeg: 0 },
-  { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -58.3, z: -61.9 },
-  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -371.2, z: -141.9, model: "models/Community_south.glb1", rotationDeg: 0 },
-  { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -266.8, z: 16.6 },
-  { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -311.9, z: 135.7, model: "models/place_금파힐109.glb", rotationDeg: -2.7, scaleRatio: 1.3 },
-  { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -253.5, z: 114.3, model: "models/place_금파힐110.glb", rotationDeg: -3.6, scaleRatio: 1.3 },
-  { id: 11, name: "금호파크힐스 111동", floors: 15, type: "아파트", x: -164.6, z: 120.5, model: "models/place_금파힐111.glb", rotationDeg: -1.2, scaleRatio: 1.3 },
-  { id: 12, name: "금호파크힐스 112동", floors: 15, type: "아파트", x: -67.2, z: 55.3, model: "models/place_금파힐112.glb", rotationDeg: -4.3, scaleRatio: 1.3 },
-  { id: 14, name: "금호파크힐스 114동", floors: 15, type: "아파트", x: 7.5, z: -101.6, model: "models/place_금파힐114.glb", rotationDeg: 0, scaleRatio: 1.3 },
-  { id: 15, name: "금호파크힐스 115동", floors: 15, type: "아파트", x: -22.9, z: -142.2, model: "models/place_금파힐115.glb", rotationDeg: 0, scaleRatio: 1.3 },
-  { id: 16, name: "금호파크힐스 116동", floors: 15, type: "아파트", x: -39.4, z: 109.5, model: "models/place_금파힐116.glb", rotationDeg: -4.2, scaleRatio: 1.3 },
+  { id: 5, name: "이마트24", floors: 15, type: "아파트", x: -77.7, z: -152.4, rotationDeg: 0 },
   { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 35.7, z: -155.8, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: -4, scaleRatio: 1.5 },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -240.1, z: -120.3, church: true, model: "models/place_대현교회.glb", rotationDeg: 20.8 },
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -60.2, z: 177.3 },
@@ -188,7 +175,7 @@ export const PLACES = [
   { id: 241, name: "금호센트럴자이 101동", floors: 15, type: "아파트", x: -362.1, z: 259.2, model: "models/place_금호센트럴자이101.glb", scaleRatio: 1.3 },
   { id: 242, name: "구립성동청소년독서실", floors: 5, type: "도서관", x: 308.2, z: -196.9, model: "models/place_구립성동청소년독서실.glb" },
   { id: 243, name: "버스정류장", floors: 15, type: "버스정류장", x: 77.8, z: 63.3, model: "models/asset_버스정류장.glb", rotationDeg: -90 },
-  { id: 244, name: "금파힐 커뮤니티", floors: 2, type: "기타", x: -158.8, z: -5.4, model: "models/place_금파힐커뮤니티.glb", terrain: "baked" },
+  { id: 245, name: "", floors: 15, type: "아파트", x: -160.5, z: -6.6, model: "models/place_금파힐통합.glb" },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
