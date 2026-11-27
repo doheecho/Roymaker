@@ -567,6 +567,14 @@
   "width": 27.333,
   "depth": 23.333
  },
+ "models/place_금파힐커뮤니티.glb": {
+  "file": "img/skyview/place_금파힐커뮤니티.webp",
+  "hash": "c898334558",
+  "minX": -185.001,
+  "minZ": -161.985,
+  "width": 390.783,
+  "depth": 319.546
+ },
  "models/place_금파힐후문.glb": {
   "file": "img/skyview/place_금파힐후문.webp",
   "hash": "e602e48cab",
