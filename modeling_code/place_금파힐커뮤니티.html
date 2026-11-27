@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>금호파크힐스 통합 커뮤니티·지하주차장 데크 3D 모델링 v3 (남동 둥근 공원·커뮤니티센터·105동 이마트24/신협 상가·보행자 경사로·주차장 입구)</title>
+  <title>금호파크힐스 통합 커뮤니티·지하주차장 데크 3D 모델링 v4 (정문 0m~후문 +15.2m 실측 경사 · 둥근 공원 · 105동 상가)</title>
   <style>
     body { margin: 0; overflow: hidden; background: #1f242b; }
     #info {
@@ -10,7 +10,7 @@
       font-family: 'Malgun Gothic', sans-serif; font-size: 12.5px;
       background: rgba(18, 21, 26, 0.88); padding: 11px 15px;
       border-radius: 9px; border: 1px solid rgba(255,255,255,0.18);
-      pointer-events: none; line-height: 1.55; max-width: 680px;
+      pointer-events: none; line-height: 1.55; max-width: 720px;
     }
     #info code {
       background: rgba(255,255,255,0.12); padding: 1px 5px; border-radius: 4px;
@@ -47,11 +47,11 @@
 </head>
 <body>
   <div id="info">
-    <strong>금호파크힐스 통합 커뮤니티 센터 &amp; 지하주차장 데크 v3</strong><br/>
-    · <b>하단 지하주차장 데크 (남~동 외곽)</b>: <code>Y = 0.0m</code> (정문 높이 유지 · 검정 화강석 B1~B3 외벽 <code>-14.0m</code>)<br/>
-    · <b>서북 통합 커뮤니티 데크</b>: <code>Y = +6.0m</code> (2층 커뮤니티센터 글자·남동 둥근 공원·105동 하부 이마트24/신협 상가·주차장 출입구 1/3)<br/>
-    · <b>단지내 산책용 보행자길</b>: 동북쪽(<code>Y = 0m</code>) → 중앙 놀이터 부근 완만 경사(<code>Y = +6m</code>) → 90° 꺾어 서북단 연결<br/>
-    · <b>map_data.js 배치 좌표</b>: <code>x: -160.0, z: 0.0, rotationDeg: 0, scaleRatio: 1</code> (실측 1:1 raw m · 노란선은 GLB 추출 시 제외)
+    <strong>금호파크힐스 통합 커뮤니티 센터 &amp; 지하주차장 데크 v4 (정문 0m ↔ 후문 +15.2m 경사 반영)</strong><br/>
+    · <b>하단 지하주차장 데크</b>: 남측(정문~113동) <code>Y = 0.0m</code> 평탄 → 북측(114·115동~후문) <code>+15.2m</code> 완만 상승 (B1~B3 검정 화강석 외벽 <code>-14m</code>)<br/>
+    · <b>서북 통합 커뮤니티 데크</b>: 하단 대비 <code>+6.0m</code> 단차 유지 (2층 커뮤니티센터 간판·남동 반원 공원·105동 이마트24/신협 상가·주차장 출입구 1/3)<br/>
+    · <b>단지내 산책용 보행자길</b>: 동북쪽 1층 진입로 → 중앙 놀이터 상단 데크(자연 평탄 연결) → 90° 꺾어 서북단 연결<br/>
+    · <b>map_data.js 배치 좌표</b>: <code>x: -158.8, z: -5.4, terrain: "baked"</code> (경사 내장형 GLB — 게임에서 자동 인식, 중복 경사 없음)
   </div>
 
   <div id="controls-ui">
@@ -2131,6 +2131,125 @@
     lowerTrees.forEach(([x, z, tp, sc]) => addTree(parkGroup, x, z, LOWER_DECK_Y, tp, sc));
 
     // =========================================================
+    // 6-2. 정문(0m)~113동 평탄 + 북측(114·115동~후문 +15.2m) 실측 경사 베이크
+    // (map_data.js id:244 배치 z=-5.4 기준: world rawZ=10.0 -> localZ=15.4, 후문 rawZ=-168.7 -> localZ=-163.3)
+    // =========================================================
+    const SLOPE_HINGE_LOCAL_Z = 15.4;
+    const SLOPE_BACK_LOCAL_Z = -163.3;
+    const SLOPE_BACK_H = 15.2;
+    function slopeLiftAtLocalZ(localZ) {
+      if (localZ >= SLOPE_HINGE_LOCAL_Z) return 0;
+      return SLOPE_BACK_H * Math.min(1, (SLOPE_HINGE_LOCAL_Z - localZ) / (SLOPE_HINGE_LOCAL_Z - SLOPE_BACK_LOCAL_Z));
+    }
+
+    function applyParkHillsSlopeToRoot(root) {
+      const STRUCTURAL_RE = /(?:Deck|Wall|Road|Walk|Promenade|Ramp|Facade|Fence|Rail|Coping|Curb|Shop|Canopy|Lintel|Apron|Planter|Plaza|Floor|RoofGarden|Playground|Court|Portal)/i;
+      root.updateMatrixWorld(true);
+      const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
+      const invMat = new THREE.Matrix4();
+
+      root.traverse((o) => {
+        if (!o.isMesh || !o.geometry?.attributes?.position) return;
+        const src = o.geometry;
+        const wm = o.matrixWorld;
+        if (!src.boundingBox) src.computeBoundingBox();
+        const bb = src.boundingBox.clone().applyMatrix4(wm);
+        if (bb.min.z >= SLOPE_HINGE_LOCAL_Z - 1e-5) return;
+
+        const zSpan = bb.max.z - bb.min.z;
+        let ancNames = o.name || '';
+        let p = o.parent;
+        while (p && p !== root) {
+          if (p.name) ancNames += '/' + p.name;
+          p = p.parent;
+        }
+        const uniformUpright = zSpan <= 4.5 && !STRUCTURAL_RE.test(ancNames);
+        const nonIdx = src.index ? src.toNonIndexed() : src.clone();
+        const pos = nonIdx.attributes.position;
+        const uv = nonIdx.attributes.uv || null;
+        invMat.copy(wm).invert();
+
+        if (uniformUpright) {
+          const lift = slopeLiftAtLocalZ((bb.min.z + bb.max.z) * 0.5);
+          for (let i = 0; i < pos.count; i++) {
+            vA.fromBufferAttribute(pos, i).applyMatrix4(wm);
+            vA.y += lift;
+            vA.applyMatrix4(invMat);
+            pos.setXYZ(i, vA.x, vA.y, vA.z);
+          }
+          pos.needsUpdate = true;
+          nonIdx.computeBoundingBox();
+          nonIdx.computeBoundingSphere();
+          o.geometry = nonIdx;
+          src.dispose();
+          return;
+        }
+
+        const outPos = [];
+        const outUv = uv ? [] : null;
+        const emitVert = (wx, wy, wz, u, v) => {
+          vA.set(wx, wy + slopeLiftAtLocalZ(wz), wz).applyMatrix4(invMat);
+          outPos.push(vA.x, vA.y, vA.z);
+          if (outUv) outUv.push(u, v);
+        };
+        const emitTri = (a, b, c) => {
+          emitVert(a[0], a[1], a[2], a[3], a[4]);
+          emitVert(b[0], b[1], b[2], b[3], b[4]);
+          emitVert(c[0], c[1], c[2], c[3], c[4]);
+        };
+        const lerpV = (a, b, t) => [
+          a[0] + (b[0] - a[0]) * t,
+          a[1] + (b[1] - a[1]) * t,
+          a[2] + (b[2] - a[2]) * t,
+          a[3] + (b[3] - a[3]) * t,
+          a[4] + (b[4] - a[4]) * t,
+        ];
+
+        for (let i = 0; i < pos.count; i += 3) {
+          vA.fromBufferAttribute(pos, i).applyMatrix4(wm);
+          vB.fromBufferAttribute(pos, i + 1).applyMatrix4(wm);
+          vC.fromBufferAttribute(pos, i + 2).applyMatrix4(wm);
+          const A = [vA.x, vA.y, vA.z, uv ? uv.getX(i) : 0, uv ? uv.getY(i) : 0];
+          const B = [vB.x, vB.y, vB.z, uv ? uv.getX(i + 1) : 0, uv ? uv.getY(i + 1) : 0];
+          const C = [vC.x, vC.y, vC.z, uv ? uv.getX(i + 2) : 0, uv ? uv.getY(i + 2) : 0];
+
+          const da = A[2] - SLOPE_HINGE_LOCAL_Z;
+          const db = B[2] - SLOPE_HINGE_LOCAL_Z;
+          const dc = C[2] - SLOPE_HINGE_LOCAL_Z;
+          if ((da > 1e-6 || db > 1e-6 || dc > 1e-6) && (da < -1e-6 || db < -1e-6 || dc < -1e-6)) {
+            const sA = da >= 0, sB = db >= 0, sC = dc >= 0;
+            let v0, v1, v2;
+            if (sA !== sB && sA !== sC) { v0 = A; v1 = B; v2 = C; }
+            else if (sB !== sA && sB !== sC) { v0 = B; v1 = C; v2 = A; }
+            else { v0 = C; v1 = A; v2 = B; }
+            const t1 = (SLOPE_HINGE_LOCAL_Z - v0[2]) / (v1[2] - v0[2]);
+            const t2 = (SLOPE_HINGE_LOCAL_Z - v0[2]) / (v2[2] - v0[2]);
+            const m1 = lerpV(v0, v1, t1);
+            const m2 = lerpV(v0, v2, t2);
+            emitTri(v0, m1, m2);
+            emitTri(m1, v1, v2);
+            emitTri(m1, v2, m2);
+          } else {
+            emitTri(A, B, C);
+          }
+        }
+
+        const nextGeo = new THREE.BufferGeometry();
+        nextGeo.setAttribute('position', new THREE.Float32BufferAttribute(outPos, 3));
+        if (outUv) nextGeo.setAttribute('uv', new THREE.Float32BufferAttribute(outUv, 2));
+        nextGeo.computeVertexNormals();
+        nextGeo.computeBoundingBox();
+        nextGeo.computeBoundingSphere();
+        o.geometry = nextGeo;
+        nonIdx.dispose();
+        src.dispose();
+      });
+      root.name = 'KumhoParkHills_Community_Base_Sloped';
+      root.updateMatrixWorld(true);
+    }
+    applyParkHillsSlopeToRoot(communityRoot);
+
+    // =========================================================
     // 7. 선택적 노란 경계선 참고 가이드 (기본 OFF, GLB 추출 제외)
     // =========================================================
     const yellowGuideGroup = new THREE.Group();
@@ -2140,7 +2259,18 @@
 
     const yellowLineMat = new THREE.LineBasicMaterial({ color: 0xffee00 });
     function addYellowLine(pts, y) {
-      const vecs = pts.map(([x, z]) => new THREE.Vector3(x, y, z));
+      const vecs = [];
+      for (let i = 0; i < pts.length; i++) {
+        const [x0, z0] = pts[i];
+        vecs.push(new THREE.Vector3(x0, y + slopeLiftAtLocalZ(z0), z0));
+        if (i + 1 < pts.length) {
+          const [x1, z1] = pts[i + 1];
+          if ((z0 - SLOPE_HINGE_LOCAL_Z) * (z1 - SLOPE_HINGE_LOCAL_Z) < 0) {
+            const t = (SLOPE_HINGE_LOCAL_Z - z0) / (z1 - z0);
+            vecs.push(new THREE.Vector3(x0 + (x1 - x0) * t, y, SLOPE_HINGE_LOCAL_Z));
+          }
+        }
+      }
       yellowGuideGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(vecs), yellowLineMat));
     }
     addYellowLine(UPPER_OUTLINE.slice(0, 17), UPPER_DECK_Y + 1.6);
@@ -2162,25 +2292,25 @@
     window.setView = (mode) => {
       if (mode === 'top') {
         camera.position.set(0, 440, 10);
-        controls.target.set(0, 0, 0);
+        controls.target.set(0, 6, 0);
       } else if (mode === 'se_park') {
         camera.position.set(56, 32, 108);
         controls.target.set(8, 3.5, 52);
       } else if (mode === 'shop_105') {
-        camera.position.set(108, 12, -138);
-        controls.target.set(72, 3.2, -139.5);
+        camera.position.set(108, 25, -138);
+        controls.target.set(72, 16.5, -139.5);
       } else if (mode === 'ramp') {
-        camera.position.set(120, 48, -145);
-        controls.target.set(35, 3, -75);
+        camera.position.set(125, 58, -145);
+        controls.target.set(35, 11, -75);
       } else if (mode === 'portal_ne') {
-        camera.position.set(118, 16, -125);
-        controls.target.set(84, 3, -88);
+        camera.position.set(118, 25, -125);
+        controls.target.set(84, 12, -88);
       } else if (mode === 'portal_s') {
         camera.position.set(-55, 16, 128);
         controls.target.set(-55, 3, 72);
       } else if (mode === 'nw_wall') {
-        camera.position.set(-230, 80, -210);
-        controls.target.set(-55, 2, -65);
+        camera.position.set(-230, 92, -210);
+        controls.target.set(-55, 11, -65);
       } else if (mode === 'south_wall') {
         camera.position.set(145, 72, 265);
         controls.target.set(20, -2, 85);
