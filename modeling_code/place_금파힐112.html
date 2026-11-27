@@ -1926,144 +1926,6 @@
 
     const apt112 = createKumho112Dong();
     scene.add(apt112);
-    
-        const apt112 = createKumho112Dong();
-    scene.add(apt112);
-
-    // =========================================================
-    // [추가] 지하 1~2층 순수 석재 벽체 연장 (Y = 0 ~ -5.30m, 창문 없음) & 1층 기준 노드
-    // =========================================================
-    (() => {
-      const BASEMENT_FLOORS = 2;
-      const BASEMENT_H = FLOOR_H * BASEMENT_FLOORS; // 5.30m (Y = 0 ~ -5.30m)
-      const EPS = 0.05;
-
-      // 창문(columns) 없는 순수 1~3층 석재 벽체 텍스처에서 2층 분량만 추출하여 캐싱
-      const plainWallMatCache = new Map();
-      const getPlainBasementWallMat = (widthMeters) => {
-        const key = Math.max(1, Math.round(widthMeters * 10)); // 0.1m 단위 캐싱
-        if (!plainWallMatCache.has(key)) {
-          const fullTex = createStoneBaseTexture(widthMeters, null);
-          const srcImg = fullTex.image;
-          const sw = srcImg.width;
-          const sh = srcImg.height;
-          const cropH = Math.round(sh * (BASEMENT_FLOORS / BASE_FLOORS));
-
-          const canvas = document.createElement('canvas');
-          canvas.width = sw;
-          canvas.height = cropH;
-          const ctx = canvas.getContext('2d');
-
-          // 상단 2개 층 석재 벽체 패턴(굵은 층간선 + 얇은 줄눈 4줄)만 복사
-          ctx.drawImage(srcImg, 0, 0, sw, cropH, 0, 0, sw, cropH);
-          // 지하 2층 최하단 마감선
-          ctx.fillStyle = '#1A1D21';
-          ctx.fillRect(0, cropH - 4, sw, 4);
-
-          fullTex.dispose();
-
-          const bTex = new THREE.CanvasTexture(canvas);
-          bTex.colorSpace = THREE.SRGBColorSpace;
-          bTex.anisotropy = 8;
-
-          plainWallMatCache.set(
-            key,
-            new THREE.MeshStandardMaterial({ map: bTex, roughness: 0.72 })
-          );
-        }
-        return plainWallMatCache.get(key);
-      };
-
-      // 월드 좌표 기준 1~3층 기단 구조체(Y = 0 ~ BASE_H)만 수집
-      apt112.updateMatrixWorld(true);
-      const baseMeshes = [];
-      const worldBox = new THREE.Box3();
-
-      apt112.traverse((obj) => {
-        if (!obj.isMesh || !obj.geometry) return;
-        worldBox.setFromObject(obj);
-        if (Math.abs(worldBox.min.y) < EPS && Math.abs(worldBox.max.y - BASE_H) < EPS) {
-          // 1~3층 창문 표현용 얇은 덧댐 패널(두께 0.2m 이하)은 지하에서 제외 (뒤편 본체 벽체로 매끈하게 마감)
-          if (obj.geometry.type === 'BoxGeometry' && obj.geometry.parameters) {
-            const { width, depth } = obj.geometry.parameters;
-            if (width <= 0.2 || depth <= 0.2) return;
-          }
-          baseMeshes.push(obj);
-        }
-      });
-
-      // 수집된 1~3층 외벽 구조체를 창문 없는 순수 석재 벽체로 Y = 0 ~ -5.30m 연장
-      baseMeshes.forEach((mesh, idx) => {
-        const parent = mesh.parent;
-        if (!parent) return;
-
-        let bGeo;
-        let bMats;
-        let bPosY;
-
-        if (mesh.geometry.type === 'BoxGeometry' && mesh.geometry.parameters) {
-          const { width, depth } = mesh.geometry.parameters;
-          bGeo = new THREE.BoxGeometry(width, BASEMENT_H, depth);
-          const matX = getPlainBasementWallMat(depth);
-          const matZ = getPlainBasementWallMat(width);
-          bMats = [matX, matX, darkStoneMat, darkStoneMat, matZ, matZ];
-          bPosY = -BASEMENT_H / 2;
-        } else {
-          // 중앙 코어(ExtrudeGeometry)는 동일 석재 단색 벽체 유지
-          bGeo = mesh.geometry.clone();
-          bGeo.scale(1, BASEMENT_H / BASE_H, 1);
-          bGeo.translate(0, -BASEMENT_H, 0);
-          bMats = [darkStoneMat, darkStoneMat];
-          bPosY = mesh.position.y;
-        }
-
-        const bMesh = new THREE.Mesh(bGeo, bMats);
-        bMesh.name = `Basement_B1B2_${idx}`;
-        bMesh.position.set(mesh.position.x, bPosY, mesh.position.z);
-        bMesh.rotation.copy(mesh.rotation);
-        bMesh.scale.copy(mesh.scale);
-        bMesh.castShadow = mesh.castShadow;
-        bMesh.receiveShadow = mesh.receiveShadow;
-        parent.add(bMesh);
-      });
-
-      // 1층 출입구 하단 기준 노드(Anchor_1F) 명시 — Y = 0
-      const anchor1F = new THREE.Object3D();
-      anchor1F.name = 'Anchor_1F';
-      anchor1F.position.set(5.68, 0, -7.47);
-      anchor1F.userData = {
-        floor: '1F',
-        groundY: 0,
-        basementFloors: BASEMENT_FLOORS,
-        basementMinY: -BASEMENT_H
-      };
-      apt112.add(anchor1F);
-    })();
-
-
-    // =========================================================
-    // 6. 3D 모델링 파일 (.glb) 추출
-    // =========================================================
-    window.exportGLB = () => {
-      const exporter = new GLTFExporter();
-      exporter.parse(
-        apt112,
-        (result) => {
-          const blob = new Blob([result], { type: 'model/gltf-binary' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = 'kumho_112dong.glb';
-          link.click();
-          URL.revokeObjectURL(url);
-        },
-        (err) => console.error('GLB 추출 오류:', err),
-        { binary: true }
-      );
-    };
-      
-    const apt112 = createKumho112Dong();
-    scene.add(apt112);
 
     // =========================================================
     // [추가] 지하 1~2층 순수 석재 벽체 연장 (총 7.95m = 지상 1~3층 높이, 층당 3.975m, 창문 없음)
@@ -2152,6 +2014,27 @@
       const worldBox = new THREE.Box3();
 
       apt112.traverse((obj) => {
+
+    // =========================================================
+    // 6. 3D 모델링 파일 (.glb) 추출
+    // =========================================================
+    window.exportGLB = () => {
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        apt112,
+        (result) => {
+          const blob = new Blob([result], { type: 'model/gltf-binary' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'kumho_112dong.glb';
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        (err) => console.error('GLB 추출 오류:', err),
+        { binary: true }
+      );
+    };
 
     // =========================================================
     // 7. 렌더 루프 & 리사이즈
