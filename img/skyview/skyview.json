@@ -289,11 +289,11 @@
  },
  "models/place_GS25.glb": {
   "file": "img/skyview/place_GS25.webp",
-  "hash": "ae89167279",
-  "minX": -10.512,
-  "minZ": -13.534,
-  "width": 22.5,
-  "depth": 24.083
+  "hash": "2dd4c4b0fe",
+  "minX": -9.415,
+  "minZ": -11.758,
+  "width": 19.833,
+  "depth": 22
  },
  "models/place_KFC.glb": {
   "file": "img/skyview/place_KFC.webp",
