@@ -4888,6 +4888,17 @@ function conformParkHillsCommunityModel(entry, model) {
   const HINGE_W = PARKHILLS_Z_HINGE * W;
   const STRUCTURAL_RE = /(?:Deck|Wall|Road|Walk|Promenade|Ramp|Facade|Fence|Rail|Coping|Curb|Shop|Canopy|Lintel|Apron|Planter|Plaza|Floor|RoofGarden|Playground|Court|Portal)/i;
   model.updateMatrixWorld(true);
+  // HTML v4에서 이미 정문(0m)->후문(+15.2m) 경사가 구워져 추출된 GLB라면 중복 경사 적용을 건너뛴다
+  let alreadySloped = false;
+  model.traverse((o) => {
+    if (o.name && /Sloped/i.test(o.name)) alreadySloped = true;
+  });
+  if (!alreadySloped) {
+    const modelBox = new THREE.Box3().setFromObject(model);
+    if ((modelBox.max.y - entry.group.position.y) / W > 18.0) alreadySloped = true;
+  }
+  if (alreadySloped) return;
+
   const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
   const invMat = new THREE.Matrix4();
 
