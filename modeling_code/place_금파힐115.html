@@ -1329,6 +1329,94 @@
     scene.add(apt115);
 
     // =========================================================
+    // [추가] 지하 1~2층 순수 석재 벽체 연장 (총 7.95m = 지상 1~3층 높이, 층당 3.975m, 창문 없음)
+    // =========================================================
+    (() => {
+      const BASEMENT_FLOORS = 2;
+      const BASEMENT_H = BASE_H; // 7.95m (지상 1~3층 총 높이와 동일 -> 지하 층당 3.975m)
+      const SUB_ROWS_PER_FLOOR = 7; // 지상(층당 5단, 약 0.53m)과 비슷한 석재 타일 크기(약 0.57m) 유지
+      const EPS = 0.05;
+
+      // 1~3층 석재 벽체와 동일한 팔레트·비율로 지하 2개 층(총 7.95m) 순수 벽체 텍스처 생성
+      const plainWallMatCache = new Map();
+      const getPlainBasementWallMat = (widthMeters) => {
+        const key = Math.max(1, Math.round(widthMeters * 10));
+        if (!plainWallMatCache.has(key)) {
+          const pxPerMeter = 42;
+          const cw = Math.max(160, Math.round(widthMeters * pxPerMeter));
+          const ch = 384; // 지상 BASE_H(7.95m)와 동일한 세로 픽셀 밀도
+          const canvas = document.createElement('canvas');
+          canvas.width = cw;
+          canvas.height = ch;
+          const ctx = canvas.getContext('2d');
+
+          ctx.fillStyle = '#2B2F35';
+          ctx.fillRect(0, 0, cw, ch);
+
+          const colW = 54;
+          const floorPx = ch / BASEMENT_FLOORS;
+          const subRowH = floorPx / SUB_ROWS_PER_FLOOR;
+
+          // 석재 타일 미세 명암 패턴
+          for (let f = 0; f < BASEMENT_FLOORS; f++) {
+            const fy = f * floorPx;
+            for (let r = 0; r < SUB_ROWS_PER_FLOOR; r++) {
+              const ry = fy + r * subRowH;
+              for (let x = 0; x < cw; x += colW) {
+                const shade = ((f * 7 + r * 3 + Math.floor(x / colW) * 5) % 5) - 2;
+                ctx.fillStyle = `rgb(${43 + shade * 2}, ${47 + shade * 2}, ${53 + shade * 2})`;
+                ctx.fillRect(x + 1, ry + 1, colW - 2, subRowH - 2);
+              }
+            }
+          }
+
+          // 수직 줄눈
+          ctx.fillStyle = 'rgba(120, 128, 138, 0.28)';
+          for (let x = colW; x < cw; x += colW) {
+            ctx.fillRect(x, 0, 1.5, ch);
+          }
+
+          // 층간 두꺼운 회색선(지하 1층·2층 경계) + 내부 얇은 줄눈
+          for (let f = 0; f < BASEMENT_FLOORS; f++) {
+            const fy = f * floorPx;
+            ctx.fillStyle = '#9EA5AE';
+            ctx.fillRect(0, fy, cw, 5);
+            ctx.fillStyle = '#181B1F';
+            ctx.fillRect(0, fy + 5, cw, 1.5);
+
+            for (let r = 1; r < SUB_ROWS_PER_FLOOR; r++) {
+              const ry = fy + r * subRowH;
+              ctx.fillStyle = '#5D646E';
+              ctx.fillRect(0, ry, cw, 1.5);
+              ctx.fillStyle = '#1A1D21';
+              ctx.fillRect(0, ry + 1.5, cw, 1);
+            }
+          }
+
+          // 지하 2층 최하단 마감선
+          ctx.fillStyle = '#1A1D21';
+          ctx.fillRect(0, ch - 4, cw, 4);
+
+          const bTex = new THREE.CanvasTexture(canvas);
+          bTex.colorSpace = THREE.SRGBColorSpace;
+          bTex.anisotropy = 8;
+
+          plainWallMatCache.set(
+            key,
+            new THREE.MeshStandardMaterial({ map: bTex, roughness: 0.72 })
+          );
+        }
+        return plainWallMatCache.get(key);
+      };
+
+      // 월드 좌표 기준 1~3층 기단 구조체(Y = 0 ~ BASE_H) 수집
+      apt115.updateMatrixWorld(true);
+      const baseMeshes = [];
+      const worldBox = new THREE.Box3();
+
+      apt115.traverse((obj) => {  
+
+    // =========================================================
     // 6. 3D 모델링 파일 (.glb) 추출
     // =========================================================
     window.exportGLB = () => {
