@@ -729,11 +729,11 @@
  },
  "models/place_설내옥.glb": {
   "file": "img/skyview/place_설내옥.webp",
-  "hash": "a0cf5fd619",
-  "minX": -29.522,
+  "hash": "7d5b042280",
+  "minX": -33.234,
   "minZ": -18.208,
-  "width": 48.083,
-  "depth": 48.083
+  "width": 51.75,
+  "depth": 51.75
  },
  "models/place_성동구보건소금호분소.glb": {
   "file": "img/skyview/place_성동구보건소금호분소.webp",
