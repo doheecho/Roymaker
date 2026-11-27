@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261126z";
+import * as MAP_DATA from "./map_data.js?v=20261127a";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261126f";
+const ASSET_VERSION = "20261127a";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -884,7 +884,17 @@ function conformToTerrain(objects) {
       const ab = xzLen2(A, B), bc = xzLen2(B, C), ca = xzLen2(C, A);
       const m = Math.max(ab, bc, ca);
       if (same || m <= minEdge * minEdge || depth > 16 || chordErr(A, B, C) < CONFORM_TOLERANCE) {
-        [A, B, C].forEach((V) => V.forEach((val, k) => out[k].push(...val)));
+        const ha = tY(A), hb = tY(B), hc = tY(C);
+        const hMin = Math.min(ha, hb, hc);
+        const hMax = Math.max(ha, hb, hc);
+        // 1.2m 이하 삼각형이 1.0m 넘는 수직 옹벽·단차를 걸치면 종유석처럼 솟지 않도록 낮은 쪽 바닥 높이에 평탄 밀착시킨다
+        const hs = hMax - hMin > 1.0 * WORLD_SCALE ? [hMin, hMin, hMin] : [ha, hb, hc];
+        [A, B, C].forEach((V, vi) => {
+          V.forEach((val, k) => {
+            if (k === pi) out[k].push(val[0], val[1] + hs[vi], val[2]);
+            else out[k].push(...val);
+          });
+        });
         return;
       }
       if (m === ab) { const M = mid(A, B); emit(A, M, C, depth + 1); emit(M, B, C, depth + 1); }
@@ -893,11 +903,11 @@ function conformToTerrain(objects) {
     };
     for (let i = 0; i < pos.count; i += 3) emit(vert(i), vert(i + 1), vert(i + 2), 0);
     triIn += pos.count / 3;
-    // 높이 매기고 다시 메시 자기 좌표로
+    // 다시 메시 자기 좌표로 변환 (지형 높이는 emit 단계에서 반영 완료)
     inv.copy(o.matrixWorld).invert();
     const P = out[pi];
     for (let i = 0; i < P.length; i += 3) {
-      v.set(P[i], P[i + 1] + getTerrainY(P[i], P[i + 2]), P[i + 2]).applyMatrix4(inv);
+      v.set(P[i], P[i + 1], P[i + 2]).applyMatrix4(inv);
       P[i] = v.x; P[i + 1] = v.y; P[i + 2] = v.z;
     }
     const geo = new THREE.BufferGeometry();
@@ -2678,7 +2688,7 @@ function emitSidewalkBand(stores, secs, opts) {
   }
   if (opts.ped && secs.length >= 6) {
     // 행인이 걸을 보도 중앙선(월드 좌표, 점마다 높이)
-    const mid = secs.map((sc) => sc.at(opts.width * 0.62));
+    const mid = secs.map((sc) => sc.at(Math.min(opts.width, sc.effW ?? opts.width) * 0.62));
     const pcum = [0];
     for (let i = 1; i < mid.length; i++) pcum.push(pcum[i - 1] + Math.hypot(mid[i][0] - mid[i - 1][0], mid[i][1] - mid[i - 1][1]));
     pedPaths.push({ pts: mid, ys: secs.map((sc) => sc.y + terrainAt(sc)), cum: pcum, len: pcum[pcum.length - 1], w: opts.width });
@@ -2707,6 +2717,23 @@ function emitSidewalkBand(stores, secs, opts) {
     secs.forEach((sc) => { if (full(sc)) run.push(sc); else flushRail(); });
     flushRail();
   }
+}
+
+// 도로 가장자리에서 바깥으로 스캔해 1.2m 넘는 수직 옹벽·단차가 나오면 그 직전에서 보도 폭을 끊는다
+function clipSidewalkWidthAtCliff(at, maxW) {
+  if (!terrainShapes.length) return maxW;
+  const step = 0.5 * WORLD_SCALE;
+  const p0 = at(0);
+  let prevY = getTerrainY(p0[0], p0[1]);
+  for (let o = step; o <= maxW + 1e-6; o += step) {
+    const p = at(Math.min(o, maxW));
+    const ty = getTerrainY(p[0], p[1]);
+    if (Math.abs(ty - prevY) > 1.2 * WORLD_SCALE) {
+      return Math.max(0.2 * WORLD_SCALE, o - step - 0.15 * WORLD_SCALE);
+    }
+    prevY = ty;
+  }
+  return maxW;
 }
 
 function collectChainSidewalk(members, stores, conns) {
@@ -2749,10 +2776,11 @@ function collectChainSidewalk(members, stores, conns) {
       const secs = samples.map((q) => {
         const nx = -q.tz * dir, nz = q.tx * dir; // 도로 바깥쪽 법선
         const at = (o) => [q.x + nx * (roadW / 2 + o), q.z + nz * (roadW / 2 + o)];
+        const effW = clipSidewalkWidthAtCliff(at, sideW);
         // 보도 폭 안쪽·가운데·바깥 중 한 곳이라도 다른 도로 위면 그 자리는 도로 높이로(비스듬히 지나가는 길도 다 덮게)
-        const blocked = SIDEWALK_PROBES.some((f) => { const p = at(sideW * f); return pointOnRoad(p[0], p[1], ignore); });
-        const inner = at(0), outer = at(sideW);
-        return { d: q.d, c: [(inner[0] + outer[0]) / 2, (inner[1] + outer[1]) / 2], at, inner, outer, blocked };
+        const blocked = SIDEWALK_PROBES.some((f) => { const p = at(effW * f); return pointOnRoad(p[0], p[1], ignore); });
+        const inner = at(0), outer = at(effW);
+        return { d: q.d, c: [(inner[0] + outer[0]) / 2, (inner[1] + outer[1]) / 2], at, inner, outer, effW, blocked };
       });
       emitSidewalkBand(stores, secs, { style: swStyleOf(first), width: sideW, ped: true, railing: !!first.railing });
     });
@@ -2807,8 +2835,15 @@ function buildSidewalkJoints(conns, chainOf, stores) {
         return out;
       };
       const inner = arc(ri);
+      const outer = [];
+      for (let k = 0; k <= steps; k++) {
+        const t = a1 + (da * k) / steps;
+        const ct = Math.cos(t), st = Math.sin(t);
+        const effW = clipSidewalkWidthAtCliff((o) => [P[0] + ct * (ri + o), P[1] + st * (ri + o)], ro - ri);
+        outer.push([P[0] + ct * (ri + effW), P[1] + st * (ri + effW)]);
+      }
       const tP = 0; // 평평하게 — 지형 높이는 conformToTerrain()이
-      pushStrip(sideStore(stores, swStyleOf(seg)), inner, arc(ro), tP);
+      pushStrip(sideStore(stores, swStyleOf(seg)), inner, outer, tP);
       pushVerticalQuadStrip(stores.curb, inner, tP, tP + SIDEWALK_TOP_Y);
       pushStrip(stores.line, arc(ri + inset), arc(ri + inset + lineW), tP);
     });
@@ -2867,8 +2902,9 @@ function buildSidewalkCorners(stores) {
         if (idx) d += Math.hypot(pt[0] - Q[idx - 1][0], pt[1] - Q[idx - 1][1]);
         const n = N[idx];
         const at = (o) => [pt[0] + n[0] * o, pt[1] + n[1] * o];
-        const outer = at(W);
-        return { d, c: [(pt[0] + outer[0]) / 2, (pt[1] + outer[1]) / 2], at, inner: pt, outer, blocked: SIDEWALK_PROBES.some((f) => probe(at(W * f))) };
+        const effW = clipSidewalkWidthAtCliff(at, W);
+        const outer = at(effW);
+        return { d, c: [(pt[0] + outer[0]) / 2, (pt[1] + outer[1]) / 2], at, inner: pt, outer, effW, blocked: SIDEWALK_PROBES.some((f) => probe(at(effW * f))) };
       });
       emitSidewalkBand(stores, secs, { style, width: W, platform: true });
     };
