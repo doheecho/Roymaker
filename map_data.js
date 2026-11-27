@@ -42,10 +42,10 @@ export const PLACES = [
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -392.8, z: 75.6, model: "models/place_금파힐101.glb", rotationDeg: -7.3, scaleRatio: 1.3 },
   { id: 2, name: "금호파크힐스 102동", floors: 15, type: "아파트", x: -313.8, z: 41.4 },
   { id: 3, name: "금호파크힐스 103동", floors: 15, type: "아파트", x: -246.5, z: -21.7, rotationDeg: 0 },
-  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -192.6, z: -81.1, model: "models/Community_north.glb", rotationDeg: -2 },
+  { id: 4, name: "금호파크힐스 104동", floors: 15, type: "아파트", x: -192.6, z: -81.1, model: "models/Community_north.glb1", rotationDeg: -2 },
   { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -121.1, z: -124.9, rotationDeg: 0 },
   { id: 6, name: "금호파크힐스 106동", floors: 15, type: "아파트", x: -58.3, z: -61.9 },
-  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -371.2, z: -141.9, model: "models/Community_south.glb", rotationDeg: 0 },
+  { id: 7, name: "금호파크힐스 107동", floors: 15, type: "아파트", x: -371.2, z: -141.9, model: "models/Community_south.glb1", rotationDeg: 0 },
   { id: 8, name: "금호파크힐스 108동", floors: 15, type: "아파트", x: -266.8, z: 16.6 },
   { id: 9, name: "금호파크힐스 109동", floors: 15, type: "아파트", x: -311.9, z: 135.7, model: "models/place_금파힐109.glb", rotationDeg: -2.7, scaleRatio: 1.3 },
   { id: 10, name: "금호파크힐스 110동", floors: 15, type: "아파트", x: -253.5, z: 114.3, model: "models/place_금파힐110.glb", rotationDeg: -3.6, scaleRatio: 1.3 },
@@ -188,6 +188,7 @@ export const PLACES = [
   { id: 241, name: "금호센트럴자이 101동", floors: 15, type: "아파트", x: -362.1, z: 259.2, model: "models/place_금호센트럴자이101.glb", scaleRatio: 1.3 },
   { id: 242, name: "구립성동청소년독서실", floors: 5, type: "도서관", x: 308.2, z: -196.9, model: "models/place_구립성동청소년독서실.glb" },
   { id: 243, name: "버스정류장", floors: 15, type: "버스정류장", x: 77.8, z: 63.3, model: "models/asset_버스정류장.glb", rotationDeg: -90 },
+  { id: 244, name: "새 건물", floors: 15, type: "아파트", x: -158.8, z: -5.4, model: "models/place_금파힐커뮤니티.glb" },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
