@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261127h";
+import * as MAP_DATA from "./map_data.js?v=20261127i";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261127h";
+const ASSET_VERSION = "20261127i";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -546,6 +546,7 @@ async function buildStaticScene() {
   // 움직이지 않는 것들(도로·보도·신호등·가로등·나무·바닥)은 만든 뒤 위치 계산을 고정해 매 프레임 비용을 줄인다
   let before = new Set(scene.children);
   buildParks();
+  buildParkHillsGreenGround(); // 금호파크힐스 단지·주변 녹지 빈 땅에 구글 위성사진 대신 공원 수풀/잔디 텍스처 적용
   buildRoads();
   buildRoadsideProps();
   conformToTerrain(scene.children.filter((o) => !before.has(o))); // 평평하게 만든 도로·보도·공원 등을 실제 지형에 붙인다
@@ -2092,19 +2093,231 @@ function buildTrees() {
   scene.add(trunkInst, foliageInst);
 }
 
-// 공원(PARKS): 바닥을 초록 잔디로 칠한 네모난 구역 — 지도 이미지(y=-0.025)보다는 위, 도로
+// 스카이뷰 공원 느낌의 자연스러운 잔디·수풀 텍스처(심리스 타일링) —
+// 텍스처 없는 빈 땅에 흐릿한 구글 위성사진 대신 공원 녹지/관목 질감이 보이게 한다.
+let _parkFoliageTex = null;
+function getParkFoliageTexture() {
+  if (_parkFoliageTex) return _parkFoliageTex;
+  const S = 512;
+  const c = document.createElement("canvas");
+  c.width = S;
+  c.height = S;
+  const g = c.getContext("2d");
+
+  // 결정론적 난수 (매번 같은 자연스러운 패턴)
+  let seed = 42197;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  // 타일 가장자리 이음새가 없도록 3x3 wrap 드로잉 헬퍼
+  const drawWrapped = (fn) => {
+    for (let ox = -S; ox <= S; ox += S) {
+      for (let oy = -S; oy <= S; oy += S) fn(ox, oy);
+    }
+  };
+
+  // 1) 스카이뷰 공원 잔디 베이스
+  g.fillStyle = "#4d7c3a";
+  g.fillRect(0, 0, S, S);
+
+  // 2) 부드러운 잔디 명암 얼룩 (넓은 녹지대 단조로움 방지)
+  const patchColors = [
+    "rgba(96, 146, 66, 0.24)",
+    "rgba(60, 102, 44, 0.24)",
+    "rgba(118, 162, 74, 0.16)",
+    "rgba(45, 82, 34, 0.20)",
+  ];
+  for (let i = 0; i < 65; i++) {
+    const cx = rand() * S;
+    const cy = rand() * S;
+    const r = 24 + rand() * 52;
+    const col = patchColors[i % patchColors.length];
+    drawWrapped((ox, oy) => {
+      const grad = g.createRadialGradient(cx + ox, cy + oy, r * 0.15, cx + ox, cy + oy, r);
+      grad.addColorStop(0, col);
+      grad.addColorStop(1, "rgba(77, 124, 58, 0)");
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(cx + ox, cy + oy, r, 0, Math.PI * 2);
+      g.fill();
+    });
+  }
+
+  // 3) 미세 잔디 결/입자
+  for (let i = 0; i < 2400; i++) {
+    const x = rand() * S;
+    const y = rand() * S;
+    g.fillStyle = rand() > 0.5 ? "rgba(130, 174, 84, 0.28)" : "rgba(38, 70, 29, 0.26)";
+    g.fillRect(x, y, 2 + rand() * 2, 2 + rand() * 3);
+  }
+
+  // 4) 스카이뷰 수풀(관목·녹지 군락) 클러스터 — 어두운 그늘 + 중간 잎 + 햇빛 하이라이트
+  for (let i = 0; i < 42; i++) {
+    const bx = rand() * S;
+    const by = rand() * S;
+    const br = 9 + rand() * 16;
+    const lobes = 4 + Math.floor(rand() * 4);
+    const offsets = [];
+    for (let k = 0; k < lobes; k++) {
+      const ang = (k / lobes) * Math.PI * 2 + rand() * 0.6;
+      const dist = br * (0.25 + rand() * 0.45);
+      offsets.push([Math.cos(ang) * dist, Math.sin(ang) * dist, br * (0.48 + rand() * 0.35)]);
+    }
+    drawWrapped((ox, oy) => {
+      // 그늘
+      g.fillStyle = "rgba(28, 54, 22, 0.40)";
+      g.beginPath();
+      g.arc(bx + ox + 2.5, by + oy + 2.5, br * 1.02, 0, Math.PI * 2);
+      g.fill();
+      // 짙은 수풀 본체
+      g.fillStyle = "#356129";
+      for (const [dx, dy, lr] of offsets) {
+        g.beginPath();
+        g.arc(bx + ox + dx, by + oy + dy, lr, 0, Math.PI * 2);
+        g.fill();
+      }
+      // 중간 잎층
+      g.fillStyle = "#4c8037";
+      for (const [dx, dy, lr] of offsets) {
+        g.beginPath();
+        g.arc(bx + ox + dx * 0.85 - 1, by + oy + dy * 0.85 - 1, lr * 0.78, 0, Math.PI * 2);
+        g.fill();
+      }
+      // 햇빛 하이라이트 잎
+      g.fillStyle = "rgba(126, 174, 82, 0.62)";
+      for (const [dx, dy, lr] of offsets) {
+        g.beginPath();
+        g.arc(bx + ox + dx * 0.7 - 2.2, by + oy + dy * 0.7 - 2.2, lr * 0.45, 0, Math.PI * 2);
+        g.fill();
+      }
+    });
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  _parkFoliageTex = tex;
+  return tex;
+}
+
+function makeParkFoliageMaterial() {
+  return new THREE.MeshStandardMaterial({
+    map: getParkFoliageTexture(),
+    roughness: 0.94,
+    metalness: 0.0,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+}
+
+// 공원(PARKS): 바닥을 초록 잔디·수풀로 칠한 구역 — 지도 이미지(y=-0.025)보다는 위, 도로
 // (y≈0.005~0.006)보다는 아래에 깔아서 도로가 공원 위를 지나가도 도로가 보이게 한다.
 function buildParks() {
-  const mat = new THREE.MeshStandardMaterial({ color: 0x6fae4a });
+  const mat = makeParkFoliageMaterial();
+  const TILE_RAW = 16; // 16m마다 타일 1회 반복
   PARKS.forEach((park) => {
     const geo = new THREE.PlaneGeometry(park.w * WORLD_SCALE, park.d * WORLD_SCALE);
     geo.rotateX(-Math.PI / 2);
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, (uv.getX(i) * park.w) / TILE_RAW, (uv.getY(i) * park.d) / TILE_RAW);
+    }
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(park.x * WORLD_SCALE, glbTerrain ? 0.015 : -0.01, park.z * WORLD_SCALE); // 실제 지형이 있으면 그 위로(conformToTerrain이 붙임)
     mesh.rotation.y = park.rotationDeg ? THREE.MathUtils.degToRad(park.rotationDeg) : 0;
     mesh.receiveShadow = true;
+    mesh.renderOrder = -1;
     scene.add(mesh);
   });
+}
+
+// 금호파크힐스 단지 및 외곽 녹지 빈 땅(101동·정문 주변·신금호공원·북서/북/동측 녹지 완충지대)에
+// 아무 텍스처가 없어 흐릿한 구글 위성사진(GameMap.glb)이 비쳐 나오는 구간을
+// 스카이뷰 느낌의 공원 수풀·잔디 텍스처로 덮는다. 도로·보도·금파힐통합 GLB 아래층(y=0.014)에 깔려
+// 기존 도로나 건물 데크를 전혀 가리지 않고 빈 땅에만 자연스럽게 드러난다.
+function buildParkHillsGreenGround() {
+  const W = WORLD_SCALE;
+  const TILE_RAW = 14;
+  // 금호파크힐스 외곽 간선도로 안쪽 경계 다각형(raw m) — 인접 타 단지·상가로 넘치지 않게 도로 중심선 안쪽으로 맞춤
+  const rawPts = [
+    [-400.5, 153.3], // 정문 앞 남서 대로 교차점
+    [-426.0, 127.0], // 101동 남서 도로
+    [-415.0, 72.0],  // 101동 서측 도로
+    [-375.0, 38.0],  // 보건소 남측
+    [-345.0, 12.0],  // 보건소·주민센터 동측 경계
+    [-305.0, -55.0], // 주민센터 동측 녹지
+    [-255.0, -145.0],// 북서 도로 커브 안쪽
+    [-195.0, -192.0],// 북측 금호로 남단
+    [-51.8, -192.6], // 후문 앞 금호로
+    [56.0, -193.0],  // 북동 금호로 교차점
+    [56.0, -120.0],  // 동측 대로 서단
+    [52.0, -50.0],   // 동측 지하주차장 진입로
+    [52.0, 65.0],    // 112·113동 동측
+    [46.0, 128.0],   // 119안전센터·116동 동남측
+    [-20.0, 132.0],  // 금호고 북측 경계
+    [-115.0, 140.0], // 111동 남측
+    [-159.1, 215.0], // 신금호공원 남동 대로
+    [-235.0, 200.0], // 신금호공원 남측 대로 곡선
+    [-315.0, 178.0], // 남서 대로 곡선
+  ];
+  const contour = rawPts.map(([x, z]) => new THREE.Vector2(x * W, z * W));
+  if (THREE.ShapeUtils.isClockWise(contour)) contour.reverse();
+  const tris = THREE.ShapeUtils.triangulateShape(contour, []);
+  if (!tris.length) return;
+
+  // conformToTerrain이 지형 기복을 촘촘히 따를 수 있도록 긴 변(> 18m)은 미리 분할한다
+  const posArr = [];
+  const uvArr = [];
+  const MAX_EDGE_W = 18 * W;
+  const emitTri = (ax, az, bx, bz, cx, cz, depth) => {
+    const ab = Math.hypot(bx - ax, bz - az);
+    const bc = Math.hypot(cx - bx, cz - bz);
+    const ca = Math.hypot(ax - cx, az - cz);
+    const m = Math.max(ab, bc, ca);
+    if (m <= MAX_EDGE_W || depth >= 5) {
+      // Y-up 반시계 방향(위에서 볼 때 앞면) 보장
+      const cross = (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+      const pts = cross < 0
+        ? [[ax, az], [bx, bz], [cx, cz]]
+        : [[ax, az], [cx, cz], [bx, bz]];
+      for (const [px, pz] of pts) {
+        posArr.push(px, 0, pz);
+        uvArr.push(px / (TILE_RAW * W), pz / (TILE_RAW * W));
+      }
+      return;
+    }
+    if (m === ab) {
+      const mx = (ax + bx) * 0.5, mz = (az + bz) * 0.5;
+      emitTri(ax, az, mx, mz, cx, cz, depth + 1);
+      emitTri(mx, mz, bx, bz, cx, cz, depth + 1);
+    } else if (m === bc) {
+      const mx = (bx + cx) * 0.5, mz = (bz + cz) * 0.5;
+      emitTri(ax, az, bx, bz, mx, mz, depth + 1);
+      emitTri(ax, az, mx, mz, cx, cz, depth + 1);
+    } else {
+      const mx = (cx + ax) * 0.5, mz = (cz + az) * 0.5;
+      emitTri(ax, az, bx, bz, mx, mz, depth + 1);
+      emitTri(mx, mz, bx, bz, cx, cz, depth + 1);
+    }
+  };
+  for (const [ia, ib, ic] of tris) {
+    emitTri(contour[ia].x, contour[ia].y, contour[ib].x, contour[ib].y, contour[ic].x, contour[ic].y, 0);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(posArr, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvArr, 2));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, makeParkFoliageMaterial());
+  mesh.position.y = glbTerrain ? 0.014 : -0.012;
+  mesh.receiveShadow = true;
+  mesh.castShadow = false;
+  mesh.renderOrder = -1;
+  scene.add(mesh);
 }
 
 // 차선 점선은 도로가 많아지니 개별 메시로 그리면 수백 개가 생겨서(실측 500개+) 프레임이 뚝 떨어진다.
