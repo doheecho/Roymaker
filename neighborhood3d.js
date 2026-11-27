@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261127e";
+import * as MAP_DATA from "./map_data.js?v=20261127f";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261127e";
+const ASSET_VERSION = "20261127f";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -4071,12 +4071,15 @@ function settleBuildingBase(entry, model) {
 
   // GLB 안에 1층 출입구 기준 노드(Anchor_1F / Entrance_1F / Ground_1F 등)가 명시돼 있으면
   // 해당 출입구 자리의 실제 지형 높이에 1층 바닥을 정확히 맞춘다(지하 1~2층은 내리막에서만 자연 노출).
-  if (anchor1FXZ && !entry.place.y) {
-    entry.group.position.y = getTerrainY(anchor1FXZ[0], anchor1FXZ[1]) + 0.02 * W;
-  } else if (isParkHillsSingleDong && !entry.place.y) {
+  if (anchor1FXZ) {
+    const autoBaseY = getTerrainY(anchor1FXZ[0], anchor1FXZ[1]) + 0.02 * W;
+    entry.autoBaseY = autoBaseY;
+    entry.group.position.y = autoBaseY + entry.groundY;
+  } else if (isParkHillsSingleDong) {
     const centerSi = shapeIndexAt(entry.px, entry.pz);
     const onParkHillsDeck = centerSi >= 0 && terrainShapes[centerSi].name.includes("금파힐 커뮤니티");
     const centerTy = getTerrainY(entry.px, entry.pz);
+    let minEdgeTy = centerTy;
     let maxEdgeTy = centerTy;
     const sampleStep = 2.0 * W;
     const considerTy = (sx, sz) => {
@@ -4085,7 +4088,8 @@ function settleBuildingBase(entry, model) {
         if (si < 0 || !terrainShapes[si].name.includes("금파힐 커뮤니티")) return;
       }
       const ty = getTerrainY(sx, sz);
-      if (onParkHillsDeck && Math.abs(ty - centerTy) > 3.5 * W) return; // 인접 6m 단차·바깥 언덕 무시
+      if (onParkHillsDeck && Math.abs(ty - centerTy) > 4.2 * W) return; // 인접 6m 단차·바깥 언덕 무시
+      if (ty < minEdgeTy) minEdgeTy = ty;
       if (ty > maxEdgeTy) maxEdgeTy = ty;
     };
     for (const loop of loops) {
@@ -4104,10 +4108,16 @@ function settleBuildingBase(entry, model) {
         considerTy(cx / loop.length, cz / loop.length);
       }
     }
-    const targetY = maxEdgeTy + (onParkHillsDeck ? 0.12 * W : 0.05 * W);
-    if (onParkHillsDeck || targetY > entry.group.position.y) {
-      entry.group.position.y = targetY;
-    }
+    // 평탄 데크(남측 109~112·116동)는 데크 상면(+0.05m)에 1층(y=0)이 바로 밀착되게 맞추고,
+    // 경사 구간(101·113·114·115동 등)은 오르막 1층·필로티가 묻히지 않으면서도 내리막 단차가 과하게
+    // 튀지 않도록 중심 고도와 오르막 고도를 부드럽게 절충(상단 대비 최대 0.65m 이내)한다.
+    const slopeSpan = maxEdgeTy - minEdgeTy;
+    const targetGroundY = slopeSpan <= 0.3 * W
+      ? centerTy
+      : Math.max(centerTy + (maxEdgeTy - centerTy) * 0.65, maxEdgeTy - 0.65 * W);
+    const autoBaseY = targetGroundY + (onParkHillsDeck ? 0.12 * W : 0.05 * W);
+    entry.autoBaseY = autoBaseY;
+    entry.group.position.y = autoBaseY + entry.groundY;
   }
 
   // 지하철 출구(신금호역)·버스정류장처럼 키가 낮은 소형 구조물(높이 ≤ 6m)이 경사지에 놓였으면
@@ -4121,6 +4131,9 @@ function settleBuildingBase(entry, model) {
     if (Number.isFinite(minEdgeTy) && entry.group.position.y - minEdgeTy > 0.35 * W) {
       entry.group.position.y = minEdgeTy + (entry.group.position.y - minEdgeTy) * 0.45;
     }
+  }
+  if (entry.autoBaseY == null) {
+    entry.autoBaseY = entry.group.position.y - entry.groundY;
   }
 
   const finalBaseY = entry.group.position.y;
@@ -4546,7 +4559,8 @@ function snapPlaceEnvPropsToTerrain(entry, model) {
 // 좌측 벽돌 담장·교문 기둥처럼 평지 구역 경계에 걸친 조각은 높은 교정 평지를 그대로 유지한다.
 function conformModelToSlopedShapes(model, baseY) {
   if (!terrainShapes.length) return;
-  const sloped = terrainShapes.filter((S) => !S.flat);
+  // 금파힐 커뮤니티 경사 데크 위 개별 동(113·114·115동 등)은 건물이 비스듬히 찌그러지지 않게 수직 유지
+  const sloped = terrainShapes.filter((S) => !S.flat && !S.name.includes("금파힐"));
   if (!sloped.length) return;
   const flatShapes = terrainShapes.filter((S) => S.flat);
   const W = WORLD_SCALE;
@@ -5337,7 +5351,9 @@ function loadPlaceModelInto(entry) {
       } else if (isParkHillsCommunityBaseModel(entry.place)) {
         conformParkHillsCommunityModel(entry, model);
       } else {
-        conformModelToSlopedShapes(model, entry.group.position.y + model.position.y);
+        if (!isParkHillsApartmentPlace(entry.place)) {
+          conformModelToSlopedShapes(model, entry.group.position.y + model.position.y);
+        }
         preparePlaceEnvCleanup(entry, model, modelScale);
       }
       mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(경사 밀착·환경 바닥 정리 후)
@@ -5444,7 +5460,7 @@ function buildPlaces() {
     const group = new THREE.Group();
     group.position.y = terrainY + groundY + baseLift;
     scene.add(group);
-    if (groundY > 0) {
+    if (groundY > 0 && !place.model) {
       const skirtH = Math.abs(groundY + baseLift);
       const skirt = new THREE.Mesh(
         new THREE.BoxGeometry(colW * 1.4, skirtH, colD * 1.4),
@@ -9763,6 +9779,7 @@ async function initNeighborhood3D() {
     });
     if (loadingEl) loadingEl.hidden = true;
     ready = true;
+    initBuildingHeightTuner();
     resize();
     animate();
   } catch (err) {
@@ -9770,6 +9787,154 @@ async function initNeighborhood3D() {
     if (loadingEl) loadingEl.textContent = "불러오지 못했어요. 인터넷 연결을 확인해 주세요.";
   } finally {
     loading = false;
+  }
+}
+
+// ── 3D 실시간 건물 높이(y) 미세 조절 도구 (Shift+H 또는 URL ?tune=1 로 열기) ──
+// 평소 게임 화면은 가리지 않고 숨겨 두었다가, 건물 1층(y=0) 높이를 3D로 보며
+// ±0.1m / ±0.5m / ±1m 단위로 조절한 뒤 map_editor.html · map_data.js에 넣을 y값을 복사한다.
+let heightTunerInited = false;
+function initBuildingHeightTuner() {
+  if (heightTunerInited) return;
+  heightTunerInited = true;
+  const edited = new Map(); // id -> { name, y }
+  let panel = null;
+  let selEl = null;
+  let valEl = null;
+  let statusEl = null;
+  let open = false;
+
+  const round2 = (v) => Math.round(v * 100) / 100;
+  const sortedEntries = () => {
+    const cx = character ? character.position.x : 0;
+    const cz = character ? character.position.z : 0;
+    return modelStreamEntries
+      .filter((e) => e.place?.model && !isParkHillsCommunityBaseModel(e.place))
+      .map((e) => ({ e, d: Math.hypot(e.px - cx, e.pz - cz) / WORLD_SCALE }))
+      .sort((a, b) => a.d - b.d);
+  };
+  const currentEntry = () => {
+    if (!selEl) return null;
+    const id = Number(selEl.value);
+    return modelStreamEntries.find((e) => e.place.id === id) || null;
+  };
+  const updateDisplay = () => {
+    const entry = currentEntry();
+    if (!entry || !valEl) return;
+    const yRaw = round2(entry.place.y || 0);
+    const baseRaw = round2((entry.autoBaseY ?? (entry.group.position.y - entry.groundY)) / WORLD_SCALE);
+    valEl.textContent = `y: ${yRaw >= 0 ? "+" : ""}${yRaw.toFixed(2)} m  (1층 고도 ${(baseRaw + yRaw).toFixed(2)} m)`;
+  };
+  const refreshList = (pickNearest = false) => {
+    if (!selEl) return;
+    const prevId = selEl.value;
+    const list = sortedEntries();
+    selEl.innerHTML = "";
+    list.forEach(({ e, d }) => {
+      const opt = document.createElement("option");
+      opt.value = String(e.place.id);
+      const yTag = e.place.y ? ` [y:${e.place.y > 0 ? "+" : ""}${e.place.y}]` : "";
+      opt.textContent = `[${e.place.id}] ${e.place.name} (${Math.round(d)}m)${yTag}`;
+      selEl.appendChild(opt);
+    });
+    if (!pickNearest && prevId && list.some(({ e }) => String(e.place.id) === prevId)) {
+      selEl.value = prevId;
+    } else if (list.length) {
+      selEl.value = String(list[0].e.place.id);
+    }
+    updateDisplay();
+  };
+  const applyDelta = (delta) => {
+    const entry = currentEntry();
+    if (!entry) return;
+    const nextY = delta === 0 ? 0 : round2((entry.place.y || 0) + delta);
+    if (entry.autoBaseY == null) entry.autoBaseY = entry.group.position.y - (entry.groundY || 0);
+    entry.place.y = nextY;
+    entry.groundY = nextY * WORLD_SCALE;
+    entry.group.position.y = entry.autoBaseY + entry.groundY;
+    entry.group.updateMatrixWorld(true);
+    if (nextY === 0) edited.delete(entry.place.id);
+    else edited.set(entry.place.id, { name: entry.place.name, y: nextY });
+    refreshList(false);
+    if (statusEl) statusEl.textContent = `${entry.place.name} → y: ${nextY}m 적용됨`;
+  };
+  const ensurePanel = () => {
+    if (panel) return;
+    panel = document.createElement("div");
+    panel.style.cssText = [
+      "position:fixed", "top:58px", "right:12px", "z-index:9999", "width:290px",
+      "background:rgba(20,24,31,0.92)", "color:#edf1f7", "border:1px solid rgba(255,255,255,0.16)",
+      "border-radius:12px", "padding:10px 12px", "font:12px/1.45 -apple-system,BlinkMacSystemFont,sans-serif",
+      "box-shadow:0 8px 24px rgba(0,0,0,0.42)", "backdrop-filter:blur(8px)", "display:none",
+    ].join(";");
+    panel.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <strong style="font-size:13px;">🏢 건물 높이(y) 실시간 조절</strong>
+        <button data-act="close" style="background:none;border:none;color:#9aa4b2;font-size:15px;cursor:pointer;padding:0 4px;">✕</button>
+      </div>
+      <div style="display:flex;gap:4px;margin-bottom:6px;">
+        <select data-el="sel" style="flex:1;min-width:0;background:#131720;color:#eef2f7;border:1px solid #394150;border-radius:6px;padding:4px 6px;font-size:12px;"></select>
+        <button data-act="nearest" title="가장 가까운 건물 선택" style="background:#2a3242;color:#e8edf5;border:1px solid #414b5e;border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;white-space:nowrap;">가까운</button>
+      </div>
+      <div data-el="val" style="font-family:monospace;font-size:12px;color:#93c5fd;margin-bottom:6px;"></div>
+      <div data-el="btns" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:7px;"></div>
+      <div style="display:flex;gap:5px;align-items:center;">
+        <button data-act="copy" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:5px 8px;font-size:11px;font-weight:600;cursor:pointer;">변경된 y값 복사</button>
+      </div>
+      <div data-el="status" style="margin-top:5px;font-size:11px;color:#9aa4b2;">Shift+H 닫기 · [ / ] 키로 ±0.1m 조절</div>
+    `;
+    document.body.appendChild(panel);
+    selEl = panel.querySelector('[data-el="sel"]');
+    valEl = panel.querySelector('[data-el="val"]');
+    statusEl = panel.querySelector('[data-el="status"]');
+    const btnsEl = panel.querySelector('[data-el="btns"]');
+    [-1, -0.5, -0.1, 0, 0.1, 0.5, 1].forEach((d) => {
+      const b = document.createElement("button");
+      b.textContent = d === 0 ? "0" : (d > 0 ? `+${d}` : `${d}`);
+      b.style.cssText = "background:#262d3b;color:#eef2f7;border:1px solid #3f4859;border-radius:5px;padding:5px 0;font-size:11px;cursor:pointer;";
+      b.addEventListener("click", () => applyDelta(d));
+      btnsEl.appendChild(b);
+    });
+    selEl.addEventListener("change", updateDisplay);
+    panel.querySelector('[data-act="nearest"]').addEventListener("click", () => refreshList(true));
+    panel.querySelector('[data-act="close"]').addEventListener("click", () => toggle(false));
+    panel.querySelector('[data-act="copy"]').addEventListener("click", async () => {
+      const entry = currentEntry();
+      const lines = edited.size
+        ? [...edited.entries()].map(([id, info]) => `id: ${id} (${info.name}) -> y: ${info.y}`)
+        : (entry ? [`id: ${entry.place.id} (${entry.place.name}) -> y: ${round2(entry.place.y || 0)}`] : []);
+      const txt = lines.join("\n");
+      try {
+        await navigator.clipboard.writeText(txt);
+        statusEl.textContent = `복사 완료! (${lines.length}개 건물) map_editor.html에 입력 가능`;
+      } catch {
+        console.info("[건물 높이 y값]\n" + txt);
+        statusEl.textContent = "콘솔(F12)에 출력했습니다.";
+      }
+    });
+  };
+  const toggle = (force) => {
+    ensurePanel();
+    open = force != null ? !!force : !open;
+    panel.style.display = open ? "block" : "none";
+    if (open) refreshList(true);
+  };
+  window.toggleHeightTuner = toggle;
+  window.addEventListener("keydown", (ev) => {
+    if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
+    if (ev.shiftKey && (ev.key === "H" || ev.key === "h")) {
+      ev.preventDefault();
+      toggle();
+    } else if (open && ev.key === "[") {
+      ev.preventDefault();
+      applyDelta(-0.1);
+    } else if (open && ev.key === "]") {
+      ev.preventDefault();
+      applyDelta(0.1);
+    }
+  });
+  if (new URLSearchParams(location.search).has("tune")) {
+    setTimeout(() => toggle(true), 600);
   }
 }
 
