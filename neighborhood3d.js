@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261127b";
+import * as MAP_DATA from "./map_data.js?v=20261127c";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261127b";
+const ASSET_VERSION = "20261127c";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -4917,70 +4917,83 @@ function parkHillsCommunityLiftRaw(rawZ) {
   return PARKHILLS_H_BACK * Math.min(1, (PARKHILLS_Z_HINGE - rawZ) / (PARKHILLS_Z_HINGE - PARKHILLS_Z_BACK));
 }
 
-// 113동~114동 동측 대로 진입 지하주차장 입구 포털(출입구 2) — 기존 GLB에 없을 때 자동 부착
+// 113동~114동 동측 대로 진입 지하주차장 입구 포털(출입구 2) — 노치 안쪽 옹벽 앞(x=26.2)에 돌출 배치해 벽 겹침 없이 터널이 또렷하게 보이게 한다
 function buildParkHillsEastParkingPortal() {
   const W = WORLD_SCALE;
   const grp = new THREE.Group();
   grp.name = "Parking_Portal_East";
-  // 월드 raw (21.8, 0.50, -57.1) 위치, 대로 방향(85°) 정면
-  grp.position.set(21.8 * W, (0.50 - PARKHILLS_DECK_BASE_RAW_Y) * W, -57.1 * W);
+  // 월드 raw (26.2, -1.30, -57.1) 위치, 대로 방향(85°) 정면 (안쪽 옹벽 x=19~22보다 앞에 위치해 터널 개구부가 절대 막히지 않음)
+  grp.position.set(26.2 * W, (-1.30 - PARKHILLS_DECK_BASE_RAW_Y) * W, -57.1 * W);
   grp.rotation.y = THREE.MathUtils.degToRad(85);
 
-  const openW = 7.6 * W, openH = 3.6 * W, totalH = 5.25 * W;
-  const pierW = 2.0 * W, totalW = openW + pierW * 2, tunnelD = 6.8 * W;
+  const openW = 7.8 * W, openH = 4.0 * W, totalH = 7.05 * W; // 바닥 -1.30m -> 데크 상면 +5.75m
+  const pierW = 2.0 * W, totalW = openW + pierW * 2, tunnelD = 4.2 * W;
   const fasciaH = totalH - openH;
 
   const fasciaMat = new THREE.MeshStandardMaterial({ color: 0x272a30, roughness: 0.55, metalness: 0.18 });
   const pierMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.62 });
-  const tunnelMat = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.95 });
-  const ledMat = new THREE.MeshStandardMaterial({ color: 0xfffbea, emissive: 0xfff4c2, emissiveIntensity: 0.9, roughness: 0.3 });
+  const tunnelMat = new THREE.MeshStandardMaterial({ color: 0x111317, roughness: 0.96 });
+  const ledMat = new THREE.MeshStandardMaterial({ color: 0xfffbea, emissive: 0xfff4c2, emissiveIntensity: 1.0, roughness: 0.25 });
   const copingMat = new THREE.MeshStandardMaterial({ color: 0xb6bcc4, roughness: 0.68 });
-  const redMat = new THREE.MeshStandardMaterial({ color: 0xdb2a2a, emissive: 0x6b0f0f, emissiveIntensity: 0.35, roughness: 0.4 });
-  const blueMat = new THREE.MeshStandardMaterial({ color: 0x234fd7, emissive: 0x102568, emissiveIntensity: 0.35, roughness: 0.4 });
+  const roofDeckMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.85 });
+  const redMat = new THREE.MeshStandardMaterial({ color: 0xdb2a2a, emissive: 0x6b0f0f, emissiveIntensity: 0.4, roughness: 0.4 });
+  const blueMat = new THREE.MeshStandardMaterial({ color: 0x234fd7, emissive: 0x102568, emissiveIntensity: 0.4, roughness: 0.4 });
 
   // 상단 간판 캔버스 텍스처 ("⊖ 출구 EXIT | 출입구 2 | 입구 ENTER ▸")
   const c = document.createElement("canvas");
   c.width = 1024; c.height = 128;
   const ctx = c.getContext("2d");
   ctx.fillStyle = "#1f2329"; ctx.fillRect(0, 0, 1024, 128);
-  ctx.strokeStyle = "#6c737d"; ctx.lineWidth = 4; ctx.strokeRect(4, 4, 1016, 120);
-  ctx.fillStyle = "#e03131"; ctx.beginPath(); ctx.arc(74, 64, 24, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#ffffff"; ctx.fillRect(58, 59, 32, 10);
+  ctx.strokeStyle = "#868e96"; ctx.lineWidth = 5; ctx.strokeRect(4, 4, 1016, 120);
+  ctx.fillStyle = "#e03131"; ctx.beginPath(); ctx.arc(74, 64, 26, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(56, 58, 36, 12);
   ctx.font = "bold 42px Malgun Gothic, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-  ctx.fillText("출구 EXIT", 112, 66);
-  ctx.font = "bold 48px Malgun Gothic, sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("출구 EXIT", 114, 66);
+  ctx.font = "bold 50px Malgun Gothic, sans-serif"; ctx.textAlign = "center";
   ctx.fillText("출입구 2", 512, 66);
   ctx.font = "bold 42px Malgun Gothic, sans-serif"; ctx.textAlign = "right";
-  ctx.fillText("입구 ENTER", 912, 66);
-  ctx.fillStyle = "#2f9e44"; ctx.beginPath(); ctx.arc(952, 64, 24, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.moveTo(944, 52); ctx.lineTo(966, 64); ctx.lineTo(944, 76); ctx.closePath(); ctx.fill();
+  ctx.fillText("입구 ENTER", 910, 66);
+  ctx.fillStyle = "#2f9e44"; ctx.beginPath(); ctx.arc(952, 64, 26, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.moveTo(943, 50); ctx.lineTo(967, 64); ctx.lineTo(943, 78); ctx.closePath(); ctx.fill();
   const signTex = new THREE.CanvasTexture(c);
   signTex.colorSpace = THREE.SRGBColorSpace;
-  const signMat = new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.45, metalness: 0.08 });
+  const signMat = new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.4, metalness: 0.08 });
 
-  // 좌우 밝은 화강석 기둥
+  // 좌우 밝은 화강석 기둥 + 노치 측면 옹벽까지 빈틈 마감 날개벽
   [-1, 1].forEach((side) => {
-    const pier = new THREE.Mesh(new THREE.BoxGeometry(pierW, openH, 2.2 * W), pierMat);
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(pierW, openH, 2.4 * W), pierMat);
     pier.position.set(side * (openW * 0.5 + pierW * 0.5), openH * 0.5, 0);
     pier.castShadow = true; pier.receiveShadow = true;
     grp.add(pier);
+
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(1.6 * W, totalH, 6.2 * W), fasciaMat);
+    wing.position.set(side * (openW * 0.5 + pierW + 0.7 * W), totalH * 0.5, -2.8 * W);
+    grp.add(wing);
   });
 
-  // 상부 다크차콜 린텔 + 출입구 2 간판 + 두겁석
-  const lintel = new THREE.Mesh(new THREE.BoxGeometry(totalW + 0.8 * W, fasciaH, 2.6 * W), fasciaMat);
+  // 상부 다크차콜 린텔 + 대로 눈높이 대형 출입구 2 간판 + 상단 두겁석 + 뒤쪽 데크 연결 지붕
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(totalW + 2.8 * W, fasciaH, 2.6 * W), fasciaMat);
   lintel.position.set(0, openH + fasciaH * 0.5, 0.15 * W);
   lintel.castShadow = true; lintel.receiveShadow = true;
   grp.add(lintel);
 
-  const signFace = new THREE.Mesh(new THREE.PlaneGeometry(8.8 * W, 1.12 * W), signMat);
-  signFace.position.set(0, openH + fasciaH * 0.48, 1.48 * W);
+  const signBack = new THREE.Mesh(new THREE.BoxGeometry(9.4 * W, 1.44 * W, 0.18 * W), fasciaMat);
+  signBack.position.set(0, openH + fasciaH * 0.42, 1.46 * W);
+  grp.add(signBack);
+  const signFace = new THREE.Mesh(new THREE.PlaneGeometry(9.2 * W, 1.32 * W), signMat);
+  signFace.position.set(0, openH + fasciaH * 0.42, 1.58 * W);
   grp.add(signFace);
 
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(totalW + 1.2 * W, 0.25 * W, 2.8 * W), copingMat);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(totalW + 3.2 * W, 0.25 * W, 2.9 * W), copingMat);
   cap.position.set(0, totalH + 0.12 * W, 0.15 * W);
   grp.add(cap);
 
-  // 어두운 터널 내부 + 천장 LED 2줄
+  const roofBridge = new THREE.Mesh(new THREE.BoxGeometry(totalW + 3.4 * W, 0.4 * W, 7.6 * W), roofDeckMat);
+  roofBridge.position.set(0, totalH - 0.18 * W, -4.0 * W);
+  roofBridge.receiveShadow = true;
+  grp.add(roofBridge);
+
+  // 어두운 터널 내부(x=26.2 -> 22.0, 뒤 옹벽보다 앞쪽에 깔끔하게 형성) + 밝은 천장 LED 2줄
   const tBack = new THREE.Mesh(new THREE.BoxGeometry(openW, openH, 0.4 * W), tunnelMat);
   tBack.position.set(0, openH * 0.5, -tunnelD);
   grp.add(tBack);
@@ -4989,21 +5002,21 @@ function buildParkHillsEastParkingPortal() {
     tw.position.set(side * openW * 0.5, openH * 0.5, -tunnelD * 0.5);
     grp.add(tw);
   });
-  const tCeil = new THREE.Mesh(new THREE.BoxGeometry(openW + 0.6 * W, 0.25 * W, tunnelD + 1.0 * W), tunnelMat);
-  tCeil.position.set(0, openH - 0.12 * W, -tunnelD * 0.5 + 0.3 * W);
+  const tCeil = new THREE.Mesh(new THREE.BoxGeometry(openW + 0.6 * W, 0.28 * W, tunnelD + 1.0 * W), tunnelMat);
+  tCeil.position.set(0, openH - 0.14 * W, -tunnelD * 0.5 + 0.3 * W);
   grp.add(tCeil);
-  [-1.7 * W, 1.7 * W].forEach((lx) => {
-    const led = new THREE.Mesh(new THREE.BoxGeometry(1.0 * W, 0.08 * W, 3.6 * W), ledMat);
-    led.position.set(lx, openH - 0.26 * W, -2.5 * W);
+  [-1.8 * W, 1.8 * W].forEach((lx) => {
+    const led = new THREE.Mesh(new THREE.BoxGeometry(1.1 * W, 0.08 * W, 3.2 * W), ledMat);
+    led.position.set(lx, openH - 0.30 * W, -1.8 * W);
     grp.add(led);
   });
 
   // 좌측 기둥 출차주의/P 표지판
-  const redSign = new THREE.Mesh(new THREE.BoxGeometry(0.65 * W, 0.65 * W, 0.16 * W), redMat);
-  redSign.position.set(-(openW * 0.5 + pierW * 0.5), 2.35 * W, 1.15 * W);
+  const redSign = new THREE.Mesh(new THREE.BoxGeometry(0.70 * W, 0.70 * W, 0.16 * W), redMat);
+  redSign.position.set(-(openW * 0.5 + pierW * 0.5), 2.75 * W, 1.25 * W);
   grp.add(redSign);
-  const blueSign = new THREE.Mesh(new THREE.BoxGeometry(0.65 * W, 0.72 * W, 0.16 * W), blueMat);
-  blueSign.position.set(-(openW * 0.5 + pierW * 0.5), 1.35 * W, 1.15 * W);
+  const blueSign = new THREE.Mesh(new THREE.BoxGeometry(0.70 * W, 0.78 * W, 0.16 * W), blueMat);
+  blueSign.position.set(-(openW * 0.5 + pierW * 0.5), 1.65 * W, 1.25 * W);
   grp.add(blueSign);
 
   return grp;
