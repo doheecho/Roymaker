@@ -289,11 +289,11 @@
  },
  "models/place_GS25.glb": {
   "file": "img/skyview/place_GS25.webp",
-  "hash": "ae89167279",
-  "minX": -10.512,
-  "minZ": -13.534,
-  "width": 22.5,
-  "depth": 24.083
+  "hash": "2dd4c4b0fe",
+  "minX": -9.415,
+  "minZ": -11.758,
+  "width": 19.833,
+  "depth": 22
  },
  "models/place_KFC.glb": {
   "file": "img/skyview/place_KFC.webp",
@@ -583,6 +583,14 @@
   "width": 390.783,
   "depth": 322.091
  },
+ "models/place_금파힐통합.glb": {
+  "file": "img/skyview/place_금파힐통합.webp",
+  "hash": "7d44eb97d2",
+  "minX": -185.001,
+  "minZ": -164.561,
+  "width": 390.783,
+  "depth": 322.091
+ },
  "models/place_금파힐후문.glb": {
   "file": "img/skyview/place_금파힐후문.webp",
   "hash": "e602e48cab",
@@ -721,11 +729,11 @@
  },
  "models/place_설내옥.glb": {
   "file": "img/skyview/place_설내옥.webp",
-  "hash": "1ae27d68f4",
-  "minX": -17.574,
-  "minZ": -20.98,
-  "width": 39.917,
-  "depth": 38.083
+  "hash": "7d5b042280",
+  "minX": -33.234,
+  "minZ": -18.208,
+  "width": 51.75,
+  "depth": 51.75
  },
  "models/place_성동구보건소금호분소.glb": {
   "file": "img/skyview/place_성동구보건소금호분소.webp",

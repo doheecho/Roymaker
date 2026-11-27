@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261127f";
+import * as MAP_DATA from "./map_data.js?v=20261127j";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261127f";
+const ASSET_VERSION = "20261127j";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -378,9 +378,12 @@ const LABEL_VISIBLE_RANGE = VISIBLE_RANGE_M * WORLD_SCALE;
 // 그 glb를 올려 둔 107동 자리 하나뿐이다. 가장 먼 모서리인 106동 쪽은 그 기준점에서 약
 // 323m 떨어져 있어서 기본 300m 범위를 살짝 넘어 — 106동 쪽에 서면 주변은 다 보이는데 이
 // 건물(모델+플레이스홀더)만 통째로 사라진다. 이 동만 범위를 여유 있게 늘려서 해결한다.
-const VISIBLE_RANGE_OVERRIDE_M = { 7: 400, 244: 550 };
+const VISIBLE_RANGE_OVERRIDE_M = { 7: 400, 244: 550, 245: 550 };
 function visibleRangeFor(id) {
-  return (VISIBLE_RANGE_OVERRIDE_M[id] ?? VISIBLE_RANGE_M) * WORLD_SCALE;
+  if (VISIBLE_RANGE_OVERRIDE_M[id] != null) return VISIBLE_RANGE_OVERRIDE_M[id] * WORLD_SCALE;
+  const pl = PLACES.find((p) => p.id === id);
+  if (pl && isParkHillsCommunityBaseModel(pl)) return 550 * WORLD_SCALE;
+  return VISIBLE_RANGE_M * WORLD_SCALE;
 }
 function makeLabelSprite(text, scale = 0.05) {
   if (!labelTextureCache[text]) {
@@ -543,6 +546,7 @@ async function buildStaticScene() {
   // 움직이지 않는 것들(도로·보도·신호등·가로등·나무·바닥)은 만든 뒤 위치 계산을 고정해 매 프레임 비용을 줄인다
   let before = new Set(scene.children);
   buildParks();
+  buildParkHillsGreenGround(); // 금호파크힐스 단지·주변 녹지 빈 땅에 구글 위성사진 대신 공원 수풀/잔디 텍스처 적용
   buildRoads();
   buildRoadsideProps();
   conformToTerrain(scene.children.filter((o) => !before.has(o))); // 평평하게 만든 도로·보도·공원 등을 실제 지형에 붙인다
@@ -2089,19 +2093,202 @@ function buildTrees() {
   scene.add(trunkInst, foliageInst);
 }
 
-// 공원(PARKS): 바닥을 초록 잔디로 칠한 네모난 구역 — 지도 이미지(y=-0.025)보다는 위, 도로
+// 차분하고 가벼운 심리스 공원 잔디·녹지 텍스처(256×256) —
+// 걷는 동안 눈이 어지럽거나 과부하가 걸리지 않게 고대비 동그라미 패턴 대신 부드러운 공원 잔디 톤만 사용한다.
+let _parkFoliageTex = null;
+function getParkFoliageTexture() {
+  if (_parkFoliageTex) return _parkFoliageTex;
+  const S = 256;
+  const c = document.createElement("canvas");
+  c.width = S;
+  c.height = S;
+  const g = c.getContext("2d");
+
+  let seed = 42197;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  const drawWrapped = (fn) => {
+    for (let ox = -S; ox <= S; ox += S) {
+      for (let oy = -S; oy <= S; oy += S) fn(ox, oy);
+    }
+  };
+
+  // 1) 차분한 공원 잔디 베이스
+  g.fillStyle = "#568241";
+  g.fillRect(0, 0, S, S);
+
+  // 2) 은은한 녹지 명암 변화 (저대비로 멀리 펼쳐져도 아른거리지 않음)
+  const patchColors = [
+    "rgba(104, 150, 74, 0.16)",
+    "rgba(66, 106, 48, 0.16)",
+    "rgba(84, 130, 62, 0.14)",
+  ];
+  for (let i = 0; i < 32; i++) {
+    const cx = rand() * S;
+    const cy = rand() * S;
+    const r = 26 + rand() * 44;
+    const col = patchColors[i % patchColors.length];
+    drawWrapped((ox, oy) => {
+      const grad = g.createRadialGradient(cx + ox, cy + oy, r * 0.1, cx + ox, cy + oy, r);
+      grad.addColorStop(0, col);
+      grad.addColorStop(1, "rgba(86, 130, 65, 0)");
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(cx + ox, cy + oy, r, 0, Math.PI * 2);
+      g.fill();
+    });
+  }
+
+  // 3) 아주 옅은 잔디 결
+  for (let i = 0; i < 650; i++) {
+    const x = rand() * S;
+    const y = rand() * S;
+    g.fillStyle = rand() > 0.5 ? "rgba(128, 170, 88, 0.14)" : "rgba(52, 86, 38, 0.13)";
+    g.fillRect(x, y, 2, 2);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 2;
+  _parkFoliageTex = tex;
+  return tex;
+}
+
+function makeParkFoliageMaterial() {
+  return new THREE.MeshStandardMaterial({
+    map: getParkFoliageTexture(),
+    roughness: 0.96,
+    metalness: 0.0,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+}
+
+// 공원(PARKS): 바닥을 초록 잔디로 칠한 구역 — 지도 이미지(y=-0.025)보다는 위, 도로
 // (y≈0.005~0.006)보다는 아래에 깔아서 도로가 공원 위를 지나가도 도로가 보이게 한다.
 function buildParks() {
-  const mat = new THREE.MeshStandardMaterial({ color: 0x6fae4a });
+  const mat = makeParkFoliageMaterial();
+  const TILE_RAW = 24;
   PARKS.forEach((park) => {
     const geo = new THREE.PlaneGeometry(park.w * WORLD_SCALE, park.d * WORLD_SCALE);
     geo.rotateX(-Math.PI / 2);
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, (uv.getX(i) * park.w) / TILE_RAW, (uv.getY(i) * park.d) / TILE_RAW);
+    }
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(park.x * WORLD_SCALE, glbTerrain ? 0.015 : -0.01, park.z * WORLD_SCALE); // 실제 지형이 있으면 그 위로(conformToTerrain이 붙임)
+    mesh.position.set(park.x * WORLD_SCALE, glbTerrain ? 0.015 : -0.01, park.z * WORLD_SCALE);
     mesh.rotation.y = park.rotationDeg ? THREE.MathUtils.degToRad(park.rotationDeg) : 0;
     mesh.receiveShadow = true;
+    mesh.renderOrder = -1;
     scene.add(mesh);
   });
+}
+
+// 금호파크힐스 바깥쪽 빈 녹지(101동 주변·신금호공원·북서 외곽 녹지)에만 가볍게 공원 잔디 바닥을 깐다.
+// place_금파힐통합.glb 데크 아래에는 중복으로 깔지 않아 과부하와 바닥 뚫림을 방지한다.
+function buildParkHillsGreenGround() {
+  const W = WORLD_SCALE;
+  const TILE_RAW = 24;
+  const mat = makeParkFoliageMaterial();
+  const pockets = [
+    // 1) 101동 및 정문 서측 녹지 (통합 데크 서남 경계 바깥쪽만)
+    [
+      [-400.5, 153.3],
+      [-426.0, 127.0],
+      [-415.0, 72.0],
+      [-375.0, 38.0],
+      [-345.0, 12.0],
+      [-341.0, 62.0],
+      [-345.5, 91.4],
+      [-336.0, 148.2],
+      [-365.0, 154.0],
+    ],
+    // 2) 신금호공원 (109~111동 남측 공원 구역)
+    [
+      [-334.3, 149.4],
+      [-283.3, 151.6],
+      [-278.6, 124.9],
+      [-145.8, 132.4],
+      [-120.0, 138.0],
+      [-159.1, 212.0],
+      [-235.0, 198.0],
+      [-315.0, 176.0],
+    ],
+    // 3) 북서측 외곽 녹지 완충지대 (통합 상단 데크 북서 경계 바깥쪽만)
+    [
+      [-341.0, 10.0],
+      [-305.0, -55.0],
+      [-255.0, -145.0],
+      [-215.0, -172.0],
+      [-231.0, -153.7],
+      [-240.0, -146.9],
+      [-226.1, -117.6],
+      [-254.4, -90.4],
+      [-288.9, -37.7],
+      [-340.2, 6.6],
+    ],
+  ];
+
+  const posArr = [];
+  const uvArr = [];
+  const MAX_EDGE_W = 28 * W;
+  const emitTri = (ax, az, bx, bz, cx, cz, depth) => {
+    const ab = Math.hypot(bx - ax, bz - az);
+    const bc = Math.hypot(cx - bx, cz - bz);
+    const ca = Math.hypot(ax - cx, az - cz);
+    const m = Math.max(ab, bc, ca);
+    if (m <= MAX_EDGE_W || depth >= 4) {
+      const cross = (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+      const pts = cross < 0
+        ? [[ax, az], [bx, bz], [cx, cz]]
+        : [[ax, az], [cx, cz], [bx, bz]];
+      for (const [px, pz] of pts) {
+        posArr.push(px, 0, pz);
+        uvArr.push(px / (TILE_RAW * W), pz / (TILE_RAW * W));
+      }
+      return;
+    }
+    if (m === ab) {
+      const mx = (ax + bx) * 0.5, mz = (az + bz) * 0.5;
+      emitTri(ax, az, mx, mz, cx, cz, depth + 1);
+      emitTri(mx, mz, bx, bz, cx, cz, depth + 1);
+    } else if (m === bc) {
+      const mx = (bx + cx) * 0.5, mz = (bz + cz) * 0.5;
+      emitTri(ax, az, bx, bz, mx, mz, depth + 1);
+      emitTri(ax, az, mx, mz, cx, cz, depth + 1);
+    } else {
+      const mx = (cx + ax) * 0.5, mz = (cz + az) * 0.5;
+      emitTri(ax, az, bx, bz, mx, mz, depth + 1);
+      emitTri(mx, mz, bx, bz, cx, cz, depth + 1);
+    }
+  };
+
+  for (const rawPts of pockets) {
+    const contour = rawPts.map(([x, z]) => new THREE.Vector2(x * W, z * W));
+    if (THREE.ShapeUtils.isClockWise(contour)) contour.reverse();
+    const tris = THREE.ShapeUtils.triangulateShape(contour, []);
+    for (const [ia, ib, ic] of tris) {
+      emitTri(contour[ia].x, contour[ia].y, contour[ib].x, contour[ib].y, contour[ic].x, contour[ic].y, 0);
+    }
+  }
+  if (!posArr.length) return;
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(posArr, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvArr, 2));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.y = glbTerrain ? 0.012 : -0.012;
+  mesh.receiveShadow = true;
+  mesh.castShadow = false;
+  mesh.renderOrder = -1;
+  scene.add(mesh);
 }
 
 // 차선 점선은 도로가 많아지니 개별 메시로 그리면 수백 개가 생겨서(실측 500개+) 프레임이 뚝 떨어진다.
@@ -3551,7 +3738,136 @@ function addPolyPlatform(poly, y, fn = null) {
   const xs = poly.map((q) => q[0]), zs = poly.map((q) => q[1]);
   groundPlatforms.push({ poly, y, fn, minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs) });
 }
+// ── 금호파크힐스 보행 가능 표면(각 동 출입구 앞 1층 바닥·커뮤니티 3층 데크·단지 도로·101/117동 1층 데크) 높이 색인 ──
+// 모델이 로드될 때 한 번만 위를 향한 바닥·데크·도로·경사로 삼각형들을 2D 격자에 등록해 두어,
+// groundHeightAt(x, z)가 별도 지형(GameMap/TERRAIN_SHAPES)이나 1층 밑 지하가 아닌
+// 실제 각 동 1층 출입구 바닥 및 커뮤니티 3층 데크 위의 정확한 높이를 O(1)로 돌려준다.
+const parkHillsWalkIndices = new Map(); // model -> { tris, minX, maxX, minZ, maxZ, cellSize, cells }
+const PARKHILLS_WALK_1F_RE = /^(?:Walk_1F_Building|Walk_1F_Basement|Walkway_1F_(?:Base)?Deck|Walkway_NE_CircularPath|Garden_(?:109|110|NE_|NW_)|Basement_B1B2_|Podium_CantileveredUpperDeck|Merged_Play_EPDMFloor|Merged_Land_Lawns)/i;
+const PARKHILLS_RAMP_NODE_RE = /^(?:Walk_Promenade_Ramp|Promenade_Main_L_Path)$/i;
+const PARKHILLS_WALK_BASE_RE = /^(?:ParkHills_Walkable_Surface|Walk_Upper_Deck|Walk_Lower_Deck|Walk_Roads|Walk_EastPortal_Driveway|Lower_Deck_TopSurface|Upper_Deck_TopSurface|NW_Community_RoofGarden|RoundPark_StripedFloor|Internal_Roads_And_Walkways|EastPortal2_SlopedDriveway)$/i;
+
+function tagParkHillsBuildingWalkMeshes(model) {
+  model.traverse((o) => {
+    if (!o.isMesh || !o.geometry?.attributes?.position) return;
+    let p = o;
+    while (p && p !== model) {
+      const nm = p.name || "";
+      if (PARKHILLS_WALK_1F_RE.test(nm)) {
+        o.userData._nbWalkPrio = 3;
+        return;
+      }
+      p = p.parent;
+    }
+  });
+}
+
+function buildParkHillsWalkIndex(model) {
+  model.updateMatrixWorld(true);
+  const tris = []; // [ax,ay,az, bx,by,bz, cx,cy,cz, prio]
+  const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
+  const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), nrm = new THREE.Vector3();
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+
+  const visit = (node, inheritedPrio) => {
+    if (!node.visible) return;
+    const nm = node.name || "";
+    let prio = inheritedPrio;
+    if (node.userData?._nbWalkPrio) prio = Math.max(prio, node.userData._nbWalkPrio);
+    if (PARKHILLS_WALK_1F_RE.test(nm)) prio = Math.max(prio, 3);
+    else if (PARKHILLS_RAMP_NODE_RE.test(nm)) prio = Math.max(prio, 2);
+    else if (PARKHILLS_WALK_BASE_RE.test(nm)) prio = Math.max(prio, 1);
+
+    if (prio > 0 && node.isMesh && node.geometry?.attributes?.position) {
+      const geo = node.geometry;
+      const pos = geo.attributes.position;
+      const idx = geo.index;
+      const wm = node.matrixWorld;
+      const cnt = idx ? idx.count : pos.count;
+      for (let i = 0; i < cnt; i += 3) {
+        const ia = idx ? idx.getX(i) : i;
+        const ib = idx ? idx.getX(i + 1) : i + 1;
+        const ic = idx ? idx.getX(i + 2) : i + 2;
+        vA.fromBufferAttribute(pos, ia).applyMatrix4(wm);
+        vB.fromBufferAttribute(pos, ib).applyMatrix4(wm);
+        vC.fromBufferAttribute(pos, ic).applyMatrix4(wm);
+        e1.subVectors(vB, vA);
+        e2.subVectors(vC, vA);
+        nrm.crossVectors(e1, e2);
+        const len = nrm.length();
+        if (len < 1e-8 || Math.abs(nrm.y) / len < 0.7) continue; // 수직 옹벽·난간 제외
+        tris.push(vA.x, vA.y, vA.z, vB.x, vB.y, vB.z, vC.x, vC.y, vC.z, prio);
+        minX = Math.min(minX, vA.x, vB.x, vC.x); maxX = Math.max(maxX, vA.x, vB.x, vC.x);
+        minZ = Math.min(minZ, vA.z, vB.z, vC.z); maxZ = Math.max(maxZ, vA.z, vB.z, vC.z);
+      }
+    }
+    for (const ch of node.children) visit(ch, prio);
+  };
+  visit(model, 0);
+  if (!tris.length) { parkHillsWalkIndices.delete(model); return; }
+
+  const triCount = tris.length / 10;
+  const cellSize = 4.0 * WORLD_SCALE;
+  const cells = new Map();
+  for (let t = 0; t < triCount; t++) {
+    const o = t * 10;
+    const tx0 = Math.min(tris[o], tris[o + 3], tris[o + 6]);
+    const tx1 = Math.max(tris[o], tris[o + 3], tris[o + 6]);
+    const tz0 = Math.min(tris[o + 2], tris[o + 5], tris[o + 8]);
+    const tz1 = Math.max(tris[o + 2], tris[o + 5], tris[o + 8]);
+    const cx0 = Math.floor((tx0 - minX) / cellSize), cx1 = Math.floor((tx1 - minX) / cellSize);
+    const cz0 = Math.floor((tz0 - minZ) / cellSize), cz1 = Math.floor((tz1 - minZ) / cellSize);
+    for (let cx = cx0; cx <= cx1; cx++) {
+      for (let cz = cz0; cz <= cz1; cz++) {
+        const key = cx * 100000 + cz;
+        let list = cells.get(key);
+        if (!list) cells.set(key, (list = []));
+        list.push(o);
+      }
+    }
+  }
+  parkHillsWalkIndices.set(model, { tris: new Float64Array(tris), minX, maxX, minZ, maxZ, cellSize, cells });
+  console.info(`[금파힐] 1층/3층 보행 표면 색인 생성: 삼각형 ${triCount}개 (등록 모델 ${parkHillsWalkIndices.size}개)`);
+}
+
+function parkHillsWalkHeightAt(x, z) {
+  if (!parkHillsWalkIndices.size) return null;
+  let bestPrio = -1;
+  let bestY = -Infinity;
+  for (const idx of parkHillsWalkIndices.values()) {
+    if (x < idx.minX || x > idx.maxX || z < idx.minZ || z > idx.maxZ) continue;
+    const cx = Math.floor((x - idx.minX) / idx.cellSize);
+    const cz = Math.floor((z - idx.minZ) / idx.cellSize);
+    const list = idx.cells.get(cx * 100000 + cz);
+    if (!list) continue;
+    const T = idx.tris;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      const ax = T[o], ay = T[o + 1], az = T[o + 2];
+      const bx = T[o + 3], by = T[o + 4], bz = T[o + 5];
+      const cx2 = T[o + 6], cy = T[o + 7], cz2 = T[o + 8];
+      const v0x = bx - ax, v0z = bz - az, v1x = cx2 - ax, v1z = cz2 - az, v2x = x - ax, v2z = z - az;
+      const den = v0x * v1z - v1x * v0z;
+      if (Math.abs(den) < 1e-10) continue;
+      const vv = (v2x * v1z - v1x * v2z) / den;
+      const ww = (v0x * v2z - v2x * v0z) / den;
+      const uu = 1 - vv - ww;
+      if (uu < -1e-4 || vv < -1e-4 || ww < -1e-4) continue;
+      const y = ay * uu + by * vv + cy * ww;
+      const prio = T[o + 9];
+      if (prio > bestPrio || (prio === bestPrio && y > bestY)) {
+        bestPrio = prio;
+        bestY = y;
+      }
+    }
+  }
+  return bestPrio >= 0 ? bestY : null;
+}
+
 function groundHeightAt(x, z) {
+  // 금파힐 통합/커뮤니티 GLB의 실제 보행 표면(데크·단지도로·보행 경사로) 위라면 모델 표면 높이를 직접 쓴다
+  const phY = parkHillsWalkHeightAt(x, z);
+  if (phY !== null) return phY + 0.01 * WORLD_SCALE;
   // 실제 지형(GLB)이 있으면 그 자리 실측 높이가 기준(base)이고, 아래의 발판·단차 턱들은
   // 전부 그 기준 위에 얹는 상대적인 높이 차다(터널을 뚫은 평지 가정이 아니라, 언덕 중턱이어도
   // 건물 발판·보도 턱 높이는 그대로 유지된다).
@@ -3906,13 +4222,13 @@ function getBuildingSkirtMaterial() {
 function isParkHillsApartmentPlace(place) {
   if (!place || ROAD_LEVEL_PLACE_IDS.has(place.id)) return false;
   if (place.name && /(?:금호파크힐스|커뮤니티)/.test(place.name)) return true;
-  if (place.model && /(?:금파힐\d|Community|커뮤니티)/i.test(place.model)) return true;
+  if (place.model && /(?:금파힐\d|금파힐통합|Community|커뮤니티)/i.test(place.model)) return true;
   return false;
 }
 
 function isParkHillsCommunityComplex(place) {
   if (!place) return false;
-  return /(?:Community|커뮤니티)/i.test(place.model || "") || /(?:커뮤니티)/.test(place.name || "");
+  return /(?:금파힐통합|Community|커뮤니티)/i.test(place.model || "") || /(?:커뮤니티)/.test(place.name || "");
 }
 
 let parkHillsSkirtMaterial = null;
@@ -4175,7 +4491,7 @@ function mergeModelMeshes(model) {
   const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
   const groups = new Map();
   model.traverse((o) => {
-    if (!o.isMesh || !o.visible || o.userData._nbEnvProp || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || !o.geometry?.attributes?.position) return;
+    if (!o.isMesh || !o.visible || o.userData._nbEnvProp || o.userData._nbWalkPrio || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || !o.geometry?.attributes?.position) return;
     // 거울처럼 뒤집힌 조각은 합치면 면 방향이 뒤집혀 안 보일 수 있어서 그대로 둔다
     if (new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld).determinant() < 0) return;
     if (Object.keys(o.geometry.morphAttributes || {}).length) return;
@@ -5052,12 +5368,139 @@ const PARKHILLS_H_BACK = 15.2;
 const PARKHILLS_DECK_BASE_RAW_Y = 0.05; // 정문 입구 찻길(+0.09m)과 하단 데크(Y=0)가 자연스럽게 맞닿는 기준 고도
 
 function isParkHillsCommunityBaseModel(place) {
-  return !!place?.model && /place_금파힐커뮤니티\.glb/i.test(place.model);
+  return !!place?.model && /place_금파힐(?:커뮤니티|통합)\.glb/i.test(place.model);
 }
 
 function parkHillsCommunityLiftRaw(rawZ) {
   if (rawZ >= PARKHILLS_Z_HINGE) return 0;
   return PARKHILLS_H_BACK * Math.min(1, (PARKHILLS_Z_HINGE - rawZ) / (PARKHILLS_Z_HINGE - PARKHILLS_Z_BACK));
+}
+
+// 금파힐 후문(id 201) 문주·경비실(z <= -166.5)은 바깥 4차선 도로와 수평을 유지하고,
+// 단지 안쪽(z > -166.5)으로 뻗은 진입로·인도·울타리·조경수만 금파힐통합 하단 데크 높이에 부드럽게 밀착시킨다.
+function conformParkHillsBackGateApron(entry, model) {
+  const W = WORLD_SCALE;
+  const HINGE_Z_RAW = -166.5;
+  const DECK_EDGE_Z_RAW = -164.4;
+  const gateBaseRawY = (entry.group.position.y + model.position.y) / W;
+  const deckAtZ = (zRaw) => PARKHILLS_DECK_BASE_RAW_Y + parkHillsCommunityLiftRaw(zRaw) + 0.02;
+  const offsetAtZ = (zRaw) => {
+    if (zRaw <= HINGE_Z_RAW) return 0;
+    const targetY = deckAtZ(zRaw);
+    if (zRaw < DECK_EDGE_Z_RAW) {
+      const t = (zRaw - HINGE_Z_RAW) / (DECK_EDGE_Z_RAW - HINGE_Z_RAW);
+      return (targetY - gateBaseRawY) * t;
+    }
+    return targetY - gateBaseRawY;
+  };
+  model.updateMatrixWorld(true);
+  const v = new THREE.Vector3();
+  const invMat = new THREE.Matrix4();
+  model.traverse((o) => {
+    if (!o.isMesh || !o.geometry?.attributes?.position) return;
+    const src = o.geometry;
+    if (!src.boundingBox) src.computeBoundingBox();
+    const bb = src.boundingBox.clone().applyMatrix4(o.matrixWorld);
+    if (bb.max.z <= HINGE_Z_RAW * W + 1e-4) return;
+    const floatGeo = toFloatGeometry(src);
+    const pos = floatGeo.attributes.position;
+    const wm = o.matrixWorld;
+    invMat.copy(wm).invert();
+    const isTreeLike = /(?:Tree|Trunk|Pine|Deciduous|Shrub|Bollard)/i.test(o.name || "");
+    if (isTreeLike) {
+      const midZRaw = ((bb.min.z + bb.max.z) * 0.5) / W;
+      const dyW = offsetAtZ(midZRaw) * W;
+      if (Math.abs(dyW) > 1e-5) {
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(wm);
+          v.y += dyW;
+          v.applyMatrix4(invMat);
+          pos.setXYZ(i, v.x, v.y, v.z);
+        }
+      }
+    } else {
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(wm);
+        const dyW = offsetAtZ(v.z / W) * W;
+        if (Math.abs(dyW) > 1e-5) {
+          v.y += dyW;
+          v.applyMatrix4(invMat);
+          pos.setXYZ(i, v.x, v.y, v.z);
+        }
+      }
+    }
+    pos.needsUpdate = true;
+    floatGeo.computeVertexNormals();
+    floatGeo.computeBoundingBox();
+    floatGeo.computeBoundingSphere();
+    o.geometry = floatGeo;
+    src.dispose();
+  });
+  entry.group.updateMatrixWorld(true);
+}
+
+// 금파힐 정문(id 202) 문주·횡단보도(로컬 z >= -2.2)는 바깥 대로 높이에 그대로 두고,
+// 문주 안쪽 진입로(로컬 z = -2.2 ~ -16.8)만 완만하게 올려 금파힐통합 하단 데크(+0.07m)와 단차 없이 잇는다.
+function conformParkHillsFrontGateApron(entry, model) {
+  const W = WORLD_SCALE;
+  const gateBaseRawY = (entry.group.position.y + model.position.y) / W;
+  const targetDeckRawY = PARKHILLS_DECK_BASE_RAW_Y + 0.02;
+  const totalRiseRaw = targetDeckRawY - gateBaseRawY;
+  if (Math.abs(totalRiseRaw) < 0.05) return;
+  model.updateMatrixWorld(true);
+  const invModel = new THREE.Matrix4().copy(model.matrixWorld).invert();
+  const v = new THREE.Vector3();
+  const lv = new THREE.Vector3();
+  const invMat = new THREE.Matrix4();
+  const Z_START = -2.2;
+  const Z_END = -16.8;
+  const riseAtLocalZ = (lz) => {
+    if (lz >= Z_START) return 0;
+    const t = Math.max(0, Math.min(1, (Z_START - lz) / (Z_START - Z_END)));
+    return totalRiseRaw * t * W;
+  };
+  model.traverse((o) => {
+    if (!o.isMesh || !o.geometry?.attributes?.position) return;
+    const src = o.geometry;
+    const wm = o.matrixWorld;
+    const toModel = new THREE.Matrix4().multiplyMatrices(invModel, wm);
+    if (!src.boundingBox) src.computeBoundingBox();
+    const lbb = src.boundingBox.clone().applyMatrix4(toModel);
+    if (lbb.min.z >= Z_START - 1e-4) return;
+    const floatGeo = toFloatGeometry(src);
+    const pos = floatGeo.attributes.position;
+    invMat.copy(wm).invert();
+    const isTreeLike = /(?:Tree|Trunk|Pine|Deciduous|Shrub|Bollard|Barrier|SubGate|Umbrella)/i.test(o.name || "");
+    if (isTreeLike) {
+      const dyW = riseAtLocalZ((lbb.min.z + lbb.max.z) * 0.5);
+      if (Math.abs(dyW) > 1e-5) {
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(wm);
+          v.y += dyW;
+          v.applyMatrix4(invMat);
+          pos.setXYZ(i, v.x, v.y, v.z);
+        }
+      }
+    } else {
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(wm);
+        lv.copy(v).applyMatrix4(invModel);
+        const dyW = riseAtLocalZ(lv.z);
+        if (Math.abs(dyW) > 1e-5) {
+          v.y += dyW;
+          v.applyMatrix4(invMat);
+          pos.setXYZ(i, v.x, v.y, v.z);
+        }
+      }
+    }
+    pos.needsUpdate = true;
+    floatGeo.computeVertexNormals();
+    floatGeo.computeBoundingBox();
+    floatGeo.computeBoundingSphere();
+    o.geometry = floatGeo;
+    src.dispose();
+  });
+  entry.group.updateMatrixWorld(true);
 }
 
 // 113동~114동 동측 대로 진입 지하주차장 입구 포털(출입구 2) — 노치 안쪽 옹벽 앞(x=26.2)에 돌출 배치해 벽 겹침 없이 터널이 또렷하게 보이게 한다
@@ -5346,20 +5789,55 @@ function loadPlaceModelInto(entry) {
       if (entry.place.terrain !== "baked") model.position.y += MODEL_Y_LIFT_OVERRIDE[entry.place.id] ?? DEFAULT_MODEL_Y_LIFT;
       entry.group.add(model);
       entry.group.updateMatrixWorld(true);
+      const isCommBase = isParkHillsCommunityBaseModel(entry.place);
+      const isParkHillsBldg = isParkHillsApartmentPlace(entry.place);
+      const isParkHillsGate = entry.place.id === 201 || entry.place.id === 202;
+      const isPreMergedUnified = isCommBase && !!model.getObjectByName("ParkHills_Walkable_Surface");
       if (entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb")) {
         adaptLotteMartToTerrain(entry, model);
-      } else if (isParkHillsCommunityBaseModel(entry.place)) {
+      } else if (isCommBase) {
         conformParkHillsCommunityModel(entry, model);
       } else {
-        if (!isParkHillsApartmentPlace(entry.place)) {
+        if (!isParkHillsBldg) {
           conformModelToSlopedShapes(model, entry.group.position.y + model.position.y);
+        }
+        if (entry.place.id === 201) {
+          conformParkHillsBackGateApron(entry, model);
+        } else if (entry.place.id === 202) {
+          conformParkHillsFrontGateApron(entry, model);
         }
         preparePlaceEnvCleanup(entry, model, modelScale);
       }
-      mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(경사 밀착·환경 바닥 정리 후)
+      if (isParkHillsBldg && !isPreMergedUnified) {
+        tagParkHillsBuildingWalkMeshes(model);
+      } else if (isParkHillsGate) {
+        model.traverse((o) => {
+          if (o.isMesh && /^(?:Interior_Complex_Driveway|Inner_Entrance_Road|Crosswalk_Road_Pad|Sidewalk_)/i.test(o.name || "")) {
+            o.userData._nbWalkPrio = 2;
+          }
+        });
+      }
+      if (!isPreMergedUnified) {
+        mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(경사 밀착·환경 바닥 정리 후)
+      }
+      const noCastNodes = new Set();
+      if (isCommBase) {
+        [
+          "Walk_1F_Building",
+          "Walk_Promenade_Ramp",
+          "Walk_Upper_Deck",
+          "Walk_Lower_Deck",
+          "Walk_Roads",
+          "Walk_EastPortal_Driveway",
+          "Shop_105_Emart24_Shinhyup_Ads",
+        ].forEach((nm) => {
+          const sub = model.getObjectByName(nm);
+          if (sub) sub.traverse((c) => noCastNodes.add(c));
+        });
+      }
       model.traverse((o) => {
         if (o.isMesh) {
-          o.castShadow = true;
+          o.castShadow = !noCastNodes.has(o);
           o.receiveShadow = true;
           // terrain: "baked" — 모델 안에 단차(높이)가 이미 들어 있으니 게임이 땅 높이만큼 또 올리지 않는다
           if (entry.place.terrain === "baked") {
@@ -5368,8 +5846,17 @@ function loadPlaceModelInto(entry) {
         }
       });
       settleBuildingBase(entry, model);
-      if (!(entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb")) && !isParkHillsCommunityBaseModel(entry.place)) {
+      if (!(entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb")) && !isCommBase) {
         snapPlaceEnvPropsToTerrain(entry, model);
+      }
+      if (isCommBase || isParkHillsBldg || isParkHillsGate) {
+        buildParkHillsWalkIndex(model);
+        if (character && !jumping) {
+          character.position.y = groundHeightAt(character.position.x, character.position.z);
+        }
+        if (mom) {
+          mom.position.y = groundHeightAt(mom.position.x, mom.position.z);
+        }
       }
       entry.loadedModel = model;
       registerBuildingGlass(entry, model); // 밤에 창문 불빛
@@ -5400,6 +5887,7 @@ function updateModelStreaming(dt) {
     if (dist <= modelLoadRangeFor(entry.place.id)) {
       if (!entry.loadedModel && !entry.loading && !entry.failed) want.push(entry);
     } else if (dist > modelUnloadRangeFor(entry.place.id) && entry.loadedModel) {
+      parkHillsWalkIndices.delete(entry.loadedModel);
       entry.group.remove(entry.loadedModel);
       disposeObject3D(entry.loadedModel);
       entry.loadedModel = null;
@@ -6255,12 +6743,15 @@ function updateMovement(dt) {
     nx = Math.max(AREA_MIN_X + 1, Math.min(AREA_MAX_X - 1, nx));
     nz = Math.max(AREA_MIN_Z + 1, Math.min(AREA_MAX_Z - 1, nz));
     // 평소 걸을 때는 옹벽(높이 차 > 1m)을 못 넘지만, 점프해서 발이 공중에 떠 있는 동안에는
-    // 현재 발 높이(character.position.y + TERRAIN_STEP_MAX) 이하의 구조물·옹벽 턱을 훌쩍 넘어갈 수 있다
+    // 현재 발 높이(character.position.y + TERRAIN_STEP_MAX) 이하의 구조물·옹벽 턱을 훌쩍 넘어갈 수 있다.
+    // 금호파크힐스 단지 내부(각 동 1층 출입구 앞 바닥·커뮤니티 3층 데크·단지 도로) 사이를 이동할 때는
+    // 별도 계단 없이도 1층/3층 바닥 위로 자유롭게 올라서고 내려올 수 있게 단차 차단을 푼다.
     if (terrainZones.length || glbTerrain) {
       const t0 = groundHeightAt(curX, curZ);
+      const curInParkHills = parkHillsWalkHeightAt(curX, curZ) !== null;
       const ok = jumping
         ? (x, z) => groundHeightAt(x, z) <= character.position.y + TERRAIN_STEP_MAX
-        : (x, z) => Math.abs(groundHeightAt(x, z) - t0) <= TERRAIN_STEP_MAX;
+        : (x, z) => (curInParkHills || parkHillsWalkHeightAt(x, z) !== null) || Math.abs(groundHeightAt(x, z) - t0) <= TERRAIN_STEP_MAX;
       if (!ok(nx, nz)) {
         if (ok(nx, curZ)) nz = curZ;
         else if (ok(curX, nz)) nx = curX;
@@ -6288,7 +6779,7 @@ function updateMovement(dt) {
       return;
     }
   } else {
-    character.position.y += (targetGroundY - character.position.y) * Math.min(1, dt * 10);
+    character.position.y += (targetGroundY - character.position.y) * Math.min(1, dt * 14);
   }
   if (moving) {
     playAction(moveMode === "run" ? "Running" : "Walking");

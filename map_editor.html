@@ -17,7 +17,13 @@
   * { box-sizing: border-box; }
   .sky-img { pointer-events: none; }
   .terrain-bg-img { pointer-events: none; }
-  #overlay.sky-hidden .sky-layer { display: none; }
+  #overlay[data-layer-filter] > .editor-layer { display: none; }
+  #overlay[data-layer-filter="shape"] > .layer-shape { display: inline; }
+  #overlay[data-layer-filter="road"] > .layer-road { display: inline; }
+  #overlay[data-layer-filter="fence"] > .layer-fence { display: inline; }
+  #overlay[data-layer-filter="place"] > .layer-place { display: inline; }
+  #overlay[data-layer-filter="nature"] > .layer-nature { display: inline; }
+  #overlay.sky-hidden > .sky-layer, #overlay.sky-hidden .sky-layer { display: none; }
   #skyOpacity { width: 80px; vertical-align: middle; }
   html, body { margin: 0; height: 100%; font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
   body { display: flex; flex-direction: column; background: #20232a; color: #e8eaf0; }
@@ -32,6 +38,16 @@
   #toolbar input[type="text"] { cursor: text; width: 180px; }
   #toolbar button:hover { background: #4a4f5b; }
   #toolbar button.active { background: #2f7a3f; border-color: #3f9a52; }
+  #layerFilterGroup {
+    display: inline-flex; align-items: center; gap: 3px; padding: 2px 4px;
+    background: #1e2128; border: 1px solid #3a3f4b; border-radius: 7px;
+  }
+  #layerFilterGroup .filter-title { font-size: 11px; color: #9aa0ad; padding: 0 4px 0 3px; user-select: none; white-space: nowrap; }
+  #layerFilterGroup button {
+    padding: 4px 8px; font-size: 12px; border-color: transparent; background: transparent; color: #c3c8d3;
+  }
+  #layerFilterGroup button:hover { background: #343946; color: #fff; }
+  #layerFilterGroup button.active { background: #2f5f8a; border-color: #4a8ac4; color: #fff; font-weight: 600; }
   #toolbar .sep { width: 1px; align-self: stretch; background: #3a3f4b; margin: 0 2px; }
   #toolbar .hint { color: #9aa0ad; font-size: 12px; margin-left: auto; }
   #toolbar button:disabled { opacity: 0.4; cursor: default; }
@@ -276,6 +292,16 @@
   <input id="roadOpacity" type="range" min="0.2" max="1" step="0.05" value="0.85" title="도로 진하기(낮추면 밑의 지도 사진이 비쳐 보여요)" />
   <label id="terrainToggleWrap" title="실제 지형(models/GameMap.glb)을 위에서 찍은 그림을 지도 자리에 깝니다 — 그림은 node tools/make_terrain_topdown.cjs로 만듭니다"><input type="checkbox" id="terrainToggle" /> 실제 지형</label>
   <input id="terrainOpacity" type="range" min="0.1" max="1" step="0.05" value="0.9" title="지형 그림 진하기" />
+  <span class="sep"></span>
+  <div id="layerFilterGroup" role="group" aria-label="레이어 단독 보기 필터" title="원하는 요소 한 가지만 골라서 보고 편집할 수 있어요 (같은 버튼을 다시 누르면 전체 보기)">
+    <span class="filter-title">보기</span>
+    <button type="button" data-filter="all" class="active">👁 전체</button>
+    <button type="button" data-filter="shape" title="평지·경사 구역(고도)만 표시하고 다른 레이어 클릭을 막습니다">⛰ 고도만</button>
+    <button type="button" data-filter="road" title="도로·보도·신호등만 표시합니다">🛣️ 도로만</button>
+    <button type="button" data-filter="fence" title="울타리만 표시합니다">🧱 울타리만</button>
+    <button type="button" data-filter="place" title="건물 마커와 스카이뷰만 표시합니다">🏢 건물만</button>
+    <button type="button" data-filter="nature" title="공원과 나무만 표시합니다">🌳 공원·나무만</button>
+  </div>
   <span class="sep"></span>
   <button id="addPlaceBtn">🏢 건물 추가</button>
   <button id="addRoadBtn">🛣️ 도로 추가</button>
@@ -811,9 +837,9 @@
   };
 
   // ── 마커/도로/공원/나무 렌더링(이 순서로 쌓아서 공원이 제일 아래, 건물 라벨이 제일 위에 오게 한다) ──
-  const parkLayer = el("g", {});
-  const sidewalkLayer = el("g", { opacity: 0.85 }); // 보도 — 도로보다 아래(도로가 항상 이긴다)
-  const roadLayer = el("g", {});
+  const parkLayer = el("g", { class: "editor-layer layer-nature" });
+  const sidewalkLayer = el("g", { class: "editor-layer layer-road", opacity: 0.85 }); // 보도 — 도로보다 아래(도로가 항상 이긴다)
+  const roadLayer = el("g", { class: "editor-layer layer-road" });
   // 도로 표면은 게임처럼 "급"(rank)이 높은 길이 위에 오게 급별 그룹에 나눠 담고, 차선은 그 위 한 그룹에
   const roadSurfaceLayer = el("g", { opacity: 0.85 });
   const roadRankGroups = [0, 1, 2, 3, 4].map(() => el("g", {}));
@@ -823,9 +849,9 @@
   const roadMarkLayer = el("g", { class: "lane-layer" }); // 정지선·횡단보도
   roadSurfaceLayer.appendChild(roadMarkLayer);
   roadLayer.appendChild(roadSurfaceLayer);
-  const skyLayer = el("g", { class: "sky-layer", opacity: 0.9 }); // 건물 스카이뷰 그림 — 도로 위, 마커 아래
-  const treeLayer = el("g", {});
-  const placeLayer = el("g", {});
+  const skyLayer = el("g", { class: "sky-layer editor-layer layer-place", opacity: 0.9 }); // 건물 스카이뷰 그림 — 도로 위, 마커 아래
+  const treeLayer = el("g", { class: "editor-layer layer-nature" });
+  const placeLayer = el("g", { class: "editor-layer layer-place" });
   const pendingLayer = el("g", {});
   // 회전/곡선/양끝 손잡이는 전부 이 맨 위 레이어에 둔다 — 그래야 건물(placeLayer)이 도로보다
   // 위에 그려져도, 건물 마커의 커다란 투명 클릭 영역이 바로 밑 도로의 곡선 손잡이를 가리는
@@ -835,15 +861,15 @@
   svg.appendChild(sidewalkLayer);
   svg.appendChild(roadLayer);
   svg.appendChild(skyLayer);
-  const shapeLayer = el("g", {}); // 평지·경사 구역 — 스카이뷰 위, 울타리 아래
+  const shapeLayer = el("g", { class: "editor-layer layer-shape" }); // 평지·경사 구역 — 스카이뷰 위, 울타리 아래
   svg.appendChild(shapeLayer);
-  const fenceLayer = el("g", {}); // 울타리 — 스카이뷰 위(단지 둘레가 잘 보이게), 나무·건물 마커 아래
+  const fenceLayer = el("g", { class: "editor-layer layer-fence" }); // 울타리 — 스카이뷰 위(단지 둘레가 잘 보이게), 나무·건물 마커 아래
   svg.appendChild(fenceLayer);
   const terrainLayer = el("g", { class: "terrain-ui" }); // 지형 높이 구역·점 — "⛰ 지형 높이" 모드이거나 점을 골랐을 때만 보인다
   svg.appendChild(terrainLayer);
   svg.appendChild(treeLayer);
   svg.appendChild(placeLayer);
-  const crossLayer = el("g", {}); // 길 중간 횡단보도·신호등 손잡이(건물 마커보다 위 — 작아서 가려지지 않게)
+  const crossLayer = el("g", { class: "editor-layer layer-road" }); // 길 중간 횡단보도·신호등 손잡이(건물 마커보다 위 — 작아서 가려지지 않게)
   svg.appendChild(crossLayer);
   svg.appendChild(pendingLayer);
   svg.appendChild(handleLayer);
@@ -2311,6 +2337,52 @@
     "delete": "교차로(빨간 점선 원)나 신호등(빨간 원)·길 중간 횡단보도(파란 점)를 누르면 지워요 — 연달아 눌러도 돼요(다시 누르면 꺼짐)",
     "pick-elevation": "지도를 누르면 그 자리의 raw 좌표(x,z)와 실제 지형 고도가 클립보드에 복사돼요 — 제미나이에 새 건물 3D 모델링을 요청할 때 붙여넣으세요(연달아 눌러도 돼요, 다시 누르면 꺼짐).",
   };
+  // ── 단독 레이어 보기 필터 (고도만 / 도로만 / 울타리만 / 건물만 / 공원·나무만) ──
+  const KIND_TO_FILTER = {
+    shape: "shape",
+    road: "road", crosswalk: "road",
+    fence: "fence",
+    place: "place",
+    park: "nature", tree: "nature",
+  };
+  const MODE_TO_FILTER = {
+    "add-shape": "shape",
+    "add-road": "road", "add-signal": "road", "add-junction": "road", "delete": "road",
+    "add-fence": "fence",
+    "add-place": "place",
+    "add-park": "nature", "add-tree": "nature",
+  };
+  const FILTER_TOAST = {
+    all: "전체 레이어를 표시해요.",
+    shape: "⛰ 고도(평지·경사 구역)만 표시 중 — 다시 누르면 전체 보기",
+    road: "🛣️ 도로·보도·신호등만 표시 중 — 다시 누르면 전체 보기",
+    fence: "🧱 울타리만 표시 중 — 다시 누르면 전체 보기",
+    place: "🏢 건물·스카이뷰만 표시 중 — 다시 누르면 전체 보기",
+    nature: "🌳 공원·나무만 표시 중 — 다시 누르면 전체 보기",
+  };
+  const layerFilterButtons = [...document.querySelectorAll("#layerFilterGroup button[data-filter]")];
+  let activeLayerFilter = "all";
+  function setLayerFilter(next, opts = {}) {
+    const target = (!opts.force && next !== "all" && next === activeLayerFilter) ? "all" : next;
+    activeLayerFilter = target;
+    if (target === "all") svg.removeAttribute("data-layer-filter");
+    else svg.setAttribute("data-layer-filter", target);
+    layerFilterButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.filter === target));
+    if (selected && target !== "all" && KIND_TO_FILTER[selected.kind] !== target) {
+      clearSelectionVisual();
+      selected = null;
+      renderPanel();
+      setTerrainVisible();
+    }
+    if (mode !== "select" && target !== "all" && MODE_TO_FILTER[mode] && MODE_TO_FILTER[mode] !== target) {
+      setMode(mode);
+    }
+    if (!opts.silent && FILTER_TOAST[target]) toast(FILTER_TOAST[target]);
+  }
+  layerFilterButtons.forEach((btn) => {
+    btn.addEventListener("click", () => setLayerFilter(btn.dataset.filter));
+  });
+
   function setMode(next) {
     if (pendingLayer.firstChild) pendingLayer.innerHTML = "";
     pendingRoadStart = null;
@@ -2324,6 +2396,10 @@
       clearSelectionVisual();
       selected = null;
       renderPanel();
+      const needed = MODE_TO_FILTER[mode];
+      if (needed && activeLayerFilter !== "all" && activeLayerFilter !== needed) {
+        setLayerFilter(needed, { force: true, silent: true });
+      }
     }
     setTerrainVisible();
     if (mode === "add-junction") refreshJoinSpots(true);
@@ -2877,6 +2953,9 @@
     if (!q) return;
     const match = PLACES.find((p) => p.name.includes(q));
     if (!match) { toast("못 찾았어요: " + q); return; }
+    if (activeLayerFilter !== "all" && activeLayerFilter !== "place") {
+      setLayerFilter("all", { force: true, silent: true });
+    }
     selectPlace(match.id);
     const n = placeNodes[match.id];
     stageWrap.scrollLeft = n.px * zoom - stageWrap.clientWidth / 2;
@@ -3295,7 +3374,7 @@
   undoBtn.addEventListener("click", undo);
   redoBtn.addEventListener("click", redo);
   // 바꾸기 직전에 기록: 지도(마커·손잡이·빈 곳 누르기), 오른쪽 패널(입력칸·버튼), 툴바의 추가/삭제 버튼
-  const NO_CHECKPOINT = "#undoBtn, #redoBtn, #zoomInBtn, #zoomOutBtn, #searchInput, #labelToggleWrap, #skyToggleWrap, #laneToggleWrap, #terrainToggleWrap, #panelHeader, #exportBtn, #ghSaveBtn";
+  const NO_CHECKPOINT = "#undoBtn, #redoBtn, #zoomInBtn, #zoomOutBtn, #searchInput, #labelToggleWrap, #skyToggleWrap, #laneToggleWrap, #terrainToggleWrap, #layerFilterGroup, #panelHeader, #exportBtn, #ghSaveBtn";
   document.addEventListener("pointerdown", (ev) => {
     const t = ev.target;
     if (t && t.closest && t.closest("#overlay, #panelBody, #toolbar") && !t.closest(NO_CHECKPOINT)) checkpoint();
