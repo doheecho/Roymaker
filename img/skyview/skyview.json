@@ -279,6 +279,14 @@
   "width": 5.667,
   "depth": 2.417
  },
+ "models/emart24+105.glb": {
+  "file": "img/skyview/emart24+105.webp",
+  "hash": "96151b6fe2",
+  "minX": -28.2,
+  "minZ": -22.701,
+  "width": 64.25,
+  "depth": 42.164
+ },
  "models/place_GS25.glb": {
   "file": "img/skyview/place_GS25.webp",
   "hash": "ae89167279",
