@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261127g";
+import * as MAP_DATA from "./map_data.js?v=20261127h";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -25,7 +25,7 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
 
-const ASSET_VERSION = "20261127g";
+const ASSET_VERSION = "20261127h";
 
 // 모든 .glb를 이 하나의 로더로 불러온다 — 로더를 호출마다 새로 만들면 매번 파서·확장 설정을
 // 다시 구성하는 비용이 들고, meshopt로 압축한 모델(용량 줄이려고 지오메트리를 압축해 둔 것)을
@@ -3554,13 +3554,29 @@ function addPolyPlatform(poly, y, fn = null) {
   const xs = poly.map((q) => q[0]), zs = poly.map((q) => q[1]);
   groundPlatforms.push({ poly, y, fn, minx: Math.min(...xs), maxx: Math.max(...xs), minz: Math.min(...zs), maxz: Math.max(...zs) });
 }
-// ── 금파힐 통합/커뮤니티 GLB(place_금파힐통합.glb 등) 보행 가능 데크·도로·경사로 표면 높이 색인 ──
+// ── 금호파크힐스 보행 가능 표면(각 동 출입구 앞 1층 바닥·커뮤니티 3층 데크·단지 도로·101/117동 1층 데크) 높이 색인 ──
 // 모델이 로드될 때 한 번만 위를 향한 바닥·데크·도로·경사로 삼각형들을 2D 격자에 등록해 두어,
-// groundHeightAt(x, z)가 별도 지형(GameMap/TERRAIN_SHAPES)이 아닌 실제 눈에 보이는 GLB 표면 위
-// 정확한 높이를 O(1)로 돌려준다(캐릭터가 데크 밑으로 묻히는 문제 해결).
-let parkHillsWalkIndex = null;
-const PARKHILLS_WALK_NODE_RE = /^(?:ParkHills_Walkable_Surface|Walk_Promenade_Ramp|Walk_Lower_Deck|Walk_Upper_Deck|Walk_Roads|Walk_EastPortal_Driveway|Promenade_Main_L_Path|Lower_Deck_TopSurface|Upper_Deck_TopSurface|Internal_Roads_And_Walkways|EastPortal2_SlopedDriveway)$/i;
+// groundHeightAt(x, z)가 별도 지형(GameMap/TERRAIN_SHAPES)이나 1층 밑 지하가 아닌
+// 실제 각 동 1층 출입구 바닥 및 커뮤니티 3층 데크 위의 정확한 높이를 O(1)로 돌려준다.
+const parkHillsWalkIndices = new Map(); // model -> { tris, minX, maxX, minZ, maxZ, cellSize, cells }
+const PARKHILLS_WALK_1F_RE = /^(?:Walk_1F_Building|Walk_1F_Basement|Walkway_1F_(?:Base)?Deck|Walkway_NE_CircularPath|Garden_(?:109|110|NE_|NW_)|Basement_B1B2_|Podium_CantileveredUpperDeck|Merged_Play_EPDMFloor|Merged_Land_Lawns)/i;
 const PARKHILLS_RAMP_NODE_RE = /^(?:Walk_Promenade_Ramp|Promenade_Main_L_Path)$/i;
+const PARKHILLS_WALK_BASE_RE = /^(?:ParkHills_Walkable_Surface|Walk_Upper_Deck|Walk_Lower_Deck|Walk_Roads|Walk_EastPortal_Driveway|Lower_Deck_TopSurface|Upper_Deck_TopSurface|NW_Community_RoofGarden|RoundPark_StripedFloor|Internal_Roads_And_Walkways|EastPortal2_SlopedDriveway)$/i;
+
+function tagParkHillsBuildingWalkMeshes(model) {
+  model.traverse((o) => {
+    if (!o.isMesh || !o.geometry?.attributes?.position) return;
+    let p = o;
+    while (p && p !== model) {
+      const nm = p.name || "";
+      if (PARKHILLS_WALK_1F_RE.test(nm)) {
+        o.userData._nbWalkPrio = 3;
+        return;
+      }
+      p = p.parent;
+    }
+  });
+}
 
 function buildParkHillsWalkIndex(model) {
   model.updateMatrixWorld(true);
@@ -3569,17 +3585,20 @@ function buildParkHillsWalkIndex(model) {
   const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), nrm = new THREE.Vector3();
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
 
-  const visit = (node, inWalk, isRamp) => {
+  const visit = (node, inheritedPrio) => {
     if (!node.visible) return;
     const nm = node.name || "";
-    const walkHere = inWalk || PARKHILLS_WALK_NODE_RE.test(nm);
-    const rampHere = isRamp || PARKHILLS_RAMP_NODE_RE.test(nm);
-    if (walkHere && node.isMesh && node.geometry?.attributes?.position) {
+    let prio = inheritedPrio;
+    if (node.userData?._nbWalkPrio) prio = Math.max(prio, node.userData._nbWalkPrio);
+    if (PARKHILLS_WALK_1F_RE.test(nm)) prio = Math.max(prio, 3);
+    else if (PARKHILLS_RAMP_NODE_RE.test(nm)) prio = Math.max(prio, 2);
+    else if (PARKHILLS_WALK_BASE_RE.test(nm)) prio = Math.max(prio, 1);
+
+    if (prio > 0 && node.isMesh && node.geometry?.attributes?.position) {
       const geo = node.geometry;
       const pos = geo.attributes.position;
       const idx = geo.index;
       const wm = node.matrixWorld;
-      const prio = rampHere ? 2 : 1;
       const cnt = idx ? idx.count : pos.count;
       for (let i = 0; i < cnt; i += 3) {
         const ia = idx ? idx.getX(i) : i;
@@ -3598,10 +3617,10 @@ function buildParkHillsWalkIndex(model) {
         minZ = Math.min(minZ, vA.z, vB.z, vC.z); maxZ = Math.max(maxZ, vA.z, vB.z, vC.z);
       }
     }
-    for (const ch of node.children) visit(ch, walkHere, rampHere);
+    for (const ch of node.children) visit(ch, prio);
   };
-  visit(model, false, false);
-  if (!tris.length) { parkHillsWalkIndex = null; return; }
+  visit(model, 0);
+  if (!tris.length) { parkHillsWalkIndices.delete(model); return; }
 
   const triCount = tris.length / 10;
   const cellSize = 4.0 * WORLD_SCALE;
@@ -3623,37 +3642,39 @@ function buildParkHillsWalkIndex(model) {
       }
     }
   }
-  parkHillsWalkIndex = { owner: model, tris: new Float64Array(tris), minX, maxX, minZ, maxZ, cellSize, cells };
-  console.info(`[금파힐] 통합 GLB 보행 표면 색인 생성: 삼각형 ${triCount}개`);
+  parkHillsWalkIndices.set(model, { tris: new Float64Array(tris), minX, maxX, minZ, maxZ, cellSize, cells });
+  console.info(`[금파힐] 1층/3층 보행 표면 색인 생성: 삼각형 ${triCount}개 (등록 모델 ${parkHillsWalkIndices.size}개)`);
 }
 
 function parkHillsWalkHeightAt(x, z) {
-  const idx = parkHillsWalkIndex;
-  if (!idx || x < idx.minX || x > idx.maxX || z < idx.minZ || z > idx.maxZ) return null;
-  const cx = Math.floor((x - idx.minX) / idx.cellSize);
-  const cz = Math.floor((z - idx.minZ) / idx.cellSize);
-  const list = idx.cells.get(cx * 100000 + cz);
-  if (!list) return null;
-  const T = idx.tris;
+  if (!parkHillsWalkIndices.size) return null;
   let bestPrio = -1;
   let bestY = -Infinity;
-  for (let i = 0; i < list.length; i++) {
-    const o = list[i];
-    const ax = T[o], ay = T[o + 1], az = T[o + 2];
-    const bx = T[o + 3], by = T[o + 4], bz = T[o + 5];
-    const cx2 = T[o + 6], cy = T[o + 7], cz2 = T[o + 8];
-    const v0x = bx - ax, v0z = bz - az, v1x = cx2 - ax, v1z = cz2 - az, v2x = x - ax, v2z = z - az;
-    const den = v0x * v1z - v1x * v0z;
-    if (Math.abs(den) < 1e-10) continue;
-    const vv = (v2x * v1z - v1x * v2z) / den;
-    const ww = (v0x * v2z - v2x * v0z) / den;
-    const uu = 1 - vv - ww;
-    if (uu < -1e-4 || vv < -1e-4 || ww < -1e-4) continue;
-    const y = ay * uu + by * vv + cy * ww;
-    const prio = T[o + 9];
-    if (prio > bestPrio || (prio === bestPrio && y > bestY)) {
-      bestPrio = prio;
-      bestY = y;
+  for (const idx of parkHillsWalkIndices.values()) {
+    if (x < idx.minX || x > idx.maxX || z < idx.minZ || z > idx.maxZ) continue;
+    const cx = Math.floor((x - idx.minX) / idx.cellSize);
+    const cz = Math.floor((z - idx.minZ) / idx.cellSize);
+    const list = idx.cells.get(cx * 100000 + cz);
+    if (!list) continue;
+    const T = idx.tris;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      const ax = T[o], ay = T[o + 1], az = T[o + 2];
+      const bx = T[o + 3], by = T[o + 4], bz = T[o + 5];
+      const cx2 = T[o + 6], cy = T[o + 7], cz2 = T[o + 8];
+      const v0x = bx - ax, v0z = bz - az, v1x = cx2 - ax, v1z = cz2 - az, v2x = x - ax, v2z = z - az;
+      const den = v0x * v1z - v1x * v0z;
+      if (Math.abs(den) < 1e-10) continue;
+      const vv = (v2x * v1z - v1x * v2z) / den;
+      const ww = (v0x * v2z - v2x * v0z) / den;
+      const uu = 1 - vv - ww;
+      if (uu < -1e-4 || vv < -1e-4 || ww < -1e-4) continue;
+      const y = ay * uu + by * vv + cy * ww;
+      const prio = T[o + 9];
+      if (prio > bestPrio || (prio === bestPrio && y > bestY)) {
+        bestPrio = prio;
+        bestY = y;
+      }
     }
   }
   return bestPrio >= 0 ? bestY : null;
@@ -4286,7 +4307,7 @@ function mergeModelMeshes(model) {
   const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
   const groups = new Map();
   model.traverse((o) => {
-    if (!o.isMesh || !o.visible || o.userData._nbEnvProp || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || !o.geometry?.attributes?.position) return;
+    if (!o.isMesh || !o.visible || o.userData._nbEnvProp || o.userData._nbWalkPrio || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || !o.geometry?.attributes?.position) return;
     // 거울처럼 뒤집힌 조각은 합치면 면 방향이 뒤집혀 안 보일 수 있어서 그대로 둔다
     if (new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld).determinant() < 0) return;
     if (Object.keys(o.geometry.morphAttributes || {}).length) return;
@@ -5510,13 +5531,14 @@ function loadPlaceModelInto(entry) {
       entry.group.add(model);
       entry.group.updateMatrixWorld(true);
       const isCommBase = isParkHillsCommunityBaseModel(entry.place);
+      const isParkHillsBldg = isParkHillsApartmentPlace(entry.place);
       const isPreMergedUnified = isCommBase && !!model.getObjectByName("ParkHills_Walkable_Surface");
       if (entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb")) {
         adaptLotteMartToTerrain(entry, model);
       } else if (isCommBase) {
         conformParkHillsCommunityModel(entry, model);
       } else {
-        if (!isParkHillsApartmentPlace(entry.place)) {
+        if (!isParkHillsBldg) {
           conformModelToSlopedShapes(model, entry.group.position.y + model.position.y);
         }
         if (entry.place.id === 201) {
@@ -5524,12 +5546,23 @@ function loadPlaceModelInto(entry) {
         }
         preparePlaceEnvCleanup(entry, model, modelScale);
       }
+      if (isParkHillsBldg && !isPreMergedUnified) {
+        tagParkHillsBuildingWalkMeshes(model);
+      }
       if (!isPreMergedUnified) {
         mergeModelMeshes(model); // 같은 재질 조각을 합쳐 그리기 명령 줄이기(경사 밀착·환경 바닥 정리 후)
       }
       const noCastNodes = new Set();
       if (isCommBase) {
-        ["ParkHills_Walkable_Surface", "Shop_105_Emart24_Shinhyup_Ads"].forEach((nm) => {
+        [
+          "Walk_1F_Building",
+          "Walk_Promenade_Ramp",
+          "Walk_Upper_Deck",
+          "Walk_Lower_Deck",
+          "Walk_Roads",
+          "Walk_EastPortal_Driveway",
+          "Shop_105_Emart24_Shinhyup_Ads",
+        ].forEach((nm) => {
           const sub = model.getObjectByName(nm);
           if (sub) sub.traverse((c) => noCastNodes.add(c));
         });
@@ -5548,7 +5581,7 @@ function loadPlaceModelInto(entry) {
       if (!(entry.place.id === 27 && entry.place.model?.includes("place_롯데마트.glb")) && !isCommBase) {
         snapPlaceEnvPropsToTerrain(entry, model);
       }
-      if (isCommBase) {
+      if (isCommBase || isParkHillsBldg) {
         buildParkHillsWalkIndex(model);
         if (character && !jumping) {
           character.position.y = groundHeightAt(character.position.x, character.position.z);
@@ -5586,9 +5619,7 @@ function updateModelStreaming(dt) {
     if (dist <= modelLoadRangeFor(entry.place.id)) {
       if (!entry.loadedModel && !entry.loading && !entry.failed) want.push(entry);
     } else if (dist > modelUnloadRangeFor(entry.place.id) && entry.loadedModel) {
-      if (parkHillsWalkIndex && parkHillsWalkIndex.owner === entry.loadedModel) {
-        parkHillsWalkIndex = null;
-      }
+      parkHillsWalkIndices.delete(entry.loadedModel);
       entry.group.remove(entry.loadedModel);
       disposeObject3D(entry.loadedModel);
       entry.loadedModel = null;
@@ -6444,12 +6475,15 @@ function updateMovement(dt) {
     nx = Math.max(AREA_MIN_X + 1, Math.min(AREA_MAX_X - 1, nx));
     nz = Math.max(AREA_MIN_Z + 1, Math.min(AREA_MAX_Z - 1, nz));
     // 평소 걸을 때는 옹벽(높이 차 > 1m)을 못 넘지만, 점프해서 발이 공중에 떠 있는 동안에는
-    // 현재 발 높이(character.position.y + TERRAIN_STEP_MAX) 이하의 구조물·옹벽 턱을 훌쩍 넘어갈 수 있다
+    // 현재 발 높이(character.position.y + TERRAIN_STEP_MAX) 이하의 구조물·옹벽 턱을 훌쩍 넘어갈 수 있다.
+    // 금호파크힐스 단지 내부(각 동 1층 출입구 앞 바닥·커뮤니티 3층 데크·단지 도로) 사이를 이동할 때는
+    // 별도 계단 없이도 1층/3층 바닥 위로 자유롭게 올라서고 내려올 수 있게 단차 차단을 푼다.
     if (terrainZones.length || glbTerrain) {
       const t0 = groundHeightAt(curX, curZ);
+      const curInParkHills = parkHillsWalkHeightAt(curX, curZ) !== null;
       const ok = jumping
         ? (x, z) => groundHeightAt(x, z) <= character.position.y + TERRAIN_STEP_MAX
-        : (x, z) => Math.abs(groundHeightAt(x, z) - t0) <= TERRAIN_STEP_MAX;
+        : (x, z) => (curInParkHills || parkHillsWalkHeightAt(x, z) !== null) || Math.abs(groundHeightAt(x, z) - t0) <= TERRAIN_STEP_MAX;
       if (!ok(nx, nz)) {
         if (ok(nx, curZ)) nz = curZ;
         else if (ok(curX, nz)) nx = curX;
@@ -6477,7 +6511,7 @@ function updateMovement(dt) {
       return;
     }
   } else {
-    character.position.y += (targetGroundY - character.position.y) * Math.min(1, dt * 10);
+    character.position.y += (targetGroundY - character.position.y) * Math.min(1, dt * 14);
   }
   if (moving) {
     playAction(moveMode === "run" ? "Running" : "Walking");
