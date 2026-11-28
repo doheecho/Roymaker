@@ -825,11 +825,11 @@
  },
  "models/place_우리농산물직판장.glb": {
   "file": "img/skyview/place_우리농산물직판장.webp",
-  "hash": "91c4a87063",
+  "hash": "7879bd1697",
   "minX": -13.43,
-  "minZ": -32.4,
-  "width": 39.313,
-  "depth": 68
+  "minZ": -30.46,
+  "width": 37,
+  "depth": 63.917
  },
  "models/place_제주수퍼.glb": {
   "file": "img/skyview/place_제주수퍼.webp",
