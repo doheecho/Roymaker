@@ -987,6 +987,8 @@ function getTerrainY(x, z) {
     const h = shapeHeightAt(x, z, -1);
     if (h !== null) return h;
   }
+  const skirtY = parkHillsOuterSkirtHeightAt(x, z);
+  if (skirtY !== null) return skirtY;
   return rawTerrainY(x, z);
 }
 // 실제 지형(GameMap.glb)만의 높이 — 구역을 무시한다
@@ -1083,18 +1085,25 @@ function terrainRegionAt(x, z) {
     const hit = shapeHitAt(x, z, -1);
     if (hit) return 1e7 + hit.si * 1000 + (terrainShapes[hit.si].flat ? 0 : hit.ti);
   }
+  if (parkHillsOuterSkirtHeightAt(x, z) !== null) return 2.5e7;
   return terrainTriAt(x, z);
 }
 const SHAPE_WALL_MIN_RAW = 0.3;
 // 지형 메시를 구역 및 금파힐통합.glb 근처에서 잘게 나눠 꼭짓점 높이를 맞춘다.
-// 금파힐통합.glb 내부는 실제 보행 바닥면보다 0.5m 아래로 눌러 GameMap.glb 언덕 메시가
-// 경사로·데크 위로 천장처럼 튀어나오거나 Z-fighting이 나지 않게 한다.
+// 1) 금파힐통합.glb 내부(중앙 커뮤니티 외벽 포함)는 구멍 닫기+침식 눌림으로 지형 삼각형이
+//    벽면 밖으로 종유석처럼 솟아오르지 못하게 한다.
+// 2) 금파힐 외곽 경계~10m 구간은 찢어짐(wallStraddle) 없이 부드럽게 경사를 잇고, 도로를 제외한
+//    단차 경사면은 초록 잔디 녹지 메시(triplanar UV)로 덮어 자연스럽게 연결한다.
 // 원래 지형 높이 조회(terrainTriIndex)는 그대로 두고 그림만 바꾼다.
 function refineTerrainMeshForShapes(mesh) {
   const W = WORLD_SCALE;
   const boxes = terrainShapes.map((S) => S.box);
-  for (const idx of parkHillsWalkIndices.values()) {
-    boxes.push([idx.minX, idx.minZ, idx.maxX, idx.maxZ]);
+  if (parkHillsTerrainMask) {
+    boxes.push([parkHillsTerrainMask.minX, parkHillsTerrainMask.minZ, parkHillsTerrainMask.maxX, parkHillsTerrainMask.maxZ]);
+  } else {
+    for (const idx of parkHillsWalkIndices.values()) {
+      boxes.push([idx.minX, idx.minZ, idx.maxX, idx.maxZ]);
+    }
   }
   const pad = 2 * W;
   const nearShape = (a, b, c) => {
@@ -1103,13 +1112,18 @@ function refineTerrainMeshForShapes(mesh) {
     return boxes.some(([bx0, bz0, bx1, bz1]) => x1 >= bx0 && x0 <= bx1 && z1 >= bz0 && z0 <= bz1);
   };
   const region = (P) => {
-    if (parkHillsWalkHeightAt(P[0], P[2]) !== null) return -2;
+    const sm = parkHillsTerrainMaskSample(P[0], P[2]);
+    if (sm) return sm.mode === "inside" ? -2 : -3;
     const h = shapeHitAt(P[0], P[2], -1);
     return h ? h.si * 1000 + (terrainShapes[h.si].flat ? 0 : h.ti) : -1;
   };
   const meshYAt = (x, z) => {
-    const phMin = parkHillsMinWalkYAt(x, z);
-    if (phMin !== null) return phMin - 0.5 * W;
+    const sm = parkHillsTerrainMaskSample(x, z);
+    if (sm) {
+      if (sm.mode === "inside") return sm.y;
+      const sk = parkHillsOuterSkirtHeightAt(x, z);
+      return sk !== null ? sk : rawTerrainY(x, z);
+    }
     return getTerrainY(x, z);
   };
   mesh.updateMatrixWorld(true);
@@ -1124,6 +1138,8 @@ function refineTerrainMeshForShapes(mesh) {
     UV.push(uv ? [uv.getX(i), uv.getY(i)] : [0, 0]);
   }
   const outP = [], outUV = [];
+  const grassP = [], grassUV = [];
+  const GRASS_TILE = 16 * W;
   const BIG = 6 * W, SMALL = 0.6 * W, PH_STEP_EDGE = 2.0 * W, WALL_MIN = SHAPE_WALL_MIN_RAW * W;
   const len2 = (A, B) => (A[0] - B[0]) ** 2 + (A[2] - B[2]) ** 2;
   const mid = (A, B) => [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2, (A[2] + B[2]) / 2];
@@ -1140,7 +1156,7 @@ function refineTerrainMeshForShapes(mesh) {
         const limit2 = hasShape ? SMALL * SMALL : PH_STEP_EDGE * PH_STEP_EDGE;
         if (m > limit2) {
           if (ra !== rb || ra !== rc) split = true;
-          else if (ra === -2) {
+          else if (ra === -2 || ra === -3) {
             const ya = meshYAt(A[0], A[2]), yb = meshYAt(B[0], B[2]), yc = meshYAt(C[0], C[2]);
             if (Math.max(ya, yb, yc) - Math.min(ya, yb, yc) > 1.2 * W) split = true;
           }
@@ -1151,7 +1167,37 @@ function refineTerrainMeshForShapes(mesh) {
       const ys = near ? [meshYAt(A[0], A[2]), meshYAt(B[0], B[2]), meshYAt(C[0], C[2])] : [A[1], B[1], C[1]];
       const minY = Math.min(ys[0], ys[1], ys[2]);
       const maxY = Math.max(ys[0], ys[1], ys[2]);
-      const wallStraddle = near && maxY - minY >= WALL_MIN && (region(A) !== region(B) || region(A) !== region(C));
+      const ra = near ? region(A) : -1;
+      const rb = near ? region(B) : -1;
+      const rc = near ? region(C) : -1;
+      const hasShape = ra >= 0 || rb >= 0 || rc >= 0;
+      // 옹벽 수직 절단(wallStraddle)은 실제 옹벽이 서는 TERRAIN_SHAPES(금북초 등)에만 적용 —
+      // 금파힐 외곽은 찢어짐 없이 부드러운 초록 잔디 경사로 잇는다.
+      const wallStraddle = near && hasShape && maxY - minY >= WALL_MIN && (ra !== rb || ra !== rc);
+      const hasInside = ra === -2 || rb === -2 || rc === -2;
+      const allInside = ra === -2 && rb === -2 && rc === -2;
+      const hasSkirt = ra === -3 || rb === -3 || rc === -3;
+      const mx = (A[0] + B[0] + C[0]) / 3;
+      const mz = (A[2] + B[2] + C[2]) / 3;
+      const onRoad = (hasInside || hasSkirt) && parkHillsRoadProximity(mx, mz) > 0.65;
+      const isGrassSeam = near && !hasShape && !allInside && !onRoad && (hasInside || (hasSkirt && maxY - minY > 0.20 * W));
+      if (isGrassSeam) {
+        const p0 = [A[0], ys[0], A[2]], p1 = [B[0], ys[1], B[2]], p2 = [C[0], ys[2], C[2]];
+        const e1x = p1[0] - p0[0], e1y = p1[1] - p0[1], e1z = p1[2] - p0[2];
+        const e2x = p2[0] - p0[0], e2y = p2[1] - p0[1], e2z = p2[2] - p0[2];
+        const nx = e1y * e2z - e1z * e2y;
+        const ny = e1z * e2x - e1x * e2z;
+        const nz = e1x * e2y - e1y * e2x;
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        const proj = Math.abs(ny) / nl >= 0.55 ? 0 : (Math.abs(nx) >= Math.abs(nz) ? 1 : 2);
+        [p0, p1, p2].forEach((Q) => {
+          grassP.push(Q[0], Q[1], Q[2]);
+          if (proj === 0) grassUV.push(Q[0] / GRASS_TILE, Q[2] / GRASS_TILE);
+          else if (proj === 1) grassUV.push(Q[2] / GRASS_TILE, Q[1] / GRASS_TILE);
+          else grassUV.push(Q[0] / GRASS_TILE, Q[1] / GRASS_TILE);
+        });
+        return;
+      }
       [[A, ua], [B, ub], [C, uc]].forEach(([V, U], k) => {
         outP.push(V[0], wallStraddle ? minY : ys[k], V[2]);
         outUV.push(U[0], U[1]);
@@ -1177,7 +1223,40 @@ function refineTerrainMeshForShapes(mesh) {
   mesh.geometry = geo;
   src.dispose();
   g.dispose();
-  console.info(`[지형] 평지·경사 구역 ${terrainShapes.length}곳 + 금파힐 GLB ${parkHillsWalkIndices.size}곳 반영: 지형 삼각형 ${P.length / 3} → ${outP.length / 9}`);
+
+  // 금파힐 외곽 단차 녹지(잔디 경사면) 메시 추가 — 위성사진 지형과 꼭짓점을 공유해 빈틈·찢어짐 없이 이어진다
+  if (grassP.length && mesh.parent) {
+    const prevGrass = mesh.parent.getObjectByName("ParkHills_OuterGrassSeam");
+    if (prevGrass) {
+      mesh.parent.remove(prevGrass);
+      prevGrass.geometry?.dispose();
+    }
+    for (let i = 0; i < grassP.length; i += 3) {
+      v.set(grassP[i], grassP[i + 1], grassP[i + 2]).applyMatrix4(inv);
+      grassP[i] = v.x; grassP[i + 1] = v.y; grassP[i + 2] = v.z;
+    }
+    const grassGeo = new THREE.BufferGeometry();
+    grassGeo.setAttribute("position", new THREE.Float32BufferAttribute(grassP, 3));
+    grassGeo.setAttribute("uv", new THREE.Float32BufferAttribute(grassUV, 2));
+    grassGeo.computeVertexNormals();
+    grassGeo.computeBoundingSphere();
+    grassGeo.computeBoundingBox();
+    const grassMat = makeParkFoliageMaterial();
+    grassMat.side = THREE.DoubleSide;
+    grassMat.polygonOffsetFactor = 2;
+    grassMat.polygonOffsetUnits = 2;
+    const grassMesh = new THREE.Mesh(grassGeo, grassMat);
+    grassMesh.name = "ParkHills_OuterGrassSeam";
+    grassMesh.position.copy(mesh.position);
+    grassMesh.rotation.copy(mesh.rotation);
+    grassMesh.scale.copy(mesh.scale);
+    grassMesh.receiveShadow = true;
+    grassMesh.castShadow = false;
+    grassMesh.userData.noConform = true;
+    grassMesh.userData.noTerrainTess = true;
+    mesh.parent.add(grassMesh);
+  }
+  console.info(`[지형] 평지·경사 구역 ${terrainShapes.length}곳 + 금파힐 GLB ${parkHillsWalkIndices.size}곳 반영: 지형 ${outP.length / 9}삼각형, 외곽 잔디 경사 ${grassP.length / 9}삼각형`);
 }
 // 금북초 옹벽 벽화 공통: 거친 사각 돌블록 음영 바탕을 캔버스 위에 얹는다
 function overlayRetainingStoneRelief(ctx, W, H, cols, rows, alpha) {
@@ -3950,6 +4029,267 @@ function parkHillsMinWalkYAt(x, z) {
   return minY < Infinity ? minY : null;
 }
 
+// ── 금파힐 지형 눌림·외곽 잔디 경사(10m) 마스크 ──
+// 1) 내부 구멍 닫기 + 6m 최소 침식(suppressY)으로 중앙 커뮤니티 외벽 등에서 GameMap.glb가
+//    종유석처럼 솟아오르는 현상을 원천 차단한다.
+// 2) 외곽 경계~10m 구간은 연속 유클리드 거리 기반의 부드러운 경사로 이어, 도로를 건드리지 않고
+//    단차 틈을 초록 잔디 녹지(ParkHills_OuterGrassSeam)로 자연스럽게 메운다.
+let parkHillsTerrainMask = null;
+let _phRoadSegsCache = null;
+
+function parkHillsRoadProximity(x, z) {
+  if (!parkHillsTerrainMask) return 0;
+  const W = WORLD_SCALE;
+  if (!_phRoadSegsCache) {
+    _phRoadSegsCache = [];
+    const pad = 25 * W;
+    const bx0 = parkHillsTerrainMask.minX - pad, bx1 = parkHillsTerrainMask.maxX + pad;
+    const bz0 = parkHillsTerrainMask.minZ - pad, bz1 = parkHillsTerrainMask.maxZ + pad;
+    for (const seg of ROAD_SEGMENTS) {
+      if (!seg.a || !seg.b) continue;
+      const halfExtent = ((seg.width || 10) * 0.5 + Math.min(seg.sidewalk || 0, 15)) * W;
+      const pts = [];
+      if (seg.curve) {
+        const steps = 8;
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps, u = 1 - t;
+          pts.push([
+            (u * u * seg.a[0] + 2 * u * t * seg.curve[0] + t * t * seg.b[0]) * W,
+            (u * u * seg.a[1] + 2 * u * t * seg.curve[1] + t * t * seg.b[1]) * W,
+          ]);
+        }
+      } else {
+        pts.push([seg.a[0] * W, seg.a[1] * W], [seg.b[0] * W, seg.b[1] * W]);
+      }
+      for (let i = 0; i < pts.length - 1; i++) {
+        const ax = pts[i][0], az = pts[i][1], bx = pts[i + 1][0], bz = pts[i + 1][1];
+        const rx0 = Math.min(ax, bx) - halfExtent - 6 * W;
+        const rx1 = Math.max(ax, bx) + halfExtent + 6 * W;
+        const rz0 = Math.min(az, bz) - halfExtent - 6 * W;
+        const rz1 = Math.max(az, bz) + halfExtent + 6 * W;
+        if (rx1 < bx0 || rx0 > bx1 || rz1 < bz0 || rz0 > bz1) continue;
+        _phRoadSegsCache.push({ ax, az, bx, bz, halfExtent, rx0, rx1, rz0, rz1 });
+      }
+    }
+  }
+  let minMargin = Infinity;
+  for (let i = 0; i < _phRoadSegsCache.length; i++) {
+    const s = _phRoadSegsCache[i];
+    if (x < s.rx0 || x > s.rx1 || z < s.rz0 || z > s.rz1) continue;
+    const d = distToSegment(x, z, s.ax, s.az, s.bx, s.bz) - s.halfExtent;
+    if (d < minMargin) {
+      minMargin = d;
+      if (minMargin <= 1.0 * W) return 1.0;
+    }
+  }
+  const inner = 1.0 * W, outer = 5.0 * W;
+  if (minMargin >= outer) return 0.0;
+  const t = 1 - (minMargin - inner) / (outer - inner);
+  return t * t * (3 - 2 * t);
+}
+
+function buildParkHillsTerrainMask(model) {
+  const idx = parkHillsWalkIndices.get(model);
+  if (!idx) { parkHillsTerrainMask = null; return; }
+  const W = WORLD_SCALE;
+  const M = 2.0 * W;
+  const SKIRT_CELLS = 5; // 10m 외곽 잔디 경사 전환 구간
+  const SKIRT_MAX_W = SKIRT_CELLS * M;
+  const PAD = 12.0 * W;
+  const gx0 = idx.minX - PAD, gz0 = idx.minZ - PAD;
+  const cols = Math.ceil((idx.maxX - idx.minX + PAD * 2) / M) + 1;
+  const rows = Math.ceil((idx.maxZ - idx.minZ + PAD * 2) / M) + 1;
+  const N = cols * rows;
+  const inside = new Uint8Array(N);
+  const rawMinY = new Float32Array(N).fill(NaN);
+
+  const subOff = [[0.6 * W, 0], [-0.6 * W, 0], [0, 0.6 * W], [0, -0.6 * W]];
+  for (let r = 0; r < rows; r++) {
+    const wz = gz0 + (r + 0.5) * M;
+    for (let c = 0; c < cols; c++) {
+      const wx = gx0 + (c + 0.5) * M;
+      if (wx < idx.minX - M || wx > idx.maxX + M || wz < idx.minZ - M || wz > idx.maxZ + M) continue;
+      let y = parkHillsMinWalkYAt(wx, wz);
+      if (y === null) {
+        for (let k = 0; k < 4; k++) {
+          const yy = parkHillsMinWalkYAt(wx + subOff[k][0], wz + subOff[k][1]);
+          if (yy !== null && (y === null || yy < y)) y = yy;
+        }
+      }
+      if (y !== null) {
+        const i = r * cols + c;
+        inside[i] = 1;
+        rawMinY[i] = y;
+      }
+    }
+  }
+
+  // 내부 틈새(중앙 커뮤니티 외벽 두께 틈 등) 닫기 — 바깥으로는 확장하지 않는다
+  for (let pass = 0; pass < 2; pass++) {
+    const addIdx = [], addY = [];
+    for (let r = 2; r < rows - 2; r++) {
+      for (let c = 2; c < cols - 2; c++) {
+        const i = r * cols + c;
+        if (inside[i]) continue;
+        const lr = (inside[i - 1] || inside[i - 2]) && (inside[i + 1] || inside[i + 2]);
+        const ud = (inside[i - cols] || inside[i - 2 * cols]) && (inside[i + cols] || inside[i + 2 * cols]);
+        let cnt = 0, mY = Infinity;
+        const nb = [i - 1, i + 1, i - cols, i + cols, i - 2, i + 2, i - 2 * cols, i + 2 * cols];
+        for (let k = 0; k < nb.length; k++) {
+          const ni = nb[k];
+          if (inside[ni]) { cnt++; if (rawMinY[ni] < mY) mY = rawMinY[ni]; }
+        }
+        if ((lr || ud || cnt >= 5) && mY < Infinity) {
+          addIdx.push(i);
+          addY.push(mY);
+        }
+      }
+    }
+    for (let k = 0; k < addIdx.length; k++) {
+      inside[addIdx[k]] = 1;
+      rawMinY[addIdx[k]] = addY[k];
+    }
+  }
+
+  // 바깥으로부터의 내부 거리(inDist): 1 = 외곽 경계, 2+ = 순수 내부
+  const inDist = new Int16Array(N).fill(9999);
+  const q = new Int32Array(N);
+  let qh = 0, qt = 0;
+  for (let i = 0; i < N; i++) {
+    if (!inside[i]) { inDist[i] = 0; q[qt++] = i; }
+  }
+  const DX = [1, -1, 0, 0], DZ = [0, 0, 1, -1];
+  while (qh < qt) {
+    const ci = q[qh++], c = ci % cols, r = (ci / cols) | 0, d = inDist[ci];
+    if (d >= 5) continue;
+    for (let k = 0; k < 4; k++) {
+      const nc = c + DX[k], nr = r + DZ[k];
+      if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
+      const ni = nr * cols + nc;
+      if (inDist[ni] > d + 1) { inDist[ni] = d + 1; q[qt++] = ni; }
+    }
+  }
+
+  // 내부 눌림 높이(suppressY): 외곽 테두리는 GLB 바로 아래(-0.15m), 내부(커뮤니티 외벽 포함)는
+  // 주변 6m 최소 바닥 높이보다 1.1m 아래로 눌러 벽면 밖으로 솟아오르는 종유석 삼각형을 완전 차단
+  const suppressY = new Float32Array(N).fill(NaN);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      if (!inside[i]) continue;
+      if (inDist[i] <= 1) {
+        suppressY[i] = rawMinY[i] - 0.15 * W;
+        continue;
+      }
+      const rad = inDist[i] === 2 ? 1 : 3;
+      let mY = rawMinY[i];
+      for (let dr = -rad; dr <= rad; dr++) {
+        const nr = r + dr;
+        if (nr < 0 || nr >= rows) continue;
+        for (let dc = -rad; dc <= rad; dc++) {
+          const nc = c + dc;
+          if (nc < 0 || nc >= cols) continue;
+          const ni = nr * cols + nc;
+          if (inside[ni] && rawMinY[ni] < mY) mY = rawMinY[ni];
+        }
+      }
+      suppressY[i] = mY - (inDist[i] === 2 ? 0.55 * W : 1.1 * W);
+    }
+  }
+
+  // 외곽 10m 잔디 경사 전환 구간(outDist = 1..5): 가장 가까운 경계 셀 좌표(nearC, nearR)와 edgeY 전파
+  const outDist = new Int16Array(N).fill(-1);
+  const nearC = new Int16Array(N).fill(-1);
+  const nearR = new Int16Array(N).fill(-1);
+  const edgeY = new Float32Array(N).fill(NaN);
+  qh = 0; qt = 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      if (inside[i] && inDist[i] === 1) {
+        outDist[i] = 0;
+        nearC[i] = c;
+        nearR[i] = r;
+        edgeY[i] = suppressY[i];
+        q[qt++] = i;
+      }
+    }
+  }
+  while (qh < qt) {
+    const ci = q[qh++], c = ci % cols, r = (ci / cols) | 0, d = outDist[ci];
+    if (d >= SKIRT_CELLS) continue;
+    for (let k = 0; k < 4; k++) {
+      const nc = c + DX[k], nr = r + DZ[k];
+      if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
+      const ni = nr * cols + nc;
+      if (inside[ni] || outDist[ni] !== -1) continue;
+      outDist[ni] = d + 1;
+      nearC[ni] = nearC[ci];
+      nearR[ni] = nearR[ci];
+      edgeY[ni] = edgeY[ci];
+      q[qt++] = ni;
+    }
+  }
+
+  // 외곽 잔디 경사면의 edgeY를 2회 부드럽게 스무딩해 계단 현상 방지
+  const tmpY = new Float32Array(edgeY);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let r = 1; r < rows - 1; r++) {
+      for (let c = 1; c < cols - 1; c++) {
+        const i = r * cols + c;
+        if (outDist[i] <= 0) continue;
+        let sum = edgeY[i] * 2, wSum = 2;
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            if (!dr && !dc) continue;
+            const ni = (r + dr) * cols + (c + dc);
+            if (outDist[ni] >= 0 && !Number.isNaN(edgeY[ni])) { sum += edgeY[ni]; wSum += 1; }
+          }
+        }
+        tmpY[i] = sum / wSum;
+      }
+    }
+    edgeY.set(tmpY);
+  }
+
+  parkHillsTerrainMask = {
+    gx0, gz0, cellSize: M, cols, rows,
+    minX: gx0, maxX: gx0 + cols * M,
+    minZ: gz0, maxZ: gz0 + rows * M,
+    skirtMaxW: SKIRT_MAX_W,
+    inside, suppressY, outDist, nearC, nearR, edgeY,
+  };
+  _phRoadSegsCache = null;
+}
+
+function parkHillsTerrainMaskSample(x, z) {
+  const m = parkHillsTerrainMask;
+  if (!m || x < m.minX || x >= m.maxX || z < m.minZ || z >= m.maxZ) return null;
+  const c = Math.floor((x - m.gx0) / m.cellSize);
+  const r = Math.floor((z - m.gz0) / m.cellSize);
+  if (c < 0 || c >= m.cols || r < 0 || r >= m.rows) return null;
+  const i = r * m.cols + c;
+  if (m.inside[i]) return { mode: "inside", y: m.suppressY[i] };
+  if (m.outDist[i] > 0) {
+    const nx = m.gx0 + (m.nearC[i] + 0.5) * m.cellSize;
+    const nz = m.gz0 + (m.nearR[i] + 0.5) * m.cellSize;
+    const distW = Math.hypot(x - nx, z - nz);
+    if (distW < m.skirtMaxW) return { mode: "skirt", distW, edgeY: m.edgeY[i] };
+  }
+  return null;
+}
+
+function parkHillsOuterSkirtHeightAt(x, z) {
+  const sm = parkHillsTerrainMaskSample(x, z);
+  if (!sm || sm.mode !== "skirt") return null;
+  const t = Math.max(0, Math.min(1, sm.distW / parkHillsTerrainMask.skirtMaxW));
+  const rw = parkHillsRoadProximity(x, z);
+  const s = Math.max(t * t * (3 - 2 * t), rw);
+  if (s >= 0.999) return null;
+  const ry = rawTerrainY(x, z);
+  return sm.edgeY * (1 - s) + ry * s;
+}
+
 function groundHeightAt(x, z) {
   // 금파힐 통합/커뮤니티 GLB 범위 내라면 getTerrainY가 GLB 실제 보행 표면(1층·3층 데크·경사로·단지도로)을
   // 기준(base)으로 돌려주며, 그 위에 깔린 도로·보도 위라면 턱만큼 올려 발이 묻히지 않게 한다.
@@ -6025,6 +6365,7 @@ function preloadParkHillsBaseModel() {
         });
         settleBuildingBase(preEntry, model);
         buildParkHillsWalkIndex(model);
+        buildParkHillsTerrainMask(model);
         resolve({ place: basePlace, model, group, eastParkingPortalAdded: preEntry.eastParkingPortalAdded });
       },
       undefined,
