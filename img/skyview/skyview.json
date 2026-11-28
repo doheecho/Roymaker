@@ -295,6 +295,38 @@
   "width": 5.667,
   "depth": 2.417
  },
+ "models/bus_241.glb": {
+  "file": "img/skyview/bus_241.webp",
+  "hash": "d54fe67e34",
+  "minX": -1.48,
+  "minZ": -5.4,
+  "width": 3.083,
+  "depth": 11.083
+ },
+ "models/bus_성동01.glb": {
+  "file": "img/skyview/bus_성동01.webp",
+  "hash": "844f24655a",
+  "minX": -1.355,
+  "minZ": -3.7,
+  "width": 2.833,
+  "depth": 7.75
+ },
+ "models/bus_성동02.glb": {
+  "file": "img/skyview/bus_성동02.webp",
+  "hash": "bbdf15835e",
+  "minX": -1.355,
+  "minZ": -3.7,
+  "width": 2.833,
+  "depth": 7.75
+ },
+ "models/bus_성동03-2.glb": {
+  "file": "img/skyview/bus_성동03-2.webp",
+  "hash": "82d0e2ec1a",
+  "minX": -1.355,
+  "minZ": -3.7,
+  "width": 2.833,
+  "depth": 7.75
+ },
  "models/emart24+105.glb": {
   "file": "img/skyview/emart24+105.webp",
   "hash": "96151b6fe2",
