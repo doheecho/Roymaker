@@ -521,7 +521,7 @@ async function buildStaticScene() {
   const sun = new THREE.DirectionalLight(0xffffff, 1.3);
   sun.position.set(20, 30, 15);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(512, 512); // 그림자 맵 512 — 대신 캐릭터 주변만 덮게 좁혀서(updateSunFollow) 선명하다
+  sun.shadow.mapSize.set(256, 256); // 그림자 맵 256(2026-11-28 512→256, 성능 개선) — 캐릭터 주변만 덮게 좁혀서(updateSunFollow) 여전히 또렷하다
   Object.assign(sun.shadow.camera, { left: -SHADOW_HALF, right: SHADOW_HALF, top: SHADOW_HALF, bottom: -SHADOW_HALF, near: 0.5, far: 120 });
   scene.add(sun);
   scene.add(sun.target);
@@ -6587,7 +6587,7 @@ function updateModelStreaming(dt) {
     loadingNow++;
   }
 }
-const MAX_CONCURRENT_MODEL_LOADS = 2;
+const MAX_CONCURRENT_MODEL_LOADS = 1; // 2026-11-28: 2→1, 밀집 구역(금파힐·금호역 등)에서 여러 glb가 한꺼번에 몰려 순간 버벅이는 것을 줄인다
 
 function buildPlaces(preloadedParkHills = null) {
   PLACES.forEach((place) => {
