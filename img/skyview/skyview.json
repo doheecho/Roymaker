@@ -369,11 +369,11 @@
  },
  "models/place_골드축산.glb": {
   "file": "img/skyview/place_골드축산.webp",
-  "hash": "e7731e132c",
-  "minX": -24.789,
-  "minZ": -23.63,
-  "width": 51.75,
-  "depth": 48.167
+  "hash": "87705778da",
+  "minX": -8.4,
+  "minZ": -7.344,
+  "width": 17.667,
+  "depth": 14.5
  },
  "models/place_구립성동청소년독서실.glb": {
   "file": "img/skyview/place_구립성동청소년독서실.webp",
@@ -822,6 +822,14 @@
   "minZ": -40.8,
   "width": 45.066,
   "depth": 83.6
+ },
+ "models/place_영자네곱창.glb": {
+  "file": "img/skyview/place_영자네곱창.webp",
+  "hash": "d4a3ac6dfb",
+  "minX": -5.495,
+  "minZ": -5.98,
+  "width": 12.083,
+  "depth": 12
  },
  "models/place_왕십리풍림아이원114.glb": {
   "file": "img/skyview/place_왕십리풍림아이원114.webp",
