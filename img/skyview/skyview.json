@@ -513,11 +513,11 @@
  },
  "models/place_금북남전체구역.glb": {
   "file": "img/skyview/place_금북남전체구역.webp",
-  "hash": "75901b0ee4",
-  "minX": -43.408,
-  "minZ": -79.71,
-  "width": 83.014,
-  "depth": 157.42
+  "hash": "26013299ec",
+  "minX": -41.91,
+  "minZ": -78.746,
+  "width": 78.363,
+  "depth": 153.921
  },
  "models/place_금북주택가.glb": {
   "file": "img/skyview/place_금북주택가.webp",
