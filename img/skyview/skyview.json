@@ -369,11 +369,11 @@
  },
  "models/place_골드축산.glb": {
   "file": "img/skyview/place_골드축산.webp",
-  "hash": "c30afc48e7",
-  "minX": -26.501,
-  "minZ": -24.5,
-  "width": 52.083,
-  "depth": 55
+  "hash": "e7731e132c",
+  "minX": -24.789,
+  "minZ": -23.63,
+  "width": 51.75,
+  "depth": 48.167
  },
  "models/place_구립성동청소년독서실.glb": {
   "file": "img/skyview/place_구립성동청소년독서실.webp",
