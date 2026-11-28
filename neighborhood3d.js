@@ -8409,6 +8409,54 @@ function loadBusModels() {
     );
   });
 }
+// 실제 차종 glb(순백 베이스 1개씩) — 차마다 매번 새로 불러오면 같은 텍스처·지오메트리가 메모리에
+// 중복 쌓이니, 차종당 딱 한 번만 불러와 carModelCache에 원본으로만 갖고 있고(scene에는 안 넣음)
+// 차 하나하나는 그 원본을 clone()해서 쓴다 — VRAM은 차 대수와 무관하게 차종 5개 분량으로 고정된다.
+const CAR_MODEL_TYPES = ["ray", "sorento", "avante", "granduer"]; // 일반 승용차 — 스폰 때 하나를 무작위로 고른다
+const CAR_MODEL_FILES = {
+  ray: "models/car_ray.glb",
+  sorento: "models/car_sorento.glb",
+  avante: "models/car_avante.glb",
+  granduer: "models/car_granduer.glb",
+  taxi: "models/car_taxi.glb",
+};
+const TAXI_CHANCE = 0.15; // 승용차 슬롯 중 택시 비율(대략 6~7대 중 1대)
+const TAXI_COLORS = [0xffffff, 0x1a1a1a]; // 택시는 흰색·검정만
+let carModelCache = {}; // key -> 로드된 원본 Object3D(절대 scene에 안 넣는다)
+function loadCarModels() {
+  Object.entries(CAR_MODEL_FILES).forEach(([key, path]) => {
+    gltfLoader.load(
+      `${path}?v=${ASSET_VERSION}`,
+      (gltf) => {
+        const model = gltf.scene;
+        model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        carModelCache[key] = model;
+      },
+      undefined,
+      (err) => console.warn(`차종 glb(${key})를 못 불러왔다`, err)
+    );
+  });
+}
+// 차 한 대가 처음 등장할 때 딱 한 번만 원본을 clone()해 자기 몸체(car.model)로 삼고, 재질도
+// clone()해서 색을 입힌다(원본 재질을 직접 바꾸면 같은 차종 전부가 같이 바뀐다). 한 번 만든
+// model은 재스폰 때도 그대로 재사용 — 매번 다시 만들지 않는다.
+function ensureCarVisual(car) {
+  if (car.model || car.type !== "car") return;
+  const base = carModelCache[car.carKey];
+  if (!base) return; // 아직 로드 전 — 모델이 도착할 때까지 이 차는 안 보인다
+  const model = base.clone();
+  model.scale.setScalar(WORLD_SCALE);
+  model.visible = false;
+  model.rotation.order = "YXZ";
+  model.traverse((o) => {
+    if (o.isMesh) {
+      o.material = o.material.clone();
+      o.material.color.setHex(car.color);
+    }
+  });
+  scene.add(model);
+  car.model = model;
+}
 let carRoads = null; // 도로별 정보(차가 달릴 수 있는 도로만 drivable)
 let carNodes = null;
 let cars = []; // 차·버스 모두(type: "car" | "bus")
@@ -8603,18 +8651,16 @@ function buildCars() {
   cars = [];
   const nCarSlots = CAR_COUNT + 1; // 마지막 한 대는 "골목에서 나오는 차" 이벤트 전용
   const total = nCarSlots + BUS_COUNT + MOTO_COUNT;
-  const bodyGeo = new THREE.BoxGeometry(CAR_WID, 0.11, CAR_LEN);
-  const cabinGeo = new THREE.BoxGeometry(CAR_WID * 0.86, 0.085, CAR_LEN * 0.5);
   const wheelGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.045, 10);
   wheelGeo.rotateZ(Math.PI / 2);
   const shadowGeo = new THREE.CircleGeometry(1, 16);
   shadowGeo.rotateX(-Math.PI / 2);
-  const body = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.35 }), nCarSlots);
-  const cabin = new THREE.InstancedMesh(cabinGeo, new THREE.MeshStandardMaterial({ color: 0x24313d, roughness: 0.2, metalness: 0.6 }), nCarSlots);
   const wheels = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ color: 0x151618, roughness: 0.9 }), total * 4);
   const shadow = new THREE.InstancedMesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }), total);
   busModels = BUS_TYPES.map(() => null);
   loadBusModels(); // 노선별 glb — 비동기라 로드되기 전까진 그 버스는 숨겨진다
+  carModelCache = {};
+  loadCarModels(); // 차종별 glb(순백 베이스) — 차마다 clone()해서 쓴다(ensureCarVisual)
   const motoBody = new THREE.InstancedMesh(makeMotoBodyGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.25 }), MOTO_COUNT);
   const rider = new THREE.InstancedMesh(makeRiderGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true }), MOTO_COUNT);
   const helmetGeo = new THREE.SphereGeometry(0.05, 10, 8);
@@ -8633,8 +8679,10 @@ function buildCars() {
   const beams = new THREE.InstancedMesh(beamGeo, new THREE.MeshBasicMaterial({ map: getLightPoolTexture(), color: 0xfff4dc, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5 }), total);
   beams.renderOrder = 2;
   for (let k = 0; k < nCarSlots; k++) {
-    body.setColorAt(k, new THREE.Color(CAR_COLORS[k % CAR_COLORS.length]));
-    cars.push({ active: false, index: k, type: "car", len: CAR_LEN, wid: CAR_WID, scripted: k === CAR_COUNT });
+    const isTaxi = Math.random() < TAXI_CHANCE;
+    const carKey = isTaxi ? "taxi" : CAR_MODEL_TYPES[Math.floor(Math.random() * CAR_MODEL_TYPES.length)];
+    const color = isTaxi ? TAXI_COLORS[Math.floor(Math.random() * TAXI_COLORS.length)] : CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+    cars.push({ active: false, index: k, type: "car", len: CAR_LEN, wid: CAR_WID, scripted: k === CAR_COUNT, carKey, color, model: null });
   }
   for (let k = 0; k < BUS_COUNT; k++) {
     cars.push({ active: false, index: k, type: "bus", busType: k % BUS_TYPES.length, len: BUS_LEN, wid: BUS_WID });
@@ -8642,15 +8690,14 @@ function buildCars() {
   for (let k = 0; k < MOTO_COUNT; k++) {
     cars.push({ active: false, index: k, type: "moto", len: MOTO_LEN, wid: MOTO_WID, lean: 0, latOff: 0.5 + Math.random() * 0.5 });
   }
-  const all = [body, cabin, wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams];
+  const all = [wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams];
   all.forEach((m) => {
     m.frustumCulled = false; // 인스턴스가 계속 움직여서 미리 잡은 경계로 자르면 안 된다
     m.count = 0;
     scene.add(m);
   });
   [motoBody, rider, helmet].forEach((m) => m.setColorAt(0, new THREE.Color(0xffffff))); // instanceColor 버퍼를 미리 만든다
-  if (body.instanceColor) body.instanceColor.needsUpdate = true;
-  carMeshes = { body, cabin, wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams, all };
+  carMeshes = { wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams, all };
 }
 
 function chooseNextRoad(car) {
@@ -8863,13 +8910,14 @@ function updateCars(dt) {
     }
   });
   // 그리기(종류별로 활성인 것만 앞쪽 칸에 모아서)
-  const { body, cabin, wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams } = carMeshes;
+  const { wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams } = carMeshes;
   const m = new THREE.Matrix4(), part = new THREE.Matrix4(), base = new THREE.Matrix4(), sc = new THREE.Matrix4();
-  const _busScratch = new THREE.Vector3(); // base.decompose() 스케일 받이용 — busModel.scale(WORLD_SCALE)은 안 건드린다
+  const _glbVehicleScratch = new THREE.Vector3(); // base.decompose() 스케일 받이용 — glb 차체의 scale(WORLD_SCALE)은 안 건드린다
   const y0 = ROAD_LAYER_BASE_Y + 0.006; // 도로 표면 바로 위(그림자 판 높이) — 실제 높이는 그 자리 지형을 더한다
   const pitchM = new THREE.Matrix4();
-  let nCar = 0, nAll = 0, nW = 0, nMoto = 0, nHead = 0, nTail = 0;
+  let nAll = 0, nW = 0, nMoto = 0, nHead = 0, nTail = 0;
   busModels.forEach((bm) => { if (bm) bm.visible = false; }); // 이번 프레임에 active인 버스만 다시 켠다
+  cars.forEach((c) => { if (c.model) c.model.visible = false; }); // 이번 프레임에 active인 승용차만 다시 켠다
   // 밤엔 전조등·미등을 켜고 차 앞 도로를 비춘다(낮에는 아예 그리지 않는다)
   const lampsOn = nightLevel > 0.3;
   headLamps.visible = tailLamps.visible = beams.visible = lampsOn;
@@ -8877,6 +8925,7 @@ function updateCars(dt) {
   const lamp = (mesh, idx, x, y, z) => { mesh.setMatrixAt(idx, m.multiplyMatrices(base, part.makeTranslation(x, y, z))); };
   cars.forEach((car) => {
     if (!car.active) return;
+    if (car.type === "car") ensureCarVisual(car); // 처음 등장할 때 딱 한 번만 clone() — 이미 있으면 그냥 통과
     // 실제 지형: 차 앞뒤 끝의 높이로 앞뒤 기울기, 가운데 높이로 위치
     const hl = car.len * 0.5;
     const hF = getTerrainY(car.x + car.fx * hl, car.z + car.fz * hl), hB = getTerrainY(car.x - car.fx * hl, car.z - car.fz * hl);
@@ -8894,7 +8943,7 @@ function updateCars(dt) {
       const busModel = busModels[car.busType];
       if (busModel) {
         busModel.visible = true;
-        base.decompose(busModel.position, busModel.quaternion, _busScratch);
+        base.decompose(busModel.position, busModel.quaternion, _glbVehicleScratch);
       }
       if (lampsOn) for (const sx of [-1, 1]) {
         lamp(headLamps, nHead++, sx * 0.13, 0.13, BUS_LEN / 2 + 0.004);
@@ -8923,25 +8972,19 @@ function updateCars(dt) {
       }
       nMoto++;
     } else {
-      body.setMatrixAt(nCar, m.multiplyMatrices(base, part.makeTranslation(0, 0.1, 0)));
-      cabin.setMatrixAt(nCar, m.multiplyMatrices(base, part.makeTranslation(0, 0.195, -0.04)));
-      if (body.instanceColor && car.colorSlot !== nCar) {
-        body.setColorAt(nCar, new THREE.Color(CAR_COLORS[car.index % CAR_COLORS.length]));
-        car.colorSlot = nCar;
-        body.instanceColor.needsUpdate = true;
-      }
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-        wheels.setMatrixAt(nW++, m.multiplyMatrices(base, part.makeTranslation(sx * (CAR_WID / 2 - 0.01), 0.045, sz * 0.26)));
+      // glb 자체에 바퀴 등 외형이 통째로 들어 있는 단일 메시라 절차적 몸통·바퀴 인스턴스는 안 쓰고
+      // base를 car.model(ensureCarVisual이 미리 clone해 둔 것)에 직접 옮긴다.
+      if (car.model) {
+        car.model.visible = true;
+        base.decompose(car.model.position, car.model.quaternion, _glbVehicleScratch);
       }
       if (lampsOn) for (const sx of [-1, 1]) {
         lamp(headLamps, nHead++, sx * 0.11, 0.105, CAR_LEN / 2 + 0.004);
         lamp(tailLamps, nTail++, sx * 0.12, 0.115, -CAR_LEN / 2 - 0.004);
       }
-      nCar++;
     }
     nAll++;
   });
-  body.count = cabin.count = nCar;
   shadow.count = nAll;
   wheels.count = nW;
   motoBody.count = rider.count = helmet.count = deliveryBox.count = nMoto;
