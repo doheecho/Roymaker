@@ -473,11 +473,11 @@
  },
  "models/place_구립성동청소년독서실.glb": {
   "file": "img/skyview/place_구립성동청소년독서실.webp",
-  "hash": "345ae48ec4",
-  "minX": -19.744,
-  "minZ": -17.703,
-  "width": 40,
-  "depth": 36.333
+  "hash": "7c2861c6d3",
+  "minX": -15.649,
+  "minZ": -13.163,
+  "width": 31.75,
+  "depth": 28
  },
  "models/place_극미101.glb": {
   "file": "img/skyview/place_극미101.webp",
@@ -881,11 +881,11 @@
  },
  "models/place_성동구보건소금호분소.glb": {
   "file": "img/skyview/place_성동구보건소금호분소.webp",
-  "hash": "dd4064d4f1",
-  "minX": -23.5,
-  "minZ": -12.001,
-  "width": 46,
-  "depth": 24.583
+  "hash": "7aecffa8d5",
+  "minX": -20.86,
+  "minZ": -11.217,
+  "width": 38.833,
+  "depth": 21.417
  },
  "models/place_성동중앙교회.glb": {
   "file": "img/skyview/place_성동중앙교회.webp",
