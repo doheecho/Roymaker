@@ -719,6 +719,14 @@
   "width": 23.329,
   "depth": 65.153
  },
+ "models/place_금호119안전센터1.glb": {
+  "file": "img/skyview/place_금호119안전센터1.webp",
+  "hash": "8d035b9505",
+  "minX": -6.9,
+  "minZ": -9.1,
+  "width": 15.25,
+  "depth": 18.25
+ },
  "models/place_금호1가동주민센터.glb": {
   "file": "img/skyview/place_금호1가동주민센터.webp",
   "hash": "1d624ea211",
