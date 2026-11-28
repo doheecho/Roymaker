@@ -735,6 +735,14 @@
   "width": 46.833,
   "depth": 46.5
  },
+ "models/place_라쿵푸마라탕.glb": {
+  "file": "img/skyview/place_라쿵푸마라탕.webp",
+  "hash": "3ae50388f8",
+  "minX": -20.299,
+  "minZ": -28.567,
+  "width": 44.417,
+  "depth": 55.167
+ },
  "models/place_롯데마트.glb": {
   "file": "img/skyview/place_롯데마트.webp",
   "hash": "0006ebd5dd",
