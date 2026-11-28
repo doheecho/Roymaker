@@ -44,7 +44,7 @@ export const PLACES = [
   { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 38.6, z: -160.9, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: -4, scaleRatio: 1.5 },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -240.1, z: -120.3, church: true, model: "models/place_대현교회.glb", rotationDeg: 20.8 },
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -60.2, z: 177.3 },
-  { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 57.2, z: 272.8, model: "models/place_금파힐117동.glb", rotationDeg: -0.8, scaleRatio: 1.3 },
+  { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 58.9, z: 272, y: -1.5, model: "models/place_금파힐117동.glb", rotationDeg: -0.8, scaleRatio: 1.3 },
   { id: 21, name: "금호119안전센터", floors: 2, type: "기타", x: 21.5, z: 118.7, model: "models/place_금호119안전센터.glb", rotationDeg: 4.6, scaleRatio: 1.5 },
   { id: 22, name: "성동구립금호도서관", floors: 4, type: "도서관", x: 89.1, z: 90.9, model: "models/place_library.glb", rotationDeg: 0, scaleRatio: 1.5 },
   { id: 23, name: "성동구보건소금호분소", floors: 4, type: "보건소", x: 91.6, z: 137.5 },
