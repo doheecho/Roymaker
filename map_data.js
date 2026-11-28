@@ -41,7 +41,7 @@ export const PLACES = [
   { id: 0, name: "우리집", floors: 15, type: "아파트", x: -0.2, z: 1.3, home: true, model: "models/place_금파힐113.glb", rotationDeg: 0, scaleRatio: 1.3 },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -392.8, z: 75.6, model: "models/place_금파힐101.glb", rotationDeg: -7.3, scaleRatio: 1.3 },
   { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -121.1, z: -124.9, rotationDeg: 0 },
-  { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 35.7, z: -155.8, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: -4, scaleRatio: 1.5 },
+  { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 38.6, z: -160.9, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: -4, scaleRatio: 1.5 },
   { id: 18, name: "대현교회", floors: 4, type: "기타", x: -240.1, z: -120.3, church: true, model: "models/place_대현교회.glb", rotationDeg: 20.8 },
   { id: 19, name: "금호고등학교", floors: 5, type: "학교", x: -60.2, z: 177.3 },
   { id: 20, name: "금호파크힐스 117동", floors: 15, type: "아파트", x: 57.2, z: 272.8, model: "models/place_금파힐117동.glb", rotationDeg: -0.8, scaleRatio: 1.3 },
@@ -50,10 +50,10 @@ export const PLACES = [
   { id: 23, name: "성동구보건소금호분소", floors: 4, type: "보건소", x: 91.6, z: 137.5 },
   { id: 24, name: "성동아이사랑복합문화센터", floors: 4, type: "기타", x: 153.5, z: 287.9 },
   { id: 25, name: "태비KTS태권스쿨", floors: 4, type: "학원", x: 117.4, z: -98, model: "models/3D_place_taekwondo.glb", rotationDeg: 0, scaleRatio: 1.5 },
-  { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 111.2, z: -152.8, diagonal: true, model: "models/place_홍일빌딩.glb", rotationDeg: 0, scaleRatio: 1.5 },
+  { id: 26, name: "NEW웰빙마트", floors: 4, type: "중형마트", x: 106.6, z: -153.5, diagonal: true, model: "models/place_홍일빌딩.glb", rotationDeg: -4.6, scaleRatio: 1.5 },
   { id: 27, name: "롯데마트행당점", floors: 6, type: "대형마트", x: 638.2, z: -370.4, model: "models/place_롯데마트.glb", rotationDeg: 31.9, scaleRatio: 1.9, terrain: "baked" },
   { id: 28, name: "메가MGC커피", floors: 2, type: "카페", x: 50, z: -227.6, diagonal: true, model: "models/3D_place_megacoffee.glb", rotationDeg: 0, scaleRatio: 1.7 },
-  { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -91.4, z: -230.5, model: "models/place_adamleeds.glb", scaleRatio: 1.5 },
+  { id: 29, name: "아담리즈수학·CU", floors: 3, type: "편의점", x: -86.5, z: -233.4, model: "models/place_adamleeds.glb", scaleRatio: 1.5 },
   { id: 30, name: "분식집", floors: 4, type: "식당", x: -31, z: -224.7, model: "models/place_bunsik.glb", scaleRatio: 1.1 },
   { id: 31, name: "신금호두산위브 101동", floors: 15, type: "아파트", x: -270.2, z: -211.9, model: "models/place_신금호두산위브101.glb" },
   { id: 32, name: "신금호두산위브 102동", floors: 15, type: "아파트", x: -220.7, z: -224.7, model: "models/place_신금호두산위브102.glb", scaleRatio: 1.3 },
@@ -148,12 +148,12 @@ export const PLACES = [
   { id: 212, name: "신금호역 인근 상가", floors: 15, type: "기타", x: -540, z: -83, model: "models/place_신금호역5번출구앞상가.glb", rotationDeg: -3.2, scaleRatio: 1.3 },
   { id: 213, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -623.5, z: 22.2, model: "models/place_megacoffee2.glb", rotationDeg: -25.5, scaleRatio: 1.5 },
   { id: 214, name: "주택", floors: 5, type: "기타", x: 15.4, z: -226.6, model: "models/place_bagel.glb", rotationDeg: 0.8, scaleRatio: 1.4 },
-  { id: 216, name: "주택가", floors: 3, type: "기타", x: -79.5, z: -301.3, y: -3, model: "models/place_금북주택가2.glb", rotationDeg: -0.9, scaleRatio: 1.3 },
+  { id: 216, name: "주택가", floors: 3, type: "기타", x: -83.2, z: -311.7, y: -3, model: "models/place_금북주택가2.glb", rotationDeg: -0.4, scaleRatio: 1.3 },
   { id: 217, name: "금호1가동 주민센터", floors: 5, type: "아파트", x: -340.6, z: -63.2, model: "models/place_금호1가동주민센터.glb", rotationDeg: 28.9, scaleRatio: 1.5 },
   { id: 218, name: "GS25", floors: 15, type: "아파트", x: -21.8, z: -576.1, model: "models/place_gs25극미점.glb", scaleRatio: 1.8 },
   { id: 219, name: "상가", floors: 15, type: "기타", x: 2.6, z: -510.1, model: "models/place_산마을돈타운2.glb", scaleRatio: 1.4 },
   { id: 220, name: "주택가", floors: 4, type: "기타", x: 7, z: -361.2, model: "models/place_금북남전체구역.glb", rotationDeg: 1.9, scaleRatio: 1.3 },
-  { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -595.1, z: 100, model: "models/place_골드축산.glb", rotationDeg: -4.5 },
+  { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -595.3, z: 94.5, model: "models/place_골드축산.glb", rotationDeg: -1.4, scaleRatio: 1.3 },
   { id: 223, name: "행복한교회", floors: 5, type: "기타", x: 107.8, z: -495.1, model: "models/place_행복한교회.glb", rotationDeg: 5.5, scaleRatio: 1.5 },
   { id: 224, name: "대림상가", floors: 5, type: "기타", x: 53.4, z: -562.6, model: "models/place_대림독서실.glb", rotationDeg: -15.6, scaleRatio: 1.3 },
   { id: 225, name: "금호초등학교", floors: 5, type: "학교", x: -558.7, z: 335.9, model: "models/place_금호초등학교2.glb", rotationDeg: 2.5, scaleRatio: 1.7 },
@@ -176,7 +176,7 @@ export const PLACES = [
   { id: 242, name: "구립성동청소년독서실", floors: 5, type: "도서관", x: 308.2, z: -196.9, model: "models/place_구립성동청소년독서실.glb" },
   { id: 243, name: "버스정류장", floors: 15, type: "버스정류장", x: 77.8, z: 63.3, model: "models/asset_버스정류장.glb", rotationDeg: -90 },
   { id: 245, name: "", floors: 15, type: "아파트", x: -160.5, z: -6.6, model: "models/place_금파힐통합.glb", terrain: "baked" },
-  { id: 246, name: "버스정류정", floors: 1, type: "버스정류장", x: -269.8, z: -104.5, model: "models/asset_버스정류장.glb", rotationDeg: -88 },
+  { id: 246, name: "버스정류장", floors: 1, type: "버스정류장", x: -263.2, z: -97.8, model: "models/asset_버스정류장.glb", rotationDeg: -88 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
@@ -342,9 +342,9 @@ export const ROAD_SEGMENTS = [
   { a: [616.4, -269.9], b: [387.2, -129.8], width: 10, sidewalk: 5 },
   { a: [697.6, -120], b: [803.4, -162.2], width: 10, curve: [751, -140.7] },
   { a: [-50.9, -887.2], b: [-53.7, -821.8], width: 25, curve: [-51.5, -855.2], sidewalk: 15, lanes: 6 },
-  { a: [-633.1, 82.7], b: [-624.4, 58.7], width: 10, curve: [-629.2, 69.1], sidewalk: 10 },
-  { a: [-643.6, 135.4], b: [-633.1, 82.7], width: 10, curve: [-639.6, 104.9], sidewalk: 10 },
-  { a: [-643.6, 135.4], b: [-537.3, 137.6], width: 10, sidewalk: 5 },
+  { a: [-633.1, 82.7], b: [-624.4, 58.7], width: 10, curve: [-629.2, 69.1], sidewalk: 15 },
+  { a: [-643.6, 135.4], b: [-633.1, 82.7], width: 10, curve: [-639.6, 104.9], sidewalk: 15 },
+  { a: [-643.6, 135.4], b: [-537.3, 137.6], width: 10, sidewalk: 15 },
   { a: [-12.3, -253.1], b: [-51.9, -251.7], width: 10, sidewalk: 10, kind: "school", lanes: 1, signalB: false },
   { a: [79.1, -194], b: [-11.2, -193], width: 30, sidewalk: 10, signalA: false },
   { a: [-52, -358.1], b: [-51.9, -251.7], width: 10, sidewalk: 10, kind: "school", lanes: 1, signalB: false },
@@ -378,7 +378,6 @@ export const TREES = [[-428.9, -212.3], [-429.2, -186.8], [-421.4, -169.9], [-42
 // 건물과 같은 방식(월드 기준, 0이면 가로=x축·세로=z축 그대로)으로 돌아간다. map_editor.html에서
 // "공원 추가/삭제"로 다룬다.
 export const PARKS = [
-  { id: 1, x: -416.9, z: -208.1, w: 200, d: 300, rotationDeg: 9.4 },
 ];
 
 // 길 중간 횡단보도·신호등 — x,z(raw)는 도로 위 자리(가장 가까운 도로에 붙는다), signal: false면 신호등 없이 횡단보도만.
