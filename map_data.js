@@ -139,7 +139,7 @@ export const PLACES = [
   { id: 203, name: "조형선외과동물병원", floors: 3, type: "기타", x: -446, z: 66.3, model: "models/place_조형선외과동물병원.glb", rotationDeg: -46.8, scaleRatio: 1.5 },
   { id: 204, name: "신금호역 인근 상가", floors: 3, type: "기타", x: -480.5, z: 31.5, model: "models/place_신금호역4번출구앞건물.glb", rotationDeg: 2, scaleRatio: 1.4 },
   { id: 205, name: "설내옥", floors: 3, type: "식당", x: -456.4, z: 152.9, model: "models/place_설내옥.glb", rotationDeg: -7.9, scaleRatio: 1.5 },
-  { id: 206, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -499.5, z: 88.3, model: "models/place_키잉글리시.glb", rotationDeg: -5.1, scaleRatio: 1.5 },
+  { id: 206, name: "신금호역 인근 상가", floors: 5, type: "기타", x: -499.5, z: 88.3, model: "models/place_마라순코우.glb", rotationDeg: -5.1, scaleRatio: 1.5 },
   { id: 207, name: "KFC", floors: 4, type: "식당", x: -590.5, z: 42.7, model: "models/place_KFC.glb", rotationDeg: -9.9, scaleRatio: 1.5 },
   { id: 208, name: "GS25", floors: 154, type: "편의점", x: -540.6, z: 56.1, model: "models/place_GS25.glb", rotationDeg: 7.8, scaleRatio: 1.3 },
   { id: 209, name: "홈플러스익스프레스", floors: 5, type: "중형마트", x: -436.3, z: 14.1, model: "models/place_홈플러스익스프레스.glb", rotationDeg: -15, scaleRatio: 1.5 },
@@ -176,6 +176,7 @@ export const PLACES = [
   { id: 242, name: "구립성동청소년독서실", floors: 5, type: "도서관", x: 308.2, z: -196.9, model: "models/place_구립성동청소년독서실.glb" },
   { id: 243, name: "버스정류장", floors: 15, type: "버스정류장", x: 77.8, z: 63.3, model: "models/asset_버스정류장.glb", rotationDeg: -90 },
   { id: 245, name: "", floors: 15, type: "아파트", x: -160.5, z: -6.6, model: "models/place_금파힐통합.glb", terrain: "baked" },
+  { id: 246, name: "버스정류정", floors: 1, type: "버스정류장", x: -269.8, z: -104.5, model: "models/asset_버스정류장.glb", rotationDeg: -88 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
