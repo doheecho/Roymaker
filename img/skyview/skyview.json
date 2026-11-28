@@ -255,6 +255,14 @@
   "width": 29.25,
   "depth": 31.75
  },
+ "models/asset_금파힐정문.glb": {
+  "file": "img/skyview/asset_금파힐정문.webp",
+  "hash": "8befa47201",
+  "minX": -14.289,
+  "minZ": -16.8,
+  "width": 27.333,
+  "depth": 19
+ },
  "models/asset_금파힐정문문주.glb": {
   "file": "img/skyview/asset_금파힐정문문주.webp",
   "hash": "65efccb6da",
