@@ -179,9 +179,9 @@ export const PLACES = [
   { id: 247, name: "", floors: 15, type: "식당", x: -576.1, z: 92.5, model: "models/place_영자네곱창.glb", rotationDeg: 12, scaleRatio: 1.3 },
   { id: 248, name: "", floors: 3, type: "식당", x: -574.5, z: 114.6, model: "models/place_페리카나.glb", scaleRatio: 1.3 },
   { id: 249, name: "", floors: 3, type: "식당", x: -529.3, z: 110.5, model: "models/place_우리농산물직판장1.glb", rotationDeg: -9, scaleRatio: 1.3 },
-  { id: 250, name: "", floors: 3, type: "식당", x: -526.4, z: 109, model: "models/place_오봉집.glb", scaleRatio: 1.3 },
-  { id: 251, name: "", floors: 3, type: "식당", x: -527.1, z: 108.1, model: "models/place_미소김밥.glb", rotationDeg: 0.4, scaleRatio: 1.3 },
-  { id: 252, name: "", floors: 3, type: "식당", x: -521.7, z: 110.6, model: "models/place_금이네.glb", rotationDeg: -5, scaleRatio: 1.3 },
+  { id: 250, name: "", floors: 3, type: "식당", x: -526.4, z: 109, y: 1, model: "models/place_오봉집.glb", scaleRatio: 1.3 },
+  { id: 251, name: "", floors: 3, type: "식당", x: -527.1, z: 108.1, y: 1, model: "models/place_미소김밥.glb", rotationDeg: 0.4, scaleRatio: 1.3 },
+  { id: 252, name: "", floors: 3, type: "식당", x: -521.7, z: 110.6, y: 2, model: "models/place_금이네.glb", rotationDeg: -5, scaleRatio: 1.3 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
@@ -349,7 +349,7 @@ export const ROAD_SEGMENTS = [
   { a: [-50.9, -887.2], b: [-53.7, -821.8], width: 25, curve: [-51.5, -855.2], sidewalk: 15, lanes: 6 },
   { a: [-633.1, 82.7], b: [-624.4, 58.7], width: 10, curve: [-629.2, 69.1], sidewalk: 15 },
   { a: [-643.6, 135.4], b: [-633.1, 82.7], width: 10, curve: [-639.6, 104.9], sidewalk: 15 },
-  { a: [-643.6, 135.4], b: [-545.1, 137], width: 10, sidewalk: 15 },
+  { a: [-643.6, 135.4], b: [-545.1, 137], width: 10, sidewalk: 15, kind: "school" },
   { a: [-12.3, -253.1], b: [-51.9, -251.7], width: 10, sidewalk: 10, kind: "school", lanes: 1, signalB: false },
   { a: [79.1, -194], b: [-11.2, -193], width: 30, sidewalk: 10, signalA: false },
   { a: [-52, -358.1], b: [-51.9, -251.7], width: 10, sidewalk: 10, kind: "school", lanes: 1, signalB: false },
