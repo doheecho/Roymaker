@@ -1,0 +1,2135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>금호동 2가 블록 전체 정밀 3D 모델링 v6 (경사 고도 · 남서 1층 노출 · 도로 경계 밀착)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700;900&family=Song+Myung&family=Yeon+Sung&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #A7C7E7;
+      font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+      color: #f8fafc; user-select: none;
+    }
+    #canvas-container { width: 100%; height: 100%; position: relative; }
+    .hud-panel {
+      position: absolute;
+      background: rgba(15, 20, 28, 0.86);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.34);
+      z-index: 10;
+    }
+    #info {
+      top: 14px; left: 16px; padding: 11px 15px;
+      max-width: min(540px, calc(100vw - 32px));
+      pointer-events: none;
+    }
+    #info h1 {
+      font-size: 13.5px; font-weight: 700; color: #ffffff;
+      display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 4px;
+    }
+    #info .badge {
+      font-size: 10.5px; font-weight: 700;
+      background: rgba(245, 158, 11, 0.25); color: #fde68a;
+      border: 1px solid rgba(251, 191, 36, 0.60);
+      padding: 1px 7px; border-radius: 999px;
+    }
+    #info p { font-size: 11.4px; color: #cbd5e1; line-height: 1.48; }
+    #info .compass { margin-top: 3px; font-size: 10.8px; color: #93c5fd; font-weight: 600; }
+
+    #options-panel {
+      top: 14px; right: 16px; padding: 11px 13px;
+      display: flex; flex-direction: column; gap: 5px;
+      width: 268px; max-height: calc(100vh - 125px); overflow-y: auto;
+    }
+    .options-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+    .options-title { font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 0.04em; }
+    .collapse-btn {
+      background: rgba(51, 65, 85, 0.72); color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 6px;
+      padding: 2px 7px; font-size: 10.5px; cursor: pointer; font-family: inherit;
+    }
+    .collapse-btn:hover { background: rgba(71, 85, 105, 0.92); color: #fff; }
+    #options-body { display: flex; flex-direction: column; gap: 4px; }
+    #options-body.collapsed { display: none; }
+    .toggle-row {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 11.3px; color: #e2e8f0; cursor: pointer; padding: 1.5px 0;
+    }
+    .toggle-row input[type="checkbox"] { width: 14px; height: 14px; accent-color: #f59e0b; cursor: pointer; flex-shrink: 0; }
+    .toggle-row .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .panel-divider { height: 1px; background: rgba(255, 255, 255, 0.14); margin: 3px 0; }
+    #mesh-stats { font-size: 11px; color: #cbd5e1; line-height: 1.5; font-variant-numeric: tabular-nums; }
+    #mesh-stats strong { color: #fde68a; font-weight: 700; }
+
+    #controls-ui {
+      bottom: 14px; left: 50%; transform: translateX(-50%);
+      padding: 8px 10px; display: flex; flex-wrap: wrap; align-items: center;
+      justify-content: center; gap: 5px; max-width: calc(100vw - 20px);
+    }
+    .cam-btn {
+      background: rgba(51, 65, 85, 0.84); color: #f1f5f9;
+      border: 1px solid rgba(148, 163, 184, 0.30);
+      padding: 6px 9px; border-radius: 7px; cursor: pointer;
+      font-size: 11.2px; font-family: inherit; font-weight: 500;
+      transition: all 0.16s ease; white-space: nowrap;
+    }
+    .cam-btn:hover { background: rgba(37, 99, 235, 0.88); border-color: rgba(147, 197, 253, 0.82); transform: translateY(-1px); }
+    .cam-btn.featured-btn { border-color: rgba(251, 191, 36, 0.55); }
+    .cam-btn.active { background: #2563eb; border-color: #93c5fd; color: #fff; font-weight: 700; }
+    .bar-divider { width: 1px; height: 20px; background: rgba(255, 255, 255, 0.18); margin: 0 2px; }
+    .export-btn {
+      background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff;
+      border: 1px solid rgba(254, 240, 138, 0.80); padding: 6px 12px;
+      border-radius: 7px; cursor: pointer; font-size: 11.5px; font-family: inherit;
+      font-weight: 700; display: inline-flex; align-items: center; gap: 5px;
+      transition: all 0.16s ease; white-space: nowrap;
+    }
+    .export-btn:hover { background: linear-gradient(135deg, #fbbf24, #ea580c); transform: translateY(-1px); }
+    .export-btn:disabled { opacity: 0.65; cursor: wait; transform: none; }
+
+    #toast {
+      position: absolute; top: 18px; left: 50%;
+      transform: translateX(-50%) translateY(-14px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(251, 191, 36, 0.65); color: #fef3c7;
+      padding: 9px 16px; border-radius: 10px; font-size: 12.2px; font-weight: 600;
+      opacity: 0; pointer-events: none; transition: opacity 0.24s ease, transform 0.24s ease; z-index: 30;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="info" class="hud-panel">
+    <h1>
+      금호동 2가 블록 전체 정밀 3D 모델링 (10개 건물 실사 고증)
+      <span class="badge">NE Y=0.0m → SW Y=+2.95m · 도로 경계 밀착</span>
+    </h1>
+    <p>좌클릭 드래그: 회전 &nbsp;|&nbsp; 우클릭 드래그: 이동 &nbsp;|&nbsp; 휠: 확대·축소</p>
+    <div class="compass">북: -Z / 동: +X / 남: +Z / 서: -X &nbsp;|&nbsp; 블록 29.60m × 42.40m · NE(Y=0.0m) → SW(Y=+2.95m) · B1(Y=-3.60m)</div>
+  </div>
+
+  <div id="options-panel" class="hud-panel">
+    <div class="options-header">
+      <div class="options-title">10개 건물 표시 및 추출</div>
+      <button class="collapse-btn" id="btn-collapse">접기</button>
+    </div>
+    <div id="options-body">
+      <label class="toggle-row"><input type="checkbox" data-grp="b1" checked /><span class="dot" style="background:#c7967a;"></span><span>1. 설내옥설렁탕 (5F · Y=0.0m)</span></label>
+      <label class="toggle-row"><input type="checkbox" data-grp="b2" checked /><span class="dot" style="background:#facc15;"></span><span>2. 대림부동산·상가 (3F · Y=0.0m)</span></label>
+      <label class="toggle-row"><input type="checkbox" data-grp="b3" checked /><span class="dot" style="background:#b94a38;"></span><span>3. 141번지 주택 (2F · Y=+0.55m)</span></label>
+      <label class="toggle-row"><input type="checkbox" data-grp="b4" checked /><span class="dot" style="background:#a64b3b;"></span><span>4. 86 윤슬네일·상가 (3F · Y=+2.95m)</span></label>
+      <label class="toggle-row"><input type="checkbox" data-grp="b5" checked /><span class="dot" style="background:#e2e8f0;"></span><span>5. 84 할머니냉면·상가 (3F · Y=+2.95m)</span></label>
+      <label class="toggle-row"><input type="checkbox" data-grp="b6" checked /><span class="dot" style="background:#7e5a4e;"></span><span>6. 84-2 컴퓨터수리 (3F · Y=+1.95m)</span></label>
+      <label class="toggle-row"><input type="checkbox" data-grp="b7" checked /><span class="dot" style="background:#2e5e47;"></span><span>7. 143-9 녹색지붕 (2F · Y=+1.15m)</span></label>
+      <label class="toggle-row"><input type="checkbox" data-grp="b9" checked /><span class="dot" style="background:#cbd5e1;"></span><span>8. 143-13 평지붕 (3F · Y=+2.05m)</span></label>
+      <label class="toggle-row"><input type="checkbox" data-grp="b8" checked /><span class="dot" style="background:#8f4334;"></span><span>9. 143-11 중정주택 (2F · Y=+1.85m)</span></label>
+      <label class="toggle-row"><input type="checkbox" data-grp="b10" checked /><span class="dot" style="background:#94a3b8;"></span><span>10. 84-1 내부주택 (2F · Y=+2.60m)</span></label>
+      <div class="panel-divider"></div>
+      <label class="toggle-row"><input type="checkbox" id="chk-outlines" /><span class="dot" style="background:#64748b;"></span><span>건축 윤곽선 (Edges)</span></label>
+      <div class="panel-divider"></div>
+      <div id="mesh-stats">메시 집계 중...</div>
+    </div>
+  </div>
+
+  <div id="toast">GLB 파일 생성 중...</div>
+
+  <div id="controls-ui" class="hud-panel">
+    <button class="cam-btn featured-btn active" data-view="top">1. 스카이뷰</button>
+    <button class="cam-btn" data-view="n_seol">2. 북(설내옥)</button>
+    <button class="cam-btn" data-view="ne_seol">3. 북동(설내옥)</button>
+    <button class="cam-btn" data-view="ne_daelim">4. 북동(부동산)</button>
+    <button class="cam-btn" data-view="e_daelim">5. 동(부동산·141)</button>
+    <button class="cam-btn" data-view="w_yunseul">6. 서(윤슬네일)</button>
+    <button class="cam-btn" data-view="sw_shops">7. 남서(86 상가열)</button>
+    <button class="cam-btn" data-view="s_sarang">8. 남(84 할머니·사랑방)</button>
+    <div class="bar-divider"></div>
+    <button class="export-btn" id="btn-export-glb"><span>⬇</span> 3D 추출 (.glb)</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+    import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+    // =========================================================================
+    // 1. 씬, 카메라, 렌더러 및 무그림자 5-Point 주간 조명
+    // =========================================================================
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#A7C7E7');
+    scene.fog = new THREE.Fog('#A7C7E7', 120, 320);
+
+    const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.15, 600);
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      logarithmicDepthBuffer: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = false;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.068;
+    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.minDistance = 3.2;
+    controls.maxDistance = 165;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+    const hemiLight = new THREE.HemisphereLight(0xeef6ff, 0x8b929c, 0.72);
+    hemiLight.position.set(0, 60, 0);
+    scene.add(hemiLight);
+
+    const neKeyLight = new THREE.DirectionalLight(0xfffaf0, 0.96);
+    neKeyLight.position.set(36, 52, -38);
+    scene.add(neKeyLight);
+
+    const swFillLight = new THREE.DirectionalLight(0xe4f0fc, 0.76);
+    swFillLight.position.set(-38, 42, 38);
+    scene.add(swFillLight);
+
+    const seRimLight = new THREE.DirectionalLight(0xfcf6ee, 0.48);
+    seRimLight.position.set(38, 28, 32);
+    scene.add(seRimLight);
+
+    // =========================================================================
+    // 2. 블록 그룹 계층
+    //    - 동북(NE, z = -10.60): Y = 0.00m (설내옥·대림부동산 기존 높이 그대로 유지)
+    //    - 남서(SW, z = +31.80): Y = +2.95m (지형 경사 반영하여 86·84 상가 1층 전체 노출 + 도보 경계 밀착)
+    //    - 지하 1층(B1) 하단: Y = -3.60m (각 건물 지상층 외벽과 동일한 재질·색상 마감)
+    // =========================================================================
+    const BLOCK_ROT_RAD = THREE.MathUtils.degToRad(-45);
+    const BASEMENT_BOTTOM_Y = -3.60;
+
+    const rootExportGroup = new THREE.Group();
+    rootExportGroup.name = 'Geumho_Block_10Buildings_v6';
+    scene.add(rootExportGroup);
+
+    const blockGroup = new THREE.Group();
+    blockGroup.name = 'Unified_10Building_Block';
+    blockGroup.rotation.y = BLOCK_ROT_RAD;
+    rootExportGroup.add(blockGroup);
+
+    const groups = {
+      b1: new THREE.Group(),
+      b2: new THREE.Group(),
+      b3: new THREE.Group(),
+      b4: new THREE.Group(),
+      b5: new THREE.Group(),
+      b6: new THREE.Group(),
+      b7: new THREE.Group(),
+      b8: new THREE.Group(),
+      b9: new THREE.Group(),
+      b10: new THREE.Group()
+    };
+    groups.b1.name = 'B1_Seolnaeok_5F';
+    groups.b2.name = 'B2_DaelimRealty_3F';
+    groups.b3.name = 'B3_House_141_2F';
+    groups.b4.name = 'B4_RedBrick_86_3F';
+    groups.b5.name = 'B5_WhiteTile_84_3F';
+    groups.b6.name = 'B6_BrownBrick_84_2_3F';
+    groups.b7.name = 'B7_GreenRoof_143_9_2F';
+    groups.b8.name = 'B8_Courtyard_143_11_2F';
+    groups.b9.name = 'B9_FlatGray_143_13_3F';
+    groups.b10.name = 'B10_InnerGray_84_1_2F';
+    Object.values(groups).forEach((g) => blockGroup.add(g));
+
+    const outlineGroup = new THREE.Group();
+    outlineGroup.name = 'Architectural_Outlines';
+    outlineGroup.visible = false;
+    outlineGroup.rotation.y = BLOCK_ROT_RAD;
+    scene.add(outlineGroup);
+
+    function blockToWorld(lx, ly, lz) {
+      return new THREE.Vector3(lx, ly, lz).applyAxisAngle(new THREE.Vector3(0, 1, 0), BLOCK_ROT_RAD);
+    }
+
+    // =========================================================================
+    // 3. 공통 유틸리티 & 고품질 GeometryBatcher
+    // =========================================================================
+    const dynamicSignRegistry = [];
+
+    async function waitForKoreanFonts(timeoutMs = 1500) {
+      if (!document.fonts) return;
+      const specs = [
+        '400 48px "Yeon Sung"',
+        '400 48px "Song Myung"',
+        '400 48px "Black Han Sans"',
+        '700 48px "Gowun Batang"',
+        '700 48px "Noto Sans KR"',
+        '900 48px "Noto Sans KR"'
+      ];
+      try {
+        await Promise.race([
+          Promise.all([...specs.map((f) => document.fonts.load(f).catch(() => {})), document.fonts.ready]),
+          new Promise((r) => setTimeout(r, timeoutMs))
+        ]);
+      } catch (_) {}
+    }
+
+    function registerDynamicSign(canvas, tex, drawFn) {
+      dynamicSignRegistry.push({ canvas, tex, drawFn });
+      drawFn(canvas.getContext('2d'), canvas.width, canvas.height);
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    function redrawAllDynamicSigns() {
+      for (const e of dynamicSignRegistry) {
+        const ctx = e.canvas.getContext('2d');
+        ctx.clearRect(0, 0, e.canvas.width, e.canvas.height);
+        e.drawFn(ctx, e.canvas.width, e.canvas.height);
+        e.tex.needsUpdate = true;
+      }
+    }
+
+    function mulberry32(seed) {
+      let a = seed >>> 0;
+      return () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    let toastTimer = null;
+    function showToast(msg, duration = 2900) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+    }
+
+    function applyWorldPlanarUVs(geometry, scaleU = 0.36, scaleV = 0.36) {
+      geometry.computeVertexNormals();
+      const pos = geometry.attributes.position;
+      const norm = geometry.attributes.normal;
+      const uv = geometry.attributes.uv;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const nx = Math.abs(norm.getX(i)), ny = Math.abs(norm.getY(i)), nz = Math.abs(norm.getZ(i));
+        if (ny >= nx && ny >= nz) uv.setXY(i, x * scaleU, z * scaleV);
+        else if (nx >= nz) uv.setXY(i, z * scaleU, y * scaleV);
+        else uv.setXY(i, x * scaleU, y * scaleV);
+      }
+      uv.needsUpdate = true;
+    }
+
+    function addOutlineForMesh(mesh, color = 0x1e293b, threshold = 28, opacity = 0.45) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, threshold);
+      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
+      line.position.copy(mesh.position);
+      line.rotation.copy(mesh.rotation);
+      line.scale.copy(mesh.scale);
+      outlineGroup.add(line);
+    }
+
+    class GeometryBatcher {
+      constructor() {
+        this.buckets = new Map();
+        this.baseBox = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+        this.baseCyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 14).toNonIndexed();
+        this.baseDodec = new THREE.DodecahedronGeometry(0.5, 1).toNonIndexed();
+        this._mat4 = new THREE.Matrix4();
+        this._pos = new THREE.Vector3();
+        this._quat = new THREE.Quaternion();
+        this._euler = new THREE.Euler();
+        this._scale = new THREE.Vector3();
+      }
+      _ensure(key, material) {
+        if (!this.buckets.has(key)) this.buckets.set(key, { material, geoms: [] });
+        return this.buckets.get(key);
+      }
+      _normalize(srcGeom) {
+        const g = srcGeom.index ? srcGeom.toNonIndexed() : srcGeom.clone();
+        if (!g.attributes.normal) g.computeVertexNormals();
+        if (!g.attributes.uv) {
+          g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+        }
+        for (const attr of Object.keys(g.attributes)) {
+          if (attr !== 'position' && attr !== 'normal' && attr !== 'uv') g.deleteAttribute(attr);
+        }
+        return g;
+      }
+      addGeometry(key, material, geometry, matrix = null) {
+        const g = this._normalize(geometry);
+        if (matrix) g.applyMatrix4(matrix);
+        this._ensure(key, material).geoms.push(g);
+      }
+      addBox(key, material, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, worldUV = 0) {
+        const g = this.baseBox.clone();
+        this._pos.set(x, y, z);
+        this._euler.set(rx, ry, rz);
+        this._quat.setFromEuler(this._euler);
+        this._scale.set(sx, sy, sz);
+        this._mat4.compose(this._pos, this._quat, this._scale);
+        g.applyMatrix4(this._mat4);
+        if (worldUV > 0) applyWorldPlanarUVs(g, worldUV, worldUV);
+        this._ensure(key, material).geoms.push(g);
+      }
+      addCylinder(key, material, x, y, z, diameter, length, rx = 0, ry = 0, rz = 0) {
+        const g = this.baseCyl.clone();
+        this._pos.set(x, y, z);
+        this._euler.set(rx, ry, rz);
+        this._quat.setFromEuler(this._euler);
+        this._scale.set(diameter, length, diameter);
+        this._mat4.compose(this._pos, this._quat, this._scale);
+        g.applyMatrix4(this._mat4);
+        this._ensure(key, material).geoms.push(g);
+      }
+      addDodecahedron(key, material, x, y, z, diameter) {
+        const g = this.baseDodec.clone();
+        this._pos.set(x, y, z);
+        this._quat.identity();
+        this._scale.set(diameter, diameter, diameter);
+        this._mat4.compose(this._pos, this._quat, this._scale);
+        g.applyMatrix4(this._mat4);
+        this._ensure(key, material).geoms.push(g);
+      }
+      addRod(key, material, x1, y1, z1, x2, y2, z2, diameter) {
+        const v1 = new THREE.Vector3(x1, y1, z1), v2 = new THREE.Vector3(x2, y2, z2);
+        const dir = new THREE.Vector3().subVectors(v2, v1);
+        const len = dir.length();
+        if (len < 0.001) return;
+        const mid = new THREE.Vector3().addVectors(v1, v2).multiplyScalar(0.5);
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+        const g = this.baseCyl.clone();
+        this._scale.set(diameter, len, diameter);
+        this._mat4.compose(mid, q, this._scale);
+        g.applyMatrix4(this._mat4);
+        this._ensure(key, material).geoms.push(g);
+      }
+      buildAll(parentGroup) {
+        for (const [key, { material, geoms }] of this.buckets.entries()) {
+          if (!geoms.length) continue;
+          const merged = mergeGeometries(geoms, false);
+          geoms.forEach((g) => g.dispose());
+          geoms.length = 0;
+          if (!merged) continue;
+          const mesh = new THREE.Mesh(merged, material);
+          mesh.name = `Merged_${key}`;
+          parentGroup.add(mesh);
+        }
+        this.buckets.clear();
+      }
+      disposeBases() {
+        this.baseBox.dispose();
+        this.baseCyl.dispose();
+        this.baseDodec.dispose();
+      }
+    }
+
+    // =========================================================================
+    // 4. 고해상도 프로시저럴 텍스처 & PBR 재질 라이브러리
+    // =========================================================================
+    function makeTex(canvas, rx = 1, ry = 1, isLinear = false) {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = isLinear ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      if (rx !== 1 || ry !== 1) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(rx, ry);
+      }
+      return tex;
+    }
+
+    function makeSignTex(w, h, drawFn, isDynamic = true) {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const tex = makeTex(c, 1, 1, false);
+      if (isDynamic) return registerDynamicSign(c, tex, drawFn);
+      drawFn(c.getContext('2d'), w, h);
+      return tex;
+    }
+
+    function drawHanokBowlEmblem(ctx, cx, cy, r, strokeColor, fillBgColor = null, innerFillAccent = null) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      if (fillBgColor) {
+        ctx.fillStyle = fillBgColor;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = r * 0.055;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.90, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = r * 0.024;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.81, 0, Math.PI * 2); ctx.stroke();
+
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = r * 0.052;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.14, -r * 0.44); ctx.quadraticCurveTo(-r * 0.36, -r * 0.24, -r * 0.64, -r * 0.14);
+      ctx.moveTo(r * 0.14, -r * 0.44); ctx.quadraticCurveTo(r * 0.36, -r * 0.24, r * 0.64, -r * 0.14);
+      ctx.moveTo(-r * 0.18, -r * 0.45); ctx.lineTo(r * 0.18, -r * 0.45);
+      ctx.moveTo(-r * 0.60, -r * 0.06); ctx.quadraticCurveTo(0, -r * 0.18, r * 0.60, -r * 0.06);
+      ctx.stroke();
+
+      ctx.lineWidth = r * 0.025;
+      for (let i = -2; i <= 2; i++) {
+        const tx = i * r * 0.15;
+        ctx.beginPath();
+        ctx.moveTo(tx * 0.45, -r * 0.40);
+        ctx.quadraticCurveTo(tx * 0.85, -r * 0.24, tx * 1.15, -r * 0.10);
+        ctx.stroke();
+      }
+
+      ctx.lineWidth = r * 0.028;
+      [-r * 0.18, 0, r * 0.18].forEach((sx, idx) => {
+        const h = idx === 1 ? r * 0.24 : r * 0.18;
+        ctx.beginPath();
+        ctx.moveTo(sx, r * 0.16);
+        ctx.bezierCurveTo(sx - r * 0.06, r * 0.10, sx + r * 0.06, r * 0.04, sx, r * 0.16 - h);
+        ctx.stroke();
+      });
+
+      ctx.lineWidth = r * 0.052;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.44, r * 0.24); ctx.lineTo(r * 0.44, r * 0.24);
+      ctx.bezierCurveTo(r * 0.42, r * 0.56, r * 0.22, r * 0.62, r * 0.18, r * 0.62);
+      ctx.lineTo(-r * 0.18, r * 0.62);
+      ctx.bezierCurveTo(-r * 0.22, r * 0.62, -r * 0.42, r * 0.56, -r * 0.44, r * 0.24);
+      ctx.closePath();
+      if (innerFillAccent) { ctx.fillStyle = innerFillAccent; ctx.fill(); }
+      ctx.stroke();
+
+      ctx.lineWidth = r * 0.045;
+      ctx.beginPath(); ctx.moveTo(-r * 0.22, r * 0.68); ctx.lineTo(r * 0.22, r * 0.68); ctx.stroke();
+      ctx.restore();
+    }
+
+    function createTerracottaStuccoTex() {
+      const size = 512;
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const rand = mulberry32(14201);
+      ctx.fillStyle = '#C7967A'; ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 420; i++) {
+        ctx.fillStyle = rand() > 0.5 ? 'rgba(255,238,224,0.036)' : 'rgba(110,60,40,0.042)';
+        ctx.beginPath(); ctx.arc(rand() * size, rand() * size, 8 + rand() * 32, 0, Math.PI * 2); ctx.fill();
+      }
+      for (let i = 0; i < 7500; i++) {
+        ctx.fillStyle = rand() > 0.5 ? 'rgba(255,244,234,0.04)' : 'rgba(72,40,26,0.045)';
+        ctx.fillRect(rand() * size, rand() * size, 2, 2);
+      }
+      ctx.fillStyle = 'rgba(110, 68, 48, 0.20)';
+      ctx.fillRect(0, 0, size, 3); ctx.fillRect(0, 256, size, 3);
+      return makeTex(c, 1, 1, false);
+    }
+
+    function createCreamStuccoTex() {
+      const size = 512;
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const rand = mulberry32(14261);
+      ctx.fillStyle = '#EDE7D7'; ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 5500; i++) {
+        ctx.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.04)' : 'rgba(90,78,62,0.032)';
+        ctx.fillRect(rand() * size, rand() * size, 2, 2);
+      }
+      return makeTex(c, 1, 1, false);
+    }
+
+    function createWarmOakTex() {
+      const W = 256, H = 512;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+      const rand = mulberry32(14202);
+      ctx.fillStyle = '#8C6A4A'; ctx.fillRect(0, 0, W, H);
+      for (let x = 0; x < W; x += 16) {
+        const d = (rand() - 0.5) * 24;
+        ctx.fillStyle = `rgb(${Math.round(142 + d)},${Math.round(108 + d * 0.78)},${Math.round(76 + d * 0.58)})`;
+        ctx.fillRect(x, 0, 14, H);
+        for (let k = 0; k < 4; k++) {
+          ctx.fillStyle = rand() > 0.5 ? 'rgba(255,235,210,0.08)' : 'rgba(52,30,15,0.12)';
+          ctx.fillRect(x + 2 + rand() * 10, 0, 1.5, H);
+        }
+        ctx.fillStyle = 'rgba(52,30,16,0.34)'; ctx.fillRect(x + 14, 0, 2, H);
+      }
+      return makeTex(c, 1, 1, false);
+    }
+
+    function createGlassBlockTex() {
+      const size = 512;
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#B8C2CA'; ctx.fillRect(0, 0, size, size);
+      const cell = size / 8;
+      for (let r = 0; r < 8; r++) {
+        for (let col = 0; col < 8; col++) {
+          const x = col * cell + 3, y = r * cell + 3, s = cell - 6;
+          const grad = ctx.createRadialGradient(x + s * 0.45, y + s * 0.42, 4, x + s * 0.5, y + s * 0.5, s * 0.72);
+          grad.addColorStop(0, '#EEF5F8'); grad.addColorStop(0.65, '#CBD8E0'); grad.addColorStop(1, '#8FA2AF');
+          ctx.fillStyle = grad; ctx.fillRect(x, y, s, s);
+          ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2; ctx.strokeRect(x + 3, y + 3, s - 6, s - 6);
+        }
+      }
+      return makeTex(c, 1, 1, false);
+    }
+
+    function createDarkGreenRoofTex() {
+      const size = 512;
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const rand = mulberry32(14211);
+      ctx.fillStyle = '#2E5E47'; ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 320; i++) {
+        ctx.fillStyle = rand() > 0.5 ? 'rgba(72,140,104,0.07)' : 'rgba(16,42,30,0.09)';
+        ctx.beginPath(); ctx.arc(rand() * size, rand() * size, 12 + rand() * 34, 0, Math.PI * 2); ctx.fill();
+      }
+      return makeTex(c, 2, 2, false);
+    }
+
+    function createVintageMosaicTileTextures() {
+      const size = 512;
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const bc = document.createElement('canvas'); bc.width = size; bc.height = size;
+      const bctx = bc.getContext('2d');
+      const rand = mulberry32(14197);
+
+      ctx.fillStyle = '#9C9688'; ctx.fillRect(0, 0, size, size);
+      bctx.fillStyle = '#383838'; bctx.fillRect(0, 0, size, size);
+
+      const cols = 16, rows = 32, tw = size / cols, th = size / rows;
+      for (let r = 0; r < rows; r++) {
+        for (let col = 0; col < cols; col++) {
+          const d = (rand() - 0.5) * 18;
+          ctx.fillStyle = `rgb(${Math.min(242, Math.max(170, Math.round(216 + d)))},${Math.min(238, Math.max(166, Math.round(211 + d)))},${Math.min(224, Math.max(152, Math.round(195 + d)))})`;
+          ctx.fillRect(col * tw + 1.5, r * th + 1.5, tw - 3, th - 3);
+          const bv = Math.round(196 + (rand() - 0.5) * 32);
+          bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
+          bctx.fillRect(col * tw + 1.5, r * th + 1.5, tw - 3, th - 3);
+        }
+      }
+      for (let i = 0; i < 45; i++) {
+        const sx = rand() * size, sw = 4 + rand() * 18, sh = 60 + rand() * 280, sy = rand() * (size - sh * 0.5);
+        const grad = ctx.createLinearGradient(0, sy, 0, sy + sh);
+        grad.addColorStop(0, 'rgba(65, 62, 54, 0.14)'); grad.addColorStop(1, 'rgba(65, 62, 54, 0.0)');
+        ctx.fillStyle = grad; ctx.fillRect(sx, sy, sw, sh);
+      }
+      return { map: makeTex(c, 1, 1, false), bumpMap: makeTex(bc, 1, 1, true) };
+    }
+
+    function createWeatheredRearConcreteTex() {
+      const size = 512;
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const rand = mulberry32(14229);
+      ctx.fillStyle = '#E5E6E7'; ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 55; i++) {
+        ctx.fillStyle = `rgba(92, 88, 80, ${0.06 + rand() * 0.14})`;
+        ctx.beginPath(); ctx.ellipse(rand() * size, rand() * 170, 5 + rand() * 18, 4 + rand() * 14, rand() * Math.PI, 0, Math.PI * 2); ctx.fill();
+      }
+      return makeTex(c, 2, 1, false);
+    }
+
+    function createRibbedGreySidingTex() {
+      const size = 256;
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#9FA3A6'; ctx.fillRect(0, 0, size, size);
+      for (let y = 0; y < size; y += 16) {
+        ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(0, y, size, 3);
+        ctx.fillStyle = 'rgba(40,44,48,0.28)'; ctx.fillRect(0, y + 12, size, 4);
+      }
+      return makeTex(c, 2, 2, false);
+    }
+
+    function createBrickAndTileTextures(baseR, baseG, baseB, groutHex, cols, rows, seed) {
+      const size = 512;
+      const c = document.createElement('canvas'); c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const bc = document.createElement('canvas'); bc.width = size; bc.height = size;
+      const bctx = bc.getContext('2d');
+      const rand = mulberry32(seed);
+
+      ctx.fillStyle = groutHex; ctx.fillRect(0, 0, size, size);
+      bctx.fillStyle = '#3A3A3A'; bctx.fillRect(0, 0, size, size);
+
+      const tw = size / cols, th = size / rows;
+      for (let r = 0; r < rows; r++) {
+        const stag = (r % 2 === 1) ? tw * 0.5 : 0;
+        for (let col = -1; col <= cols; col++) {
+          const d = (rand() - 0.5) * 24;
+          ctx.fillStyle = `rgb(${Math.min(248, Math.max(55, Math.round(baseR + d)))},${Math.min(248, Math.max(40, Math.round(baseG + d * 0.65)))},${Math.min(248, Math.max(35, Math.round(baseB + d * 0.55)))})`;
+          ctx.fillRect(col * tw + stag + 2, r * th + 2, tw - 4, th - 4);
+          const bv = Math.round(202 + (rand() - 0.5) * 28);
+          bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
+          bctx.fillRect(col * tw + stag + 2, r * th + 2, tw - 4, th - 4);
+        }
+      }
+      return { map: makeTex(c, 1, 1, false), bumpMap: makeTex(bc, 1, 1, true) };
+    }
+
+    function createBarberPoleTex() {
+      const c = document.createElement('canvas'); c.width = 128; c.height = 256;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, 128, 256);
+      for (let y = -128; y < 384; y += 64) {
+        ctx.fillStyle = '#DC2626';
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(128, y + 64); ctx.lineTo(128, y + 84); ctx.lineTo(0, y + 20); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#1D4ED8';
+        ctx.beginPath(); ctx.moveTo(0, y + 32); ctx.lineTo(128, y + 96); ctx.lineTo(128, y + 116); ctx.lineTo(0, y + 52); ctx.closePath(); ctx.fill();
+      }
+      return makeTex(c, 1, 1, false);
+    }
+
+    function createStripedAwningTex(c1, c2, bottomLabel = null) {
+      const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+      const ctx = c.getContext('2d');
+      const stripes = 16, sw = 512 / stripes;
+      for (let i = 0; i < stripes; i++) {
+        ctx.fillStyle = i % 2 === 0 ? c1 : c2;
+        ctx.fillRect(i * sw, 0, sw, 256);
+      }
+      if (bottomLabel) {
+        ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(0, 206, 512, 50);
+        ctx.fillStyle = '#1E293B'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '800 32px "Noto Sans KR", sans-serif';
+        ctx.fillText(bottomLabel, 256, 232);
+      }
+      return makeTex(c, 1, 1, false);
+    }
+
+    // 공용 PBR 재질
+    const basementSlabMat = new THREE.MeshStandardMaterial({ color: '#23272D', roughness: 0.85 });
+
+    const terracottaStuccoMat = new THREE.MeshStandardMaterial({ map: createTerracottaStuccoTex(), roughness: 0.84, metalness: 0.02 });
+    const creamStuccoMat = new THREE.MeshStandardMaterial({ map: createCreamStuccoTex(), roughness: 0.74, metalness: 0.02 });
+    const oakWoodMat = new THREE.MeshStandardMaterial({ map: createWarmOakTex(), roughness: 0.68 });
+    const darkWoodDeckMat = new THREE.MeshStandardMaterial({ color: '#46372C', roughness: 0.80 });
+    const darkBronzeMat = new THREE.MeshStandardMaterial({ color: '#382E28', roughness: 0.46, metalness: 0.35 });
+    const darkSignBarMat = new THREE.MeshStandardMaterial({ color: '#3A3630', roughness: 0.52, metalness: 0.28 });
+    const darkSignFrameMat = new THREE.MeshStandardMaterial({ color: '#2B2724', roughness: 0.45, metalness: 0.38 });
+    const darkMetalMat = new THREE.MeshStandardMaterial({ color: '#22262C', roughness: 0.45, metalness: 0.50 });
+    const stainlessMat = new THREE.MeshStandardMaterial({ color: '#CFD5DC', roughness: 0.26, metalness: 0.82 });
+    const greenRoofMat = new THREE.MeshStandardMaterial({ map: createDarkGreenRoofTex(), roughness: 0.84 });
+    const roofPadDarkMat = new THREE.MeshStandardMaterial({ color: '#242A2F', roughness: 0.86 });
+    const polyGreenArchMat = new THREE.MeshStandardMaterial({ color: '#1D5242', roughness: 0.24, metalness: 0.15, transparent: true, opacity: 0.72, side: THREE.DoubleSide });
+    const pilotiConcreteMat = new THREE.MeshStandardMaterial({ color: '#30343B', roughness: 0.90 });
+
+    const mosaicTex = createVintageMosaicTileTextures();
+    const mosaicTileMat = new THREE.MeshStandardMaterial({ map: mosaicTex.map, bumpMap: mosaicTex.bumpMap, bumpScale: 0.025, roughness: 0.72 });
+    const b2RearConcreteMat = new THREE.MeshStandardMaterial({ map: createWeatheredRearConcreteTex(), roughness: 0.85 });
+    const b2RoofMat = new THREE.MeshStandardMaterial({ color: '#7A776E', roughness: 0.88 });
+    const burgundyMat = new THREE.MeshStandardMaterial({ color: '#6A232A', roughness: 0.50 });
+    const vividYellowMat = new THREE.MeshStandardMaterial({ color: '#FACC15', roughness: 0.42 });
+    const palePinkMat = new THREE.MeshStandardMaterial({ color: '#E4D5DF', roughness: 0.55 });
+    const paleLilacMat = new THREE.MeshStandardMaterial({ color: '#D9D7E3', roughness: 0.55 });
+    const mintDoorMat = new THREE.MeshStandardMaterial({ color: '#C2D0CA', roughness: 0.65 });
+
+    const ribbedSidingMat = new THREE.MeshStandardMaterial({ map: createRibbedGreySidingTex(), roughness: 0.82 });
+    const house2FWhiteMat = new THREE.MeshStandardMaterial({ color: '#ECEEEB', roughness: 0.76 });
+    const houseRoofGrayMat = new THREE.MeshStandardMaterial({ color: '#D5D8DC', roughness: 0.82 });
+
+    const redBrickTex = createBrickAndTileTextures(166, 70, 54, '#C8C3B8', 6, 18, 14227);
+    const redBrickWallMat = new THREE.MeshStandardMaterial({ map: redBrickTex.map, bumpMap: redBrickTex.bumpMap, bumpScale: 0.022, roughness: 0.82 });
+
+    const brownBrickTex = createBrickAndTileTextures(126, 90, 78, '#A89F98', 6, 18, 17077);
+    const brownBrickWallMat = new THREE.MeshStandardMaterial({ map: brownBrickTex.map, bumpMap: brownBrickTex.bumpMap, bumpScale: 0.022, roughness: 0.84 });
+
+    const whiteTileTex = createBrickAndTileTextures(234, 236, 239, '#B4B9C0', 8, 22, 17075);
+    const whiteTexTileMat = new THREE.MeshStandardMaterial({ map: whiteTileTex.map, bumpMap: whiteTileTex.bumpMap, bumpScale: 0.018, roughness: 0.72 });
+
+    const mansardGreenMat = new THREE.MeshStandardMaterial({ color: '#586246', roughness: 0.78 });
+    const clayPitchRoofMat = new THREE.MeshStandardMaterial({ color: '#8F4334', roughness: 0.80 });
+    const royalBlueMat = new THREE.MeshStandardMaterial({ color: '#1E3A8A', roughness: 0.55 });
+    const blueDeckMat = new THREE.MeshStandardMaterial({ color: '#2563EB', roughness: 0.58 });
+    const purpleAwningMat = new THREE.MeshStandardMaterial({ color: '#6D28D9', roughness: 0.52 });
+    const blueAwningMat = new THREE.MeshStandardMaterial({ color: '#1D4ED8', roughness: 0.52 });
+    const limeFrameMat = new THREE.MeshStandardMaterial({ color: '#65A30D', roughness: 0.55 });
+    const barberPoleMat = new THREE.MeshStandardMaterial({ map: createBarberPoleTex(), roughness: 0.28, metalness: 0.15 });
+    const maeulAwningMat = new THREE.MeshStandardMaterial({ map: createStripedAwningTex('#E7DEC8', '#6E6254', '마을이용원'), roughness: 0.72 });
+    const repairAwningMat = new THREE.MeshStandardMaterial({ map: createStripedAwningTex('#D8CEBE', '#5D5348', '집수리 · 방수'), roughness: 0.72 });
+
+    const wallConcreteBaseMat = new THREE.MeshStandardMaterial({ color: '#D4D6D8', roughness: 0.88 });
+    const granitePillarMat = new THREE.MeshStandardMaterial({ color: '#848B94', roughness: 0.74 });
+    const darkGlassMat = new THREE.MeshStandardMaterial({ color: '#263746', roughness: 0.16, metalness: 0.48 });
+    const clearShopGlassMat = new THREE.MeshStandardMaterial({ color: '#5A788C', roughness: 0.12, metalness: 0.42, transparent: true, opacity: 0.38 });
+    const glassBlockScreenMat = new THREE.MeshStandardMaterial({ map: createGlassBlockTex(), roughness: 0.24 });
+    const warmInteriorMat = new THREE.MeshStandardMaterial({ color: '#3A322C', emissive: '#6E5538', emissiveIntensity: 0.28, roughness: 0.80 });
+    const ledWarmMat = new THREE.MeshStandardMaterial({ color: '#FFFBEB', emissive: '#FEF3C7', emissiveIntensity: 1.0, roughness: 0.18 });
+    const whitePlasterMat = new THREE.MeshStandardMaterial({ color: '#F4F5F7', roughness: 0.72 });
+    const acUnitMat = new THREE.MeshStandardMaterial({ color: '#E2E6EB', roughness: 0.52, metalness: 0.16 });
+    const carWhiteMat = new THREE.MeshStandardMaterial({ color: '#EEF1F5', roughness: 0.28, metalness: 0.28 });
+    const carBlackMat = new THREE.MeshStandardMaterial({ color: '#1F242B', roughness: 0.30, metalness: 0.35 });
+
+    /**
+     * 건물이 있는 땅(대지) 아래로만 지하 1층(topY -> Y=-3.60m) 벽체 생성
+     * - 지상층 외벽 재질/색상 및 UV 스케일을 동일하게 적용하여 Y=0 경계선 이음매 제거
+     */
+    function addBasementToBottom(parent, x1, x2, topY, z1, z2, name, wallMat, uvScale = 0.32, withOutline = false) {
+      const w = x2 - x1, d = z2 - z1, h = topY - BASEMENT_BOTTOM_Y;
+      if (h <= 0.01) return null;
+      const geo = new THREE.BoxGeometry(w, h, d);
+      applyWorldPlanarUVs(geo, uvScale, uvScale);
+      const mats = Array.isArray(wallMat)
+        ? wallMat
+        : [wallMat, wallMat, basementSlabMat, basementSlabMat, wallMat, wallMat];
+      const mesh = new THREE.Mesh(geo, mats);
+      mesh.name = name;
+      mesh.position.set((x1 + x2) / 2, BASEMENT_BOTTOM_Y + h / 2, (z1 + z2) / 2);
+      parent.add(mesh);
+      if (withOutline) addOutlineForMesh(mesh);
+      return mesh;
+    }
+
+    function addMassBlock(parent, x1, x2, y1, y2, z1, z2, mat, name, withOutline = true, uvScale = 0.32) {
+      const w = x2 - x1, h = y2 - y1, d = z2 - z1;
+      const g = new THREE.BoxGeometry(w, h, d);
+      applyWorldPlanarUVs(g, uvScale, uvScale);
+      const m = new THREE.Mesh(g, mat);
+      m.name = name;
+      m.position.set((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2);
+      parent.add(m);
+      if (withOutline) addOutlineForMesh(m);
+      return m;
+    }
+
+    function addWallMounted3DText(parent, opts) {
+      const {
+        segments, x, y, z, rotY = 0,
+        planeW, planeH,
+        sideColor = '#1E2228',
+        depthStart = 0.006, depthEnd = 0.072, layers = 4,
+        cw = 768, ch = 220
+      } = opts;
+
+      const drawComposite = (ctx, w, h, mode) => {
+        ctx.clearRect(0, 0, w, h);
+        ctx.save();
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        const measured = segments.map((seg) => {
+          ctx.font = seg.font;
+          return { ...seg, width: ctx.measureText(seg.text).width };
+        });
+        const totalW = measured.reduce((acc, s) => acc + s.width, 0);
+        let curX = (w - totalW) / 2;
+
+        measured.forEach((seg) => {
+          ctx.font = seg.font;
+          const cy = h / 2 + (seg.dy || 0);
+          if (mode === 'shadow') {
+            ctx.fillStyle = 'rgba(18, 16, 14, 0.36)';
+            ctx.strokeStyle = 'rgba(18, 16, 14, 0.36)';
+            ctx.lineWidth = (seg.rimW || 4) + 6;
+            ctx.strokeText(seg.text, curX, cy);
+            ctx.fillText(seg.text, curX, cy);
+          } else if (mode === 'side') {
+            ctx.fillStyle = sideColor;
+            ctx.strokeStyle = sideColor;
+            ctx.lineWidth = (seg.rimW || 4) + 6;
+            ctx.strokeText(seg.text, curX, cy);
+            ctx.fillText(seg.text, curX, cy);
+          } else {
+            if (seg.rimW && seg.rim) {
+              ctx.strokeStyle = seg.rim;
+              ctx.lineWidth = seg.rimW;
+              ctx.strokeText(seg.text, curX, cy);
+            }
+            ctx.fillStyle = seg.fill;
+            ctx.fillText(seg.text, curX, cy);
+          }
+          curX += seg.width;
+        });
+        ctx.restore();
+      };
+
+      const shTex = makeSignTex(cw, ch, (ctx, w, h) => drawComposite(ctx, w, h, 'shadow'), true);
+      const sideTex = makeSignTex(cw, ch, (ctx, w, h) => drawComposite(ctx, w, h, 'side'), true);
+      const frontTex = makeSignTex(cw, ch, (ctx, w, h) => drawComposite(ctx, w, h, 'front'), true);
+
+      const holder = new THREE.Group();
+      holder.position.set(x, y, z);
+      holder.rotation.y = rotY;
+      parent.add(holder);
+
+      const shMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(planeW, planeH),
+        new THREE.MeshBasicMaterial({ map: shTex, transparent: true, depthWrite: false })
+      );
+      shMesh.position.set(0.016, -0.020, depthStart - 0.002);
+      holder.add(shMesh);
+
+      const sideMat = new THREE.MeshStandardMaterial({
+        map: sideTex, transparent: true, alphaTest: 0.22, roughness: 0.52, metalness: 0.25
+      });
+      for (let i = 0; i < layers; i++) {
+        const zl = depthStart + (i / layers) * (depthEnd - depthStart);
+        const lm = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), sideMat);
+        lm.position.set(0, 0, zl);
+        holder.add(lm);
+      }
+
+      const frontMat = new THREE.MeshStandardMaterial({
+        map: frontTex, transparent: true, alphaTest: 0.18, roughness: 0.30, metalness: 0.12
+      });
+      const fm = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), frontMat);
+      fm.position.set(0, 0, depthEnd + 0.003);
+      holder.add(fm);
+    }
+
+    // =========================================================================
+    // 5. BUILDING 1 (`b1`): 설내옥설렁탕 (5F · 1F Y = 0.00m · B1 Y = -3.60m)
+    // =========================================================================
+    function buildBuilding1() {
+      const grp = groups.b1;
+      const batch = new GeometryBatcher();
+      const SEOL_CX = -8.00, SEOL_W = 12.60, SEOL_Z_FRONT = -10.60;
+
+      // 대지 한정 지하 1층 (전면 -Z: 크림 스타코, 측/후면: 테라코타 스타코 동일 마감)
+      const b1MainBaseMats = [terracottaStuccoMat, terracottaStuccoMat, basementSlabMat, basementSlabMat, terracottaStuccoMat, creamStuccoMat];
+      addBasementToBottom(grp, -14.30, -1.70, 0.00, -10.60, 0.00, 'B1_Basement_Main', b1MainBaseMats, 0.30, true);
+      addBasementToBottom(grp, -6.775, -1.56, 0.00, -11.74, -10.60, 'B1_Basement_Deck', creamStuccoMat, 0.30, false);
+      addBasementToBottom(grp, -8.93, -6.83, 0.00, -11.10, -10.60, 'B1_Basement_Step', creamStuccoMat, 0.30, false);
+      addBasementToBottom(grp, -16.50, -14.30, 0.00, -9.00, -1.90, 'B1_Basement_Ramp', terracottaStuccoMat, 0.30, false);
+
+      // 지상 1~5층 본체 (첨부1 기존 구조 그대로 유지)
+      addMassBlock(grp, -14.30, -1.70, 0.00, 2.74, -4.60, 0.00, terracottaStuccoMat, 'B1_1F_RearCore', false);
+      addMassBlock(grp, -9.08, -1.70, 0.00, 2.74, -10.18, -4.60, terracottaStuccoMat, 'B1_1F_DiningCore', false);
+      addMassBlock(grp, -14.30, -13.92, 0.00, 2.74, -10.60, -4.60, creamStuccoMat, 'B1_1F_PilotiOuterWall', false);
+      addMassBlock(grp, -14.30, -1.70, 2.74, 5.65, -10.60, -9.15, creamStuccoMat, 'B1_1F2F_CreamWrap', true);
+      addMassBlock(grp, -14.30, -1.70, 2.74, 5.65, -9.15, 0.00, terracottaStuccoMat, 'B1_2F_RearTerracotta', false);
+      batch.addBox('B1_2FCornice', creamStuccoMat, SEOL_CX, 5.64, SEOL_Z_FRONT - 0.11, SEOL_W + 0.14, 0.13, 0.28);
+      addMassBlock(grp, -14.30, -1.70, 5.65, 14.85, -10.60, 0.00, terracottaStuccoMat, 'B1_Upper_3to5F_Mass', true);
+
+      // 전면 디테일 그룹
+      const seolFront = new THREE.Group();
+      seolFront.position.set(SEOL_CX, 0, SEOL_Z_FRONT);
+      seolFront.rotation.y = Math.PI;
+      grp.add(seolFront);
+      const frontBatch = new GeometryBatcher();
+
+      const barY = 3.24, barW = 11.55, barH = 0.26, barD = 0.055;
+      const barShadowTex = makeSignTex(512, 64, (ctx, w, h) => {
+        const g = ctx.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, 'rgba(30,24,18,0)'); g.addColorStop(0.5, 'rgba(30,24,18,0.26)'); g.addColorStop(1, 'rgba(30,24,18,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      }, false);
+      const barShadow = new THREE.Mesh(new THREE.PlaneGeometry(barW + 0.14, barH + 0.12), new THREE.MeshBasicMaterial({ map: barShadowTex, transparent: true, depthWrite: false }));
+      barShadow.position.set(0.06, barY - 0.025, 0.005); seolFront.add(barShadow);
+      frontBatch.addBox('Sign_DarkHorizontalBar', darkSignBarMat, 0.06, barY, barD / 2, barW, barH, barD);
+
+      function add3DChannelWord(opts) {
+        const {
+          text, x, y, planeW, planeH, fontSpec, faceColor, rimColor, rimWidth,
+          sideColor, emissiveColor, emissiveIntensity, depthStart = 0.058, depthEnd = 0.104, layers = 4, letterSpacing = 0
+        } = opts;
+        const cw = 640, ch = 260;
+        const drawText = (ctx, w, h, mode) => {
+          ctx.clearRect(0, 0, w, h);
+          ctx.save(); ctx.font = fontSpec;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          const chars = Array.from(text);
+          const widths = chars.map((chStr) => ctx.measureText(chStr).width);
+          const totalW = widths.reduce((a, b) => a + b, 0) + letterSpacing * (chars.length - 1);
+          let curX = (w - totalW) / 2;
+          chars.forEach((chStr, idx) => {
+            const cx = curX + widths[idx] / 2, cy = h / 2 + 4;
+            if (mode === 'shadow') {
+              ctx.fillStyle = 'rgba(22,17,14,0.34)'; ctx.strokeStyle = 'rgba(22,17,14,0.34)';
+              ctx.lineWidth = rimWidth + 6; ctx.strokeText(chStr, cx, cy); ctx.fillText(chStr, cx, cy);
+            } else if (mode === 'side') {
+              ctx.fillStyle = sideColor; ctx.strokeStyle = sideColor;
+              ctx.lineWidth = rimWidth + 7; ctx.strokeText(chStr, cx, cy); ctx.fillText(chStr, cx, cy);
+            } else {
+              if (rimWidth > 0 && rimColor) { ctx.strokeStyle = rimColor; ctx.lineWidth = rimWidth; ctx.strokeText(chStr, cx, cy); }
+              ctx.fillStyle = faceColor; ctx.fillText(chStr, cx, cy);
+            }
+            curX += widths[idx] + letterSpacing;
+          });
+          ctx.restore();
+        };
+        const shadowTex = makeSignTex(cw, ch, (ctx, w, h) => drawText(ctx, w, h, 'shadow'), true);
+        const sideTex = makeSignTex(cw, ch, (ctx, w, h) => drawText(ctx, w, h, 'side'), true);
+        const frontTex = makeSignTex(cw, ch, (ctx, w, h) => drawText(ctx, w, h, 'front'), true);
+
+        const shMesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+        shMesh.position.set(x + 0.018, y - 0.022, depthStart - 0.001); seolFront.add(shMesh);
+
+        const sideMat = new THREE.MeshStandardMaterial({ map: sideTex, transparent: true, alphaTest: 0.22, roughness: 0.56, metalness: 0.22 });
+        for (let i = 0; i < layers; i++) {
+          const zl = depthStart + (i / layers) * (depthEnd - depthStart);
+          const lm = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), sideMat);
+          lm.position.set(x, y, zl); seolFront.add(lm);
+        }
+        const fm = new THREE.Mesh(
+          new THREE.PlaneGeometry(planeW, planeH),
+          new THREE.MeshStandardMaterial({
+            map: frontTex, transparent: true, alphaTest: 0.18,
+            emissive: emissiveColor || '#000000', emissiveMap: frontTex, emissiveIntensity: emissiveIntensity || 0, roughness: 0.28, metalness: 0.08
+          })
+        );
+        fm.position.set(x, y, depthEnd + 0.004); seolFront.add(fm);
+      }
+
+      add3DChannelWord({ text: '설렁탕', x: -4.25, y: barY + 0.015, planeW: 1.62, planeH: 0.66, fontSpec: '400 180px "Yeon Sung", "Song Myung", serif', faceColor: '#F6F1E2', rimColor: '#2B2520', rimWidth: 5, sideColor: '#231F1C', emissiveColor: '#FFFDF5', emissiveIntensity: 0.14, letterSpacing: 10 });
+      add3DChannelWord({ text: '꼬리곰탕', x: -2.20, y: barY + 0.012, planeW: 1.98, planeH: 0.66, fontSpec: '400 162px "Yeon Sung", "Song Myung", serif', faceColor: '#F6F1E2', rimColor: '#2B2520', rimWidth: 5, sideColor: '#231F1C', emissiveColor: '#FFFDF5', emissiveIntensity: 0.14, letterSpacing: 6 });
+
+      const bezelCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.075, 36), darkSignFrameMat);
+      bezelCyl.rotation.x = Math.PI / 2; bezelCyl.position.set(-0.58, barY + 0.02, 0.085); seolFront.add(bezelCyl);
+      const emblemTex = makeSignTex(512, 512, (ctx, w, h) => {
+        const grad = ctx.createRadialGradient(w * 0.44, h * 0.40, 24, w * 0.5, h * 0.5, w * 0.5);
+        grad.addColorStop(0, '#F6F4FA'); grad.addColorStop(0.72, '#EAE7F2'); grad.addColorStop(1, '#D5D0E0');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+        drawHanokBowlEmblem(ctx, w / 2, h / 2, w * 0.45, '#463144', null, 'rgba(70, 49, 68, 0.10)');
+      }, false);
+      const emblemFace = new THREE.Mesh(new THREE.CircleGeometry(0.262, 36), new THREE.MeshStandardMaterial({ map: emblemTex, emissive: '#F3F0FA', emissiveMap: emblemTex, emissiveIntensity: 0.24, roughness: 0.24 }));
+      emblemFace.position.set(-0.58, barY + 0.02, 0.125); seolFront.add(emblemFace);
+
+      add3DChannelWord({ text: '설내옥', x: 0.52, y: barY + 0.015, planeW: 1.88, planeH: 0.82, fontSpec: '400 218px "Yeon Sung", "Song Myung", serif', faceColor: '#3D2327', rimColor: '#EFE7E9', rimWidth: 9, sideColor: '#1A1315', emissiveColor: '#4A2830', emissiveIntensity: 0.10, depthEnd: 0.122, layers: 5, letterSpacing: 10 });
+
+      const subSpecTex = makeSignTex(512, 110, (ctx, w, h) => {
+        ctx.fillStyle = '#F8FAFC'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '700 54px "Noto Sans KR", sans-serif'; ctx.fillText('설렁탕 전문점', w / 2, h / 2 + 2);
+      }, true);
+      const subSpecMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.96, 0.20), new THREE.MeshStandardMaterial({ map: subSpecTex, transparent: true, alphaTest: 0.12, emissive: '#FFFFFF', emissiveMap: subSpecTex, emissiveIntensity: 0.20 }));
+      subSpecMesh.position.set(1.72, barY - 0.015, barD + 0.008); seolFront.add(subSpecMesh);
+
+      add3DChannelWord({ text: '도가니탕', x: 2.95, y: barY + 0.012, planeW: 1.98, planeH: 0.66, fontSpec: '400 162px "Yeon Sung", "Song Myung", serif', faceColor: '#F6F1E2', rimColor: '#2B2520', rimWidth: 5, sideColor: '#231F1C', emissiveColor: '#FFFDF5', emissiveIntensity: 0.14, letterSpacing: 6 });
+      add3DChannelWord({ text: '함흥냉면', x: 4.85, y: barY + 0.012, planeW: 1.96, planeH: 0.66, fontSpec: '400 162px "Yeon Sung", "Song Myung", serif', faceColor: '#F6F1E2', rimColor: '#2B2520', rimWidth: 5, sideColor: '#231F1C', emissiveColor: '#FFFDF5', emissiveIntensity: 0.14, letterSpacing: 6 });
+
+      const deliveryTex = makeSignTex(512, 128, (ctx, w, h) => {
+        ctx.fillStyle = '#342E28'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '700 66px "Gowun Batang", "Song Myung", serif'; ctx.fillText('택배 · 포장', w / 2, h / 2);
+      }, true);
+      const deliveryMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.96, 0.24), new THREE.MeshStandardMaterial({ map: deliveryTex, transparent: true, alphaTest: 0.10, roughness: 0.55 }));
+      deliveryMesh.position.set(-4.25, 2.86, 0.012); seolFront.add(deliveryMesh);
+
+      const phoneTex = makeSignTex(640, 128, (ctx, w, h) => {
+        ctx.fillStyle = '#352F29'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '700 62px "Gowun Batang", Georgia, serif'; ctx.fillText('02.2298.6608', w / 2, h / 2);
+      }, true);
+      const phoneMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.26, 0.24), new THREE.MeshStandardMaterial({ map: phoneTex, transparent: true, alphaTest: 0.10, roughness: 0.55 }));
+      phoneMesh.position.set(4.85, 2.84, 0.012); seolFront.add(phoneMesh);
+
+      [-4.72, -2.36, 0.00, 2.36, 4.72].forEach((wx) => {
+        const wy = 4.62, ww = 1.28, wh = 1.38;
+        frontBatch.addBox('B1_2F_WinFrames', darkBronzeMat, wx, wy + wh / 2 - 0.04, 0.01, ww, 0.08, 0.18);
+        frontBatch.addBox('B1_2F_WinFrames', darkBronzeMat, wx, wy - wh / 2 + 0.04, 0.01, ww, 0.08, 0.18);
+        frontBatch.addBox('B1_2F_WinFrames', darkBronzeMat, wx - ww / 2 + 0.04, wy, 0.01, 0.08, wh, 0.18);
+        frontBatch.addBox('B1_2F_WinFrames', darkBronzeMat, wx + ww / 2 - 0.04, wy, 0.01, 0.08, wh, 0.18);
+        frontBatch.addBox('B1_2F_WinGlass', darkGlassMat, wx, wy, -0.02, ww - 0.14, wh - 0.14, 0.04);
+        frontBatch.addBox('B1_2F_WinInteriorLight', ledWarmMat, wx + 0.12, wy + 0.34, -0.005, 0.62, 0.03, 0.01);
+        [-0.42, 0.42].forEach((dx) => frontBatch.addCylinder('B1_Cornice_LEDs', ledWarmMat, wx + dx, 5.565, 0.14, 0.11, 0.025));
+      });
+
+      [-6.12, -3.72, -1.32, 1.08, 3.62, 6.08].forEach((cx, idx) => {
+        frontBatch.addBox('B1_OakColumns', oakWoodMat, cx, 1.37, -0.14, (idx === 0 || idx === 5) ? 0.38 : 0.34, 2.74, 0.38);
+      });
+      const bay12Back = new THREE.Mesh(new THREE.PlaneGeometry(4.60, 2.66), warmInteriorMat);
+      bay12Back.position.set(-3.72, 1.36, -0.38); seolFront.add(bay12Back);
+      const bay1Glass = new THREE.Mesh(new THREE.PlaneGeometry(2.06, 2.62), clearShopGlassMat);
+      bay1Glass.position.set(-4.92, 1.36, -0.28); seolFront.add(bay1Glass);
+
+      const prideDecalTex = makeSignTex(640, 260, (ctx, w, h) => {
+        ctx.fillStyle = 'rgba(248,246,242,0.94)'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#4A2B3C'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 54px "Noto Sans KR", sans-serif'; ctx.fillText('설내옥 3무 자존심', w / 2, 68);
+        ctx.fillStyle = '#6B2145'; ctx.fillRect(80, 106, w - 160, 4);
+        ctx.fillStyle = '#334155'; ctx.font = '700 36px "Noto Sans KR", sans-serif'; ctx.fillText('무 MSG · 무 첨가물 · 무 색소', w / 2, 178);
+      }, true);
+      const prideDecal = new THREE.Mesh(new THREE.PlaneGeometry(1.76, 0.68), new THREE.MeshStandardMaterial({ map: prideDecalTex, transparent: true, roughness: 0.40 }));
+      prideDecal.position.set(-4.72, 2.34, -0.25); seolFront.add(prideDecal);
+
+      const bay2Glass = new THREE.Mesh(new THREE.PlaneGeometry(2.06, 2.62), clearShopGlassMat);
+      bay2Glass.position.set(-2.52, 1.36, -0.28); seolFront.add(bay2Glass);
+      frontBatch.addBox('B1_GlassBlockScreens', glassBlockScreenMat, -3.22, 0.90, -0.24, 0.64, 1.18, 0.08);
+      frontBatch.addBox('B1_GlassBlockScreens', glassBlockScreenMat, -1.82, 0.90, -0.24, 0.64, 1.18, 0.08);
+
+      const bay2LogoTex = makeSignTex(384, 512, (ctx, w, h) => {
+        drawHanokBowlEmblem(ctx, w / 2, h * 0.42, 132, '#E2C994', 'rgba(42, 34, 28, 0.45)', null);
+        ctx.fillStyle = '#E8D2A2'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '700 38px "Gowun Batang", serif'; ctx.fillText('설렁탕 전문점', w / 2, h * 0.80);
+      }, true);
+      const bay2Logo = new THREE.Mesh(new THREE.PlaneGeometry(0.76, 1.02), new THREE.MeshStandardMaterial({ map: bay2LogoTex, transparent: true, roughness: 0.35 }));
+      bay2Logo.position.set(-2.52, 1.56, -0.22); seolFront.add(bay2Logo);
+
+      frontBatch.addBox('B1_WoodDeck', darkWoodDeckMat, -3.55, 0.14, 0.42, 4.65, 0.28, 1.44);
+      frontBatch.addBox('B1_WoodDeck', darkWoodDeckMat, -6.02, 0.10, 0.42, 0.30, 0.20, 1.40);
+      frontBatch.addBox('B1_WoodDeck', darkWoodDeckMat, -6.30, 0.05, 0.42, 0.28, 0.10, 1.40);
+      frontBatch.addBox('B1_Railing', darkBronzeMat, -3.55, 1.12, 1.08, 4.55, 0.045, 0.045);
+      frontBatch.addBox('B1_Railing', darkBronzeMat, -3.55, 0.42, 1.08, 4.55, 0.032, 0.032);
+      for (let rx = -5.80; rx <= -1.30; rx += 0.225) {
+        const isPost = Math.abs(rx + 5.80) < 0.05 || Math.abs(rx + 4.30) < 0.05 || Math.abs(rx + 2.80) < 0.05 || Math.abs(rx + 1.30) < 0.05;
+        frontBatch.addBox('B1_Railing', darkBronzeMat, rx, 0.70, 1.08, isPost ? 0.05 : 0.02, 0.86, isPost ? 0.05 : 0.02);
+      }
+      [-5.80, -4.30, -2.80].forEach((lx) => {
+        frontBatch.addBox('B1_Railing', darkMetalMat, lx, 1.24, 1.08, 0.12, 0.20, 0.12);
+        frontBatch.addBox('B1_LanternGlow', ledWarmMat, lx, 1.24, 1.08, 0.08, 0.13, 0.13);
+      });
+
+      frontBatch.addBox('B1_EntryStep', darkWoodDeckMat, -0.12, 0.07, 0.10, 2.10, 0.14, 0.80);
+      frontBatch.addBox('B1_EntryFrame', darkBronzeMat, -0.12, 1.42, -0.34, 2.02, 2.58, 0.10);
+      const entryDoorBack = new THREE.Mesh(new THREE.PlaneGeometry(1.86, 2.44), warmInteriorMat);
+      entryDoorBack.position.set(-0.12, 1.42, -0.42);
+      const entryDoorGlass = new THREE.Mesh(new THREE.PlaneGeometry(1.86, 2.44), clearShopGlassMat);
+      entryDoorGlass.position.set(-0.12, 1.42, -0.30);
+      seolFront.add(entryDoorBack, entryDoorGlass);
+      frontBatch.addBox('B1_EntryFrame', darkBronzeMat, -0.12, 1.42, -0.29, 0.05, 2.46, 0.06);
+      for (let i = 0; i < 7; i++) frontBatch.addCylinder('B1_FairyLights', ledWarmMat, -0.88 + i * 0.255, 2.58, -0.26, 0.055, 0.07);
+
+      const naejangPosterTex = makeSignTex(256, 440, (ctx, w, h) => {
+        ctx.fillStyle = '#F7F3EC'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#B91C1C'; ctx.lineWidth = 14; ctx.strokeRect(7, 7, w - 14, h - 14);
+        ctx.fillStyle = '#3B2820'; ctx.beginPath(); ctx.arc(w / 2, 108, 64, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#D97706'; ctx.beginPath(); ctx.arc(w / 2, 108, 48, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#B91C1C'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 54px "Noto Sans KR", sans-serif';
+        ctx.fillText('한정', w / 2, 224); ctx.fillText('판매', w / 2, 286);
+        ctx.fillStyle = '#1E293B'; ctx.font = '800 34px "Noto Sans KR", sans-serif'; ctx.fillText('한우내장탕', w / 2, 368);
+      }, true);
+      const naejangPoster = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.96), new THREE.MeshStandardMaterial({ map: naejangPosterTex, roughness: 0.42 }));
+      naejangPoster.position.set(0.38, 1.56, -0.27); seolFront.add(naejangPoster);
+
+      frontBatch.addBox('B1_PilotiInterior', pilotiConcreteMat, 3.58, 0.03, -2.95, 4.72, 0.06, 5.95);
+      frontBatch.addBox('B1_PilotiInterior', pilotiConcreteMat, 3.58, 2.71, -2.95, 4.72, 0.06, 5.95);
+      frontBatch.addBox('B1_PilotiInterior', pilotiConcreteMat, 1.24, 1.37, -2.95, 0.06, 2.68, 5.90);
+      frontBatch.addBox('B1_PilotiInterior', pilotiConcreteMat, 5.90, 1.37, -2.95, 0.06, 2.68, 5.90);
+      frontBatch.addBox('B1_PilotiInterior', pilotiConcreteMat, 3.58, 1.37, -5.92, 4.70, 2.68, 0.06);
+      frontBatch.addBox('B1_PilotiYellowStripe', vividYellowMat, 5.86, 0.85, -2.60, 0.02, 0.09, 4.20);
+      frontBatch.addBox('B1_PilotiLED', ledWarmMat, 2.35, 2.66, -2.60, 0.12, 0.03, 2.40);
+      frontBatch.addBox('B1_PilotiLED', ledWarmMat, 4.75, 2.66, -2.60, 0.12, 0.03, 2.40);
+      {
+        const cx = 2.35, cz = -2.15;
+        frontBatch.addBox('B1_CarBody', carWhiteMat, cx, 0.62, cz, 1.80, 0.60, 4.60);
+        frontBatch.addBox('B1_CarBody', carWhiteMat, cx, 1.13, cz - 0.35, 1.54, 0.46, 2.30);
+        frontBatch.addBox('B1_CarGlass', darkGlassMat, cx, 1.12, cz + 0.80, 1.42, 0.40, 0.08, -0.42, 0, 0);
+        frontBatch.addBox('B1_CarGlass', darkGlassMat, cx, 1.13, cz - 0.35, 1.56, 0.36, 1.94);
+        frontBatch.addBox('B1_CarGrille', stainlessMat, cx, 0.56, cz + 2.31, 0.96, 0.26, 0.04);
+        frontBatch.addBox('B1_CarLights', ledWarmMat, cx - 0.64, 0.69, cz + 2.31, 0.34, 0.11, 0.04);
+        frontBatch.addBox('B1_CarLights', ledWarmMat, cx + 0.64, 0.69, cz + 2.31, 0.34, 0.11, 0.04);
+        [[cx - 0.86, cz + 1.38], [cx + 0.86, cz + 1.38], [cx - 0.86, cz - 1.40], [cx + 0.86, cz - 1.40]].forEach(([wx, wz]) => {
+          frontBatch.addCylinder('B1_CarTires', darkMetalMat, wx, 0.32, wz, 0.62, 0.22, 0, 0, Math.PI / 2);
+        });
+      }
+
+      const newMenuBannerTex = makeSignTex(240, 620, (ctx, w, h) => {
+        const g = ctx.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, '#3B1D38'); g.addColorStop(0.55, '#261428'); g.addColorStop(1, '#150C17');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#C084FC'; ctx.lineWidth = 6; ctx.strokeRect(8, 8, w - 16, h - 16);
+        ctx.fillStyle = '#FDE047'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 38px "Noto Sans KR", sans-serif'; ctx.fillText('신메뉴', w / 2, 74);
+        ctx.fillStyle = '#FFFFFF'; ctx.font = '800 34px "Noto Sans KR", sans-serif'; ctx.fillText('출시', w / 2, 124);
+        ctx.fillStyle = '#E9D5FF'; ctx.font = '700 24px "Noto Sans KR", sans-serif'; ctx.fillText('한우 왕갈비탕', w / 2, 184);
+        ctx.fillStyle = '#F8FAFC'; ctx.beginPath(); ctx.arc(w / 2, 340, 82, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#6B2F1B'; ctx.beginPath(); ctx.arc(w / 2, 340, 68, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#EAB308'; ctx.beginPath(); ctx.arc(w / 2 - 14, 332, 22, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#CBD5E1'; ctx.font = '700 24px "Noto Sans KR", sans-serif'; ctx.fillText('설내옥 설렁탕', w / 2, 520);
+      }, true);
+      const newMenuStand = new THREE.Mesh(
+        new THREE.BoxGeometry(0.58, 1.56, 0.06),
+        [darkMetalMat, darkMetalMat, darkMetalMat, darkMetalMat, new THREE.MeshStandardMaterial({ map: newMenuBannerTex, roughness: 0.42 }), darkMetalMat]
+      );
+      newMenuStand.position.set(3.38, 0.90, 0.22); newMenuStand.rotation.y = -0.14; seolFront.add(newMenuStand);
+      frontBatch.addBox('B1_BannerBase', darkMetalMat, 3.38, 0.08, 0.22, 0.62, 0.16, 0.34, 0, -0.14, 0);
+
+      const rightPierPosterTex = makeSignTex(220, 560, (ctx, w, h) => {
+        ctx.fillStyle = '#181B20'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#64748B'; ctx.lineWidth = 6; ctx.strokeRect(6, 6, w - 12, h - 12);
+        ctx.fillStyle = '#F8FAFC'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '800 36px "Song Myung", serif'; ctx.fillText('명실상부', w / 2, 84);
+        ctx.fillStyle = '#94A3B8'; ctx.font = '600 22px "Noto Sans KR", sans-serif'; ctx.fillText('전통의 깊은 맛', w / 2, 140);
+        ctx.fillStyle = '#334155'; ctx.fillRect(28, 200, w - 56, 210);
+        ctx.fillStyle = '#E2E8F0'; ctx.font = '700 22px "Noto Sans KR", sans-serif'; ctx.fillText('설내옥', w / 2, 485);
+      }, true);
+      const rightPierPoster = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 1.24), new THREE.MeshStandardMaterial({ map: rightPierPosterTex, roughness: 0.46 }));
+      rightPierPoster.position.set(6.08, 1.24, 0.06); seolFront.add(rightPierPoster);
+
+      {
+        const vW = 0.62, vH = 2.80, vT = 0.18, vX = 6.73, vY = 7.05, vZ = 0.02;
+        frontBatch.addBox('B1_VertSignBrackets', darkMetalMat, 6.36, 6.22, vZ, 0.24, 0.08, 0.12);
+        frontBatch.addBox('B1_VertSignBrackets', darkMetalMat, 6.36, 7.88, vZ, 0.24, 0.08, 0.12);
+        const vertFaceTex = makeSignTex(256, 1024, (ctx, w, h) => {
+          ctx.fillStyle = '#2B2724'; ctx.fillRect(0, 0, w, h);
+          ctx.fillStyle = '#F0EBE1'; ctx.fillRect(14, 14, w - 28, h - 28);
+          ctx.fillStyle = '#201C1A'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.font = '700 56px "Yeon Sung", serif'; ctx.fillText('설내옥', w / 2, 92);
+          ctx.fillStyle = 'rgba(32,28,26,0.24)'; ctx.fillRect(46, 142, w - 92, 4);
+          ctx.fillStyle = '#201C1A'; ctx.font = '400 220px "Yeon Sung", serif';
+          ctx.fillText('설', w / 2, 295); ctx.fillText('렁', w / 2, 575); ctx.fillText('탕', w / 2, 855);
+        }, true);
+        const vertFaceMat = new THREE.MeshStandardMaterial({ map: vertFaceTex, emissive: '#F5EFE4', emissiveMap: vertFaceTex, emissiveIntensity: 0.14, roughness: 0.34 });
+        const vertSignMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(vW, vH, vT),
+          [darkSignFrameMat, darkSignFrameMat, darkSignFrameMat, darkSignFrameMat, vertFaceMat, vertFaceMat]
+        );
+        vertSignMesh.position.set(vX, vY, vZ); seolFront.add(vertSignMesh);
+      }
+
+      frontBatch.buildAll(seolFront);
+      frontBatch.disposeBases();
+
+      function addPitchedWindowHood(cx, topY, wallCoord, width, facing) {
+        const shape = new THREE.Shape();
+        const hw = width / 2 + 0.12;
+        shape.moveTo(-hw, 0); shape.lineTo(hw, 0); shape.lineTo(hw * 0.72, 0.22); shape.lineTo(0, 0.32); shape.lineTo(-hw * 0.72, 0.22); shape.closePath();
+        const hoodGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.24, bevelEnabled: false });
+        const m4 = new THREE.Matrix4();
+        if (facing === '-Z') m4.makeTranslation(cx, topY, wallCoord - 0.22);
+        else if (facing === '-X') m4.multiplyMatrices(new THREE.Matrix4().makeTranslation(wallCoord - 0.22, topY, cx), new THREE.Matrix4().makeRotationY(-Math.PI / 2));
+        batch.addGeometry('B1_WindowHoods', darkBronzeMat, hoodGeo, m4);
+        hoodGeo.dispose();
+      }
+
+      const neWinXsB1 = [-12.72, -10.36, -8.00, -5.64, -3.28];
+      [7.25, 10.18].forEach((wy) => {
+        neWinXsB1.forEach((wx) => {
+          batch.addBox('B1_WinFrames', darkBronzeMat, wx, wy, -10.62, 1.28, 1.22, 0.14);
+          batch.addBox('B1_WinGlass', darkGlassMat, wx, wy, -10.67, 1.12, 1.06, 0.04);
+          batch.addBox('B1_WinFrames', darkBronzeMat, wx, wy - 0.63, -10.68, 1.40, 0.08, 0.18);
+          addPitchedWindowHood(wx, wy + 0.61, -10.60, 1.28, '-Z');
+        });
+      });
+      neWinXsB1.forEach((wx) => {
+        batch.addBox('B1_5F_WinFrames', whitePlasterMat, wx, 13.05, -10.62, 1.22, 0.86, 0.12);
+        batch.addBox('B1_WinGlass', darkGlassMat, wx, 13.05, -10.66, 1.08, 0.72, 0.04);
+        batch.addBox('B1_5F_WinFrames', whitePlasterMat, wx, 13.05, -10.67, 0.05, 0.74, 0.05);
+      });
+
+      const nwBannerTex = makeSignTex(720, 720, (ctx, w, h) => {
+        ctx.fillStyle = '#F2EFE6'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#BDB4A6'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+        drawHanokBowlEmblem(ctx, 136, 128, 70, '#5A4A42', null, null);
+        ctx.fillStyle = '#3A312C'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '400 116px "Yeon Sung", serif';
+        ['설', '내', '옥'].forEach((ch, i) => ctx.fillText(ch, 136, 275 + i * 145));
+        const cols = [['설', '렁', '탕'], ['도', '가', '니', '탕'], ['꼬', '리', '곰', '탕'], ['함', '흥', '냉', '면']];
+        ctx.fillStyle = '#4B4039'; ctx.font = '400 76px "Yeon Sung", serif';
+        cols.forEach((arr, cIdx) => arr.forEach((ch, rIdx) => ctx.fillText(ch, 300 + cIdx * 106, (arr.length === 3 ? 235 : 190) + rIdx * 110)));
+      }, true);
+      const nwBanner = new THREE.Mesh(new THREE.PlaneGeometry(3.45, 3.60), new THREE.MeshStandardMaterial({ map: nwBannerTex, roughness: 0.62 }));
+      nwBanner.rotation.y = -Math.PI / 2; nwBanner.position.set(-14.34, 12.10, -7.85); grp.add(nwBanner);
+
+      [{ z: -7.85, ys: [4.62, 7.25] }, { z: -4.50, ys: [4.62, 7.25, 10.18] }].forEach((col) => {
+        col.ys.forEach((wy) => {
+          batch.addBox('B1_WinFrames', darkBronzeMat, -14.32, wy, col.z, 0.14, 1.22, 1.28);
+          batch.addBox('B1_WinGlass', darkGlassMat, -14.37, wy, col.z, 0.04, 1.06, 1.12);
+          addPitchedWindowHood(col.z, wy + 0.61, -14.30, 1.28, '-X');
+        });
+      });
+      batch.addBox('B1_5F_WinFrames', whitePlasterMat, -14.32, 13.05, -4.50, 0.12, 0.86, 1.20);
+      batch.addBox('B1_WinGlass', darkGlassMat, -14.36, 13.05, -4.50, 0.04, 0.72, 1.06);
+      batch.addBox('B1_WinFrames', darkBronzeMat, -14.32, 8.15, -1.40, 0.14, 12.20, 1.58);
+      batch.addBox('B1_WinGlass', darkGlassMat, -14.37, 8.15, -1.40, 0.04, 12.00, 1.40);
+
+      const rampLen = 7.10, rampMidZ = -5.45;
+      batch.addBox('B1_RampWall', darkWoodDeckMat, -16.42, 0.90, rampMidZ, 0.16, 1.80, rampLen);
+      batch.addBox('B1_RampWall', darkWoodDeckMat, -15.40, 0.90, -1.98, 2.16, 1.80, 0.16);
+      const archGeo = new THREE.CylinderGeometry(1.08, 1.08, rampLen, 16, 1, true, 0, Math.PI);
+      archGeo.rotateZ(Math.PI / 2); archGeo.rotateY(Math.PI / 2); archGeo.scale(1.0, 0.64, 1.0);
+      const archCanopy = new THREE.Mesh(archGeo, polyGreenArchMat);
+      archCanopy.position.set(-15.40, 1.80, rampMidZ); grp.add(archCanopy);
+
+      [-8.20, -7.40].forEach((cz) => {
+        batch.addCylinder('B1_ExhaustFlues', stainlessMat, -1.48, 9.90, cz, 0.34, 12.80);
+        [10.6, 12.6, 14.5].forEach((by) => batch.addBox('B1_DarkMetal', darkMetalMat, -1.58, by, cz, 0.32, 0.08, 0.40));
+        batch.addCylinder('B1_ExhaustFlues', stainlessMat, -1.36, 16.38, cz, 0.34, 0.42, 0, 0, Math.PI / 2);
+      });
+
+      batch.addBox('B1_RoofCornice', terracottaStuccoMat, SEOL_CX, 14.72, -10.68, SEOL_W + 0.34, 0.74, 0.36, 0, 0, 0, 0.30);
+      batch.addBox('B1_RoofCornice', terracottaStuccoMat, -14.38, 14.72, -5.30, 0.36, 0.74, 10.96, 0, 0, 0, 0.30);
+      batch.addBox('B1_RoofCornice', terracottaStuccoMat, -1.62, 14.72, -5.30, 0.36, 0.74, 10.96, 0, 0, 0, 0.30);
+      batch.addBox('B1_RoofCornice', terracottaStuccoMat, SEOL_CX, 14.72, 0.08, SEOL_W + 0.34, 0.74, 0.36, 0, 0, 0, 0.30);
+      const greenDeck = new THREE.Mesh(new THREE.BoxGeometry(12.0, 0.08, 10.0), greenRoofMat);
+      greenDeck.position.set(SEOL_CX, 14.88, -5.30); grp.add(greenDeck);
+      batch.addBox('B1_RoofEquipPad', roofPadDarkMat, -7.40, 14.98, -5.80, 4.30, 0.14, 3.50);
+      batch.addBox('B1_RoofAC', acUnitMat, -6.20, 15.45, -5.80, 0.84, 0.82, 1.14);
+      batch.addBox('B1_RoofAC', acUnitMat, -8.20, 15.45, -5.80, 0.84, 0.82, 1.14);
+      addMassBlock(grp, -14.30, -11.45, 14.85, 17.00, -3.20, 0.00, terracottaStuccoMat, 'B1_Roof_StairPenthouse', true);
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 6. BUILDING 2 (`b2`): 대림부동산·상가 (3F · 1F Y = 0.00m · B1 Y = -3.60m)
+    // =========================================================================
+    function buildBuilding2() {
+      const grp = groups.b2;
+      const batch = new GeometryBatcher();
+      const B2_X0 = -1.20, B2_X1 = 15.30, B2_CX = 7.05;
+
+      // 대지 한정 지하 1층 (전면·좌우: 모자이크 타일, 후면 +Z: 콘크리트 외벽 동일)
+      const b2BaseMats = [mosaicTileMat, mosaicTileMat, basementSlabMat, basementSlabMat, b2RearConcreteMat, mosaicTileMat];
+      addBasementToBottom(grp, B2_X0, B2_X1, 0.00, -10.30, -5.10, 'B2_Basement_Main', b2BaseMats, 0.40, true);
+      addBasementToBottom(grp, 7.95, 11.05, 0.00, -11.06, -10.30, 'B2_Basement_Patio', mosaicTileMat, 0.40, false);
+
+      const mainGeo = new THREE.BoxGeometry(16.5, 9.45, 5.2);
+      applyWorldPlanarUVs(mainGeo, 0.40, 0.40);
+      const mainMesh = new THREE.Mesh(mainGeo, [mosaicTileMat, mosaicTileMat, b2RoofMat, b2RoofMat, b2RearConcreteMat, mosaicTileMat]);
+      mainMesh.position.set(B2_CX, 4.725, -7.70);
+      grp.add(mainMesh);
+      addOutlineForMesh(mainMesh);
+
+      const pH = 0.65, pT = 0.24, pY = 9.45 + pH / 2;
+      batch.addBox('B2_ParapetTile', mosaicTileMat, B2_CX, pY, -10.3 + pT / 2, 16.5, pH, pT, 0, 0, 0, 0.40);
+      batch.addBox('B2_ParapetRear', b2RearConcreteMat, B2_CX, pY, -5.1 - pT / 2, 16.5, pH, pT);
+      batch.addBox('B2_ParapetTile', mosaicTileMat, B2_X1 - pT / 2, pY, -7.70, pT, pH, 5.2 - pT * 2, 0, 0, 0, 0.40);
+      batch.addBox('B2_ParapetTile', mosaicTileMat, B2_X0 + pT / 2, pY, -7.70, pT, pH, 5.2 - pT * 2, 0, 0, 0, 0.40);
+      addMassBlock(grp, -1.10, 2.60, 9.45, 11.50, -6.90, -5.10, whitePlasterMat, 'B2_Rear_StairPenthouse', true);
+
+      batch.addBox('B2_DarkMetal', darkMetalMat, -0.50, 1.35, -10.32, 1.24, 2.70, 0.14);
+      batch.addBox('B2_Burgundy', burgundyMat, -1.14, 1.35, -10.37, 0.14, 2.70, 0.08);
+      batch.addBox('B2_Burgundy', burgundyMat, 0.14, 1.35, -10.37, 0.14, 2.70, 0.08);
+
+      const addFascia = (w, h, d, x, y, z, sideMat, fn, cw = 512, ch = 140) => {
+        const tex = makeSignTex(cw, ch, fn, true);
+        const m = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, d),
+          [sideMat, sideMat, sideMat, sideMat, sideMat, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.42 })]
+        );
+        m.position.set(x, y, z); grp.add(m);
+      };
+
+      addFascia(1.42, 0.44, 0.12, -0.50, 2.92, -10.38, burgundyMat, (ctx, w, h) => {
+        ctx.fillStyle = '#6A232A'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '800 54px "Gowun Batang", serif'; ctx.fillText('LONDON BASIC', w / 2, h / 2);
+      });
+
+      const lbPierTex = makeSignTex(96, 560, (ctx, w, h) => {
+        ctx.fillStyle = '#881326'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '800 44px "Noto Sans KR", sans-serif';
+        ['런', '던', '베', '이', '직', '학', '생', '복'].forEach((ch, i) => ctx.fillText(ch, w / 2, 48 + i * 64));
+      });
+      const lbPierMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 2.50), new THREE.MeshStandardMaterial({ map: lbPierTex, roughness: 0.42 }));
+      lbPierMesh.rotation.y = Math.PI; lbPierMesh.position.set(0.14, 1.35, -10.42); grp.add(lbPierMesh);
+
+      const lbVertTex = makeSignTex(200, 960, (ctx, w, h) => {
+        ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, 400);
+        ctx.fillStyle = '#334155'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '800 44px "Noto Sans KR", sans-serif';
+        ['바', '디', '필', '라', '테', '스'].forEach((ch, i) => ctx.fillText(ch, w / 2, 52 + i * 58));
+        ctx.fillStyle = '#B91C1C'; ctx.fillRect(0, 400, w, 560);
+        ctx.fillStyle = '#FFFFFF'; ctx.font = '900 46px "Noto Sans KR", sans-serif';
+        ['런', '던', '베', '이', '직', '학', '생', '복'].forEach((ch, i) => ctx.fillText(ch, w / 2, 442 + i * 64));
+        ctx.strokeStyle = '#334155'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+      });
+      const lbVertMat = new THREE.MeshStandardMaterial({ map: lbVertTex, roughness: 0.40 });
+      const lbVertSign = new THREE.Mesh(new THREE.BoxGeometry(0.24, 4.80, 0.88), [lbVertMat, lbVertMat, darkMetalMat, darkMetalMat, darkMetalMat, lbVertMat]);
+      lbVertSign.position.set(-1.22, 6.40, -10.76); grp.add(lbVertSign);
+
+      addFascia(3.80, 0.88, 0.14, 2.10, 3.00, -10.38, palePinkMat, (ctx, w, h) => {
+        ctx.fillStyle = '#E4D5DF'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#881337'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 100px "Noto Sans KR", sans-serif'; ctx.fillText('미인 만들기', w * 0.46, 114);
+        ctx.fillStyle = '#6B2145'; ctx.font = '700 32px "Noto Sans KR", sans-serif';
+        ctx.fillText('헤어샵', w * 0.86, 62); ctx.fillText('02-2292-6197', w * 0.50, 186);
+      }, 840, 220);
+      batch.addBox('B2_DarkMetal', darkMetalMat, 2.10, 1.32, -10.32, 3.66, 2.52, 0.10);
+      batch.addBox('B2_Glass', darkGlassMat, 2.10, 1.32, -10.36, 3.48, 2.36, 0.04);
+      batch.addBox('B2_WhiteAFrame', whitePlasterMat, 0.45, 0.68, -10.75, 0.62, 1.34, 0.12, -0.08, 0.18, 0);
+
+      addFascia(3.80, 0.88, 0.14, 5.90, 3.00, -10.38, paleLilacMat, (ctx, w, h) => {
+        ctx.fillStyle = '#D9D7E3'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#475569'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.font = '700 26px "Noto Sans KR", sans-serif'; ctx.fillText('대한그린체육', w * 0.40, 68);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#3B82F6'; ctx.font = '900 72px Arial, sans-serif'; ctx.fillText('t', w * 0.48, 68);
+        ctx.fillStyle = '#7E22CE'; ctx.fillText('G', w * 0.55, 68);
+        ctx.fillStyle = '#1E293B'; ctx.font = '800 50px "Noto Sans KR", sans-serif';
+        ctx.fillText('대한그린체육산업협동조합', w / 2, 152);
+      }, 840, 220);
+      batch.addBox('B2_WhiteFrame', whitePlasterMat, 5.90, 1.32, -10.32, 3.68, 2.52, 0.10);
+      batch.addBox('B2_Glass', darkGlassMat, 5.90, 1.32, -10.36, 3.48, 2.36, 0.04);
+      const potLeafMat = new THREE.MeshStandardMaterial({ color: '#2F6B35', roughness: 0.88 });
+      [4.7, 5.25].forEach((px) => {
+        batch.addCylinder('B2_Pots', whitePlasterMat, px, 0.24, -10.55, 0.34, 0.46);
+        batch.addDodecahedron('B2_PotFoliage', potLeafMat, px, 0.62, -10.55, 0.52);
+      });
+
+      batch.addBox('B2_YellowWrap', vividYellowMat, 8.04, 1.32, -10.40, 0.48, 2.64, 0.22);
+      batch.addBox('B2_YellowWrap', vividYellowMat, 10.96, 1.32, -10.40, 0.48, 2.64, 0.22);
+      addFascia(3.40, 0.90, 0.22, 9.50, 3.00, -10.40, vividYellowMat, (ctx, w, h) => {
+        ctx.fillStyle = '#FACC15'; ctx.fillRect(0, 0, w, h);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 84px "Noto Sans KR", sans-serif';
+        ctx.lineWidth = 10; ctx.strokeStyle = '#0F172A'; ctx.strokeText('케어스포츠투어', w * 0.52, h / 2 + 4);
+        ctx.fillStyle = '#1D4ED8'; ctx.fillText('케어스포츠투어', w * 0.52, h / 2 + 4);
+      }, 800, 220);
+      batch.addBox('B2_DarkMetal', darkMetalMat, 9.50, 1.28, -10.33, 2.46, 2.50, 0.08);
+      batch.addBox('B2_Glass', darkGlassMat, 9.50, 1.28, -10.37, 2.30, 2.34, 0.04);
+      for (let bx = 8.75; bx <= 10.26; bx += 0.75) batch.addBox('B2_DarkMetal', darkMetalMat, bx, 1.28, -10.39, 0.06, 2.36, 0.06);
+      batch.addBox('B2_PatioWood', darkWoodDeckMat, 9.50, 0.06, -10.72, 3.10, 0.12, 0.68);
+      batch.addBox('B2_PatioWood', darkWoodDeckMat, 9.50, 0.65, -11.04, 2.40, 0.06, 0.06);
+      batch.addBox('B2_PatioWood', darkWoodDeckMat, 9.50, 0.22, -11.04, 2.40, 0.05, 0.05);
+      for (let rx = 8.35; rx <= 10.66; rx += 0.24) batch.addBox('B2_PatioWood', darkWoodDeckMat, rx, 0.42, -11.04, 0.035, 0.48, 0.035);
+      batch.addBox('B2_PatioWood', darkWoodDeckMat, 8.00, 0.38, -10.72, 0.06, 0.64, 0.64);
+      batch.addBox('B2_PatioWood', darkWoodDeckMat, 11.00, 0.38, -10.72, 0.06, 0.64, 0.64);
+
+      addFascia(4.14, 0.96, 0.18, 13.25, 3.04, -10.40, burgundyMat, (ctx, w, h) => {
+        ctx.fillStyle = '#6A232A'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#9E4B52'; ctx.lineWidth = 6; ctx.strokeRect(4, 4, w - 8, h - 8);
+        ctx.textBaseline = 'middle'; ctx.fillStyle = '#F8FAFC'; ctx.textAlign = 'left';
+        ctx.font = '700 32px "Noto Sans KR", sans-serif'; ctx.fillText('정문앞', 38, 42);
+        ctx.font = '900 104px "Noto Sans KR", sans-serif'; ctx.fillText('대림부동산', 36, 146);
+        ctx.fillStyle = '#E2E8F0'; ctx.textAlign = 'right';
+        ctx.font = '700 28px "Noto Sans KR", sans-serif'; ctx.fillText('공인중개사사무소  대표:이차범', w - 34, 72);
+        ctx.fillStyle = '#FDE047'; ctx.font = '900 72px Arial, sans-serif'; ctx.fillText('2293-3456', w - 34, 156);
+      }, 960, 240);
+
+      const daelimSubTex = makeSignTex(960, 96, (ctx, w, h) => {
+        ctx.fillStyle = '#4A181D'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#F8FAFC'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '700 40px "Noto Sans KR", sans-serif'; ctx.fillText('금호 재개발 분양권 아파트 매매 전 월세 전문', w / 2, h / 2 + 2);
+      });
+      const daelimSub = new THREE.Mesh(new THREE.PlaneGeometry(3.82, 0.36), new THREE.MeshStandardMaterial({ map: daelimSubTex, roughness: 0.45 }));
+      daelimSub.rotation.y = Math.PI; daelimSub.position.set(13.12, 2.38, -10.37); grp.add(daelimSub);
+
+      batch.addBox('B2_DarkMetal', darkMetalMat, 13.12, 1.12, -10.33, 3.82, 2.22, 0.08);
+      batch.addBox('B2_Glass', darkGlassMat, 13.12, 1.12, -10.36, 3.68, 2.08, 0.04);
+
+      const bottomStripTex = makeSignTex(880, 120, (ctx, w, h) => {
+        ctx.fillStyle = '#6A232A'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '800 52px "Noto Sans KR", Arial, sans-serif'; ctx.fillText('대 림   2293-3456   부동산   대 림', w / 2, h / 2);
+      });
+      const botStrip = new THREE.Mesh(new THREE.PlaneGeometry(3.66, 0.42), new THREE.MeshStandardMaterial({ map: bottomStripTex, roughness: 0.44 }));
+      botStrip.rotation.y = Math.PI; botStrip.position.set(13.12, 0.42, -10.39); grp.add(botStrip);
+
+      const cornerVertTex = makeSignTex(220, 680, (ctx, w, h) => {
+        ctx.fillStyle = '#881326'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#FCA5A5'; ctx.lineWidth = 4; ctx.strokeRect(6, 6, w - 12, h - 12);
+        ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 76px "Noto Sans KR", sans-serif';
+        ['대', '림', '부', '동', '산'].forEach((ch, i) => ctx.fillText(ch, w * 0.64, 92 + i * 118));
+        ctx.fillStyle = '#FDE68A'; ctx.font = '700 32px "Noto Sans KR", sans-serif';
+        ['정', '직', '신', '뢰', '책', '임', '중', '개'].forEach((ch, i) => ctx.fillText(ch, w * 0.24, 72 + i * 74));
+      });
+      const cornerVert = new THREE.Mesh(
+        new THREE.BoxGeometry(0.54, 2.10, 0.14),
+        [burgundyMat, burgundyMat, burgundyMat, burgundyMat, burgundyMat, new THREE.MeshStandardMaterial({ map: cornerVertTex, roughness: 0.42 })]
+      );
+      cornerVert.position.set(15.04, 1.08, -10.42); grp.add(cornerVert);
+
+      [4.95, 7.95].forEach((wy) => {
+        [{ x: 13.20, w: 1.52, h: 1.44 }, { x: 9.50, w: 1.08, h: 1.24 }, { x: 5.90, w: 1.08, h: 1.24 }, { x: 2.30, w: 1.08, h: 1.24 }, { x: -0.25, w: 1.02, h: 1.22 }].forEach((wc) => {
+          batch.addBox('B2_DarkMetal', darkMetalMat, wc.x, wy, -10.31, wc.w, wc.h, 0.14);
+          batch.addBox('B2_Glass', darkGlassMat, wc.x, wy, -10.36, wc.w - 0.14, wc.h - 0.14, 0.04);
+          batch.addBox('B2_WhiteFrame', whitePlasterMat, wc.x, wy, -10.37, 0.05, wc.h - 0.14, 0.04);
+        });
+      });
+
+      const seSignTex = makeSignTex(640, 220, (ctx, w, h) => {
+        ctx.fillStyle = '#6A232A'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 92px "Noto Sans KR", sans-serif'; ctx.fillText('대림부동산', w / 2, 82);
+        ctx.fillStyle = '#FDE047'; ctx.font = '900 62px Arial, sans-serif'; ctx.fillText('2293-3456', w / 2, 168);
+      });
+      const seSign = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.96, 2.75),
+        [new THREE.MeshStandardMaterial({ map: seSignTex, roughness: 0.42 }), burgundyMat, burgundyMat, burgundyMat, burgundyMat, burgundyMat]
+      );
+      seSign.position.set(15.36, 3.04, -8.94); grp.add(seSign);
+
+      const seListTex = makeSignTex(512, 540, (ctx, w, h) => {
+        ctx.fillStyle = '#4A181D'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#9E4B52'; ctx.lineWidth = 6; ctx.strokeRect(6, 6, w - 12, h - 12);
+        ctx.fillStyle = '#F8FAFC'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '700 40px "Noto Sans KR", sans-serif';
+        ['금호자이 1차', '래미안하이리버', '신금호파크자이', '대림이편한세상', '아파트 분양권', '아파트 입주권', '매매 · 전/월세'].forEach((t, i) => {
+          ctx.fillText(t, w / 2, 56 + i * 70);
+        });
+      });
+      const seList = new THREE.Mesh(new THREE.PlaneGeometry(2.55, 2.40), new THREE.MeshStandardMaterial({ map: seListTex, roughness: 0.48 }));
+      seList.rotation.y = Math.PI / 2; seList.position.set(15.34, 1.24, -8.98); grp.add(seList);
+
+      batch.addBox('B2_MintDoor', mintDoorMat, 15.32, 1.05, -6.45, 0.08, 2.08, 1.08);
+      const miniArchGeo = new THREE.CylinderGeometry(0.45, 0.45, 1.28, 12, 1, true, 0, Math.PI * 0.55);
+      miniArchGeo.rotateZ(-Math.PI / 2); miniArchGeo.rotateX(Math.PI / 2);
+      const miniAwning = new THREE.Mesh(miniArchGeo, polyGreenArchMat);
+      miniAwning.position.set(15.32, 2.15, -6.45); grp.add(miniAwning);
+      batch.addBox('B2_AC', acUnitMat, 15.52, 1.65, -7.25, 0.40, 0.64, 0.82);
+      batch.addCylinder('B2_Downspout', whitePlasterMat, 15.36, 4.90, -5.22, 0.11, 9.75);
+
+      [4.95, 7.95].forEach((wy) => {
+        [-9.00, -6.40].forEach((wz) => {
+          batch.addBox('B2_DarkMetal', darkMetalMat, 15.31, wy, wz, 0.14, 1.32, 1.24);
+          batch.addBox('B2_Glass', darkGlassMat, 15.36, wy, wz, 0.04, 1.16, 1.08);
+        });
+      });
+
+      const miniRealtyTex = makeSignTex(220, 220, (ctx, w, h) => {
+        ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#6A232A'; ctx.lineWidth = 10; ctx.strokeRect(6, 6, w - 12, h - 12);
+        ctx.fillStyle = '#6A232A'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 56px "Noto Sans KR", sans-serif'; ctx.fillText('부동산', w / 2, 92);
+        ctx.font = '700 30px Arial, sans-serif'; ctx.fillText('2293-3456', w / 2, 156);
+      });
+      const miniRealtyMat = new THREE.MeshStandardMaterial({ map: miniRealtyTex, roughness: 0.42 });
+      const miniRealty = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.18), [burgundyMat, burgundyMat, burgundyMat, burgundyMat, miniRealtyMat, miniRealtyMat]);
+      miniRealty.position.set(15.58, 4.18, -10.22); grp.add(miniRealty);
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 7. BUILDING 3 (`b3`): 141번지 2층 주택 & 적벽돌 담장 마당 (1F Y = +0.55m · B1 Y = -3.60m)
+    // =========================================================================
+    function buildBuilding3() {
+      const grp = groups.b3;
+      const batch = new GeometryBatcher();
+      const G = 0.55;
+
+      // 1층 리브 사이딩 & 마당 적벽돌 담장·화강석 기둥과 동일한 지하 1층 외벽
+      addBasementToBottom(grp, -2.80, 6.80, G, -3.20, 7.40, 'B3_Basement_House', ribbedSidingMat, 0.35, true);
+      const b3YardBaseMats = [redBrickWallMat, ribbedSidingMat, basementSlabMat, basementSlabMat, redBrickWallMat, redBrickWallMat];
+      addBasementToBottom(grp, 6.80, 15.00, G, -5.10, 6.60, 'B3_Basement_Courtyard', b3YardBaseMats, 0.55, true);
+      addBasementToBottom(grp, 14.44, 15.16, G, 6.25, 6.95, 'B3_Basement_GatePillar', granitePillarMat, 0.36, false);
+
+      addMassBlock(grp, -2.80, 6.80, G, G + 3.05, -3.20, 7.40, ribbedSidingMat, 'B3_House_1F', true, 0.35);
+      batch.addBox('B3_WoodDoor', darkWoodDeckMat, 6.83, G + 1.10, 0.60, 0.08, 2.15, 1.15);
+      [3.40, -1.50].forEach((wz) => {
+        batch.addBox('B3_Frames', darkMetalMat, 6.83, G + 1.55, wz, 0.10, 1.35, 1.75);
+        batch.addBox('B3_Glass', darkGlassMat, 6.86, G + 1.55, wz, 0.04, 1.20, 1.60);
+        for (let b = -0.68; b <= 0.69; b += 0.22) batch.addBox('B3_SecurityBars', stainlessMat, 6.90, G + 1.55, wz + b, 0.02, 1.22, 0.02);
+      });
+
+      const f2Mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(9.60, 3.05, 10.60),
+        [house2FWhiteMat, house2FWhiteMat, houseRoofGrayMat, house2FWhiteMat, house2FWhiteMat, house2FWhiteMat]
+      );
+      f2Mesh.position.set(2.00, G + 4.575, 2.10);
+      grp.add(f2Mesh);
+      addOutlineForMesh(f2Mesh);
+
+      batch.addBox('B3_RoofBox', darkMetalMat, 2.00, G + 6.22, 2.10, 3.4, 0.26, 3.4);
+      batch.addBox('B3_Balcony', house2FWhiteMat, 7.42, G + 3.16, 2.40, 1.26, 0.24, 11.00);
+      batch.addBox('B3_Balcony', house2FWhiteMat, 5.02, G + 3.16, 7.80, 6.06, 0.24, 0.82);
+      batch.addBox('B3_Balcony', house2FWhiteMat, 7.98, G + 4.10, 2.40, 0.14, 0.14, 11.00);
+      batch.addBox('B3_Balcony', house2FWhiteMat, 7.98, G + 3.38, 2.40, 0.14, 0.24, 11.00);
+      for (let bz = -3.00; bz <= 7.82; bz += 0.36) batch.addBox('B3_Balcony', house2FWhiteMat, 7.98, G + 3.74, bz, 0.12, 0.58, 0.16);
+      batch.addBox('B3_AlumVeranda', stainlessMat, 6.85, G + 5.00, 2.30, 0.10, 1.75, 9.00);
+      batch.addBox('B3_Glass', darkGlassMat, 6.88, G + 5.00, 2.30, 0.04, 1.58, 8.80);
+
+      batch.addBox('B3_CourtyardFloor', wallConcreteBaseMat, 10.90, G + 0.04, 0.75, 8.20, 0.08, 11.70);
+      batch.addBox('B3_WallBase', wallConcreteBaseMat, 14.84, G + 0.425, 0.60, 0.34, 0.85, 11.40);
+      addMassBlock(grp, 14.68, 15.00, G + 0.85, G + 2.20, -5.10, 6.30, redBrickWallMat, 'B3_Courtyard_RedBrickWall', true, 0.55);
+      batch.addBox('B3_WallCoping', house2FWhiteMat, 14.84, G + 2.27, 0.60, 0.40, 0.14, 11.46);
+
+      batch.addBox('B3_Car', carWhiteMat, 12.6, G + 0.65, -2.6, 1.85, 0.65, 4.30);
+      batch.addBox('B3_Car', carWhiteMat, 12.6, G + 1.18, -2.3, 1.60, 0.52, 2.60);
+      batch.addBox('B3_Glass', darkGlassMat, 12.6, G + 1.18, -2.3, 1.62, 0.40, 2.20);
+
+      batch.addBox('B3_GatePillar', granitePillarMat, 14.80, G + 1.275, 6.60, 0.72, 2.55, 0.72);
+      const addr141Tex = makeSignTex(180, 120, (ctx, w, h) => {
+        ctx.fillStyle = '#1D4ED8'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 6; ctx.strokeRect(6, 6, w - 12, h - 12);
+        ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 58px Arial, sans-serif'; ctx.fillText('141', w / 2, h / 2 + 2);
+      }, false);
+      const addr141 = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.22), new THREE.MeshStandardMaterial({ map: addr141Tex, roughness: 0.40 }));
+      addr141.rotation.y = Math.PI / 2; addr141.position.set(15.17, G + 1.92, 6.60); grp.add(addr141);
+
+      const barkMat = new THREE.MeshStandardMaterial({ color: '#4B3A2C', roughness: 0.92 });
+      const leafMat = new THREE.MeshStandardMaterial({ color: '#3E7234', roughness: 0.86 });
+      batch.addCylinder('B3_TreeTrunk', barkMat, 9.6, G + 1.45, -1.4, 0.28, 2.8);
+      [[0, 3.5, 0, 2.5], [-0.8, 3.0, 0.5, 1.9], [0.8, 3.1, -0.4, 2.0]].forEach(([dx, dy, dz, d]) => {
+        batch.addDodecahedron('B3_TreeLeaves', leafMat, 9.6 + dx, G + dy, -1.4 + dz, d);
+      });
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 8. BUILDING 4 (`b4`): 86 적벽돌 3층 상가주택 (1F Y = +2.95m · B1 Y = -3.60m · SW 도보 경계 밀착)
+    // =========================================================================
+    function buildBuilding4() {
+      const grp = groups.b4;
+      const batch = new GeometryBatcher();
+      const G = 2.95;
+      const x0 = -14.30, x1 = -2.50, z0 = 20.60, z1 = 31.80;
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+
+      // 지상 적벽돌 외벽과 동일한 적벽돌 지하 1층
+      addBasementToBottom(grp, x0, x1, G, z0, z1, 'B4_Basement_1F', redBrickWallMat, 0.36, true);
+      batch.addBox('B4_NWBase', wallConcreteBaseMat, x0 - 0.04, G - 1.25, 28.4, 0.12, 2.40, 2.60);
+      batch.addBox('B4_NWBaseDoor', granitePillarMat, x0 - 0.08, G - 1.35, 29.0, 0.08, 2.10, 1.15);
+
+      addMassBlock(grp, x0, x1, G, G + 9.20, z0, z1, redBrickWallMat, 'B4_RedBrick_3F_Mass', true, 0.36);
+
+      const greenRoof4 = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 - 0.4, 0.08, z1 - z0 - 0.4), greenRoofMat);
+      greenRoof4.position.set(cx, G + 9.24, cz); grp.add(greenRoof4);
+      batch.addBox('B4_Coping', houseRoofGrayMat, cx, G + 9.32, z0 + 0.14, x1 - x0, 0.24, 0.28);
+      batch.addBox('B4_Coping', houseRoofGrayMat, cx, G + 9.32, z1 - 0.14, x1 - x0, 0.24, 0.28);
+      batch.addBox('B4_Coping', houseRoofGrayMat, x0 + 0.14, G + 9.32, cz, 0.28, 0.24, z1 - z0);
+      batch.addBox('B4_Coping', houseRoofGrayMat, x1 - 0.14, G + 9.32, cz, 0.28, 0.24, z1 - z0);
+      addMassBlock(grp, -13.2, -10.2, G + 9.20, G + 11.10, 21.6, 24.8, redBrickWallMat, 'B4_Roof_Penthouse', true, 0.36);
+
+      const bayXs = [-12.85, -9.95, -7.05, -4.05];
+      const win2FSpecs = [
+        { top: '', main: '즉시그립교체', sub: '(정품,최저가)', bot: '2252-8751' },
+        { top: '', main: '샤프트길이', sub: '조정및교체', bot: '2252-8751' },
+        { top: '우리나라 최초', main: '최신골프채', sub: '렌탈서비스실시', bot: '' },
+        { top: '', main: '개인스윙웨이트', sub: '(Swing Weight)', bot: '에 맞춘피팅' }
+      ];
+      bayXs.forEach((bx, idx) => {
+        [G + 4.45, G + 7.45].forEach((wy) => {
+          batch.addBox('B4_Frames', wallConcreteBaseMat, bx, wy, z1 + 0.02, 1.48, 1.32, 0.14);
+          batch.addBox('B4_Glass', darkGlassMat, bx, wy, z1 + 0.06, 1.32, 1.14, 0.04);
+          batch.addBox('B4_White', whitePlasterMat, bx, wy, z1 + 0.07, 0.05, 1.14, 0.04);
+        });
+        const sp = win2FSpecs[idx];
+        const decalTex = makeSignTex(260, 220, (ctx, w, h) => {
+          ctx.fillStyle = '#3B4854'; ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 4; ctx.strokeRect(4, 4, w - 8, h - 8);
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          if (sp.top) {
+            ctx.fillStyle = '#DC2626'; ctx.fillRect(34, 18, w - 68, 30);
+            ctx.fillStyle = '#FFFFFF'; ctx.font = '800 20px "Noto Sans KR", sans-serif'; ctx.fillText(sp.top, w / 2, 33);
+          }
+          ctx.fillStyle = '#FFFFFF'; ctx.font = '900 34px "Noto Sans KR", sans-serif';
+          ctx.fillText(sp.main, w / 2, sp.top ? 88 : 68);
+          ctx.fillStyle = '#BEF264'; ctx.font = '700 26px "Noto Sans KR", sans-serif';
+          ctx.fillText(sp.sub, w / 2, sp.top ? 132 : 114);
+          if (sp.bot) {
+            ctx.fillStyle = '#FDE047'; ctx.font = '800 26px "Noto Sans KR", sans-serif';
+            ctx.fillText(sp.bot, w / 2, 166);
+          }
+        }, true);
+        const decal = new THREE.Mesh(new THREE.PlaneGeometry(1.18, 1.02), new THREE.MeshStandardMaterial({ map: decalTex }));
+        decal.position.set(bx, G + 4.45, z1 + 0.085); grp.add(decal);
+      });
+
+      batch.addBox('B4_Frames', wallConcreteBaseMat, x0 - 0.02, G + 7.45, 29.4, 0.14, 1.28, 1.56);
+      batch.addBox('B4_Glass', darkGlassMat, x0 - 0.06, G + 7.45, 29.4, 0.04, 1.10, 1.38);
+
+      const addFrontSign = (w, h, d, x, y, z, bgMat, fn, cw = 560, ch = 175) => {
+        const tex = makeSignTex(cw, ch, fn, true);
+        const m = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, d),
+          [bgMat, bgMat, bgMat, bgMat, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.42 }), bgMat]
+        );
+        m.position.set(x, y, z); grp.add(m);
+      };
+
+      addFrontSign(2.90, 0.94, 0.18, -12.85, G + 2.90, z1 + 0.09, whitePlasterMat, (ctx, w, h) => {
+        ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#1E3A8A'; ctx.fillRect(0, 0, w, 18);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '400 102px "Black Han Sans", "Noto Sans KR", sans-serif';
+        ctx.lineWidth = 10; ctx.strokeStyle = '#0F172A'; ctx.strokeText('윤슬네일', w / 2, h / 2 + 8);
+        ctx.fillStyle = '#7B96E8'; ctx.fillText('윤슬네일', w / 2, h / 2 + 8);
+      });
+      batch.addBox('B4_BlueAwning', blueAwningMat, -12.85, G + 2.34, z1 + 0.34, 2.86, 0.22, 0.68, 0.25, 0, 0);
+      batch.addBox('B4_Glass', clearShopGlassMat, -12.85, G + 1.25, z1 + 0.03, 2.64, 2.32, 0.04);
+      batch.addBox('B4_BlueDeck', blueDeckMat, -12.85, G + 0.42, z1 + 0.90, 2.82, 0.84, 0.08);
+      batch.addBox('B4_BlueDeck', blueDeckMat, -14.22, G + 0.42, z1 + 0.46, 0.08, 0.84, 0.92);
+      batch.addBox('B4_BlueDeck', blueDeckMat, -11.48, G + 0.42, z1 + 0.46, 0.08, 0.84, 0.92);
+      batch.addBox('B4_GreenTurf', greenRoofMat, -12.85, G + 0.05, z1 + 0.45, 2.72, 0.10, 0.88);
+      batch.addCylinder('B4_BarberPole', barberPoleMat, x0 - 0.14, G + 2.55, z1 - 0.35, 0.18, 1.05);
+
+      const addr86Tex = makeSignTex(120, 96, (ctx, w, h) => {
+        ctx.fillStyle = '#1E3A8A'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#FFF'; ctx.lineWidth = 4; ctx.strokeRect(4, 4, w - 8, h - 8);
+        ctx.fillStyle = '#FFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 44px Arial, sans-serif'; ctx.fillText('86', w / 2, h / 2);
+      }, false);
+      const addr86 = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.19), new THREE.MeshStandardMaterial({ map: addr86Tex }));
+      addr86.position.set(-11.44, G + 2.02, z1 + 0.02); grp.add(addr86);
+
+      addWallMounted3DText(grp, {
+        segments: [
+          { text: '마을', font: '900 104px "Noto Sans KR", sans-serif', fill: '#1E2952', rim: '#E2E8F0', rimW: 5 },
+          { text: '이용원', font: '900 104px "Noto Sans KR", sans-serif', fill: '#881326', rim: '#E2E8F0', rimW: 5 },
+          { text: ' 2234-6578', font: '800 38px Arial, sans-serif', fill: '#991B1B', rim: '#FFFFFF', rimW: 4, dy: 24 }
+        ],
+        x: -9.95, y: G + 2.76, z: z1 + 0.01,
+        planeW: 2.75, planeH: 0.56, sideColor: '#1E2228', depthEnd: 0.075
+      });
+      batch.addBox('B4_MaeulAwning', maeulAwningMat, -9.95, G + 2.26, z1 + 0.34, 2.66, 0.28, 0.68, 0.26, 0, 0);
+      batch.addBox('B4_Glass', darkGlassMat, -9.95, G + 1.15, z1 + 0.03, 2.54, 2.15, 0.04);
+      const maeulBottomTex = makeSignTex(520, 72, (ctx, w, h) => {
+        ctx.fillStyle = '#B91C1C'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#FDE047'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '800 34px "Noto Sans KR", sans-serif'; ctx.fillText('염색 2234-6578   💈 마을이용원', w / 2, h / 2);
+      });
+      const maeulBottom = new THREE.Mesh(new THREE.PlaneGeometry(2.48, 0.34), new THREE.MeshStandardMaterial({ map: maeulBottomTex }));
+      maeulBottom.position.set(-9.95, G + 0.92, z1 + 0.06); grp.add(maeulBottom);
+      batch.addCylinder('B4_BarberPole', barberPoleMat, -8.52, G + 3.45, z1 + 0.18, 0.16, 0.95);
+
+      addWallMounted3DText(grp, {
+        segments: [
+          { text: '선 헤어랜드', font: '800 94px "Gowun Batang", "Song Myung", serif', fill: '#22262C', rim: '#CBD5E1', rimW: 5 }
+        ],
+        x: -7.05, y: G + 2.76, z: z1 + 0.01,
+        planeW: 2.65, planeH: 0.52, sideColor: '#111317', depthEnd: 0.075
+      });
+      batch.addBox('B4_DarkAwning', darkMetalMat, -7.05, G + 2.28, z1 + 0.30, 2.62, 0.22, 0.60, 0.24, 0, 0);
+      batch.addBox('B4_Glass', darkGlassMat, -7.05, G + 1.15, z1 + 0.03, 2.54, 2.15, 0.04);
+
+      addFrontSign(3.14, 0.72, 0.14, -4.05, G + 2.82, z1 + 0.07, darkMetalMat, (ctx, w, h) => {
+        ctx.fillStyle = '#1E2228'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#166534'; ctx.beginPath(); ctx.arc(68, h / 2, 46, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#E2E8F0'; ctx.lineWidth = 4; ctx.stroke();
+        ctx.fillStyle = '#F8FAFC'; ctx.beginPath(); ctx.arc(68, h / 2 - 4, 24, 0, Math.PI * 2); ctx.fill();
+
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.font = '400 72px "Black Han Sans", "Noto Sans KR", sans-serif';
+        ctx.lineWidth = 7; ctx.strokeStyle = '#0F172A';
+        let tx = 132;
+        ctx.strokeText('서원', tx, h / 2 + 4); ctx.fillStyle = '#F1F5F9'; ctx.fillText('서원', tx, h / 2 + 4);
+        tx += ctx.measureText('서원').width + 4;
+        ctx.strokeText('골프', tx, h / 2 + 4); ctx.fillStyle = '#EAB308'; ctx.fillText('골프', tx, h / 2 + 4);
+        tx += ctx.measureText('골프').width + 4;
+        ctx.strokeText('피팅샵', tx, h / 2 + 4); ctx.fillStyle = '#F1F5F9'; ctx.fillText('피팅샵', tx, h / 2 + 4);
+      }, 680, 175);
+      batch.addBox('B4_DarkVoid', pilotiConcreteMat, -4.65, G + 1.20, z1 - 0.10, 1.75, 2.40, 0.30);
+      batch.addBox('B4_GreenDoor', mansardGreenMat, -3.15, G + 1.20, z1 + 0.02, 0.96, 2.40, 0.08);
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 9. BUILDING 5 (`b5`): 84 백색타일 3층 상가주택 (1F Y = +2.95m · B1 Y = -3.60m · SW 도보 경계 밀착)
+    // =========================================================================
+    function buildBuilding5() {
+      const grp = groups.b5;
+      const batch = new GeometryBatcher();
+      const G = 2.95;
+      const x0 = 0.70, x1 = 15.10, z0 = 22.40, z1 = 31.80;
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+
+      // 지상 백색 텍스처 타일과 동일한 지하 1층 외벽
+      addBasementToBottom(grp, x0, x1, G, z0, z1, 'B5_Basement_1F', whiteTexTileMat, 0.38, true);
+
+      batch.addBox('B5_BasementDoor', darkMetalMat, x1 + 0.04, G - 1.35, 27.6, 0.12, 2.20, 2.30);
+      batch.addBox('B5_ConcreteLedge', wallConcreteBaseMat, x1 + 0.22, G - 0.18, 27.6, 0.44, 0.14, 2.60);
+      batch.addBox('B5_AC', acUnitMat, x1 + 0.24, G + 0.25, 26.9, 0.36, 0.62, 0.78);
+      batch.addBox('B5_AC', acUnitMat, x1 + 0.24, G + 0.32, 28.0, 0.38, 0.72, 0.88);
+
+      addMassBlock(grp, x0, x1, G, G + 8.90, z0, z1, whiteTexTileMat, 'B5_WhiteTile_3F_Mass', true, 0.38);
+
+      const greenRoof5 = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 - 0.4, 0.08, z1 - z0 - 0.4), greenRoofMat);
+      greenRoof5.position.set(cx, G + 8.94, cz); grp.add(greenRoof5);
+      batch.addBox('B5_Coping', houseRoofGrayMat, cx, G + 9.02, z0 + 0.14, x1 - x0, 0.24, 0.28);
+      batch.addBox('B5_Coping', houseRoofGrayMat, cx, G + 9.02, z1 - 0.14, x1 - x0, 0.24, 0.28);
+      batch.addBox('B5_Coping', houseRoofGrayMat, x0 + 0.14, G + 9.02, cz, 0.28, 0.24, z1 - z0);
+      batch.addBox('B5_Coping', houseRoofGrayMat, x1 - 0.14, G + 9.02, cz, 0.28, 0.24, z1 - z0);
+
+      batch.addBox('B5_CarportRoof', redBrickWallMat, -0.90, G + 2.65, 26.80, 3.20, 0.14, 8.80, 0, 0, -0.04);
+      [-2.35, 0.55].forEach((px) => [23.2, 30.4].forEach((pz) => batch.addCylinder('B5_Posts', darkMetalMat, px, G + 1.32, pz, 0.09, 2.64)));
+      batch.addBox('B5_CarportSUV', carBlackMat, -0.95, G + 0.68, 27.2, 1.85, 0.72, 4.40);
+      batch.addBox('B5_CarportSUV', carBlackMat, -0.95, G + 1.24, 26.8, 1.64, 0.54, 2.70);
+
+      const bayXs = [2.10, 4.95, 7.80, 10.65, 13.55];
+      bayXs.forEach((bx) => {
+        [G + 4.35, G + 7.25].forEach((wy) => {
+          batch.addBox('B5_BayBox', whiteTexTileMat, bx, wy, z1 + 0.15, 1.62, 1.50, 0.30, 0, 0, 0, 0.38);
+          batch.addBox('B5_Frames', darkBronzeMat, bx, wy, z1 + 0.28, 1.46, 1.26, 0.08);
+          batch.addBox('B5_Glass', darkGlassMat, bx, wy, z1 + 0.31, 1.32, 1.12, 0.04);
+          batch.addBox('B5_Frames', darkBronzeMat, bx - 0.36, wy, z1 + 0.32, 0.04, 1.12, 0.04);
+          batch.addBox('B5_Frames', darkBronzeMat, bx + 0.36, wy, z1 + 0.32, 0.04, 1.12, 0.04);
+        });
+      });
+
+      [24.6, 29.2].forEach((wz) => {
+        [G + 4.35, G + 7.25].forEach((wy) => {
+          batch.addBox('B5_Frames', darkBronzeMat, x1 + 0.02, wy, wz, 0.12, 1.24, 1.42);
+          batch.addBox('B5_Glass', darkGlassMat, x1 + 0.06, wy, wz, 0.04, 1.08, 1.26);
+        });
+      });
+
+      const addShopSign = (w, h, d, x, y, z, bgMat, fn, cw = 520, ch = 160) => {
+        const tex = makeSignTex(cw, ch, fn, true);
+        const m = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, d),
+          [bgMat, bgMat, bgMat, bgMat, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.42 }), bgMat]
+        );
+        m.position.set(x, y, z); grp.add(m);
+      };
+
+      batch.addBox('B5_RoyalBlue', royalBlueMat, 2.10, G + 2.25, z1 + 0.42, 2.65, 0.55, 0.85, 0.32, 0, 0);
+      batch.addBox('B5_Glass', darkGlassMat, 2.10, G + 1.15, z1 + 0.03, 2.48, 2.15, 0.04);
+      const roundBlueSign = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.14, 24), royalBlueMat);
+      roundBlueSign.rotation.z = Math.PI / 2; roundBlueSign.position.set(0.62, G + 3.10, z1 + 0.25); grp.add(roundBlueSign);
+
+      addWallMounted3DText(grp, {
+        segments: [
+          { text: '할머니', font: '400 94px "Black Han Sans", "Noto Sans KR", sans-serif', fill: '#D97706', rim: '#1E293B', rimW: 5 },
+          { text: '냉면', font: '400 94px "Black Han Sans", "Noto Sans KR", sans-serif', fill: '#1E3A8A', rim: '#F8FAFC', rimW: 5 }
+        ],
+        x: 4.95, y: G + 2.74, z: z1 + 0.01,
+        planeW: 2.55, planeH: 0.52, sideColor: '#1E2228', depthEnd: 0.075
+      });
+      batch.addBox('B5_PurpleAwning', purpleAwningMat, 4.95, G + 2.26, z1 + 0.38, 2.65, 0.34, 0.78, 0.28, 0, 0);
+      const halmoniValanceTex = makeSignTex(520, 64, (ctx, w, h) => {
+        ctx.fillStyle = '#581C87'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#F5D0FE'; ctx.lineWidth = 3; ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.fillStyle = '#FDF4FF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '700 28px "Noto Sans KR", sans-serif'; ctx.fillText('♡ 할머니냉면        할머니냉면        할머니냉면 ♡', w / 2, h / 2);
+      });
+      const halmoniValance = new THREE.Mesh(new THREE.PlaneGeometry(2.64, 0.22), new THREE.MeshStandardMaterial({ map: halmoniValanceTex }));
+      halmoniValance.position.set(4.95, G + 2.02, z1 + 0.75); grp.add(halmoniValance);
+      batch.addBox('B5_Glass', darkGlassMat, 4.95, G + 1.15, z1 + 0.03, 2.48, 2.15, 0.04);
+
+      addWallMounted3DText(grp, {
+        segments: [
+          { text: '지성헤어', font: '900 92px "Gowun Batang", "Song Myung", serif', fill: '#1E3A5F', rim: '#E2E8F0', rimW: 5 }
+        ],
+        x: 7.80, y: G + 2.74, z: z1 + 0.01,
+        planeW: 2.50, planeH: 0.50, sideColor: '#1E293B', depthEnd: 0.075
+      });
+      batch.addBox('B5_Lime', limeFrameMat, 7.80, G + 1.15, z1 + 0.03, 2.55, 2.20, 0.08);
+      batch.addBox('B5_Glass', darkGlassMat, 7.80, G + 1.15, z1 + 0.06, 2.34, 2.00, 0.04);
+
+      addShopSign(2.70, 0.68, 0.14, 10.65, G + 2.78, z1 + 0.07, whitePlasterMat, (ctx, w, h) => {
+        ctx.fillStyle = '#F8FAFC'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#CBD5E1'; ctx.lineWidth = 4; ctx.strokeRect(4, 4, w - 8, h - 8);
+        ctx.fillStyle = '#1E293B'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '900 94px "Noto Sans KR", sans-serif'; ctx.fillText('사랑방', w * 0.38, h / 2 + 2);
+        ctx.fillStyle = '#7F1D1D'; ctx.font = '800 38px "Noto Sans KR", sans-serif';
+        ctx.fillText('식당', w * 0.78, h * 0.34); ctx.fillText('포차', w * 0.78, h * 0.68);
+      }, 540, 170);
+      batch.addBox('B5_BlueAwning', blueAwningMat, 10.65, G + 2.24, z1 + 0.38, 2.68, 0.34, 0.78, 0.28, 0, 0);
+      batch.addBox('B5_Deck', darkWoodDeckMat, 10.65, G + 0.08, z1 + 0.42, 2.60, 0.16, 0.84);
+      batch.addBox('B5_Glass', darkGlassMat, 10.65, G + 1.15, z1 + 0.03, 2.48, 2.15, 0.04);
+      batch.addBox('B5_Banner', burgundyMat, 9.62, G + 1.15, z1 + 0.08, 0.42, 1.35, 0.04);
+      batch.addBox('B5_WoodMenu', oakWoodMat, 11.15, G + 1.32, z1 + 0.08, 1.25, 0.75, 0.05);
+      batch.addBox('B5_Crates', blueDeckMat, 10.55, G + 0.42, z1 + 0.56, 0.48, 0.52, 0.42);
+      batch.addBox('B5_Crates', blueDeckMat, 11.15, G + 0.42, z1 + 0.56, 0.48, 0.52, 0.42);
+
+      addWallMounted3DText(grp, {
+        segments: [
+          { text: '종합설비', font: '900 92px "Noto Sans KR", sans-serif', fill: '#A16207', rim: '#FEF08A', rimW: 4 }
+        ],
+        x: 13.55, y: G + 2.74, z: z1 + 0.01,
+        planeW: 2.55, planeH: 0.50, sideColor: '#422006', depthEnd: 0.075
+      });
+      batch.addBox('B5_RepairAwning', repairAwningMat, 13.55, G + 2.26, z1 + 0.34, 2.62, 0.28, 0.68, 0.26, 0, 0);
+      batch.addBox('B5_BlueAwning', royalBlueMat, 13.55, G + 1.15, z1 + 0.03, 2.55, 2.20, 0.06);
+      batch.addBox('B5_Glass', darkGlassMat, 13.55, G + 1.15, z1 + 0.06, 2.34, 2.00, 0.04);
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 10. BUILDING 6 (`b6`): 84-2 갈색벽돌 3층 주택 (1F Y = +1.95m · B1 Y = -3.60m · NE-SW 연장)
+    // =========================================================================
+    function buildBuilding6() {
+      const grp = groups.b6;
+      const batch = new GeometryBatcher();
+      const G = 1.95;
+      const x0 = 5.80, x1 = 15.10, z0 = 7.80, z1 = 21.80;
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+
+      // 지상 갈색벽돌 외벽과 동일한 지하 1층
+      addBasementToBottom(grp, x0, x1, G, z0, z1, 'B6_Basement_1F', brownBrickWallMat, 0.36, true);
+      addMassBlock(grp, x0, x1, G, G + 8.80, z0, z1, brownBrickWallMat, 'B6_BrownBrick_3F', true, 0.36);
+
+      batch.addBox('B6_Mansard', mansardGreenMat, cx, G + 9.12, cz, x1 - x0 + 0.24, 0.64, z1 - z0 + 0.24);
+      batch.addBox('B6_RoofTop', houseRoofGrayMat, cx, G + 9.46, cz, x1 - x0 - 0.20, 0.08, z1 - z0 - 0.20);
+      addMassBlock(grp, 9.2, 12.2, G + 9.46, G + 11.20, 12.8, 16.4, brownBrickWallMat, 'B6_Roof_Penthouse', true, 0.36);
+
+      [11.2, 17.8].forEach((wz) => {
+        [G + 1.50, G + 4.45, G + 7.35].forEach((wy) => {
+          batch.addBox('B6_Frames', darkMetalMat, x1 + 0.02, wy, wz, 0.12, 1.28, 1.65);
+          batch.addBox('B6_Glass', darkGlassMat, x1 + 0.06, wy, wz, 0.04, 1.12, 1.48);
+        });
+      });
+      batch.addBox('B6_Sunroom', whitePlasterMat, x1 + 0.30, G + 4.45, 19.8, 0.60, 1.65, 2.40);
+      batch.addBox('B6_Glass', darkGlassMat, x1 + 0.58, G + 4.45, 19.8, 0.06, 1.32, 2.18);
+      batch.addBox('B6_GreenGarage', mansardGreenMat, x1 + 0.04, G - 0.90, 11.2, 0.12, 2.15, 2.10);
+      batch.addBox('B6_AC', acUnitMat, x1 + 0.22, G + 0.55, 9.8, 0.36, 0.64, 0.80);
+      batch.addBox('B6_AC', acUnitMat, x1 + 0.22, G + 3.55, 9.8, 0.36, 0.64, 0.80);
+      addMassBlock(grp, x1 - 0.24, x1 + 0.12, G, G + 1.15, z0, 18.6, redBrickWallMat, 'B6_RetainingWall', false, 0.50);
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 11. BUILDING 7 (`b7`): 143-9 녹색지붕 2층 주택 (1F Y = +1.15m · B1 Y = -3.60m · NE-SW 연장)
+    // =========================================================================
+    function buildBuilding7() {
+      const grp = groups.b7;
+      const batch = new GeometryBatcher();
+      const G = 1.15;
+      const x0 = -14.30, x1 = -3.80, z0 = 0.40, z1 = 10.60;
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+
+      addBasementToBottom(grp, x0, x1, G, z0, z1, 'B7_Basement_1F', house2FWhiteMat, 0.32, true);
+      addMassBlock(grp, x0, x1, G, G + 6.10, z0, z1, house2FWhiteMat, 'B7_2F_Mass', true);
+
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 - 0.4, 0.08, z1 - z0 - 0.4), greenRoofMat);
+      roof.position.set(cx, G + 6.14, cz); grp.add(roof);
+      batch.addBox('B7_Parapet', house2FWhiteMat, cx, G + 6.32, z0 + 0.14, x1 - x0, 0.44, 0.28);
+      batch.addBox('B7_Parapet', house2FWhiteMat, cx, G + 6.32, z1 - 0.14, x1 - x0, 0.44, 0.28);
+      batch.addBox('B7_Parapet', house2FWhiteMat, x0 + 0.14, G + 6.32, cz, 0.28, 0.44, z1 - z0);
+      batch.addBox('B7_Parapet', house2FWhiteMat, x1 - 0.14, G + 6.32, cz, 0.28, 0.44, z1 - z0);
+
+      [3.2, 7.8].forEach((wz) => {
+        [G + 1.60, G + 4.45].forEach((wy) => {
+          batch.addBox('B7_Frames', darkMetalMat, x0 - 0.02, wy, wz, 0.12, 1.18, 1.42);
+          batch.addBox('B7_Glass', darkGlassMat, x0 - 0.06, wy, wz, 0.04, 1.02, 1.26);
+        });
+      });
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 12. BUILDING 9 (`b9`): 143-13 백색/연회색 평지붕 3층 다세대 (1F Y = +2.05m · B1 Y = -3.60m · NE-SW 연장)
+    // =========================================================================
+    function buildBuilding9() {
+      const grp = groups.b9;
+      const batch = new GeometryBatcher();
+      const G = 2.05;
+      const x0 = -14.30, x1 = -4.20, z0 = 11.00, z1 = 20.20;
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+
+      addBasementToBottom(grp, x0, x1, G, z0, z1, 'B9_Basement_1F', house2FWhiteMat, 0.32, true);
+      addMassBlock(grp, x0, x1, G, G + 8.40, z0, z1, house2FWhiteMat, 'B9_3F_Mass', true);
+
+      batch.addBox('B9_Parapet', houseRoofGrayMat, cx, G + 8.56, z0 + 0.14, x1 - x0, 0.36, 0.28);
+      batch.addBox('B9_Parapet', houseRoofGrayMat, cx, G + 8.56, z1 - 0.14, x1 - x0, 0.36, 0.28);
+      batch.addBox('B9_Parapet', houseRoofGrayMat, x0 + 0.14, G + 8.56, cz, 0.28, 0.36, z1 - z0);
+      batch.addBox('B9_Parapet', houseRoofGrayMat, x1 - 0.14, G + 8.56, cz, 0.28, 0.36, z1 - z0);
+      addMassBlock(grp, -7.2, -4.4, G + 8.40, G + 10.30, 13.8, 16.8, house2FWhiteMat, 'B9_Roof_Penthouse', true);
+
+      [G + 3.00, G + 5.75].forEach((by) => {
+        batch.addBox('B9_Balcony', houseRoofGrayMat, x0 - 0.32, by, cz, 0.64, 0.18, 6.80);
+        batch.addBox('B9_Rail', darkMetalMat, x0 - 0.60, by + 0.52, cz, 0.05, 0.88, 6.70);
+      });
+      [13.4, 17.8].forEach((wz) => {
+        [G + 1.55, G + 4.35, G + 7.05].forEach((wy) => {
+          batch.addBox('B9_Frames', darkBronzeMat, x0 - 0.02, wy, wz, 0.12, 1.20, 1.45);
+          batch.addBox('B9_Glass', darkGlassMat, x0 - 0.06, wy, wz, 0.04, 1.04, 1.28);
+        });
+      });
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 13. BUILDING 8 (`b8`): 143-11 적갈색 중정지붕 2층 주택 (1F Y = +1.85m · B1 Y = -3.60m · NE-SW 연장)
+    // =========================================================================
+    function buildBuilding8() {
+      const grp = groups.b8;
+      const batch = new GeometryBatcher();
+      const G = 1.85;
+      const x0 = -3.60, x1 = 5.40, z0 = 7.80, z1 = 19.80;
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+
+      addBasementToBottom(grp, x0, x1, G, z0, z1, 'B8_Basement_1F', creamStuccoMat, 0.32, true);
+      addMassBlock(grp, x0, x1, G, G + 5.80, z0, z1, creamStuccoMat, 'B8_2F_Mass', true);
+
+      const rH = 0.76, rW = 1.50, rY = G + 5.80 + rH / 2;
+      batch.addBox('B8_CourtFloor', pilotiConcreteMat, cx, G + 5.84, cz, x1 - x0 - rW * 2, 0.08, z1 - z0 - rW * 2);
+      batch.addBox('B8_ClayRoof', clayPitchRoofMat, cx, rY, z0 + rW / 2, x1 - x0 + 0.24, rH, rW, 0, 0, 0, 0.40);
+      batch.addBox('B8_ClayRoof', clayPitchRoofMat, cx, rY, z1 - rW / 2, x1 - x0 + 0.24, rH, rW, 0, 0, 0, 0.40);
+      batch.addBox('B8_ClayRoof', clayPitchRoofMat, x0 + rW / 2, rY, cz, rW, rH, z1 - z0 - rW * 2, 0, 0, 0, 0.40);
+      batch.addBox('B8_ClayRoof', clayPitchRoofMat, x1 - rW / 2, rY, cz, rW, rH, z1 - z0 - rW * 2, 0, 0, 0, 0.40);
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 14. BUILDING 10 (`b10`): 84-1 백색/연회색 평지붕 2층 주택 (1F Y = +2.60m · B1 Y = -3.60m · NE-SW 연장)
+    // =========================================================================
+    function buildBuilding10() {
+      const grp = groups.b10;
+      const batch = new GeometryBatcher();
+      const G = 2.60;
+      const x0 = -1.80, x1 = 5.40, z0 = 20.20, z1 = 29.40;
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+
+      addBasementToBottom(grp, x0, x1, G, z0, z1, 'B10_Basement_1F', house2FWhiteMat, 0.32, true);
+      addMassBlock(grp, x0, x1, G, G + 5.80, z0, z1, house2FWhiteMat, 'B10_2F_Mass', true);
+
+      batch.addBox('B10_Parapet', houseRoofGrayMat, cx, G + 5.96, z0 + 0.14, x1 - x0, 0.32, 0.28);
+      batch.addBox('B10_Parapet', houseRoofGrayMat, cx, G + 5.96, z1 - 0.14, x1 - x0, 0.32, 0.28);
+      batch.addBox('B10_Parapet', houseRoofGrayMat, x0 + 0.14, G + 5.96, cz, 0.28, 0.32, z1 - z0);
+      batch.addBox('B10_Parapet', houseRoofGrayMat, x1 - 0.14, G + 5.96, cz, 0.28, 0.32, z1 - z0);
+      addMassBlock(grp, 0.6, 3.0, G + 5.80, G + 7.50, 23.4, 26.2, house2FWhiteMat, 'B10_Roof_Penthouse', true);
+
+      batch.buildAll(grp);
+      batch.disposeBases();
+    }
+
+    // =========================================================================
+    // 15. 실시간 메시 통계, 8개 카메라 프리셋 & 비파괴 GLB 추출
+    // =========================================================================
+    function updateMeshStats() {
+      let meshCount = 0, triCount = 0;
+      Object.values(groups).forEach((grp) => {
+        if (!grp.visible) return;
+        grp.traverse((obj) => {
+          if (obj.isMesh && obj.geometry) {
+            meshCount++;
+            const g = obj.geometry;
+            triCount += g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+          }
+        });
+      });
+      document.getElementById('mesh-stats').innerHTML =
+        `병합 메시 수: <strong>${meshCount.toLocaleString()}</strong>개<br/>` +
+        `총 삼각형 수: <strong>${Math.round(triCount).toLocaleString()}</strong> tris`;
+    }
+
+    const skyTargetW = blockToWorld(0.5, 4.0, 10.6);
+    const cameraPresets = {
+      top:       { pos: new THREE.Vector3(skyTargetW.x, 88.0, skyTargetW.z + 0.25), target: skyTargetW.clone() },
+      n_seol:    { pos: blockToWorld(-25.5, 5.6, -21.5), target: blockToWorld(-9.4, 6.2, -6.5) },
+      ne_seol:   { pos: blockToWorld(-8.0, 4.8, -28.0), target: blockToWorld(-8.0, 6.2, -10.2) },
+      ne_daelim: { pos: blockToWorld(8.5, 4.2, -25.5), target: blockToWorld(7.0, 4.6, -9.8) },
+      e_daelim:  { pos: blockToWorld(27.5, 5.2, -17.5), target: blockToWorld(8.0, 4.6, -3.5) },
+      w_yunseul: { pos: blockToWorld(-26.5, 8.6, 42.5), target: blockToWorld(-9.5, 6.5, 29.5) },
+      sw_shops:  { pos: blockToWorld(-7.8, 7.4, 47.5), target: blockToWorld(-8.2, 6.2, 31.8) },
+      s_sarang:  { pos: blockToWorld(9.5, 7.4, 47.5), target: blockToWorld(8.2, 6.2, 31.8) }
+    };
+
+    let camAnim = null;
+    function setView(viewKey, instant = false) {
+      const preset = cameraPresets[viewKey];
+      if (!preset) return;
+      document.querySelectorAll('.cam-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.view === viewKey));
+      if (instant) {
+        camAnim = null;
+        camera.position.copy(preset.pos);
+        controls.target.copy(preset.target);
+        controls.update();
+        return;
+      }
+      camAnim = { startPos: camera.position.clone(), endPos: preset.pos.clone(), startTarget: controls.target.clone(), endTarget: preset.target.clone(), progress: 0, duration: 0.65 };
+    }
+
+    document.querySelectorAll('.cam-btn').forEach((btn) => btn.addEventListener('click', () => setView(btn.dataset.view, false)));
+    controls.addEventListener('start', () => { camAnim = null; });
+
+    document.querySelectorAll('input[data-grp]').forEach((chk) => {
+      chk.addEventListener('change', (e) => {
+        groups[e.target.dataset.grp].visible = e.target.checked;
+        updateMeshStats();
+      });
+    });
+    document.getElementById('chk-outlines').addEventListener('change', (e) => { outlineGroup.visible = e.target.checked; });
+
+    const btnCollapse = document.getElementById('btn-collapse');
+    const optionsBody = document.getElementById('options-body');
+    btnCollapse.addEventListener('click', () => {
+      const collapsed = optionsBody.classList.toggle('collapsed');
+      btnCollapse.textContent = collapsed ? '펼치기' : '접기';
+    });
+
+    const exportBtn = document.getElementById('btn-export-glb');
+    exportBtn.addEventListener('click', () => {
+      if (!Object.values(groups).some((g) => g.visible)) {
+        showToast('추출할 건물을 1개 이상 선택해주세요.', 2600);
+        return;
+      }
+      exportBtn.disabled = true;
+      showToast('금호동 2가 블록 10개 건물 통합 GLB 파일을 생성하고 있습니다...', 4500);
+      try {
+        const exporter = new GLTFExporter();
+        exporter.parse(
+          rootExportGroup,
+          (result) => {
+            const blob = new Blob([result], { type: 'model/gltf-binary' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Geumho_Block_10Buildings_v6.glb';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 1200);
+            showToast(`추출 완료! Geumho_Block_10Buildings_v6.glb (${(blob.size / (1024 * 1024)).toFixed(2)} MB)`, 3600);
+            exportBtn.disabled = false;
+          },
+          (err) => { console.error(err); showToast('GLB 추출 중 오류가 발생했습니다.', 3400); exportBtn.disabled = false; },
+          { binary: true, onlyVisible: true }
+        );
+      } catch (err) {
+        console.error(err); exportBtn.disabled = false;
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+      if (camAnim) {
+        camAnim.progress += dt / camAnim.duration;
+        const t = Math.min(1, camAnim.progress);
+        const ease = 1 - Math.pow(1 - t, 3);
+        camera.position.lerpVectors(camAnim.startPos, camAnim.endPos, ease);
+        controls.target.lerpVectors(camAnim.startTarget, camAnim.endTarget, ease);
+        if (t >= 1) camAnim = null;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    async function initApp() {
+      await waitForKoreanFonts(1500);
+      buildBuilding1();
+      buildBuilding2();
+      buildBuilding3();
+      buildBuilding4();
+      buildBuilding5();
+      buildBuilding6();
+      buildBuilding7();
+      buildBuilding8();
+      buildBuilding9();
+      buildBuilding10();
+      updateMeshStats();
+      setView('top', true);
+      if (document.fonts && typeof document.fonts.addEventListener === 'function') {
+        document.fonts.addEventListener('loadingdone', redrawAllDynamicSigns);
+      }
+      animate();
+    }
+
+    window.onload = initApp;
+  </script>
+</body>
+</html>

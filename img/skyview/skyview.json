@@ -297,11 +297,11 @@
  },
  "models/place_KFC.glb": {
   "file": "img/skyview/place_KFC.webp",
-  "hash": "27b79b719a",
-  "minX": -9.823,
-  "minZ": -13.52,
-  "width": 19.833,
-  "depth": 26.583
+  "hash": "3bc685da4e",
+  "minX": -19.069,
+  "minZ": -17.098,
+  "width": 35.417,
+  "depth": 33.917
  },
  "models/place_adamleeds.glb": {
   "file": "img/skyview/place_adamleeds.webp",
