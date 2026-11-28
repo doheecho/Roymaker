@@ -8376,17 +8376,39 @@ const VEHICLE_SPAWN_MIN = 14; // 월드 단위 — 캐릭터 바로 앞에서 �
 const VEHICLE_SPAWN_MAX = 38;
 const VEHICLE_DESPAWN = 48;
 const CAR_LEN = 0.8, CAR_WID = 0.34;
-const BUS_LEN = 1.7, BUS_WID = 0.4, BUS_H = 0.42, BUS_CLEARANCE = 0.06;
+const BUS_LEN = 1.7, BUS_WID = 0.4;
 const CAR_MAX_SPEED = 4.2; // 월드/초 (캐릭터 걷기 3, 뛰기 7.5)
 const BUS_MAX_SPEED = 3.2;
 const BUS_ROAD_MIN_WIDTH = 13; // 버스가 다니는 큰길
 const CAR_ACCEL = 2.2, CAR_DECEL = 5.5;
 const CAR_COLORS = [0xf2f2f0, 0xc9ccd1, 0x2b2d31, 0xb8202a, 0x1f4e8c, 0x6b7076, 0x203247, 0xd8cdb0, 0x3c6e47];
-// 서울 시내버스(노선 번호·행선지는 예시 — 바꾸고 싶으면 여기만 고치면 된다)
+// 실제 성동구 마을버스·간선버스 glb — BUS_COUNT(4)와 정확히 1:1로 대응해 각자 한 대씩 돈다.
+// 노선을 바꾸거나 추가하고 싶으면 여기 배열만 고치면 된다(모델은 models/ 안에 미리 넣어 둘 것).
 const BUS_TYPES = [
-  { key: "blue", body: "#1f5fbf", roof: "#dde6f2", number: "421", dest: "금호동", badge: "B" },
-  { key: "green", body: "#3da535", roof: "#e3f0dc", number: "2014", dest: "금호역", badge: "G" },
+  { key: "seongdong01", model: "models/bus_성동01.glb", label: "성동01" },
+  { key: "seongdong02", model: "models/bus_성동02.glb", label: "성동02" },
+  { key: "seongdong03-2", model: "models/bus_성동03-2.glb", label: "성동03-2" },
+  { key: "241", model: "models/bus_241.glb", label: "241" },
 ];
+let busModels = []; // BUS_TYPES와 같은 순서, 인덱스별 glb Object3D — 로드 전엔 null(그동안 그 버스는 숨김)
+function loadBusModels() {
+  BUS_TYPES.forEach((t, i) => {
+    gltfLoader.load(
+      `${t.model}?v=${ASSET_VERSION}`,
+      (gltf) => {
+        const model = gltf.scene;
+        model.scale.setScalar(WORLD_SCALE);
+        model.visible = false; // 매 프레임 car.active인 버스만 보이게 켠다
+        model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        model.rotation.order = "YXZ";
+        scene.add(model);
+        busModels[i] = model;
+      },
+      undefined,
+      (err) => console.warn(`${t.label} 버스 모델을 못 불러왔다`, err)
+    );
+  });
+}
 let carRoads = null; // 도로별 정보(차가 달릴 수 있는 도로만 drivable)
 let carNodes = null;
 let cars = []; // 차·버스 모두(type: "car" | "bus")
@@ -8522,110 +8544,6 @@ function spawnCar(car) {
   return false;
 }
 
-// 버스 텍스처 한 장(1024×1024)에 옆면 두 개·앞·뒤·지붕을 모아 그린다
-//   y 0~256: 왼쪽 옆면(앞이 왼쪽) / 256~512: 오른쪽 옆면(문 쪽, 앞이 오른쪽) / 512~768: 앞·뒤·지붕
-function makeBusTexture(t) {
-  const c = document.createElement("canvas");
-  c.width = c.height = 1024;
-  const g = c.getContext("2d");
-  const side = (y0, frontAtLeft) => {
-    g.fillStyle = t.body;
-    g.fillRect(0, y0, 1024, 256);
-    g.fillStyle = "rgba(0,0,0,0.22)";
-    g.fillRect(0, y0 + 210, 1024, 46); // 아래 진한 띠
-    g.fillStyle = "#f4f4f4";
-    g.fillRect(0, y0 + 198, 1024, 8); // 흰 줄
-    g.fillStyle = "#22303c";
-    g.fillRect(20, y0 + 36, 984, 118); // 창문 띠
-    g.fillStyle = t.body;
-    for (let k = 1; k < 8; k++) g.fillRect(20 + k * 123, y0 + 36, 9, 118); // 창틀
-    if (!frontAtLeft) {
-      // 문(앞문·가운데문) — 인도 쪽인 오른쪽 면에만
-      g.fillStyle = "#2c3b47";
-      g.fillRect(1024 - 150, y0 + 36, 78, 196);
-      g.fillRect(450, y0 + 36, 78, 196);
-    }
-    // 노선 번호 + 간선(B)/지선(G) 동그라미
-    g.textBaseline = "middle";
-    g.textAlign = "left";
-    g.font = "bold 40px sans-serif";
-    const label = t.number;
-    const w = g.measureText(label).width;
-    const x = frontAtLeft ? 70 : 1024 - 70 - w - 56;
-    g.fillStyle = "#ffffff";
-    g.beginPath();
-    g.arc(x + 20, y0 + 176, 18, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = t.body;
-    g.font = "bold 26px sans-serif";
-    g.textAlign = "center";
-    g.fillText(t.badge, x + 20, y0 + 177);
-    g.textAlign = "left";
-    g.fillStyle = "#ffffff";
-    g.font = "bold 40px sans-serif";
-    g.fillText(label, x + 48, y0 + 177);
-  };
-  side(0, true);
-  side(256, false);
-  // 앞면(0~256): 행선지 LED + 앞유리 + 전조등
-  g.fillStyle = t.body;
-  g.fillRect(0, 512, 256, 256);
-  g.fillStyle = "#111417";
-  g.fillRect(22, 522, 212, 34);
-  g.fillStyle = "#ffb21a";
-  g.font = "bold 24px sans-serif";
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  g.fillText(`${t.number} ${t.dest}`, 128, 540);
-  g.fillStyle = "#1c2630";
-  g.fillRect(14, 566, 228, 118);
-  g.fillStyle = "#fff6d0";
-  g.fillRect(20, 714, 44, 18);
-  g.fillRect(192, 714, 44, 18);
-  // 뒷면(256~512): 큰 노선 번호 + 브레이크등
-  g.fillStyle = t.body;
-  g.fillRect(256, 512, 256, 256);
-  g.fillStyle = "#1c2630";
-  g.fillRect(274, 560, 220, 70);
-  g.fillStyle = "#ffffff";
-  g.font = "bold 54px sans-serif";
-  g.fillText(t.number, 384, 676);
-  g.fillStyle = "#c0262c";
-  g.fillRect(268, 714, 34, 16);
-  g.fillRect(466, 714, 34, 16);
-  // 지붕(512~1024): 밝은 지붕 + 에어컨
-  g.fillStyle = t.roof;
-  g.fillRect(512, 512, 512, 256);
-  g.fillStyle = "#b7c0ca";
-  g.fillRect(620, 575, 300, 126);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
-}
-// 버스 상자의 면마다 텍스처의 다른 칸을 쓰게 UV를 바꾼다(상자 면 순서: +x, -x, +y, -y, +z(앞), -z(뒤))
-function makeBusGeometry() {
-  const geo = new THREE.BoxGeometry(BUS_WID, BUS_H, BUS_LEN);
-  const uv = geo.attributes.uv;
-  const regions = [
-    [0, 1, 0.75, 1], // +x: 왼쪽 옆면
-    [0, 1, 0.5, 0.75], // -x: 오른쪽 옆면(문 쪽)
-    [0.5, 1, 0.25, 0.5], // +y: 지붕
-    [0.5, 1, 0.25, 0.5], // -y: 바닥(안 보임)
-    [0, 0.25, 0.25, 0.5], // +z: 앞
-    [0.25, 0.5, 0.25, 0.5], // -z: 뒤
-  ];
-  for (let f = 0; f < 6; f++) {
-    const [u0, u1, v0, v1] = regions[f];
-    for (let k = 0; k < 4; k++) {
-      const i = f * 4 + k;
-      uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0));
-    }
-  }
-  uv.needsUpdate = true;
-  return geo;
-}
-
 // 배달 오토바이 모양(몸통·안장·앞 기둥·핸들을 한 덩어리로)
 function makeMotoBodyGeometry() {
   const parts = [];
@@ -8695,8 +8613,8 @@ function buildCars() {
   const cabin = new THREE.InstancedMesh(cabinGeo, new THREE.MeshStandardMaterial({ color: 0x24313d, roughness: 0.2, metalness: 0.6 }), nCarSlots);
   const wheels = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ color: 0x151618, roughness: 0.9 }), total * 4);
   const shadow = new THREE.InstancedMesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }), total);
-  const busGeo = makeBusGeometry();
-  const buses = BUS_TYPES.map((t) => new THREE.InstancedMesh(busGeo, new THREE.MeshStandardMaterial({ map: makeBusTexture(t), roughness: 0.55, metalness: 0.15 }), BUS_COUNT));
+  busModels = BUS_TYPES.map(() => null);
+  loadBusModels(); // 노선별 glb — 비동기라 로드되기 전까진 그 버스는 숨겨진다
   const motoBody = new THREE.InstancedMesh(makeMotoBodyGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.25 }), MOTO_COUNT);
   const rider = new THREE.InstancedMesh(makeRiderGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true }), MOTO_COUNT);
   const helmetGeo = new THREE.SphereGeometry(0.05, 10, 8);
@@ -8724,7 +8642,7 @@ function buildCars() {
   for (let k = 0; k < MOTO_COUNT; k++) {
     cars.push({ active: false, index: k, type: "moto", len: MOTO_LEN, wid: MOTO_WID, lean: 0, latOff: 0.5 + Math.random() * 0.5 });
   }
-  const all = [body, cabin, wheels, shadow, ...buses, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams];
+  const all = [body, cabin, wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams];
   all.forEach((m) => {
     m.frustumCulled = false; // 인스턴스가 계속 움직여서 미리 잡은 경계로 자르면 안 된다
     m.count = 0;
@@ -8732,7 +8650,7 @@ function buildCars() {
   });
   [motoBody, rider, helmet].forEach((m) => m.setColorAt(0, new THREE.Color(0xffffff))); // instanceColor 버퍼를 미리 만든다
   if (body.instanceColor) body.instanceColor.needsUpdate = true;
-  carMeshes = { body, cabin, wheels, shadow, buses, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams, all };
+  carMeshes = { body, cabin, wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams, all };
 }
 
 function chooseNextRoad(car) {
@@ -8945,12 +8863,13 @@ function updateCars(dt) {
     }
   });
   // 그리기(종류별로 활성인 것만 앞쪽 칸에 모아서)
-  const { body, cabin, wheels, shadow, buses, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams } = carMeshes;
+  const { body, cabin, wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams } = carMeshes;
   const m = new THREE.Matrix4(), part = new THREE.Matrix4(), base = new THREE.Matrix4(), sc = new THREE.Matrix4();
+  const _busScratch = new THREE.Vector3(); // base.decompose() 스케일 받이용 — busModel.scale(WORLD_SCALE)은 안 건드린다
   const y0 = ROAD_LAYER_BASE_Y + 0.006; // 도로 표면 바로 위(그림자 판 높이) — 실제 높이는 그 자리 지형을 더한다
   const pitchM = new THREE.Matrix4();
   let nCar = 0, nAll = 0, nW = 0, nMoto = 0, nHead = 0, nTail = 0;
-  const nBus = BUS_TYPES.map(() => 0);
+  busModels.forEach((bm) => { if (bm) bm.visible = false; }); // 이번 프레임에 active인 버스만 다시 켠다
   // 밤엔 전조등·미등을 켜고 차 앞 도로를 비춘다(낮에는 아예 그리지 않는다)
   const lampsOn = nightLevel > 0.3;
   headLamps.visible = tailLamps.visible = beams.visible = lampsOn;
@@ -8970,11 +8889,12 @@ function updateCars(dt) {
       beams.setMatrixAt(nAll, m.multiplyMatrices(base, part.makeTranslation(0, 0.017 - y0, ahead)).multiply(sc.makeScale(bw, 1, bl)));
     }
     if (car.type === "bus") {
-      const mesh = buses[car.busType];
-      mesh.setMatrixAt(nBus[car.busType]++, m.multiplyMatrices(base, part.makeTranslation(0, BUS_CLEARANCE + BUS_H / 2, 0)));
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-        m.multiplyMatrices(base, part.makeTranslation(sx * (BUS_WID / 2 - 0.015), 0.06, sz * 0.56));
-        wheels.setMatrixAt(nW++, m.multiply(sc.makeScale(1.35, 1.35, 1.35)));
+      // glb 자체에 바퀴·전조등 외형이 있으니 몸통용 박스 인스턴스·바퀴 인스턴스는 안 쓰고
+      // base(위치+진행방향+지형 기울기)를 glb Object3D에 직접 옮긴다(스케일은 로드 때 고정값 그대로 둔다).
+      const busModel = busModels[car.busType];
+      if (busModel) {
+        busModel.visible = true;
+        base.decompose(busModel.position, busModel.quaternion, _busScratch);
       }
       if (lampsOn) for (const sx of [-1, 1]) {
         lamp(headLamps, nHead++, sx * 0.13, 0.13, BUS_LEN / 2 + 0.004);
@@ -9024,7 +8944,6 @@ function updateCars(dt) {
   body.count = cabin.count = nCar;
   shadow.count = nAll;
   wheels.count = nW;
-  buses.forEach((mesh, k) => { mesh.count = nBus[k]; });
   motoBody.count = rider.count = helmet.count = deliveryBox.count = nMoto;
   headLamps.count = nHead;
   tailLamps.count = nTail;
