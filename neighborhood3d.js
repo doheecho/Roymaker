@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261128a";
+import * as MAP_DATA from "./map_data.js?v=20261128b";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook, pointInPoly2D } from "./road_markings.js?v=20261128a";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -2951,8 +2951,8 @@ function pointInIntersectionZone(x, z, margin = 0) {
 }
 
 // (x,z)가 ignore에 없는 도로 위(반폭 + margin 안) 또는 교차로 구역 안인가
-function pointOnRoad(x, z, ignore, margin = 0.015) {
-  if (pointInIntersectionZone(x, z, margin)) return true;
+function pointOnRoad(x, z, ignore, margin = 0.015, includeZones = true) {
+  if (includeZones && pointInIntersectionZone(x, z, margin)) return true;
   buildRoadFootprints();
   const list = roadFootprintGrid.get(gridKey(Math.floor(x / ROAD_GRID_CELL), Math.floor(z / ROAD_GRID_CELL)));
   if (!list) return false;
@@ -3454,6 +3454,98 @@ function buildSidewalkCorners(stores) {
   }
 }
 
+// 교차로 구역(INTERSECTION_ZONES) 둘레에 보행도로(보도블록·연석·황색 경계선)를 두른다.
+// 구역 경계에서 실제 도로(차로)가 맞닿는 구간은 자동으로 비워 횡단보도·차량 진입을 막지 않는다.
+function buildIntersectionZoneSidewalks(stores) {
+  if (!INTERSECTION_ZONES.length) return;
+  const W = WORLD_SCALE;
+  const lineW = SIDEWALK_YELLOW_W_RAW * W;
+  const inset = SIDEWALK_YELLOW_INSET_RAW * W;
+  const PROBES = [0.12, 0.5, 0.85];
+  INTERSECTION_ZONES.forEach((zone) => {
+    if (!zone || !zone.sidewalk || zone.sidewalk <= 0 || !Array.isArray(zone.pts) || zone.pts.length < 3) return;
+    const swW = zone.sidewalk * W;
+    const style = swStyleOf(zone);
+    const pts = zone.pts.map(([x, z]) => [x, z]);
+    let area2 = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      area2 += a[0] * b[1] - b[0] * a[1];
+    }
+    if (area2 < 0) pts.reverse();
+    const edgeN = pts.map((a, i) => {
+      const b = pts[(i + 1) % pts.length];
+      const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1;
+      return [dz / l, -dx / l];
+    });
+    // 둘레 샘플(변 2m 간격 + 볼록 꼭짓점 3분할 둥근 모서리)
+    const ring = []; // { p: [wx, wz], n: [nx, nz] }
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const nPrev = edgeN[(i - 1 + pts.length) % pts.length];
+      const nCur = edgeN[i];
+      const cross = nPrev[0] * nCur[1] - nPrev[1] * nCur[0];
+      if (cross > 0.02) {
+        let a0 = Math.atan2(nPrev[1], nPrev[0]);
+        let a1 = Math.atan2(nCur[1], nCur[0]);
+        let da = a1 - a0;
+        while (da <= -Math.PI) da += Math.PI * 2;
+        while (da > Math.PI) da -= Math.PI * 2;
+        const arcSteps = 3;
+        for (let s = 0; s < arcSteps; s++) {
+          const ang = a0 + (da * s) / arcSteps;
+          ring.push({ p: [a[0] * W, a[1] * W], n: [Math.cos(ang), Math.sin(ang)] });
+        }
+      }
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const steps = Math.max(2, Math.ceil(len / 2.0));
+      for (let s = 0; s < steps; s++) {
+        const t = s / steps;
+        ring.push({ p: [(a[0] + (b[0] - a[0]) * t) * W, (a[1] + (b[1] - a[1]) * t) * W], n: nCur });
+      }
+    }
+    if (ring.length < 3) return;
+    const flushRun = (run) => {
+      if (run.length < 2) return;
+      const inPts = run.map((q) => q.p);
+      const outPts = run.map((q) => [q.p[0] + q.n[0] * swW, q.p[1] + q.n[1] * swW]);
+      pushStrip(sideStore(stores, style), inPts, outPts, 0);
+      pushVerticalQuadStrip(stores.curb, inPts, 0, SIDEWALK_TOP_Y);
+      if (swW > inset + lineW) {
+        const y0 = run.map((q) => [q.p[0] + q.n[0] * inset, q.p[1] + q.n[1] * inset]);
+        const y1 = run.map((q) => [q.p[0] + q.n[0] * (inset + lineW), q.p[1] + q.n[1] * (inset + lineW)]);
+        pushStrip(stores.line, y0, y1, 0);
+      }
+      addPolyPlatform([...inPts, ...outPts.slice().reverse()], SIDEWALK_TOP_Y);
+    };
+    const blocked = new Array(ring.length).fill(false);
+    for (let i = 0; i < ring.length; i++) {
+      const q0 = ring[i], q1 = ring[(i + 1) % ring.length];
+      const mx = (q0.p[0] + q1.p[0]) * 0.5, mz = (q0.p[1] + q1.p[1]) * 0.5;
+      let nx = q0.n[0] + q1.n[0], nz = q0.n[1] + q1.n[1];
+      const nl = Math.hypot(nx, nz) || 1;
+      nx /= nl; nz /= nl;
+      blocked[i] = PROBES.some((f) => pointOnRoad(mx + nx * swW * f, mz + nz * swW * f, null, 0.04, false));
+    }
+    // 닫힌 고리에서 끊긴 곳부터 시작해 연속된 구간을 깔끔히 한 띠로 묶는다
+    let start = blocked.findIndex((b) => b);
+    if (start < 0) start = 0;
+    let curRun = [];
+    for (let k = 0; k < ring.length; k++) {
+      const i = (start + k) % ring.length;
+      const j = (i + 1) % ring.length;
+      if (blocked[i]) {
+        flushRun(curRun);
+        curRun = [];
+      } else {
+        if (!curRun.length) curRun.push(ring[i]);
+        curRun.push(ring[j]);
+      }
+    }
+    flushRun(curRun);
+  });
+}
+
 function buildRoadSidewalks() {
   walkBands.length = 0;
   walkDips.length = 0;
@@ -3466,6 +3558,7 @@ function buildRoadSidewalks() {
   chains.forEach((members) => collectChainSidewalk(members, stores, conns));
   buildSidewalkJoints(conns, chainOf, stores);
   buildSidewalkCorners(stores);
+  buildIntersectionZoneSidewalks(stores);
   Object.entries(stores.side).forEach(([style, store]) => {
     if (!store.idx.length) return;
     const mesh = new THREE.Mesh(
