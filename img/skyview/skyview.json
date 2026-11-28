@@ -327,6 +327,46 @@
   "width": 2.833,
   "depth": 7.75
  },
+ "models/car_avante.glb": {
+  "file": "img/skyview/car_avante.webp",
+  "hash": "45150f7030",
+  "minX": -1.08,
+  "minZ": -2.35,
+  "width": 2.167,
+  "depth": 4.75
+ },
+ "models/car_granduer.glb": {
+  "file": "img/skyview/car_granduer.webp",
+  "hash": "347ce10586",
+  "minX": -1.11,
+  "minZ": -2.49,
+  "width": 2.25,
+  "depth": 5
+ },
+ "models/car_ray.glb": {
+  "file": "img/skyview/car_ray.webp",
+  "hash": "98cd4a18fa",
+  "minX": -0.97,
+  "minZ": -1.8,
+  "width": 2,
+  "depth": 3.667
+ },
+ "models/car_sorento.glb": {
+  "file": "img/skyview/car_sorento.webp",
+  "hash": "044278f859",
+  "minX": -1.12,
+  "minZ": -2.41,
+  "width": 2.25,
+  "depth": 4.833
+ },
+ "models/car_taxi.glb": {
+  "file": "img/skyview/car_taxi.webp",
+  "hash": "e66cb32a15",
+  "minX": -1.11,
+  "minZ": -2.49,
+  "width": 2.25,
+  "depth": 5
+ },
  "models/emart24+105.glb": {
   "file": "img/skyview/emart24+105.webp",
   "hash": "96151b6fe2",
