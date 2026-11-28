@@ -7368,6 +7368,7 @@ function spawnErrandMom() {
 
 // 방향키·WASD·화면 왼쪽 절반 터치 조이스틱은 모두 "지금 카메라가 보는 방향(camYaw)"을 기준으로 움직인다.
 const TERRAIN_STEP_MAX = 1.0 * WORLD_SCALE; // 한 걸음에 오르내릴 수 있는 땅 높이 차(raw 1m) — 경사로는 되고 옹벽은 안 된다
+const GROUND_FOLLOW_MAX_RATE = 2.0; // 초당 따라갈 수 있는 최대 높이 변화(world 단위) — 정상 경사로보다 훨씬 빨라서 안 느려지고, 끊긴 타일의 순간 단차만 눌러 걸러진다
 function updateMovement(dt) {
   characterMoving = false;
   if (!character || dancing) return;
@@ -7444,7 +7445,12 @@ function updateMovement(dt) {
       return;
     }
   } else {
-    character.position.y += (targetGroundY - character.position.y) * Math.min(1, dt * 14);
+    // 금파힐 동 앞처럼 바닥 타일이 이가 어긋나거나 끊긴 자리를 지날 때 높이가 순간 "뚝" 튀지
+    // 않게, 한 프레임에 따라갈 수 있는 높이 변화량 자체를 한 번 더 못박는다 — 정상적인 경사로는
+    // 이보다 훨씬 천천히 바뀌어서 그대로 부드럽고, 비정상적으로 큰 단차만 이 속도로 눌러 걸러진다.
+    const dy = (targetGroundY - character.position.y) * Math.min(1, dt * 14);
+    const maxStep = GROUND_FOLLOW_MAX_RATE * dt;
+    character.position.y += Math.max(-maxStep, Math.min(maxStep, dy));
   }
   if (moving) {
     playAction(moveMode === "run" ? "Running" : "Walking");
