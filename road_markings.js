@@ -162,10 +162,20 @@ export function nearestRoadPoint(segs, x, z, extra = MID_SNAP_EXTRA) {
   return nearestOf(segs.map(roadInfo), x, z, extra);
 }
 
-export function computeRoadMarkings(segs, midList = []) {
+export function pointInPoly2D(x, z, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i][0], zi = pts[i][1], xj = pts[j][0], zj = pts[j][1];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi + 1e-12) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+export function computeRoadMarkings(segs, midList = [], zones = []) {
   const info = segs.map(roadInfo);
   const gaps = segs.map(() => []);
   const whiteQuads = [];
+  const validZones = (zones || []).filter((z) => z && Array.isArray(z.pts) && z.pts.length >= 3);
 
   // 각 도로 끝: 위치, 도로 안쪽(교차로에서 멀어지는) 방향
   const ends = [];
@@ -258,10 +268,71 @@ export function computeRoadMarkings(segs, midList = []) {
     }
   }
 
+  // ②-b 교차로 구역(INTERSECTION_ZONES): 신금호역 교차로처럼 복잡한 다지 교차로를 하나의 구역으로 묶는다.
+  //   · 구역 안에 완전히 들어간 짧은 연결 도로는 차선·횡단보도·보도를 전부 비운다.
+  //   · 바깥에서 구역 안으로 들어오는 도로는 구역 경계 바깥에 횡단보도·정지선을 놓고, 구역 전체가 같은 신호등 그룹을 공유한다.
+  //   · 구역을 가로질러 지나가는 도로는 구역 안쪽 구간만 차선·보도를 비운다.
+  const endZoneKey = new Map(); // "i:a" -> "z0"
+  const endByKey = new Map();
+  ends.forEach((e) => endByKey.set(`${e.i}:${e.which}`, e));
+  validZones.forEach((zone, zi) => {
+    const pts = zone.pts;
+    let zx0 = Infinity, zx1 = -Infinity, zz0 = Infinity, zz1 = -Infinity;
+    pts.forEach(([x, z]) => { zx0 = Math.min(zx0, x); zx1 = Math.max(zx1, x); zz0 = Math.min(zz0, z); zz1 = Math.max(zz1, z); });
+    info.forEach((r, i) => {
+      if (r.L < 1e-3) return;
+      // 빠른 바운딩박스 제외
+      let rx0 = Infinity, rx1 = -Infinity, rz0 = Infinity, rz1 = -Infinity;
+      r.pts.forEach(([x, z]) => { rx0 = Math.min(rx0, x); rx1 = Math.max(rx1, x); rz0 = Math.min(rz0, z); rz1 = Math.max(rz1, z); });
+      if (rx1 < zx0 || rx0 > zx1 || rz1 < zz0 || rz0 > zz1) return;
+
+      const steps = Math.max(8, Math.ceil(r.L / 0.75));
+      let sFirst = -1, sLast = -1, allIn = true;
+      for (let k = 0; k <= steps; k++) {
+        const s = (r.L * k) / steps;
+        const p = pointAt(r.pts, r.cum, s);
+        if (pointInPoly2D(p.x, p.z, pts)) {
+          if (sFirst < 0) sFirst = s;
+          sLast = s;
+        } else {
+          allIn = false;
+        }
+      }
+      if (sFirst < 0) return; // 구역과 닿지 않음
+      const inA = pointInPoly2D(r.pts[0][0], r.pts[0][1], pts);
+      const inB = pointInPoly2D(r.pts[r.pts.length - 1][0], r.pts[r.pts.length - 1][1], pts);
+      if (allIn || (inA && inB)) {
+        // 구역 내부에 완전히 들어간 도로 — 차선·보도·내부 횡단보도 전부 제거
+        gaps[i].push([-1, r.L + 1]);
+        endClear.delete(`${i}:a`);
+        endClear.delete(`${i}:b`);
+        return;
+      }
+      if (inA && !inB) {
+        const ea = endByKey.get(`${i}:a`);
+        if (ea) {
+          noteEnd(ea, sLast + CLEAR_MARGIN, true);
+          endZoneKey.set(`${i}:a`, `z${zi}`);
+        }
+      } else if (inB && !inA) {
+        const eb = endByKey.get(`${i}:b`);
+        if (eb) {
+          noteEnd(eb, (r.L - sFirst) + CLEAR_MARGIN, true);
+          endZoneKey.set(`${i}:b`, `z${zi}`);
+        }
+      } else {
+        // 양 끝은 바깥이지만 중간이 구역을 관통
+        gaps[i].push([Math.max(0, sFirst - CLEAR_MARGIN), Math.min(r.L, sLast + CLEAR_MARGIN)]);
+      }
+    });
+  });
+
   // ③ 끝마다: 교차로 안쪽은 비우고, 정지선·횡단보도
   const crossings = [];
   const junctionEnds = [];
   const junctionKeyOf = (e) => {
+    const zk = endZoneKey.get(`${e.i}:${e.which}`);
+    if (zk) return zk;
     const gi = groups.findIndex((g) => g.includes(e));
     return gi >= 0 && groups[gi].length >= 3 ? `g${gi}` : `t${e.i}${e.which}`;
   };
@@ -269,7 +340,8 @@ export function computeRoadMarkings(segs, midList = []) {
     const r = info[e.i];
     const w = r.seg.width;
     const fromA = (s) => (e.which === "a" ? s : r.L - s); // "그 끝에서 잰 거리" → "a 끝에서 잰 거리"
-    const maxGap = r.L * 0.45;
+    const inZone = endZoneKey.has(`${e.i}:${e.which}`);
+    const maxGap = inZone ? Math.max(r.L * 0.45, r.L - 2) : r.L * 0.45;
     let c = Math.min(clear, maxGap);
     if (!crossing || !isMarkedRoad(r.seg)) {
       gaps[e.i].push(e.which === "a" ? [-1, fromA(c)] : [fromA(c), r.L + 1]);

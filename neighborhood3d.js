@@ -7,8 +7,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261127n";
-import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
+import * as MAP_DATA from "./map_data.js?v=20261128a";
+import { computeRoadMarkings, markedRanges, slicePolyline, roadLook, pointInPoly2D } from "./road_markings.js?v=20261128a";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
 
@@ -24,6 +24,8 @@ const TERRAIN_POINTS = Array.isArray(MAP_DATA.TERRAIN_POINTS) ? MAP_DATA.TERRAIN
 // 평평하게 다진 곳, 교문 진입로 같은 경사로. { name, pts: [[x, z, h?], ...], h?, walls? } (h = 우리집 기준 높이 raw m,
 // 점의 h가 없으면 구역 h, 둘 다 없으면 그 자리 실제 지형 높이)
 const TERRAIN_SHAPES = Array.isArray(MAP_DATA.TERRAIN_SHAPES) ? MAP_DATA.TERRAIN_SHAPES : [];
+// 교차로 구역(맵 에디터 "⭕ 교차로 구역"): 신금호역 교차로처럼 복잡한 다지 교차로를 하나의 구역으로 묶는다
+const INTERSECTION_ZONES = Array.isArray(MAP_DATA.INTERSECTION_ZONES) ? MAP_DATA.INTERSECTION_ZONES : [];
 
 const ASSET_VERSION = "20261127j";
 
@@ -2907,8 +2909,50 @@ function buildRoadFootprints() {
   });
   return roadFootprintsCache;
 }
-// (x,z)가 ignore에 없는 도로 위(반폭 + margin 안)인가
+let _izCache = null;
+function getIntersectionZoneCache() {
+  if (_izCache) return _izCache;
+  const W = WORLD_SCALE;
+  _izCache = INTERSECTION_ZONES
+    .filter((z) => z && Array.isArray(z.pts) && z.pts.length >= 3)
+    .map((z, idx) => {
+      let rx0 = Infinity, rx1 = -Infinity, rz0 = Infinity, rz1 = -Infinity;
+      z.pts.forEach(([x, zz]) => { rx0 = Math.min(rx0, x); rx1 = Math.max(rx1, x); rz0 = Math.min(rz0, zz); rz1 = Math.max(rz1, zz); });
+      return { idx, pts: z.pts, rx0, rx1, rz0, rz1, minx: rx0 * W, maxx: rx1 * W, minz: rz0 * W, maxz: rz1 * W };
+    });
+  return _izCache;
+}
+function intersectionZoneIndexRaw(rx, rz) {
+  const list = getIntersectionZoneCache();
+  for (let i = 0; i < list.length; i++) {
+    const z = list[i];
+    if (rx < z.rx0 || rx > z.rx1 || rz < z.rz0 || rz > z.rz1) continue;
+    if (pointInPoly2D(rx, rz, z.pts)) return z.idx;
+  }
+  return -1;
+}
+function pointInIntersectionZone(x, z, margin = 0) {
+  const list = getIntersectionZoneCache();
+  if (!list.length) return false;
+  const rx = x / WORLD_SCALE, rz = z / WORLD_SCALE;
+  const rm = Math.max(0, margin / WORLD_SCALE);
+  for (let i = 0; i < list.length; i++) {
+    const zn = list[i];
+    if (rx < zn.rx0 - rm || rx > zn.rx1 + rm || rz < zn.rz0 - rm || rz > zn.rz1 + rm) continue;
+    if (pointInPoly2D(rx, rz, zn.pts)) return true;
+    if (rm > 0) {
+      for (let k = 0; k < zn.pts.length; k++) {
+        const a = zn.pts[k], b = zn.pts[(k + 1) % zn.pts.length];
+        if (distToSegment(rx, rz, a[0], a[1], b[0], b[1]) <= rm) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// (x,z)가 ignore에 없는 도로 위(반폭 + margin 안) 또는 교차로 구역 안인가
 function pointOnRoad(x, z, ignore, margin = 0.015) {
+  if (pointInIntersectionZone(x, z, margin)) return true;
   buildRoadFootprints();
   const list = roadFootprintGrid.get(gridKey(Math.floor(x / ROAD_GRID_CELL), Math.floor(z / ROAD_GRID_CELL)));
   if (!list) return false;
@@ -2934,6 +2978,7 @@ function buildRoadConnections() {
   });
   const conns = ROAD_SEGMENTS.map(() => ({ a: null, b: null, aWhich: null, bWhich: null }));
   for (const e of ends) {
+    if (intersectionZoneIndexRaw(e.x, e.z) >= 0) continue; // 교차로 구역 안의 끝점은 보도로 잇지 않는다
     const near = ends.filter((o) => o !== e && o.i !== e.i && Math.hypot(o.x - e.x, o.z - e.z) < JOIN_RAW);
     if (near.length !== 1) continue; // 혼자(막다른 길)거나 셋 이상(교차로)
     conns[e.i][e.which] = near[0].i;
@@ -3574,6 +3619,46 @@ function buildJunctionFillers() {
   }
 }
 
+// 교차로 구역(INTERSECTION_ZONES) 전체를 매끄러운 하나의 아스팔트 판으로 채운다
+function buildIntersectionZones() {
+  if (!INTERSECTION_ZONES.length) return;
+  const W = WORLD_SCALE;
+  const MAX_EDGE = 10 * W;
+  const mat = roadSurfaceMaterial("asphalt");
+  INTERSECTION_ZONES.forEach((zone) => {
+    if (!zone || !Array.isArray(zone.pts) || zone.pts.length < 3) return;
+    const contour = zone.pts.map(([x, z]) => new THREE.Vector2(x * W, z * W));
+    if (THREE.ShapeUtils.isClockWise(contour)) contour.reverse();
+    const tris = THREE.ShapeUtils.triangulateShape(contour, []);
+    if (!tris.length) return;
+    const pos = [];
+    const emit = (ax, az, bx, bz, cx, cz, depth) => {
+      const ab = Math.hypot(bx - ax, bz - az);
+      const bc = Math.hypot(cx - bx, cz - bz);
+      const ca = Math.hypot(ax - cx, az - cz);
+      const m = Math.max(ab, bc, ca);
+      if (m <= MAX_EDGE || depth >= 4) {
+        const cross = (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+        if (cross < 0) pos.push(ax, 0, az, bx, 0, bz, cx, 0, cz);
+        else pos.push(ax, 0, az, cx, 0, cz, bx, 0, bz);
+        return;
+      }
+      if (m === ab) { const mx = (ax + bx) * 0.5, mz = (az + bz) * 0.5; emit(ax, az, mx, mz, cx, cz, depth + 1); emit(mx, mz, bx, bz, cx, cz, depth + 1); }
+      else if (m === bc) { const mx = (bx + cx) * 0.5, mz = (bz + cz) * 0.5; emit(ax, az, bx, bz, mx, mz, depth + 1); emit(ax, az, mx, mz, cx, cz, depth + 1); }
+      else { const mx = (cx + ax) * 0.5, mz = (cz + az) * 0.5; emit(ax, az, bx, bz, mx, mz, depth + 1); emit(mx, mz, bx, bz, cx, cz, depth + 1); }
+    };
+    tris.forEach(([ia, ib, ic]) => emit(contour[ia].x, contour[ia].y, contour[ib].x, contour[ib].y, contour[ic].x, contour[ic].y, 0));
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    if (PAVING_TILE_RAW.asphalt) addPlanarUV(geo, PAVING_TILE_RAW.asphalt * W);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.y = ROAD_LAYER_BASE_Y + 4 * ROAD_LAYER_STEP + 0.0008;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+  });
+}
+
 // 정지선·횡단보도 줄무늬를 메시 하나로 — 어느 도로 표면보다도 위(가장 높은 rank 위)에 깐다
 function buildRoadMarks() {
   const quads = roadMarkings.whiteQuads;
@@ -3598,11 +3683,12 @@ function buildRoads() {
   yellowDashTransforms = [];
   whiteDashTransforms = [];
   schoolDecals = [];
-  roadMarkings = computeRoadMarkings(ROAD_SEGMENTS, CROSSWALKS);
+  roadMarkings = computeRoadMarkings(ROAD_SEGMENTS, CROSSWALKS, INTERSECTION_ZONES);
   ROAD_SEGMENTS.forEach(buildRoadRibbon);
   buildRoadSidewalks();
   buildLaneDashes();
   buildJunctionFillers();
+  buildIntersectionZones();
   buildRoadMarks();
   buildSchoolDecals();
   buildTrafficSignals();
@@ -8233,8 +8319,11 @@ function buildCarNetwork() {
     const L = cum[cum.length - 1];
     const w = seg.width;
     const look = roadLook(seg);
-    // 8m 이상 자동차 도로(보행용 도로는 차가 안 다님)
-    const drivable = L > 4 && w >= 8 && look.kind !== "walk" && look.perDir >= 1;
+    const za = intersectionZoneIndexRaw(pts[0][0], pts[0][1]);
+    const zb = intersectionZoneIndexRaw(pts[pts.length - 1][0], pts[pts.length - 1][1]);
+    const enclosedInZone = za >= 0 && za === zb;
+    // 8m 이상 자동차 도로(보행용 도로 및 교차로 구역 안에 완전히 들어간 짧은 연결 토막은 차가 별도로 안 다님)
+    const drivable = !enclosedInZone && L > 4 && w >= 8 && look.kind !== "walk" && look.perDir >= 1;
     // 양 끝 교차로 구간 길이(차가 그 앞에서 꺾기 시작)
     let gapA = 0, gapB = 0;
     ((roadMarkings.junctionGaps || roadMarkings.gaps)[i] || []).forEach(([g0, g1]) => {
@@ -8252,8 +8341,10 @@ function buildCarNetwork() {
   const ends = [];
   carRoads.forEach((r) => {
     if (!r.drivable) return;
-    ends.push({ i: r.i, which: "a", x: r.pts[0][0], z: r.pts[0][1] });
-    ends.push({ i: r.i, which: "b", x: r.pts[r.pts.length - 1][0], z: r.pts[r.pts.length - 1][1] });
+    const xa = r.pts[0][0], za = r.pts[0][1];
+    const xb = r.pts[r.pts.length - 1][0], zb = r.pts[r.pts.length - 1][1];
+    ends.push({ i: r.i, which: "a", x: xa, z: za, zone: intersectionZoneIndexRaw(xa, za) });
+    ends.push({ i: r.i, which: "b", x: xb, z: zb, zone: intersectionZoneIndexRaw(xb, zb) });
   });
   carNodes = new Map();
   const used = new Set();
@@ -8262,7 +8353,9 @@ function buildCarNetwork() {
     const members = [e];
     used.add(k);
     ends.forEach((o, m) => {
-      if (!used.has(m) && Math.hypot(o.x - e.x, o.z - e.z) < JOIN_RAW) { members.push(o); used.add(m); }
+      if (used.has(m)) return;
+      const sameZone = e.zone >= 0 && o.zone === e.zone;
+      if (sameZone || Math.hypot(o.x - e.x, o.z - e.z) < JOIN_RAW) { members.push(o); used.add(m); }
     });
     const node = { members };
     members.forEach((m) => carNodes.set(`${m.i}:${m.which}`, node));
