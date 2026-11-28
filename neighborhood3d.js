@@ -10546,9 +10546,11 @@ function updatePerformance(dt) {
   }
 }
 
-// 그림자: 태양 그림자 범위를 캐릭터 주변(±SHADOW_HALF)으로 좁혀서 따라다니게 한다 — 같은 512 맵으로 훨씬 선명.
+// 그림자: 태양 그림자 범위를 캐릭터 주변(±SHADOW_HALF)으로 좁혀서 따라다니게 한다 — 같은 맵으로 훨씬 선명.
 // 그림자 맵 한 칸 단위로 맞춰 움직여서 걸을 때 그림자 가장자리가 지글거리지 않게 한다.
-const SHADOW_HALF = 40;
+// (2026-11-28: 40 → 20 — 아파트 단지처럼 건물이 빽빽한 곳에서 그림자 카메라 시야 안에 들어오는
+// 건물 수 자체가 줄어 드로우콜이 크게 줄고, 같은 256 맵을 더 좁은 범위에 써서 더 또렷해진다.)
+const SHADOW_HALF = 20;
 const SUN_OFFSET = new THREE.Vector3(20, 30, 15); // 시간대(applyTimeOfDay)에 따라 해·달 방향으로 바뀐다
 let sunLight = null;
 function updateSunFollow() {
