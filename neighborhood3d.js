@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261127m";
+import * as MAP_DATA from "./map_data.js?v=20261127n";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -525,9 +525,17 @@ async function buildStaticScene() {
   scene.add(sun.target);
   sunLight = sun;
 
-  // 실제 지형(GameMap.glb)을 다 불러올 때까지 기다린 뒤에야 건물·도로 등을 짓는다 — 그래야
-  // buildPlaces() 등에서 getTerrainY(x,z)가 0이 아니라 그 자리 실측 높이를 돌려준다.
-  const needsFlatGround = await buildGlbTerrain(scene);
+  // 실제 지형(GameMap.glb)과 금파힐 통합 모델(place_금파힐통합.glb)을 함께 먼저 불러온 뒤에야
+  // 지형 메시 정리·도로·보도·울타리·건물 등을 짓는다 — 그래야 도로·보도가 실제 GLB 바닥면에 정확히 붙고,
+  // GameMap.glb 언덕 메시가 금파힐 경사로·데크 위로 천장처럼 튀어나오지 않는다.
+  const [terrainRes, preloadedParkHills] = await Promise.all([
+    buildGlbTerrain(scene),
+    preloadParkHillsBaseModel(),
+  ]);
+  const needsFlatGround = terrainRes.needsFlatGround;
+  if (terrainRes.terrainMesh && (terrainShapes.length || parkHillsWalkIndices.size)) {
+    refineTerrainMeshForShapes(terrainRes.terrainMesh);
+  }
   const bg = needsFlatGround ? buildFlatGround(scene) : null;
 
   // 각 건물 사이에 깔린 회색 보행로 — 지도 이미지가 보이도록 숨긴다(예전부터 안 쓰는 비상용)
@@ -556,7 +564,7 @@ async function buildStaticScene() {
   buildParkHillsEastRampSidewalks(); // 113~114동 동측 지하주차장 진입로 좌·우측 도보스타일 보도 마감
   tessellateForTerrain(scene.children.filter((o) => !before.has(o)));
   freezeStaticObjects([...(bg ? [bg] : []), ...scene.children.filter((o) => !before.has(o))]);
-  buildPlaces();
+  buildPlaces(preloadedParkHills);
   before = new Set(scene.children);
   buildTrees();
   freezeStaticObjects(scene.children.filter((o) => !before.has(o)));
@@ -1067,6 +1075,10 @@ function shapeHeightAt(x, z, skip) {
 }
 // 땅이 한 평면으로 이어지는 "영역" 번호 — 도로를 지형에 붙일 때 서로 다른 영역을 걸치는 삼각형만 잘게 나눈다
 function terrainRegionAt(x, z) {
+  if (parkHillsWalkIndices.size) {
+    const phY = parkHillsWalkHeightAt(x, z);
+    if (phY !== null) return 2e7 + Math.round(phY / (1.5 * WORLD_SCALE));
+  }
   if (terrainShapes.length) {
     const hit = shapeHitAt(x, z, -1);
     if (hit) return 1e7 + hit.si * 1000 + (terrainShapes[hit.si].flat ? 0 : hit.ti);
@@ -1074,19 +1086,32 @@ function terrainRegionAt(x, z) {
   return terrainTriAt(x, z);
 }
 const SHAPE_WALL_MIN_RAW = 0.3;
-// 지형 메시를 구역 근처에서 잘게 나눠(구역 가장자리를 걸치는 삼각형은 raw 약 0.6m까지) 꼭짓점 높이를 구역 높이로 바꾼다.
-// 옹벽 경계에 걸치는 삼각형은 높은 쪽 꼭짓점이 돌 옹벽 밖으로 뚫고 나오지 않게 낮은 높이로 맞춘다.
+// 지형 메시를 구역 및 금파힐통합.glb 근처에서 잘게 나눠 꼭짓점 높이를 맞춘다.
+// 금파힐통합.glb 내부는 실제 보행 바닥면보다 0.5m 아래로 눌러 GameMap.glb 언덕 메시가
+// 경사로·데크 위로 천장처럼 튀어나오거나 Z-fighting이 나지 않게 한다.
 // 원래 지형 높이 조회(terrainTriIndex)는 그대로 두고 그림만 바꾼다.
 function refineTerrainMeshForShapes(mesh) {
   const W = WORLD_SCALE;
   const boxes = terrainShapes.map((S) => S.box);
+  for (const idx of parkHillsWalkIndices.values()) {
+    boxes.push([idx.minX, idx.minZ, idx.maxX, idx.maxZ]);
+  }
   const pad = 2 * W;
   const nearShape = (a, b, c) => {
     const x0 = Math.min(a[0], b[0], c[0]) - pad, x1 = Math.max(a[0], b[0], c[0]) + pad;
     const z0 = Math.min(a[2], b[2], c[2]) - pad, z1 = Math.max(a[2], b[2], c[2]) + pad;
     return boxes.some(([bx0, bz0, bx1, bz1]) => x1 >= bx0 && x0 <= bx1 && z1 >= bz0 && z0 <= bz1);
   };
-  const region = (P) => { const h = shapeHitAt(P[0], P[2], -1); return h ? h.si * 1000 + (terrainShapes[h.si].flat ? 0 : h.ti) : -1; };
+  const region = (P) => {
+    if (parkHillsWalkHeightAt(P[0], P[2]) !== null) return -2;
+    const h = shapeHitAt(P[0], P[2], -1);
+    return h ? h.si * 1000 + (terrainShapes[h.si].flat ? 0 : h.ti) : -1;
+  };
+  const meshYAt = (x, z) => {
+    const phMin = parkHillsMinWalkYAt(x, z);
+    if (phMin !== null) return phMin - 0.5 * W;
+    return getTerrainY(x, z);
+  };
   mesh.updateMatrixWorld(true);
   const src = mesh.geometry;
   const g = src.index ? src.toNonIndexed() : src.clone();
@@ -1099,7 +1124,7 @@ function refineTerrainMeshForShapes(mesh) {
     UV.push(uv ? [uv.getX(i), uv.getY(i)] : [0, 0]);
   }
   const outP = [], outUV = [];
-  const BIG = 6 * W, SMALL = 0.6 * W, WALL_MIN = SHAPE_WALL_MIN_RAW * W;
+  const BIG = 6 * W, SMALL = 0.6 * W, PH_STEP_EDGE = 2.0 * W, WALL_MIN = SHAPE_WALL_MIN_RAW * W;
   const len2 = (A, B) => (A[0] - B[0]) ** 2 + (A[2] - B[2]) ** 2;
   const mid = (A, B) => [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2, (A[2] + B[2]) / 2];
   const midUV = (A, B) => [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];
@@ -1109,10 +1134,21 @@ function refineTerrainMeshForShapes(mesh) {
     let split = false;
     if (near && depth < 18) {
       if (m > BIG * BIG) split = true;
-      else if (m > SMALL * SMALL) { const ra = region(A); split = ra !== region(B) || ra !== region(C); }
+      else if (m > SMALL * SMALL) {
+        const ra = region(A), rb = region(B), rc = region(C);
+        const hasShape = ra >= 0 || rb >= 0 || rc >= 0;
+        const limit2 = hasShape ? SMALL * SMALL : PH_STEP_EDGE * PH_STEP_EDGE;
+        if (m > limit2) {
+          if (ra !== rb || ra !== rc) split = true;
+          else if (ra === -2) {
+            const ya = meshYAt(A[0], A[2]), yb = meshYAt(B[0], B[2]), yc = meshYAt(C[0], C[2]);
+            if (Math.max(ya, yb, yc) - Math.min(ya, yb, yc) > 1.2 * W) split = true;
+          }
+        }
+      }
     }
     if (!split) {
-      const ys = near ? [getTerrainY(A[0], A[2]), getTerrainY(B[0], B[2]), getTerrainY(C[0], C[2])] : [A[1], B[1], C[1]];
+      const ys = near ? [meshYAt(A[0], A[2]), meshYAt(B[0], B[2]), meshYAt(C[0], C[2])] : [A[1], B[1], C[1]];
       const minY = Math.min(ys[0], ys[1], ys[2]);
       const maxY = Math.max(ys[0], ys[1], ys[2]);
       const wallStraddle = near && maxY - minY >= WALL_MIN && (region(A) !== region(B) || region(A) !== region(C));
@@ -1141,7 +1177,7 @@ function refineTerrainMeshForShapes(mesh) {
   mesh.geometry = geo;
   src.dispose();
   g.dispose();
-  console.info(`[지형] 평지·경사 구역 ${terrainShapes.length}곳 반영: 지형 삼각형 ${P.length / 3} → ${outP.length / 9}`);
+  console.info(`[지형] 평지·경사 구역 ${terrainShapes.length}곳 + 금파힐 GLB ${parkHillsWalkIndices.size}곳 반영: 지형 삼각형 ${P.length / 3} → ${outP.length / 9}`);
 }
 // 금북초 옹벽 벽화 공통: 거친 사각 돌블록 음영 바탕을 캔버스 위에 얹는다
 function overlayRetainingStoneRelief(ctx, W, H, cols, rows, alpha) {
@@ -1726,7 +1762,7 @@ function buildTerrainShapeWalls() {
 // 1) 대로 보도와 진입로 절개 옹벽 사이의 빈 틈(상단 평지)을 대로 보도와 동일한 회색 블록 도보스타일로 이음매 없이 채우고,
 // 2) 차로 좌·우측 경사면에도 도보스타일 보도블록과 연석을 깔아 지하주차장 진입부 화단까지 자연스럽게 이어지게 한다.
 function buildParkHillsEastRampSidewalks() {
-  if (!terrainShapes.length) return;
+  if (!terrainShapes.some((s) => s.name.includes("지하주차장"))) return;
   const W = WORLD_SCALE;
   const tileW = SIDEWALK_TILE_RAW * W;
   const swPos = [], swUv = [], swIdx = [];
@@ -1857,7 +1893,7 @@ function shapeIndexAt(x, z) {
 // buildPlaces() 등 getTerrainY를 쓰는 다음 단계들이 실제 높이를 받아 쓸 수 있도록, 이 함수가
 // 끝날 때까지(지형이 다 뜰 때까지) 기다렸다가 건물을 짓는다 — 그래서 Promise로 돌려준다.
 function buildGlbTerrain(scene) {
-  if (!GLB_TERRAIN_ENABLED) return Promise.resolve(true);
+  if (!GLB_TERRAIN_ENABLED) return Promise.resolve({ needsFlatGround: true, terrainMesh: null });
   return new Promise((resolve) => {
     gltfLoader.load(
       `${GLB_TERRAIN_FILE}?v=${ASSET_VERSION}`,
@@ -1886,16 +1922,15 @@ function buildGlbTerrain(scene) {
         terrain.updateMatrixWorld(true);
         // 인덱스에 이미 구워 둔 높이(wy)도 원점 보정만큼 그대로 내린다 — 다시 통째로 만들 필요 없음
         for (let i = 0; i < terrainTriIndex.wy.length; i++) terrainTriIndex.wy[i] -= originY;
-        // 평지·경사 구역을 준비하고, 지형 메시를 구역 가장자리에서 잘게 나눠 구역 높이에 맞춘다
+        // 평지·경사 구역을 준비한다(메시 세분화·금파힐 바닥 눌림 처리는 buildStaticScene에서 통합 GLB 로드 직후 실행)
         prepareTerrainShapes();
-        if (terrainShapes.length) refineTerrainMeshForShapes(terrainMesh);
         scene.add(terrain);
-        resolve(false);
+        resolve({ needsFlatGround: false, terrainMesh });
       },
       undefined,
       (err) => {
         console.warn("[GLB 지형] models/GameMap.glb를 못 불러왔다 — 기존 평평한 바닥으로 대신한다", err);
-        resolve(true);
+        resolve({ needsFlatGround: true, terrainMesh: null });
       }
     );
   });
@@ -3788,6 +3823,10 @@ function buildParkHillsWalkIndex(model) {
       const idx = geo.index;
       const wm = node.matrixWorld;
       const cnt = idx ? idx.count : pos.count;
+      // 닫힌 박스/지하 구조물(예: Walk_1F_Basement)은 위를 향한 윗면(nrm.y > 0)만 쓰고 바닥 밑면(-10m)은 버린다.
+      // 단면 평판(예: Walk_Roads, Walk_Promenade_Ramp)처럼 nrm.y < 0만 있는 메쉬만 예외로 허용한다.
+      const upTris = [];
+      const downTris = [];
       for (let i = 0; i < cnt; i += 3) {
         const ia = idx ? idx.getX(i) : i;
         const ib = idx ? idx.getX(i + 1) : i + 1;
@@ -3800,9 +3839,21 @@ function buildParkHillsWalkIndex(model) {
         nrm.crossVectors(e1, e2);
         const len = nrm.length();
         if (len < 1e-8 || Math.abs(nrm.y) / len < 0.7) continue; // 수직 옹벽·난간 제외
-        tris.push(vA.x, vA.y, vA.z, vB.x, vB.y, vB.z, vC.x, vC.y, vC.z, prio);
-        minX = Math.min(minX, vA.x, vB.x, vC.x); maxX = Math.max(maxX, vA.x, vB.x, vC.x);
-        minZ = Math.min(minZ, vA.z, vB.z, vC.z); maxZ = Math.max(maxZ, vA.z, vB.z, vC.z);
+        const dst = nrm.y > 0 ? upTris : downTris;
+        dst.push(vA.x, vA.y, vA.z, vB.x, vB.y, vB.z, vC.x, vC.y, vC.z, prio);
+      }
+      const chosen = upTris.length > 0 ? upTris : downTris;
+      for (let i = 0; i < chosen.length; i += 10) {
+        tris.push(
+          chosen[i], chosen[i + 1], chosen[i + 2],
+          chosen[i + 3], chosen[i + 4], chosen[i + 5],
+          chosen[i + 6], chosen[i + 7], chosen[i + 8],
+          chosen[i + 9]
+        );
+        minX = Math.min(minX, chosen[i], chosen[i + 3], chosen[i + 6]);
+        maxX = Math.max(maxX, chosen[i], chosen[i + 3], chosen[i + 6]);
+        minZ = Math.min(minZ, chosen[i + 2], chosen[i + 5], chosen[i + 8]);
+        maxZ = Math.max(maxZ, chosen[i + 2], chosen[i + 5], chosen[i + 8]);
       }
     }
     for (const ch of node.children) visit(ch, prio);
@@ -3810,17 +3861,8 @@ function buildParkHillsWalkIndex(model) {
   visit(model, 0);
   if (!tris.length) { parkHillsWalkIndices.delete(model); return; }
 
-  // 실제로 이름 붙은 보행면이 덮는 범위(minX~maxX)보다 모델 전체 테두리가 더 넓을 수 있다
-  // (건물 앞 안뜰처럼 이름 붙은 Walk_* 메쉬가 없는 빈틈) — 격자는 모델 전체 바운딩박스로
-  // 잡아야 그 빈틈도 격자 안에 들어와서 아래 채우기(flood fill) 대상이 된다.
-  const modelBox = new THREE.Box3().setFromObject(model);
-  minX = Math.min(minX, modelBox.min.x); maxX = Math.max(maxX, modelBox.max.x);
-  minZ = Math.min(minZ, modelBox.min.z); maxZ = Math.max(maxZ, modelBox.max.z);
-
   const triCount = tris.length / 10;
   const cellSize = 4.0 * WORLD_SCALE;
-  const nCols = Math.max(1, Math.ceil((maxX - minX) / cellSize) + 1);
-  const nRows = Math.max(1, Math.ceil((maxZ - minZ) / cellSize) + 1);
   const cells = new Map();
   for (let t = 0; t < triCount; t++) {
     const o = t * 10;
@@ -3840,59 +3882,10 @@ function buildParkHillsWalkIndex(model) {
     }
   }
 
-  // ── 빈틈 채우기(flood fill) ──
-  // 건물 앞 안뜰처럼 이름 붙은 Walk_* 메쉬가 없는 칸은 "실제 지형(바깥 언덕 높이)"으로 떨어지면
-  // 안 되고(단지 안인데 전혀 안 맞는 높이가 나온다) 가장 가까운 보행면 칸의 높이를 그대로
-  // 물려받아야 한다. 격자 전체(nCols×nRows)에 대해 보행면이 있는 칸들을 동시에 시작점으로 삼아
-  // BFS로 한 번만 번져나가며 채운다 — 모델 로드 때 한 번만 하는 계산이라 매 프레임 비용은 0이다.
-  const cellCount = nCols * nRows;
-  const fillY = new Float64Array(cellCount).fill(NaN);
-  const queue = new Int32Array(cellCount);
-  let qHead = 0, qTail = 0;
-  for (const [key, list] of cells) {
-    const cx = Math.floor(key / 100000), cz = key - cx * 100000;
-    if (cx < 0 || cx >= nCols || cz < 0 || cz >= nRows) continue;
-    const ci = cz * nCols + cx;
-    if (!Number.isNaN(fillY[ci])) continue;
-    let sumY = 0;
-    for (let i = 0; i < list.length; i++) sumY += tris[list[i] + 1];
-    fillY[ci] = sumY / list.length;
-    queue[qTail++] = ci;
-  }
-  const DX = [1, -1, 0, 0], DZ = [0, 0, 1, -1];
-  while (qHead < qTail) {
-    const ci = queue[qHead++];
-    const cx = ci % nCols, cz = (ci / nCols) | 0;
-    const y = fillY[ci];
-    for (let d = 0; d < 4; d++) {
-      const nx = cx + DX[d], nz = cz + DZ[d];
-      if (nx < 0 || nx >= nCols || nz < 0 || nz >= nRows) continue;
-      const ni = nz * nCols + nx;
-      if (!Number.isNaN(fillY[ni])) continue;
-      fillY[ni] = y;
-      queue[qTail++] = ni;
-    }
-  }
-
-  parkHillsWalkIndices.set(model, { tris: new Float64Array(tris), minX, maxX, minZ, maxZ, cellSize, cells, nCols, nRows, fillY });
-  console.info(`[금파힐] 1층/3층 보행 표면 색인 생성: 삼각형 ${triCount}개, 격자 ${nCols}x${nRows}칸 채움 (등록 모델 ${parkHillsWalkIndices.size}개)`);
+  parkHillsWalkIndices.set(model, { tris: new Float64Array(tris), minX, maxX, minZ, maxZ, cellSize, cells });
+  console.info(`[금파힐] 1층/3층 보행 표면 색인 생성: 삼각형 ${triCount}개 (등록 모델 ${parkHillsWalkIndices.size}개)`);
 }
 
-// 그 자리를 정확히 덮는 보행면 삼각형이 없을 때(건물 앞 안뜰처럼 이름 붙은 Walk_* 메쉬가
-// 없는 빈틈) buildParkHillsWalkIndex가 모델 로드 때 미리 채워 둔 격자(fillY, 가장 가까운
-// 보행면 칸의 높이로 BFS 채움)에서 O(1)로 찾는다 — 단지 안에서는 끝까지 실제 지형(바깥
-// 언덕 높이라 전혀 안 맞는다)으로 떨어지지 않고 항상 금파힐통합.glb 자체의 높이를 쓴다.
-function parkHillsWalkNearestY(x, z) {
-  for (const idx of parkHillsWalkIndices.values()) {
-    if (!idx.fillY || x < idx.minX || x > idx.maxX || z < idx.minZ || z > idx.maxZ) continue;
-    const cx = Math.floor((x - idx.minX) / idx.cellSize);
-    const cz = Math.floor((z - idx.minZ) / idx.cellSize);
-    if (cx < 0 || cx >= idx.nCols || cz < 0 || cz >= idx.nRows) continue;
-    const y = idx.fillY[cz * idx.nCols + cx];
-    if (!Number.isNaN(y)) return y;
-  }
-  return null;
-}
 function parkHillsWalkHeightAt(x, z) {
   if (!parkHillsWalkIndices.size) return null;
   let bestPrio = -1;
@@ -3924,18 +3917,44 @@ function parkHillsWalkHeightAt(x, z) {
       }
     }
   }
-  if (bestPrio >= 0) return bestY;
-  return parkHillsWalkNearestY(x, z);
+  return bestPrio >= 0 ? bestY : null;
+}
+
+// 지형 메시(GameMap.glb) 눌림용: 해당 (x, z)에 겹치는 금파힐 GLB 보행면 중 가장 낮은 높이를 돌려준다.
+function parkHillsMinWalkYAt(x, z) {
+  if (!parkHillsWalkIndices.size) return null;
+  let minY = Infinity;
+  for (const idx of parkHillsWalkIndices.values()) {
+    if (x < idx.minX || x > idx.maxX || z < idx.minZ || z > idx.maxZ) continue;
+    const cx = Math.floor((x - idx.minX) / idx.cellSize);
+    const cz = Math.floor((z - idx.minZ) / idx.cellSize);
+    const list = idx.cells.get(cx * 100000 + cz);
+    if (!list) continue;
+    const T = idx.tris;
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      const ax = T[o], ay = T[o + 1], az = T[o + 2];
+      const bx = T[o + 3], by = T[o + 4], bz = T[o + 5];
+      const cx2 = T[o + 6], cy = T[o + 7], cz2 = T[o + 8];
+      const v0x = bx - ax, v0z = bz - az, v1x = cx2 - ax, v1z = cz2 - az, v2x = x - ax, v2z = z - az;
+      const den = v0x * v1z - v1x * v0z;
+      if (Math.abs(den) < 1e-10) continue;
+      const vv = (v2x * v1z - v1x * v2z) / den;
+      const ww = (v0x * v2z - v2x * v0z) / den;
+      const uu = 1 - vv - ww;
+      if (uu < -1e-4 || vv < -1e-4 || ww < -1e-4) continue;
+      const y = ay * uu + by * vv + cy * ww;
+      if (y < minY) minY = y;
+    }
+  }
+  return minY < Infinity ? minY : null;
 }
 
 function groundHeightAt(x, z) {
-  // 금파힐 통합/커뮤니티 GLB의 실제 보행 표면(데크·단지도로·보행 경사로) 위라면 모델 표면 높이를 직접 쓴다
+  // 금파힐 통합/커뮤니티 GLB 범위 내라면 getTerrainY가 GLB 실제 보행 표면(1층·3층 데크·경사로·단지도로)을
+  // 기준(base)으로 돌려주며, 그 위에 깔린 도로·보도 위라면 턱만큼 올려 발이 묻히지 않게 한다.
   const phY = parkHillsWalkHeightAt(x, z);
-  if (phY !== null) return phY + 0.01 * WORLD_SCALE;
-  // 실제 지형(GLB)이 있으면 그 자리 실측 높이가 기준(base)이고, 아래의 발판·단차 턱들은
-  // 전부 그 기준 위에 얹는 상대적인 높이 차다(터널을 뚫은 평지 가정이 아니라, 언덕 중턱이어도
-  // 건물 발판·보도 턱 높이는 그대로 유지된다).
-  const base = getTerrainY(x, z);
+  const base = phY !== null ? phY : getTerrainY(x, z);
   for (const p of groundPlatforms) {
     if (p.poly) {
       if (x < p.minx || x > p.maxx || z < p.minz || z > p.maxz) continue;
@@ -3956,9 +3975,9 @@ function groundHeightAt(x, z) {
     const d = distToSegment(x, z, s.ax, s.az, s.bx, s.bz);
     if (d > s.inner && d <= s.outer) return base + SIDEWALK_TOP_Y;
   }
-  // 실제 지형이 있을 때 도로 위면 도로 표면 높이(지형보다 ROAD_LAYER_BASE_Y 위) — 발이 도로에 묻히지 않게
-  if (glbTerrain && pointOnRoad(x, z, null, 0)) return base + ROAD_LAYER_BASE_Y;
-  return base;
+  // 실제 지형 또는 금파힐 GLB 위에 깔린 도로 위면 도로 표면 높이 — 발이 도로에 묻히지 않게
+  if ((glbTerrain || phY !== null) && pointOnRoad(x, z, null, 0)) return base + ROAD_LAYER_BASE_Y;
+  return phY !== null ? base + 0.01 * WORLD_SCALE : base;
 }
 let modelStreamTimer = 0;
 
@@ -5947,6 +5966,76 @@ function loadPlaceModelInto(entry) {
   );
 }
 
+// 게임 시작 시 도로·보도·지형 메시 정리보다 먼저 place_금파힐통합.glb를 불러와
+// 보행 표면 색인(parkHillsWalkIndices)을 채워 둔다 — 그래야 단지 내 도로·보도·울타리·
+// 정문/후문 진입로가 처음부터 GLB 바닥면 높이에 맞춰지고, GameMap.glb 언덕 메시도 깔끔히 눌린다.
+function preloadParkHillsBaseModel() {
+  const basePlace = PLACES.find((p) => p.model && isParkHillsCommunityBaseModel(p));
+  if (!basePlace) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    gltfLoader.load(
+      `${basePlace.model}?v=${ASSET_VERSION}`,
+      (gltf) => {
+        const px = basePlace.x * WORLD_SCALE;
+        const pz = basePlace.z * WORLD_SCALE;
+        const rotY = basePlace.diagonal ? Math.PI / 4 : 0;
+        const groundY = (basePlace.y || 0) * WORLD_SCALE;
+        const terrainY = PARKHILLS_DECK_BASE_RAW_Y * WORLD_SCALE;
+        const group = new THREE.Group();
+        group.position.y = terrainY + groundY;
+        const model = gltf.scene;
+        const modelScale = WORLD_SCALE * (basePlace.scaleRatio ?? 1);
+        model.scale.setScalar(modelScale);
+        model.position.set(px, 0, pz);
+        model.rotation.y = basePlace.rotationDeg != null ? THREE.MathUtils.degToRad(basePlace.rotationDeg) : rotY;
+        model.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(model);
+        const floorY = basePlace.terrain === "baked" ? 0 : Math.max(0, box.min.y);
+        model.position.y -= floorY;
+        if (basePlace.terrain !== "baked") model.position.y += MODEL_Y_LIFT_OVERRIDE[basePlace.id] ?? DEFAULT_MODEL_Y_LIFT;
+        group.add(model);
+        group.updateMatrixWorld(true);
+        const preEntry = { place: basePlace, px, pz, rotY, group, groundY, terrainY, eastParkingPortalAdded: false };
+        const isPreMergedUnified = !!model.getObjectByName("ParkHills_Walkable_Surface");
+        conformParkHillsCommunityModel(preEntry, model);
+        if (!isPreMergedUnified) mergeModelMeshes(model);
+        const noCastNodes = new Set();
+        [
+          "Walk_1F_Building",
+          "Walk_Promenade_Ramp",
+          "Walk_Upper_Deck",
+          "Walk_Lower_Deck",
+          "Walk_Roads",
+          "Walk_EastPortal_Driveway",
+          "Shop_105_Emart24_Shinhyup_Ads",
+        ].forEach((nm) => {
+          const sub = model.getObjectByName(nm);
+          if (sub) sub.traverse((c) => noCastNodes.add(c));
+        });
+        model.traverse((o) => {
+          if (o.isMesh) {
+            o.castShadow = !noCastNodes.has(o);
+            o.receiveShadow = true;
+            if (basePlace.terrain === "baked") {
+              (Array.isArray(o.material) ? o.material : [o.material]).forEach((mt) => {
+                if (mt) { mt.defines = { ...(mt.defines || {}), NB_TERRAIN_BAKED: "" }; mt.needsUpdate = true; }
+              });
+            }
+          }
+        });
+        settleBuildingBase(preEntry, model);
+        buildParkHillsWalkIndex(model);
+        resolve({ place: basePlace, model, group, eastParkingPortalAdded: preEntry.eastParkingPortalAdded });
+      },
+      undefined,
+      (err) => {
+        console.warn("[금파힐] 통합 모델 선로딩 실패 — 일반 스트리밍으로 대체", err);
+        resolve(null);
+      }
+    );
+  });
+}
+
 function updateModelStreaming(dt) {
   if (!character || !modelStreamEntries.length) return;
   modelStreamTimer += dt;
@@ -5961,7 +6050,7 @@ function updateModelStreaming(dt) {
     entry.streamDist = dist;
     if (dist <= modelLoadRangeFor(entry.place.id)) {
       if (!entry.loadedModel && !entry.loading && !entry.failed) want.push(entry);
-    } else if (dist > modelUnloadRangeFor(entry.place.id) && entry.loadedModel) {
+    } else if (dist > modelUnloadRangeFor(entry.place.id) && entry.loadedModel && !isParkHillsCommunityBaseModel(entry.place)) {
       parkHillsWalkIndices.delete(entry.loadedModel);
       entry.group.remove(entry.loadedModel);
       disposeObject3D(entry.loadedModel);
@@ -5980,7 +6069,7 @@ function updateModelStreaming(dt) {
 }
 const MAX_CONCURRENT_MODEL_LOADS = 2;
 
-function buildPlaces() {
+function buildPlaces(preloadedParkHills = null) {
   PLACES.forEach((place) => {
     const style = TYPE_STYLE[place.type] || TYPE_STYLE["기타"];
     const px = place.x * WORLD_SCALE;
@@ -6020,7 +6109,8 @@ function buildPlaces() {
     // 실제 지형(GameMap.glb)이 있으면 장소 좌표(x, z) 자리의 지형 높이에 앉힌다 — 맵 에디터 "위치+고도 뽑기"가
     // 알려주는 고도와 같은 값이다. 고저차가 큰 곳은 단차가 들어간 모델(terrain: "baked")로 바꿔 넣으면 된다.
     const terrainY = isCommBase ? PARKHILLS_DECK_BASE_RAW_Y * WORLD_SCALE : getTerrainY(px, pz);
-    const group = new THREE.Group();
+    const usePreloaded = isCommBase && preloadedParkHills && preloadedParkHills.place.id === place.id;
+    const group = usePreloaded ? preloadedParkHills.group : new THREE.Group();
     group.position.y = terrainY + groundY + baseLift;
     scene.add(group);
     if (groundY > 0 && !place.model) {
@@ -6066,7 +6156,14 @@ function buildPlaces() {
         }
         group.add(placeholder);
       }
-      modelStreamEntries.push({ place, px, pz, rotY, placeholder, group, groundY, terrainY, loadedModel: null, loading: false, inRange: true, baseDecided: null });
+      const streamEntry = {
+        place, px, pz, rotY, placeholder, group, groundY, terrainY,
+        loadedModel: usePreloaded ? preloadedParkHills.model : null,
+        loading: false, inRange: true, baseDecided: null,
+        eastParkingPortalAdded: usePreloaded ? preloadedParkHills.eastParkingPortalAdded : false,
+      };
+      modelStreamEntries.push(streamEntry);
+      if (usePreloaded) registerBuildingGlass(streamEntry, preloadedParkHills.model);
 
       // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
       if (place.church) {
