@@ -257,9 +257,9 @@
  },
  "models/asset_금파힐정문.glb": {
   "file": "img/skyview/asset_금파힐정문.webp",
-  "hash": "8befa47201",
+  "hash": "a662c69dcd",
   "minX": -14.289,
-  "minZ": -16.8,
+  "minZ": -16.801,
   "width": 27.333,
   "depth": 19
  },
@@ -270,6 +270,14 @@
   "minZ": -2.1,
   "width": 20.917,
   "depth": 4.25
+ },
+ "models/asset_금파힐후문.glb": {
+  "file": "img/skyview/asset_금파힐후문.webp",
+  "hash": "1b18fe213b",
+  "minX": -11.615,
+  "minZ": -2.332,
+  "width": 23.333,
+  "depth": 17.167
  },
  "models/asset_금파힐후문문주.glb": {
   "file": "img/skyview/asset_금파힐후문문주.webp",
