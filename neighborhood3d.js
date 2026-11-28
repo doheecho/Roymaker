@@ -969,8 +969,12 @@ function buildTerrainTriIndex(mesh) {
   }
   return { wx, wy, wz, triA, triB, triC, minX, minZ, cellW, cellH, cells };
 }
-// 그 자리 땅 높이(월드 단위, 우리집 = 0): 평지·경사 구역이 있으면 그 높이, 없으면 실제 지형
+// 그 자리 땅 높이(월드 단위, 우리집 = 0): 금파힐통합/커뮤니티 glb의 실제 보행 표면이 있으면
+// 그걸 최우선으로 쓰고(손으로 그린 TERRAIN_SHAPES보다 실제 모델 바닥이 더 정확하다),
+// 없으면 평지·경사 구역, 그래도 없으면 실제 지형(GameMap.glb) 순으로 내려간다.
 function getTerrainY(x, z) {
+  const phY = parkHillsWalkHeightAt(x, z);
+  if (phY !== null) return phY;
   if (terrainShapes.length) {
     const h = shapeHeightAt(x, z, -1);
     if (h !== null) return h;
@@ -5383,10 +5387,16 @@ function conformParkHillsBackGateApron(entry, model) {
   const HINGE_Z_RAW = -166.5;
   const DECK_EDGE_Z_RAW = -164.4;
   const gateBaseRawY = (entry.group.position.y + model.position.y) / W;
-  const deckAtZ = (zRaw) => PARKHILLS_DECK_BASE_RAW_Y + parkHillsCommunityLiftRaw(zRaw) + 0.02;
-  const offsetAtZ = (zRaw) => {
+  // 금파힐통합.glb가 이미 로드돼 그 자리 실제 보행 표면 높이를 알 수 있으면 그 값을 최우선으로 쓰고,
+  // 아직 안 불러왔으면(로딩 순서가 반대일 때) 기존 계산식(PARKHILLS_H_BACK 등)으로 대신한다.
+  const deckAt = (xRaw, zRaw) => {
+    const phY = parkHillsWalkHeightAt(xRaw * W, zRaw * W);
+    const baseY = phY !== null ? phY / W : PARKHILLS_DECK_BASE_RAW_Y + parkHillsCommunityLiftRaw(zRaw);
+    return baseY + 0.02;
+  };
+  const offsetAt = (xRaw, zRaw) => {
     if (zRaw <= HINGE_Z_RAW) return 0;
-    const targetY = deckAtZ(zRaw);
+    const targetY = deckAt(xRaw, zRaw);
     if (zRaw < DECK_EDGE_Z_RAW) {
       const t = (zRaw - HINGE_Z_RAW) / (DECK_EDGE_Z_RAW - HINGE_Z_RAW);
       return (targetY - gateBaseRawY) * t;
@@ -5408,8 +5418,9 @@ function conformParkHillsBackGateApron(entry, model) {
     invMat.copy(wm).invert();
     const isTreeLike = /(?:Tree|Trunk|Pine|Deciduous|Shrub|Bollard)/i.test(o.name || "");
     if (isTreeLike) {
+      const midXRaw = ((bb.min.x + bb.max.x) * 0.5) / W;
       const midZRaw = ((bb.min.z + bb.max.z) * 0.5) / W;
-      const dyW = offsetAtZ(midZRaw) * W;
+      const dyW = offsetAt(midXRaw, midZRaw) * W;
       if (Math.abs(dyW) > 1e-5) {
         for (let i = 0; i < pos.count; i++) {
           v.fromBufferAttribute(pos, i).applyMatrix4(wm);
@@ -5421,7 +5432,7 @@ function conformParkHillsBackGateApron(entry, model) {
     } else {
       for (let i = 0; i < pos.count; i++) {
         v.fromBufferAttribute(pos, i).applyMatrix4(wm);
-        const dyW = offsetAtZ(v.z / W) * W;
+        const dyW = offsetAt(v.x / W, v.z / W) * W;
         if (Math.abs(dyW) > 1e-5) {
           v.y += dyW;
           v.applyMatrix4(invMat);
@@ -5444,16 +5455,20 @@ function conformParkHillsBackGateApron(entry, model) {
 function conformParkHillsFrontGateApron(entry, model) {
   const W = WORLD_SCALE;
   const gateBaseRawY = (entry.group.position.y + model.position.y) / W;
-  const targetDeckRawY = PARKHILLS_DECK_BASE_RAW_Y + 0.02;
+  model.updateMatrixWorld(true);
+  const Z_START = -2.2;
+  const Z_END = -16.8;
+  // 금파힐통합.glb가 이미 로드돼 있으면 문주 안쪽 끝(Z_END)이 실제로 맞닿는 그 자리 보행 표면
+  // 높이를 직접 재서 쓰고, 아직이면(로딩 순서가 반대일 때) 기존 계산식으로 대신한다.
+  const deepWorld = new THREE.Vector3(0, 0, Z_END * W).applyMatrix4(model.matrixWorld);
+  const phY = parkHillsWalkHeightAt(deepWorld.x, deepWorld.z);
+  const targetDeckRawY = (phY !== null ? phY / W : PARKHILLS_DECK_BASE_RAW_Y) + 0.02;
   const totalRiseRaw = targetDeckRawY - gateBaseRawY;
   if (Math.abs(totalRiseRaw) < 0.05) return;
-  model.updateMatrixWorld(true);
   const invModel = new THREE.Matrix4().copy(model.matrixWorld).invert();
   const v = new THREE.Vector3();
   const lv = new THREE.Vector3();
   const invMat = new THREE.Matrix4();
-  const Z_START = -2.2;
-  const Z_END = -16.8;
   const riseAtLocalZ = (lz) => {
     if (lz >= Z_START) return 0;
     const t = Math.max(0, Math.min(1, (Z_START - lz) / (Z_START - Z_END)));
