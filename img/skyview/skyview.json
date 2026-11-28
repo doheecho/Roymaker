@@ -479,6 +479,14 @@
   "width": 46.437,
   "depth": 74.61
  },
+ "models/place_금이네.glb": {
+  "file": "img/skyview/place_금이네.webp",
+  "hash": "d77fac4dfa",
+  "minX": -13.269,
+  "minZ": -3.918,
+  "width": 41.75,
+  "depth": 42.333
+ },
  "models/place_금파힐101.glb": {
   "file": "img/skyview/place_금파힐101.webp",
   "hash": "446af0b5a8",
