@@ -423,6 +423,14 @@
   "width": 83.014,
   "depth": 157.42
  },
+ "models/place_금북주택가.glb": {
+  "file": "img/skyview/place_금북주택가.webp",
+  "hash": "7e64a4e3da",
+  "minX": -24.501,
+  "minZ": -34.768,
+  "width": 41.849,
+  "depth": 66.268
+ },
  "models/place_금북주택가1.glb": {
   "file": "img/skyview/place_금북주택가1.webp",
   "hash": "777a388a37",
