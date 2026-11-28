@@ -153,7 +153,7 @@ export const PLACES = [
   { id: 218, name: "GS25", floors: 15, type: "아파트", x: -21.8, z: -576.1, model: "models/place_gs25극미점.glb", scaleRatio: 1.8 },
   { id: 219, name: "상가", floors: 15, type: "기타", x: 2.6, z: -510.1, model: "models/place_산마을돈타운2.glb", scaleRatio: 1.4 },
   { id: 220, name: "주택가", floors: 4, type: "기타", x: 7, z: -361.2, model: "models/place_금북남전체구역.glb", rotationDeg: 1.9, scaleRatio: 1.3 },
-  { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -596.1, z: 97.2, y: -1.5, model: "models/place_골드축산.glb", rotationDeg: -1.4, scaleRatio: 1.3 },
+  { id: 222, name: "금호역인근상가", floors: 5, type: "기타", x: -582.4, z: 75.7, y: -1.5, model: "models/place_골드축산.glb", rotationDeg: -1.4, scaleRatio: 1.3 },
   { id: 223, name: "행복한교회", floors: 5, type: "기타", x: 107.8, z: -495.1, model: "models/place_행복한교회.glb", rotationDeg: 5.5, scaleRatio: 1.5 },
   { id: 224, name: "대림상가", floors: 5, type: "기타", x: 53.4, z: -562.6, model: "models/place_대림독서실.glb", rotationDeg: -15.6, scaleRatio: 1.3 },
   { id: 225, name: "금호초등학교", floors: 5, type: "학교", x: -558.7, z: 335.9, model: "models/place_금호초등학교2.glb", rotationDeg: 2.5, scaleRatio: 1.7 },
@@ -177,6 +177,7 @@ export const PLACES = [
   { id: 243, name: "버스정류장", floors: 15, type: "버스정류장", x: 77.8, z: 63.3, model: "models/asset_버스정류장.glb", rotationDeg: -90 },
   { id: 245, name: "", floors: 15, type: "아파트", x: -160.5, z: -6.6, model: "models/place_금파힐통합.glb", terrain: "baked" },
   { id: 246, name: "버스정류장", floors: 1, type: "버스정류장", x: -264.8, z: -105.8, model: "models/asset_버스정류장.glb", rotationDeg: -104.6 },
+  { id: 247, name: "새 건물", floors: 15, type: "아파트", x: -576.8, z: 95, model: "models/place_영자네곱창.glb", rotationDeg: 12, scaleRatio: 1.3 },
 ];
 
 // 2026-11-21 갱신: 금호파크힐스 단지 주변(위 네 상수로 폭을 정하던 구간 중 old raw 기준
