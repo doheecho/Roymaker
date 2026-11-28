@@ -919,6 +919,14 @@
   "width": 53,
   "depth": 50.25
  },
+ "models/place_탕화쿵푸.glb": {
+  "file": "img/skyview/place_탕화쿵푸.webp",
+  "hash": "c182fb808b",
+  "minX": -6.9,
+  "minZ": -9.74,
+  "width": 12.833,
+  "depth": 19.417
+ },
  "models/place_태권도.glb": {
   "file": "img/skyview/place_태권도.webp",
   "hash": "7e616b142e",
