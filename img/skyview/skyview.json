@@ -711,6 +711,14 @@
   "width": 234.048,
   "depth": 225.82
  },
+ "models/place_마라순코우.glb": {
+  "file": "img/skyview/place_마라순코우.webp",
+  "hash": "1274554909",
+  "minX": -28.755,
+  "minZ": -18.363,
+  "width": 47.5,
+  "depth": 42.917
+ },
  "models/place_산마을돈타운.glb": {
   "file": "img/skyview/place_산마을돈타운.webp",
   "hash": "4bfef3e626",
