@@ -1,0 +1,2128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>금호동2가 상가 블록 (우리농산물직판장 ~ 금이네) 3D 모델링 (스카이뷰 비율 · 지하 1층)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #cfe0f0;
+      font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', -apple-system, sans-serif;
+      color: #f8fafc;
+      user-select: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #cfe0f0;
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    .hud-panel {
+      position: fixed;
+      background: rgba(15, 20, 28, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
+      z-index: 10;
+    }
+
+    #info {
+      top: 14px;
+      left: 16px;
+      padding: 12px 16px;
+      max-width: min(580px, calc(100vw - 32px));
+      pointer-events: none;
+    }
+
+    #info h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 5px;
+    }
+
+    #info .badge {
+      font-size: 10.5px;
+      font-weight: 700;
+      background: rgba(59, 130, 246, 0.28);
+      color: #93c5fd;
+      border: 1px solid rgba(96, 165, 250, 0.70);
+      padding: 1px 8px;
+      border-radius: 999px;
+    }
+
+    #info p {
+      font-size: 11.4px;
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+
+    #info .compass {
+      margin-top: 4px;
+      font-size: 10.9px;
+      color: #93c5fd;
+      font-weight: 600;
+    }
+
+    #options-panel {
+      top: 14px;
+      right: 16px;
+      padding: 11px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      width: 288px;
+      max-height: calc(100vh - 140px);
+      overflow-y: auto;
+    }
+
+    .options-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2px;
+    }
+
+    .options-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 0.04em;
+    }
+
+    .collapse-btn {
+      background: rgba(51, 65, 85, 0.74);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 10.5px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .collapse-btn:hover {
+      background: rgba(71, 85, 105, 0.94);
+      color: #ffffff;
+    }
+
+    #options-body {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    #options-body.collapsed {
+      display: none;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: #e2e8f0;
+      cursor: pointer;
+      padding: 2px 0;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: #f59e0b;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .toggle-row .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .panel-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.14);
+      margin: 4px 0;
+    }
+
+    #mesh-stats {
+      font-size: 11px;
+      color: #cbd5e1;
+      line-height: 1.62;
+      font-variant-numeric: tabular-nums;
+      background: rgba(30, 41, 59, 0.62);
+      border: 1px solid rgba(148, 163, 184, 0.20);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
+    #mesh-stats strong {
+      color: #fde68a;
+      font-weight: 700;
+    }
+
+    #mesh-stats .status-pill {
+      display: inline-block;
+      margin-top: 3px;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: rgba(59, 130, 246, 0.24);
+      border: 1px solid rgba(96, 165, 250, 0.58);
+      color: #93c5fd;
+      font-size: 10.4px;
+      font-weight: 700;
+    }
+
+    #controls-ui {
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      max-width: calc(100vw - 20px);
+    }
+
+    .cam-btn {
+      background: rgba(51, 65, 85, 0.85);
+      color: #f1f5f9;
+      border: 1px solid rgba(148, 163, 184, 0.30);
+      padding: 6px 9px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 11.1px;
+      font-family: inherit;
+      font-weight: 500;
+      transition: all 0.16s ease;
+      white-space: nowrap;
+    }
+
+    .cam-btn:hover {
+      background: rgba(37, 99, 235, 0.88);
+      border-color: rgba(147, 197, 253, 0.82);
+      transform: translateY(-1px);
+    }
+
+    .cam-btn.active {
+      background: #2563eb;
+      border-color: #93c5fd;
+      color: #ffffff;
+      font-weight: 700;
+      box-shadow: 0 2px 10px rgba(37, 99, 235, 0.52);
+    }
+
+    .bar-divider {
+      width: 1px;
+      height: 22px;
+      background: rgba(255, 255, 255, 0.18);
+      margin: 0 3px;
+    }
+
+    .export-btn {
+      background: linear-gradient(135deg, #f59e0b, #ea580c);
+      color: #ffffff;
+      border: 1px solid rgba(254, 240, 138, 0.84);
+      padding: 6px 13px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 11.8px;
+      font-family: inherit;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.16s ease;
+      box-shadow: 0 3px 12px rgba(234, 88, 12, 0.48);
+      white-space: nowrap;
+    }
+
+    .export-btn:hover {
+      background: linear-gradient(135deg, #fbbf24, #f97316);
+      transform: translateY(-1px);
+      box-shadow: 0 5px 16px rgba(245, 158, 11, 0.58);
+    }
+
+    .export-btn:disabled {
+      opacity: 0.65;
+      cursor: wait;
+      transform: none;
+    }
+
+    #toast {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-14px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(251, 191, 36, 0.65);
+      color: #fef3c7;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 12.6px;
+      font-weight: 600;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.24s ease, transform 0.24s ease;
+      z-index: 30;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    #error-banner {
+      position: fixed;
+      top: 68px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: min(640px, calc(100vw - 32px));
+      background: rgba(127, 29, 29, 0.96);
+      border: 1px solid rgba(248, 113, 113, 0.92);
+      color: #fecaca;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 12.6px;
+      font-weight: 600;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48);
+      display: none;
+      z-index: 40;
+      word-break: break-word;
+    }
+
+    #error-banner.visible {
+      display: block;
+    }
+
+    @media (max-width: 960px) {
+      #info {
+        top: 10px;
+        left: 10px;
+        padding: 8px 11px;
+        max-width: calc(100vw - 220px);
+      }
+      #info h1 { font-size: 11.2px; }
+      #info p, #info .compass { font-size: 9.6px; }
+      #options-panel {
+        top: 10px;
+        right: 10px;
+        width: 214px;
+        padding: 8px 10px;
+      }
+      .toggle-row { font-size: 10.2px; }
+      .bar-divider { display: none; }
+      #controls-ui {
+        bottom: 8px;
+        padding: 6px 7px;
+        gap: 4px;
+      }
+      .cam-btn, .export-btn {
+        padding: 5px 7px;
+        font-size: 9.8px;
+      }
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="info" class="hud-panel">
+    <h1>
+      금호동2가 파란구역 상가 블록 (우리농산물직판장 ~ 금이네)
+      <span class="badge">비율 56.8m×74.7m (1:1.315) · 1F Y=0 · B1</span>
+    </h1>
+    <p>좌클릭 드래그: 회전 &nbsp;|&nbsp; 우클릭 드래그: 이동 &nbsp;|&nbsp; 휠: 확대·축소</p>
+    <div class="compass">북(-Z) · 남(+Z) · 서(-X: 무수막길 17.1°/35.9°) · 동(+X: 143-8) &nbsp;|&nbsp; B1 Y=-3.6m</div>
+  </div>
+
+  <div id="options-panel" class="hud-panel">
+    <div class="options-header">
+      <div class="options-title">표시 및 추출 설정</div>
+      <button class="collapse-btn" id="btn-collapse">접기</button>
+    </div>
+    <div id="options-body">
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-hero" checked />
+        <span class="dot" style="background:#298473;"></span>
+        <span>무수막길 전면 상가 (5개동)</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-rear" checked />
+        <span class="dot" style="background:#8b6c5c;"></span>
+        <span>남측·동측 내부 건물 (5개동)</span>
+      </label>
+
+      <div class="panel-divider"></div>
+      <div id="mesh-stats">메시 집계 중...</div>
+    </div>
+  </div>
+
+  <div id="toast">알림</div>
+  <div id="error-banner"></div>
+
+  <div id="controls-ui" class="hud-panel">
+    <button class="cam-btn active" data-view="top_plan">1. 탑뷰 (스카이뷰 비율)</button>
+    <button class="cam-btn" data-view="sky">2. 조감도 (Sky)</button>
+    <button class="cam-btn" data-view="west_all">3. 무수막길 상가 전체</button>
+    <button class="cam-btn" data-view="woori">4. 우리농산물직판장</button>
+    <button class="cam-btn" data-view="obong">5. 오봉집·착한한우·떡집</button>
+    <button class="cam-btn" data-view="jeongeun">6. 정은빌딩 (미소김밥)</button>
+    <button class="cam-btn" data-view="nuri_geum">7. 누리헤어·멋진날·금이네</button>
+    <div class="bar-divider"></div>
+    <button class="export-btn" id="btn-export-glb">
+      <span>⬇</span> 3D 추출 (.glb)
+    </button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+    import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+    let toastTimer = null;
+    function showToast(msg, duration = 3400) {
+      const el = document.getElementById('toast');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+    }
+
+    function showErrorBanner(err) {
+      const el = document.getElementById('error-banner');
+      const msg = err && err.message ? err.message : String(err);
+      console.error('3D 오류:', err);
+      if (el) {
+        el.textContent = '3D 오류: ' + msg;
+        el.classList.add('visible');
+      }
+    }
+
+    function hideErrorBanner() {
+      const el = document.getElementById('error-banner');
+      if (el) el.classList.remove('visible');
+    }
+
+    function drawRoundRect(ctx, x, y, w, h, r) {
+      const rad = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rad, y);
+      ctx.lineTo(x + w - rad, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+      ctx.lineTo(x + w, y + h - rad);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+      ctx.lineTo(x + rad, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+      ctx.lineTo(x, y + rad);
+      ctx.quadraticCurveTo(x, y, x + rad, y);
+      ctx.closePath();
+    }
+
+    try {
+      // =======================================================================
+      // 1. 씬, 카메라, WebGLRenderer & 주간 건축 조명
+      // =======================================================================
+      const container = document.getElementById('canvas-container');
+      const initW = container.clientWidth || window.innerWidth || 1280;
+      const initH = container.clientHeight || window.innerHeight || 720;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color('#cfe0f0');
+      scene.fog = new THREE.Fog('#cfe0f0', 180, 480);
+
+      const camera = new THREE.PerspectiveCamera(44, initW / initH, 0.25, 760);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        powerPreference: 'high-performance'
+      });
+      renderer.setSize(initW, initH);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.shadowMap.enabled = false;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.04;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      container.appendChild(renderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.068;
+      controls.maxPolarAngle = Math.PI * 0.85;
+      controls.minDistance = 4.0;
+      controls.maxDistance = 240;
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.48));
+
+      const hemiLight = new THREE.HemisphereLight(0xf6fbff, 0x828890, 0.92);
+      hemiLight.position.set(0, 120, 0);
+      scene.add(hemiLight);
+
+      const westKeyLight = new THREE.DirectionalLight(0xfffaf0, 1.08);
+      westKeyLight.position.set(-72, 68, 42);
+      scene.add(westKeyLight);
+
+      const eastFillLight = new THREE.DirectionalLight(0xeef6ff, 0.84);
+      eastFillLight.position.set(70, 60, -48);
+      scene.add(eastFillLight);
+
+      const northRimLight = new THREE.DirectionalLight(0xfffcf4, 0.56);
+      northRimLight.position.set(-30, 52, -75);
+      scene.add(northRimLight);
+
+      // =======================================================================
+      // 2. 스카이뷰 파란구역(17130.png) 정밀 비율 좌표계 (North=-Z, South=+Z, West=-X, East=+X)
+      //    - 전체 바운딩 비율: 가로(X) 56.80m (-25.4 ~ +31.4) : 세로(Z) 74.70m (-36.2 ~ +38.5) = 1 : 1.315
+      //    - 무수막길 상부 구간 V1(-25.40, -32.60) -> V8(-9.60, +18.60) : 방위각 +17.15° (NNW-SSE)
+      //    - 무수막길 하부 구간 V8(-9.60, +18.60) -> V7(+4.80, +38.50) : 방위각 +35.89° (NW-SE)
+      //    - 1F 기준 Y = 0.00m, 지하 1층 B1 = Y = -3.60m ~ 0.00m (1층 외벽과 동일 컬러)
+      // =======================================================================
+      const BASEMENT_1F_H = 3.60;
+
+      const V1 = { x: -25.40, z: -32.60 }; // NW corner (우리농산물직판장 북서단)
+      const V8 = { x:  -9.60, z:  18.60 }; // SW bend (멋진날포차 90 코너)
+      const V7 = { x:   4.80, z:  38.50 }; // South tip (조은부동산 88 남단)
+
+      const UPPER_DX = V8.x - V1.x; // +15.80m
+      const UPPER_DZ = V8.z - V1.z; // +51.20m
+      const UPPER_LEN = Math.hypot(UPPER_DX, UPPER_DZ); // 53.58m
+      const UPPER_ROT_Y = Math.atan2(UPPER_DX, UPPER_DZ); // +17.15°
+
+      const LOWER_DX = V7.x - V8.x; // +14.40m
+      const LOWER_DZ = V7.z - V8.z; // +19.90m
+      const LOWER_LEN = Math.hypot(LOWER_DX, LOWER_DZ); // 24.56m
+      const LOWER_ROT_Y = Math.atan2(LOWER_DX, LOWER_DZ); // +35.89°
+
+      /**
+       * 도로 선분(A -> B)을 따라 거리 t(m) 위치에 로컬 빌딩 그룹을 정렬 배치
+       * - 로컬 -X = 도로 외향 법선 (정면)
+       * - 로컬 +X = 대지 안쪽 깊이
+       * - 로컬 -Z = 북쪽(A 방향), +Z = 남쪽(B 방향)
+       */
+      function mountAlongSegment(parentGroup, A, B, tDist, name) {
+        const dx = B.x - A.x;
+        const dz = B.z - A.z;
+        const len = Math.hypot(dx, dz);
+        const rotY = Math.atan2(dx, dz);
+        const grp = new THREE.Group();
+        grp.name = name;
+        grp.position.set(A.x + (dx / len) * tDist, 0, A.z + (dz / len) * tDist);
+        grp.rotation.y = rotY;
+        parentGroup.add(grp);
+        return grp;
+      }
+
+      const exportRoot = new THREE.Group();
+      exportRoot.name = 'Geumho2ga_BlueZone_WooriMart_To_Geumine_Root';
+      scene.add(exportRoot);
+
+      const heroWestShopsGroup      = new THREE.Group(); heroWestShopsGroup.name      = 'Group1_Musumakgil_HeroShops_5Bldgs';
+      const rearLightBuildingsGroup = new THREE.Group(); rearLightBuildingsGroup.name = 'Group2_SouthEast_InnerBuildings_5Bldgs';
+
+      exportRoot.add(heroWestShopsGroup, rearLightBuildingsGroup);
+
+      // =======================================================================
+      // 3. 안전 CanvasTexture 팩토리 & GLB 사전 무결성 검증기
+      // =======================================================================
+      const FONT_STACK = "'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif";
+
+      function createSafeCanvasTexture(width, height, drawFn, options = {}) {
+        const cw = Math.max(64, Math.floor(Number(width) || 256));
+        const ch = Math.max(64, Math.floor(Number(height) || 256));
+        const {
+          repeatX = 1,
+          repeatY = 1,
+          isLinear = false,
+          forceRepeat = false
+        } = options;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('2D 캔버스 컨텍스트를 생성할 수 없습니다.');
+
+        drawFn(ctx, cw, ch);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = isLinear ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+        tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        if (forceRepeat || repeatX !== 1 || repeatY !== 1) {
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(repeatX, repeatY);
+        }
+        tex.needsUpdate = true;
+
+        if (!(tex instanceof THREE.CanvasTexture) || !(tex.image instanceof HTMLCanvasElement) || tex.image.width <= 0 || tex.image.height <= 0) {
+          throw new Error('유효하지 않은 CanvasTexture가 감지되었습니다.');
+        }
+        return tex;
+      }
+
+      const TEXTURE_SLOTS = [
+        'map', 'bumpMap', 'emissiveMap', 'roughnessMap',
+        'metalnessMap', 'alphaMap', 'normalMap', 'aoMap', 'lightMap'
+      ];
+
+      function isValidGLBImage(img) {
+        if (!img || typeof img !== 'object') return false;
+        const valid =
+          (typeof HTMLCanvasElement !== 'undefined' && img instanceof HTMLCanvasElement) ||
+          (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement) ||
+          (typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap);
+        if (!valid) return false;
+        const iw = img.naturalWidth || img.width || 0;
+        const ih = img.naturalHeight || img.height || 0;
+        return iw > 0 && ih > 0;
+      }
+
+      function sanitizeSceneForGLB(root) {
+        const detached = [];
+        root.traverse((obj) => {
+          if (!obj.visible || !obj.isMesh) return;
+
+          if (obj.geometry && obj.geometry.isBufferGeometry) {
+            const g = obj.geometry;
+            if (!g.attributes.normal) g.computeVertexNormals();
+            if (!g.attributes.uv && g.attributes.position) {
+              g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+            }
+          }
+
+          if (!obj.material) return;
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          for (const mat of mats) {
+            if (!mat) continue;
+            for (const slot of TEXTURE_SLOTS) {
+              const tex = mat[slot];
+              if (tex == null) continue;
+              if (!(tex instanceof THREE.Texture) || !isValidGLBImage(tex.image)) {
+                detached.push({ mat, slot, tex });
+                mat[slot] = null;
+                mat.needsUpdate = true;
+              }
+            }
+          }
+        });
+        return () => {
+          for (const item of detached) {
+            item.mat[item.slot] = item.tex;
+            item.mat.needsUpdate = true;
+          }
+        };
+      }
+
+      // =======================================================================
+      // 4. 공용 기하 유틸리티 (PRNG, UV, SignPlane, GeometryBatcher)
+      // =======================================================================
+      function mulberry32(seed) {
+        let a = seed >>> 0;
+        return function () {
+          a |= 0;
+          a = (a + 0x6d2b79f5) | 0;
+          let t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function applyWorldPlanarUVs(geometry, scaleU = 0.25, scaleV = 0.25) {
+        geometry.computeVertexNormals();
+        const pos = geometry.attributes.position;
+        const norm = geometry.attributes.normal;
+        const uv = geometry.attributes.uv;
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+          const nx = Math.abs(norm.getX(i)), ny = Math.abs(norm.getY(i)), nz = Math.abs(norm.getZ(i));
+          if (ny >= nx && ny >= nz) uv.setXY(i, x * scaleU, z * scaleU);
+          else if (nx >= nz) uv.setXY(i, z * scaleU, y * scaleV);
+          else uv.setXY(i, x * scaleU, y * scaleV);
+        }
+        uv.needsUpdate = true;
+      }
+
+      function addSignPlane(parentGroup, {
+        x, y, z, w, h, cw, ch, drawFn, rotY = -Math.PI / 2,
+        transparent = false, doubleSide = false, roughness = 0.36, name = 'SignPlane'
+      }) {
+        const tex = createSafeCanvasTexture(cw, ch, drawFn);
+        const cfg = { map: tex, roughness };
+        if (transparent) {
+          cfg.transparent = true;
+          cfg.alphaTest = 0.14;
+        }
+        if (doubleSide) cfg.side = THREE.DoubleSide;
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial(cfg));
+        mesh.name = name;
+        mesh.position.set(x, y, z);
+        if (rotY !== 0) mesh.rotation.y = rotY;
+        parentGroup.add(mesh);
+        return mesh;
+      }
+
+      class GeometryBatcher {
+        constructor() {
+          this.buckets = new Map();
+          this.baseBox = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+          this.baseCyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 12).toNonIndexed();
+          this.baseDodec = new THREE.DodecahedronGeometry(0.5, 0).toNonIndexed();
+          this._mat4 = new THREE.Matrix4();
+          this._pos = new THREE.Vector3();
+          this._quat = new THREE.Quaternion();
+          this._euler = new THREE.Euler();
+          this._scale = new THREE.Vector3();
+        }
+
+        _ensure(key, material) {
+          if (!this.buckets.has(key)) {
+            this.buckets.set(key, { material, geoms: [] });
+          }
+          return this.buckets.get(key);
+        }
+
+        _normalize(src) {
+          const g = src.index ? src.toNonIndexed() : src.clone();
+          if (!g.attributes.normal) g.computeVertexNormals();
+          if (!g.attributes.uv) {
+            const count = g.attributes.position.count;
+            g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(count * 2), 2));
+          }
+          for (const attr of Object.keys(g.attributes)) {
+            if (attr !== 'position' && attr !== 'normal' && attr !== 'uv') {
+              g.deleteAttribute(attr);
+            }
+          }
+          return g;
+        }
+
+        addGeometry(key, material, geometry, matrix = null) {
+          const g = this._normalize(geometry);
+          if (matrix) g.applyMatrix4(matrix);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        addBox(key, material, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0, worldUV = 0) {
+          const g = this.baseBox.clone();
+          this._pos.set(x, y, z);
+          this._euler.set(rx, ry, rz);
+          this._quat.setFromEuler(this._euler);
+          this._scale.set(sx, sy, sz);
+          this._mat4.compose(this._pos, this._quat, this._scale);
+          g.applyMatrix4(this._mat4);
+          if (worldUV > 0) applyWorldPlanarUVs(g, worldUV, worldUV);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        addCylinder(key, material, x, y, z, diameter, length, rx = 0, ry = 0, rz = 0) {
+          const g = this.baseCyl.clone();
+          this._pos.set(x, y, z);
+          this._euler.set(rx, ry, rz);
+          this._quat.setFromEuler(this._euler);
+          this._scale.set(diameter, length, diameter);
+          this._mat4.compose(this._pos, this._quat, this._scale);
+          g.applyMatrix4(this._mat4);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        addRod(key, material, x1, y1, z1, x2, y2, z2, diameter) {
+          const v1 = new THREE.Vector3(x1, y1, z1);
+          const v2 = new THREE.Vector3(x2, y2, z2);
+          const dir = new THREE.Vector3().subVectors(v2, v1);
+          const len = dir.length();
+          if (len < 0.001) return;
+          const mid = new THREE.Vector3().addVectors(v1, v2).multiplyScalar(0.5);
+          const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+          const g = this.baseCyl.clone();
+          this._scale.set(diameter, len, diameter);
+          this._mat4.compose(mid, q, this._scale);
+          g.applyMatrix4(this._mat4);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        addDodecahedron(key, material, x, y, z, sx, sy = sx, sz = sx, ry = 0) {
+          const g = this.baseDodec.clone();
+          this._pos.set(x, y, z);
+          this._euler.set(0, ry, 0);
+          this._quat.setFromEuler(this._euler);
+          this._scale.set(sx, sy, sz);
+          this._mat4.compose(this._pos, this._quat, this._scale);
+          g.applyMatrix4(this._mat4);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        addQuad(key, material, face, x, y, z, w, h, uvU = 1, uvV = 1) {
+          const hw = w * 0.5, hh = h * 0.5;
+          let pos, norm;
+          if (face === 'south') {
+            pos = new Float32Array([-hw,-hh,0, hw,-hh,0, hw,hh,0, -hw,-hh,0, hw,hh,0, -hw,hh,0]);
+            norm = new Float32Array([0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1]);
+          } else if (face === 'north') {
+            pos = new Float32Array([hw,-hh,0, -hw,-hh,0, -hw,hh,0, hw,-hh,0, -hw,hh,0, hw,hh,0]);
+            norm = new Float32Array([0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1]);
+          } else if (face === 'east') {
+            pos = new Float32Array([0,-hh,hw, 0,-hh,-hw, 0,hh,-hw, 0,-hh,hw, 0,hh,-hw, 0,hh,hw]);
+            norm = new Float32Array([1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0]);
+          } else if (face === 'west') {
+            pos = new Float32Array([0,-hh,-hw, 0,-hh,hw, 0,hh,hw, 0,-hh,-hw, 0,hh,hw, 0,hh,-hw]);
+            norm = new Float32Array([-1,0,0, -1,0,0, -1,0,0, -1,0,0, -1,0,0, -1,0,0]);
+          } else {
+            pos = new Float32Array([-hw,0,hh, hw,0,hh, hw,0,-hh, -hw,0,hh, hw,0,-hh, -hw,0,-hh]);
+            norm = new Float32Array([0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0]);
+          }
+          const uvs = new Float32Array([0,0, uvU,0, uvU,uvV, 0,0, uvU,uvV, 0,uvV]);
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+          g.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
+          g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+          g.translate(x, y, z);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        addFacadeShell(key, material, cx, cy, cz, w, h, d, floors, rotY = 0, bayW = 3.2) {
+          const hw = w * 0.5, hh = h * 0.5, hd = d * 0.5;
+          const uW = Math.max(1, Math.round(w / bayW));
+          const uD = Math.max(1, Math.round(d / bayW));
+          const vF = floors;
+          const pos = new Float32Array([
+            -hw,-hh, hd,  hw,-hh, hd,  hw, hh, hd,  -hw,-hh, hd,  hw, hh, hd, -hw, hh, hd,
+             hw,-hh,-hd, -hw,-hh,-hd, -hw, hh,-hd,   hw,-hh,-hd, -hw, hh,-hd,  hw, hh,-hd,
+             hw,-hh, hd,  hw,-hh,-hd,  hw, hh,-hd,   hw,-hh, hd,  hw, hh,-hd,  hw, hh, hd,
+            -hw,-hh,-hd, -hw,-hh, hd, -hw, hh, hd,  -hw,-hh,-hd, -hw, hh, hd, -hw, hh,-hd
+          ]);
+          const norm = new Float32Array([
+            0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1,
+            0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1,
+            1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0,
+            -1,0,0, -1,0,0, -1,0,0, -1,0,0, -1,0,0, -1,0,0
+          ]);
+          const uvs = new Float32Array([
+            0,0, uW,0, uW,vF, 0,0, uW,vF, 0,vF,
+            0,0, uW,0, uW,vF, 0,0, uW,vF, 0,vF,
+            0,0, uD,0, uD,vF, 0,0, uD,vF, 0,vF,
+            0,0, uD,0, uD,vF, 0,0, uD,vF, 0,vF
+          ]);
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+          g.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
+          g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+          if (rotY !== 0) g.rotateY(rotY);
+          g.translate(cx, cy, cz);
+          this._ensure(key, material).geoms.push(g);
+        }
+
+        buildAll(parentGroup) {
+          const created = [];
+          for (const [key, { material, geoms }] of this.buckets.entries()) {
+            if (!geoms.length) continue;
+            const merged = BufferGeometryUtils.mergeGeometries(geoms, false);
+            geoms.forEach((g) => g.dispose());
+            geoms.length = 0;
+            if (!merged) continue;
+            const mesh = new THREE.Mesh(merged, material);
+            mesh.name = `Merged_${key}`;
+            parentGroup.add(mesh);
+            created.push(mesh);
+          }
+          this.buckets.clear();
+          return created;
+        }
+
+        disposeBases() {
+          this.baseBox.dispose();
+          this.baseCyl.dispose();
+          this.baseDodec.dispose();
+        }
+      }
+
+      // =======================================================================
+      // 5. 고해상도 프로시저럴 텍스처 라이브러리
+      // =======================================================================
+      function createAcpPanelTex() {
+        const rand = mulberry32(15717);
+        return createSafeCanvasTexture(512, 512, (ctx, w, h) => {
+          ctx.fillStyle = '#B7BCC0'; ctx.fillRect(0, 0, w, h);
+          const cols = 4, rows = 3, tw = w / cols, th = h / rows;
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const d = Math.round((rand() - 0.5) * 8);
+              const g = ctx.createLinearGradient(c * tw, r * th, c * tw, (r + 1) * th);
+              g.addColorStop(0.0, `rgb(${172 + d},${177 + d},${181 + d})`);
+              g.addColorStop(0.25, `rgb(${186 + d},${191 + d},${195 + d})`);
+              g.addColorStop(1.0, `rgb(${178 + d},${183 + d},${187 + d})`);
+              ctx.fillStyle = g;
+              ctx.fillRect(c * tw + 2, r * th + 2, tw - 4, th - 4);
+              ctx.fillStyle = 'rgba(56, 60, 64, 0.14)';
+              ctx.fillRect(c * tw + 18 + (c % 2) * 26, r * th + 2, 10, 44);
+              ctx.strokeStyle = '#5F666D'; ctx.lineWidth = 3;
+              ctx.strokeRect(c * tw + 1.5, r * th + 1.5, tw - 3, th - 3);
+            }
+          }
+        }, { forceRepeat: true });
+      }
+
+      function createGranitePanelTex(baseRgb, jointHex, cols = 4, rows = 4, seed = 940) {
+        const rand = mulberry32(seed);
+        return createSafeCanvasTexture(512, 512, (ctx, w, h) => {
+          ctx.fillStyle = jointHex; ctx.fillRect(0, 0, w, h);
+          const tw = w / cols, th = h / rows;
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const d = Math.round((rand() - 0.5) * 12);
+              ctx.fillStyle = `rgb(${baseRgb[0] + d},${baseRgb[1] + d},${baseRgb[2] + d})`;
+              ctx.fillRect(c * tw + 2, r * th + 2, tw - 4, th - 4);
+            }
+          }
+          for (let i = 0; i < 6500; i++) {
+            ctx.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(26,24,22,0.055)';
+            ctx.fillRect(rand() * w, rand() * h, 2, 2);
+          }
+        }, { forceRepeat: true });
+      }
+
+      function createFlutedRedBrickTextures() {
+        const rand = mulberry32(15729);
+        const map = createSafeCanvasTexture(512, 512, (ctx, w, h) => {
+          ctx.fillStyle = '#4A3A35'; ctx.fillRect(0, 0, w, h);
+          const rows = 18, cols = 6, rh = h / rows, bw = w / cols;
+          for (let r = 0; r < rows; r++) {
+            const off = (r % 2) * (bw * 0.5);
+            for (let c = -1; c <= cols; c++) {
+              const bx = c * bw + off + 2, by = r * rh + 2;
+              const d = Math.round((rand() - 0.5) * 24);
+              ctx.fillStyle = `rgb(${123 + d},${57 + Math.round(d * 0.5)},${46 + Math.round(d * 0.45)})`;
+              ctx.fillRect(bx, by, bw - 4, rh - 4);
+              ctx.fillStyle = 'rgba(28, 12, 10, 0.28)';
+              for (let vx = bx + 6; vx < bx + bw - 8; vx += 10) {
+                ctx.fillRect(vx, by, 3, rh - 4);
+              }
+            }
+          }
+        }, { forceRepeat: true });
+
+        const bumpMap = createSafeCanvasTexture(512, 512, (ctx, w, h) => {
+          ctx.fillStyle = '#202020'; ctx.fillRect(0, 0, w, h);
+          const rows = 18, cols = 6, rh = h / rows, bw = w / cols;
+          for (let r = 0; r < rows; r++) {
+            const off = (r % 2) * (bw * 0.5);
+            for (let c = -1; c <= cols; c++) {
+              const bx = c * bw + off + 2, by = r * rh + 2;
+              ctx.fillStyle = '#DCDCDC'; ctx.fillRect(bx, by, bw - 4, rh - 4);
+              ctx.fillStyle = '#555555';
+              for (let vx = bx + 6; vx < bx + bw - 8; vx += 10) ctx.fillRect(vx, by, 3, rh - 4);
+            }
+          }
+        }, { isLinear: true, forceRepeat: true });
+
+        return { map, bumpMap };
+      }
+
+      function createCorrugatedMetalTex(baseHex, darkHex, lightHex, stripes = 28) {
+        return createSafeCanvasTexture(512, 256, (ctx, w, h) => {
+          ctx.fillStyle = baseHex; ctx.fillRect(0, 0, w, h);
+          const sw = w / stripes;
+          for (let i = 0; i < stripes; i++) {
+            const x = i * sw;
+            ctx.fillStyle = lightHex; ctx.fillRect(x, 0, sw * 0.35, h);
+            ctx.fillStyle = darkHex;  ctx.fillRect(x + sw * 0.65, 0, sw * 0.35, h);
+          }
+        }, { forceRepeat: true });
+      }
+
+      function createReflectiveGlassTex(topHex = '#6895AE', botHex = '#233A48') {
+        return createSafeCanvasTexture(256, 256, (ctx, w, h) => {
+          const g = ctx.createLinearGradient(0, 0, 0, h);
+          g.addColorStop(0.0, topHex); g.addColorStop(0.55, '#3E657A'); g.addColorStop(1.0, botHex);
+          ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+          ctx.fillStyle = 'rgba(235, 248, 255, 0.26)';
+          ctx.beginPath(); ctx.moveTo(w * 0.10, 0); ctx.lineTo(w * 0.48, 0); ctx.lineTo(w * 0.12, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+        });
+      }
+
+      function createLightKoreanFacadeTex(baseRgb, mortarHex, isStone = false, seed = 880, withWindow = true) {
+        const rand = mulberry32(seed);
+        return createSafeCanvasTexture(512, 512, (ctx, w, h) => {
+          ctx.fillStyle = mortarHex; ctx.fillRect(0, 0, w, h);
+          if (isStone) {
+            const cols = 4, rows = 4, tw = w / cols, th = h / rows;
+            for (let r = 0; r < rows; r++) {
+              for (let c = 0; c < cols; c++) {
+                const d = Math.round((rand() - 0.5) * 14);
+                ctx.fillStyle = `rgb(${baseRgb[0] + d},${baseRgb[1] + d},${baseRgb[2] + d})`;
+                ctx.fillRect(c * tw + 2.5, r * th + 2.5, tw - 5, th - 5);
+              }
+            }
+          } else {
+            const rows = 20, cols = 6, rh = h / rows, bw = w / cols;
+            for (let r = 0; r < rows; r++) {
+              const off = (r % 2) * (bw * 0.5);
+              for (let c = -1; c <= cols; c++) {
+                const d = Math.round((rand() - 0.5) * 22);
+                ctx.fillStyle = `rgb(${baseRgb[0] + d},${baseRgb[1] + Math.round(d * 0.85)},${baseRgb[2] + Math.round(d * 0.8)})`;
+                ctx.fillRect(c * bw + off + 2, r * rh + 2, bw - 4, rh - 4);
+              }
+            }
+          }
+          if (withWindow) {
+            ctx.fillStyle = '#DEDAD2'; ctx.fillRect(0, 0, w, 28);
+            ctx.fillStyle = 'rgba(20,24,28,0.22)'; ctx.fillRect(0, 28, w, 6);
+            const wx = 92, wy = 116, ww = 328, wh = 244;
+            ctx.fillStyle = '#F2F4F7'; ctx.fillRect(wx, wy, ww, wh);
+            ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 4; ctx.strokeRect(wx + 2, wy + 2, ww - 4, wh - 4);
+            const gg = ctx.createLinearGradient(wx, wy, wx, wy + wh);
+            gg.addColorStop(0, '#507892'); gg.addColorStop(1, '#223645');
+            ctx.fillStyle = gg; ctx.fillRect(wx + 14, wy + 14, ww - 28, wh - 28);
+            ctx.fillStyle = '#F2F4F7'; ctx.fillRect(wx + ww * 0.5 - 6, wy + 10, 12, wh - 20);
+            ctx.fillStyle = '#CECAC2'; ctx.fillRect(wx - 8, wy + wh, ww + 16, 14);
+          }
+        }, { forceRepeat: true });
+      }
+
+      // =======================================================================
+      // 6. 공용 PBR 재질 일괄 사전 선언
+      // =======================================================================
+      const flutedBrickTex     = createFlutedRedBrickTextures();
+
+      const acpSilverMat       = new THREE.MeshStandardMaterial({ map: createAcpPanelTex(), roughness: 0.48, metalness: 0.28 });
+      const granite94Mat       = new THREE.MeshStandardMaterial({ map: createGranitePanelTex([181, 182, 180], '#7C8082', 4, 4, 941), roughness: 0.68 });
+      const granite92Mat       = new THREE.MeshStandardMaterial({ map: createGranitePanelTex([182, 178, 172], '#807C76', 4, 4, 921), roughness: 0.70 });
+      const granite88Mat       = new THREE.MeshStandardMaterial({ map: createGranitePanelTex([194, 197, 200], '#8D9196', 4, 4, 881), roughness: 0.66 });
+      const redFlutedBrickMat  = new THREE.MeshStandardMaterial({
+        map: flutedBrickTex.map, bumpMap: flutedBrickTex.bumpMap, bumpScale: 0.032, roughness: 0.84
+      });
+      const brownPolishedGraniteMat = new THREE.MeshStandardMaterial({ map: createGranitePanelTex([106, 66, 54], '#3B231B', 3, 4, 882), roughness: 0.36, metalness: 0.14 });
+      const blackCorrugatedMat = new THREE.MeshStandardMaterial({ map: createCorrugatedMetalTex('#212428', '#15181B', '#31363D', 30), roughness: 0.52, metalness: 0.34 });
+      const greenCorrugatedGateMat = new THREE.MeshStandardMaterial({ map: createCorrugatedMetalTex('#236B36', '#174A24', '#318447', 22), roughness: 0.56, metalness: 0.26 });
+
+      const awningTealMat      = new THREE.MeshStandardMaterial({ color: '#298473', roughness: 0.72, side: THREE.DoubleSide });
+      const awningBlueMat      = new THREE.MeshStandardMaterial({ color: '#3B78B5', roughness: 0.72, side: THREE.DoubleSide });
+      const awningCrimsonMat   = new THREE.MeshStandardMaterial({ color: '#C73041', roughness: 0.72, side: THREE.DoubleSide });
+      const awningSkyBlueMat   = new THREE.MeshStandardMaterial({ color: '#4A89C4', roughness: 0.72, side: THREE.DoubleSide });
+      const awningOrangeMat    = new THREE.MeshStandardMaterial({ color: '#E67626', roughness: 0.70, side: THREE.DoubleSide });
+      const awningBeigeMat     = new THREE.MeshStandardMaterial({ color: '#9D8F82', roughness: 0.76, side: THREE.DoubleSide });
+      const awningCoralRedMat  = new THREE.MeshStandardMaterial({ color: '#D94F42', roughness: 0.72, side: THREE.DoubleSide });
+
+      const brownLintelMat     = new THREE.MeshStandardMaterial({ color: '#6E4A36', roughness: 0.66 });
+      const darkWoodDoorMat    = new THREE.MeshStandardMaterial({ color: '#5A3826', roughness: 0.62 });
+      const creamStuccoMat     = new THREE.MeshStandardMaterial({ color: '#EDE9DF', roughness: 0.76 });
+      const darkMetalMat       = new THREE.MeshStandardMaterial({ color: '#22272D', roughness: 0.44, metalness: 0.54 });
+      const darkBrownFrameMat  = new THREE.MeshStandardMaterial({ color: '#3C2A22', roughness: 0.48, metalness: 0.42 });
+      const whitePvcMat        = new THREE.MeshStandardMaterial({ color: '#F4F6F8', roughness: 0.44 });
+      const stainlessMat       = new THREE.MeshStandardMaterial({ color: '#D4DCE4', roughness: 0.22, metalness: 0.84 });
+      const windowGlassMat     = new THREE.MeshStandardMaterial({ map: createReflectiveGlassTex('#6895AE', '#233A48'), roughness: 0.14, metalness: 0.50 });
+      const curtainGlassMat    = new THREE.MeshStandardMaterial({ map: createReflectiveGlassTex('#8AB4C8', '#3B5C70'), roughness: 0.12, metalness: 0.54 });
+      const showcaseGlassMat   = new THREE.MeshStandardMaterial({
+        color: '#CBE4EE', transparent: true, opacity: 0.44, roughness: 0.12, metalness: 0.30, depthWrite: false, side: THREE.DoubleSide
+      });
+      const carportPolyMat     = new THREE.MeshStandardMaterial({
+        color: '#423026', transparent: true, opacity: 0.72, roughness: 0.24, metalness: 0.18, side: THREE.DoubleSide
+      });
+      const darkInteriorMat    = new THREE.MeshStandardMaterial({ color: '#1A1F24', roughness: 0.92 });
+      const warmShopGlowMat    = new THREE.MeshStandardMaterial({ color: '#F6E8CE', emissive: '#FEF3C7', emissiveIntensity: 0.38, roughness: 0.72 });
+
+      const roofDarkGreenMat   = new THREE.MeshStandardMaterial({ color: '#3B6352', roughness: 0.88 });
+      const roofGreenUreMat    = new THREE.MeshStandardMaterial({ color: '#387654', roughness: 0.86 });
+      const roofLightGreyMat   = new THREE.MeshStandardMaterial({ color: '#B5BAC0', roughness: 0.88 });
+      const redRoofTileMat     = new THREE.MeshStandardMaterial({ color: '#B43330', roughness: 0.62 });
+      const copingGreyMat      = new THREE.MeshStandardMaterial({ color: '#9BA0A6', roughness: 0.76 });
+      const basementBottomMat  = new THREE.MeshStandardMaterial({ color: '#333840', roughness: 0.90 });
+
+      const crateRedMat        = new THREE.MeshStandardMaterial({ color: '#C83232', roughness: 0.64 });
+      const crateYellowMat     = new THREE.MeshStandardMaterial({ color: '#DFAD28', roughness: 0.64 });
+      const styrofoamWhiteMat  = new THREE.MeshStandardMaterial({ color: '#ECEFF2', roughness: 0.84 });
+      const melonYellowMat     = new THREE.MeshStandardMaterial({ color: '#F4BE22', roughness: 0.52 });
+      const produceGreenMat    = new THREE.MeshStandardMaterial({ color: '#3E8C38', roughness: 0.62 });
+      const cabbagePaleMat     = new THREE.MeshStandardMaterial({ color: '#CBE0A8', roughness: 0.74 });
+      const meatRedMat         = new THREE.MeshStandardMaterial({ color: '#A8282E', roughness: 0.58 });
+      const plantGreenMat      = new THREE.MeshStandardMaterial({ color: '#2F7034', roughness: 0.86 });
+      const plantBrightMat     = new THREE.MeshStandardMaterial({ color: '#4B913C', roughness: 0.86 });
+      const yellowSafetyMat    = new THREE.MeshStandardMaterial({ color: '#FACC15', roughness: 0.50 });
+      const barberRedMat       = new THREE.MeshStandardMaterial({ color: '#DC2626', roughness: 0.36 });
+      const barberBlueMat      = new THREE.MeshStandardMaterial({ color: '#2563EB', roughness: 0.36 });
+
+      const lightStone88Mat     = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([192, 186, 174], '#8E887E', true,  880, true),  roughness: 0.78 });
+      const b1Stone88Mat        = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([192, 186, 174], '#8E887E', true,  880, false), roughness: 0.78 });
+
+      const lightBrick921Mat    = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([144, 114, 98],  '#7A706A', false, 921, true),  roughness: 0.84 });
+      const b1Brick921Mat       = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([144, 114, 98],  '#7A706A', false, 921, false), roughness: 0.84 });
+
+      const lightRedBrick901Mat = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([136, 62, 52],   '#6A5C56', false, 901, true),  roughness: 0.84 });
+      const b1RedBrick901Mat    = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([136, 62, 52],   '#6A5C56', false, 901, false), roughness: 0.84 });
+
+      const lightStone14314Mat  = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([198, 200, 202], '#8E9298', true,  1431, true),  roughness: 0.76 });
+      const b1Stone14314Mat     = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([198, 200, 202], '#8E9298', true,  1431, false), roughness: 0.76 });
+
+      const lightBeige1438Mat   = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([182, 162, 142], '#887E74', false, 1438, true),  roughness: 0.80 });
+      const b1Beige1438Mat      = new THREE.MeshStandardMaterial({ map: createLightKoreanFacadeTex([182, 162, 142], '#887E74', false, 1438, false), roughness: 0.80 });
+
+      // =======================================================================
+      // 7. 공용 3D 디테일 헬퍼
+      // =======================================================================
+      function addWestAwning(b, matKey, mat, xWall, yMount, zCenter, widthZ, projX = 1.65, dropY = 0.56, valanceH = 0.28) {
+        const slopeLen = Math.hypot(projX, dropY);
+        const slopeAng = Math.atan2(dropY, projX);
+        const cx = xWall - projX * 0.5;
+        const cy = yMount - dropY * 0.5;
+
+        b.addBox(matKey, mat, cx, cy, zCenter, slopeLen, 0.055, widthZ, 0, 0, slopeAng);
+        if (valanceH > 0) {
+          b.addBox(matKey, mat, xWall - projX, yMount - dropY - valanceH * 0.5, zCenter, 0.04, valanceH, widthZ);
+        }
+        [-widthZ * 0.46, widthZ * 0.46].forEach((oz) => {
+          b.addRod('Awning_Steel', darkMetalMat, xWall, yMount - dropY - 0.10, zCenter + oz, xWall - projX + 0.08, yMount - dropY, zCenter + oz, 0.045);
+          b.addRod('Awning_Steel', darkMetalMat, xWall, yMount - dropY - 0.52, zCenter + oz, xWall - projX * 0.55, yMount - dropY * 0.55, zCenter + oz, 0.04);
+        });
+      }
+
+      function addWestWindow(b, xWall, yCenter, zCenter, wZ, hY, panes = 2, frameMat = darkMetalMat, frameKey = 'Win_DarkFrame') {
+        const fT = 0.08, fD = 0.16;
+        const xF = xWall - 0.04;
+        b.addBox(frameKey, frameMat, xF, yCenter + hY * 0.5 - fT * 0.5, zCenter, fD, fT, wZ);
+        b.addBox(frameKey, frameMat, xF, yCenter - hY * 0.5 + fT * 0.5, zCenter, fD, fT, wZ);
+        b.addBox(frameKey, frameMat, xF, yCenter, zCenter - wZ * 0.5 + fT * 0.5, fD, hY, fT);
+        b.addBox(frameKey, frameMat, xF, yCenter, zCenter + wZ * 0.5 - fT * 0.5, fD, hY, fT);
+        for (let i = 1; i < panes; i++) {
+          const mz = zCenter - wZ * 0.5 + (wZ / panes) * i;
+          b.addBox(frameKey, frameMat, xF - 0.01, yCenter, mz, fD * 0.75, hY - fT, 0.055);
+        }
+        b.addQuad('Win_ReflectGlass', windowGlassMat, 'west', xWall - 0.01, yCenter, zCenter, wZ - fT * 1.4, hY - fT * 1.4);
+      }
+
+      function addBlueAddressPlaque(parentGroup, x, y, z, numStr, rotY = -Math.PI / 2) {
+        addSignPlane(parentGroup, {
+          x, y, z, w: 0.34, h: 0.28, cw: 140, ch: 112, rotY,
+          name: `AddressPlaque_${numStr}`,
+          drawFn: (ctx, w, h) => {
+            ctx.fillStyle = '#1E3A8A'; ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 6; ctx.strokeRect(4, 4, w - 8, h - 8);
+            ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = numStr.length > 2 ? '900 48px Arial, sans-serif' : '900 62px Arial, sans-serif';
+            ctx.fillText(numStr, w / 2, h / 2 + 2);
+          }
+        });
+      }
+
+      // =======================================================================
+      // 8. FIVE WESTERN HERO BUILDINGS (`heroWestShopsGroup`)
+      //    - 스카이뷰(17130.png)의 실제 도로 각도(+17.15° 상부 / +35.89° 하부)에 정확히 정렬
+      // =======================================================================
+      function buildHeroWestShops() {
+        const b1MidY = -BASEMENT_1F_H * 0.5;
+        const b1H = BASEMENT_1F_H - 0.002;
+
+        // ---------------------------------------------------------------------
+        // BUILDING 1: 우리농산물직판장 (96번지, V1->V8 구간 t = 0.6..12.6m, W = 12.0m, D = 10.2m)
+        // ---------------------------------------------------------------------
+        {
+          const g1 = mountAlongSegment(heroWestShopsGroup, V1, V8, 6.60, 'HeroB1_WooriMart_96');
+          const b = new GeometryBatcher();
+          const xMin = 0.0, xMax = 10.2, zMin = -6.0, zMax = 6.0;
+          const cx = 5.1, cz = 0.0, dX = 10.2, wZ = 12.0, H = 10.6;
+
+          // 지하 1층 (Y = -3.60 ~ 0.00m): 1층 외벽과 동일한 은회색 ACP 패널
+          b.addBox('B1_Basement_ACP', acpSilverMat, cx, b1MidY, cz, dX, b1H, wZ, 0, 0, 0, 0.24);
+
+          b.addBox('B1_ACP', acpSilverMat, cx, 3.2 + (H - 3.2) * 0.5, cz, dX, H - 3.2, wZ, 0, 0, 0, 0.24);
+          b.addBox('B1_ACP', acpSilverMat, 6.2, 1.60, cz, 8.0, 3.20, wZ, 0, 0, 0, 0.24);
+          b.addBox('B1_DarkInterior', darkInteriorMat, 2.05, 1.60, cz, 0.22, 3.16, wZ - 0.4);
+          b.addBox('B1_ACP', acpSilverMat, 0.36, 1.60, zMin + 0.36, 0.72, 3.20, 0.72, 0, 0, 0, 0.25);
+          b.addBox('B1_ACP', acpSilverMat, 0.36, 1.60, 0.20, 0.68, 3.20, 0.68, 0, 0, 0, 0.25);
+          b.addBox('B1_ACP', acpSilverMat, 0.36, 1.60, zMax - 0.36, 0.72, 3.20, 0.72, 0, 0, 0, 0.25);
+
+          b.addBox('B1_Parapet', copingGreyMat, cx, H + 0.16, cz, dX + 0.12, 0.32, wZ + 0.12);
+          b.addQuad('B1_Roof', roofDarkGreenMat, 'top', cx, H + 0.33, cz, dX - 0.3, wZ - 0.3);
+          b.addBox('B1_ACP', acpSilverMat, 2.1, H + 1.00, zMin + 2.0, 3.8, 2.00, 3.6, 0, 0, 0, 0.25);
+
+          [-4.2, -1.4, 1.4, 4.2].forEach((wz) => {
+            addWestWindow(b, xMin, 8.95, wz, 1.55, 1.32, 2, darkMetalMat, 'Win_DarkFrame');
+          });
+
+          addSignPlane(g1, {
+            x: xMin - 0.04, y: 6.25, z: cz, w: 10.2, h: 2.35, cw: 1280, ch: 360,
+            name: 'B1_Woori_2F_IllustratedBanner',
+            drawFn: (ctx, w, h) => {
+              const sky = ctx.createLinearGradient(0, 0, 0, h * 0.68);
+              sky.addColorStop(0.0, '#3B82C4'); sky.addColorStop(0.6, '#87C4EB'); sky.addColorStop(1.0, '#D8F0FA');
+              ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#4B82A8';
+              ctx.beginPath(); ctx.moveTo(0, h * 0.65); ctx.quadraticCurveTo(w * 0.28, h * 0.14, w * 0.56, h * 0.55);
+              ctx.quadraticCurveTo(w * 0.80, h * 0.22, w, h * 0.60); ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+              ctx.fillStyle = '#4F9E68';
+              ctx.beginPath(); ctx.moveTo(0, h * 0.72); ctx.quadraticCurveTo(w * 0.35, h * 0.36, w * 0.70, h * 0.74); ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+              ctx.fillStyle = '#F6E088';
+              ctx.beginPath(); ctx.moveTo(w * 0.34, h); ctx.lineTo(w * 0.50, h * 0.58); ctx.lineTo(w * 0.68, h); ctx.closePath(); ctx.fill();
+              const bCols = ['#A8C4E8', '#E4B8D4', '#94B8DC', '#D8B4C8'];
+              [930, 995, 1065, 1140].forEach((bx, idx) => {
+                const bh = 120 + (idx % 2) * 55;
+                ctx.fillStyle = bCols[idx]; ctx.fillRect(bx, h - bh, 52, bh);
+                ctx.strokeStyle = '#334155'; ctx.lineWidth = 4; ctx.strokeRect(bx, h - bh, 52, bh);
+              });
+              ctx.fillStyle = '#B94A48'; ctx.fillRect(1086, 48, 12, 130); ctx.fillRect(1072, 68, 40, 22);
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = `900 108px ${FONT_STACK}`;
+              ctx.lineWidth = 10; ctx.strokeStyle = '#1E3A5F'; ctx.strokeText('우리   농산물   직판장', w * 0.48, h * 0.50);
+              ctx.fillStyle = '#FFFFFF'; ctx.fillText('우리   농산물   직판장', w * 0.48, h * 0.50);
+              ctx.fillStyle = '#3B424A'; ctx.fillRect(w * 0.5 - 5, 0, 10, h);
+              ctx.strokeStyle = '#2A3036'; ctx.lineWidth = 12; ctx.strokeRect(6, 6, w - 12, h - 12);
+            }
+          });
+
+          b.addBox('B1_SignBack', darkMetalMat, xMin - 0.14, 4.38, cz, 0.24, 1.06, 9.60);
+          addSignPlane(g1, {
+            x: xMin - 0.27, y: 4.38, z: cz, w: 9.52, h: 1.02, cw: 1280, ch: 180,
+            transparent: true, name: 'B1_Woori_MainFasciaSign',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+              ctx.font = `900 132px ${FONT_STACK}`;
+              ctx.fillStyle = '#141B1E';
+              ctx.fillText('우리농산물직판장', 30, h / 2 + 8);
+              ctx.lineWidth = 8; ctx.strokeStyle = '#141B1E';
+              ctx.strokeText('우리', 24, h / 2 + 2);
+              ctx.fillStyle = '#E9BC3A'; ctx.fillText('우리', 24, h / 2 + 2);
+              ctx.strokeText('농산물직판장', 292, h / 2 + 2);
+              ctx.fillStyle = '#2C8C79'; ctx.fillText('농산물직판장', 292, h / 2 + 2);
+              ctx.fillStyle = '#E2E8F0'; drawRoundRect(ctx, 1068, 72, 200, 62, 8); ctx.fill();
+              ctx.fillStyle = '#1E293B'; ctx.textAlign = 'center';
+              ctx.font = '900 36px Arial, sans-serif'; ctx.fillText('2238-6926', 1168, 104);
+            }
+          });
+
+          b.addBox('B1_VertBladeCase', whitePvcMat, xMin - 0.56, 7.65, zMin + 0.22, 1.05, 4.95, 0.22);
+          const drawWooriVert = (ctx, w, h) => {
+            const g = ctx.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, '#8AD05A'); g.addColorStop(0.75, '#72B848'); g.addColorStop(1, '#E8F2DC');
+            ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#FACC15'; ctx.font = `900 72px ${FONT_STACK}`; ctx.fillText('우리', w / 2, 74);
+            ctx.fillStyle = '#1D5E3A'; ctx.font = `900 94px ${FONT_STACK}`;
+            ['농','산','물'].forEach((cS, i) => ctx.fillText(cS, w / 2, 186 + i * 96));
+            ctx.fillStyle = '#14382A';
+            ['직','판','장'].forEach((cS, i) => ctx.fillText(cS, w / 2, 476 + i * 96));
+            ctx.fillStyle = '#DC2626'; ctx.font = `900 84px ${FONT_STACK}`; ctx.fillText('마트', w / 2, 780);
+            ctx.fillStyle = '#16A34A'; ctx.beginPath(); ctx.arc(54, 886, 32, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#EF4444'; ctx.beginPath(); ctx.arc(114, 898, 34, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#F59E0B'; ctx.beginPath(); ctx.arc(172, 884, 30, 0, Math.PI * 2); ctx.fill();
+          };
+          addSignPlane(g1, { x: xMin - 0.56, y: 7.65, z: zMin + 0.09, w: 1.02, h: 4.90, cw: 220, ch: 960, rotY: Math.PI, drawFn: drawWooriVert, name: 'B1_VertSign_N' });
+          addSignPlane(g1, { x: xMin - 0.56, y: 7.65, z: zMin + 0.35, w: 1.02, h: 4.90, cw: 220, ch: 960, rotY: 0,       drawFn: drawWooriVert, name: 'B1_VertSign_S' });
+
+          addWestAwning(b, 'Awning_Teal', awningTealMat, xMin, 3.62, cz, 11.70, 1.90, 0.58, 0.38);
+          addSignPlane(g1, {
+            x: xMin - 1.93, y: 2.85, z: cz, w: 11.64, h: 0.36, cw: 1400, ch: 76,
+            name: 'B1_TealAwning_ProduceLineArt',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#1D6B5E'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#E8F6F2'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+              [140, 360, 620, 880, 1100, 1280].forEach((ix, idx) => {
+                ctx.beginPath();
+                if (idx === 0) {
+                  for (let r = 0; r < 3; r++) for (let c = 0; c < 3 - r; c++) { ctx.moveTo(ix + c * 14 + r * 7 + 6, 22 + r * 14); ctx.arc(ix + c * 14 + r * 7, 22 + r * 14, 6, 0, Math.PI * 2); }
+                } else if (idx === 1) {
+                  ctx.ellipse(ix, 38, 22, 12, -0.35, 0, Math.PI * 2);
+                } else if (idx === 2) {
+                  ctx.arc(ix, 22, 34, 0.1 * Math.PI, 0.9 * Math.PI); ctx.closePath();
+                } else if (idx === 3) {
+                  ctx.moveTo(ix - 30, 34); ctx.lineTo(ix + 24, 24); ctx.lineTo(ix + 24, 48); ctx.closePath();
+                } else if (idx === 4) {
+                  ctx.arc(ix - 12, 40, 14, 0, Math.PI * 2); ctx.moveTo(ix + 28, 38); ctx.arc(ix + 14, 38, 14, 0, Math.PI * 2);
+                } else {
+                  ctx.ellipse(ix, 38, 26, 15, 0.15, 0, Math.PI * 2);
+                }
+                ctx.stroke();
+              });
+            }
+          });
+
+          const crates = [
+            { z: -4.2, cKey: 'Crate_Red',    cMat: crateRedMat,       pKey: 'Prod_Melon',   pMat: melonYellowMat,  h: 0.65 },
+            { z: -2.6, cKey: 'Crate_Red',    cMat: crateRedMat,       pKey: 'Prod_Melon',   pMat: melonYellowMat,  h: 0.68 },
+            { z: -0.9, cKey: 'Crate_Red',    cMat: crateRedMat,       pKey: 'Prod_Green',   pMat: produceGreenMat, h: 0.58 },
+            { z:  0.8, cKey: 'Crate_Styro',  cMat: styrofoamWhiteMat, pKey: 'Prod_Cabbage', pMat: cabbagePaleMat,  h: 0.62 },
+            { z:  2.6, cKey: 'Crate_Styro',  cMat: styrofoamWhiteMat, pKey: 'Prod_Green',   pMat: produceGreenMat, h: 0.60 },
+            { z:  4.3, cKey: 'Crate_Yellow', cMat: crateYellowMat,    pKey: 'Prod_Green',   pMat: produceGreenMat, h: 0.64 }
+          ];
+          crates.forEach((cr, idx) => {
+            const cxP = xMin - 0.85;
+            b.addBox(cr.cKey, cr.cMat, cxP, cr.h * 0.5, cr.z, 1.25, cr.h, 1.15);
+            for (let m = 0; m < 4; m++) {
+              b.addDodecahedron(cr.pKey, cr.pMat, cxP - 0.25 + (m % 2) * 0.45, cr.h + 0.14, cr.z - 0.25 + Math.floor(m / 2) * 0.48, 0.34, 0.24, 0.34);
+            }
+            if (idx % 2 === 0) {
+              b.addBox('Price_YellowCards', yellowSafetyMat, cxP - 0.42, cr.h + 0.45, cr.z, 0.04, 0.32, 0.26);
+            }
+          });
+
+          b.buildAll(g1);
+          b.disposeBases();
+        }
+
+        // ---------------------------------------------------------------------
+        // BUILDING 2: 오봉집 · 강정의달인 · 착한한우 · 든든한떡집 (94번지, V1->V8 구간 t = 13.0..29.2m, W = 16.2m, D = 11.2m)
+        // ---------------------------------------------------------------------
+        {
+          const g2 = mountAlongSegment(heroWestShopsGroup, V1, V8, 21.10, 'HeroB2_Obong_Hanwoo_94');
+          const b = new GeometryBatcher();
+          const xMin = 0.0, xMax = 11.2, zMin = -8.1, zMax = 8.1;
+          const cx = 5.6, cz = 0.0, dX = 11.2, wZ = 16.2, H = 10.8;
+
+          // 지하 1층 (Y = -3.60 ~ 0.00m): 1층 외벽과 동일한 회색 화강석 패널
+          b.addBox('B2_Basement_Granite', granite94Mat, cx, b1MidY, cz, dX, b1H, wZ, 0, 0, 0, 0.26);
+
+          b.addBox('B2_Granite', granite94Mat, cx, 3.2 + (H - 3.2) * 0.5, cz, dX, H - 3.2, wZ, 0, 0, 0, 0.26);
+          b.addBox('B2_Granite', granite94Mat, 6.2, 1.60, cz, 10.0, 3.20, wZ, 0, 0, 0, 0.26);
+          [zMin + 0.35, zMin + 3.0, -0.6, 4.2, zMax - 0.35].forEach((pz) => {
+            b.addBox('B2_Granite', granite94Mat, 0.55, 1.60, pz, 1.10, 3.20, 0.54, 0, 0, 0, 0.26);
+          });
+          b.addBox('B2_Parapet', copingGreyMat, cx, H + 0.16, cz, dX + 0.12, 0.32, wZ + 0.12);
+          b.addQuad('B2_Roof', roofDarkGreenMat, 'top', cx, H + 0.33, cz, dX - 0.3, wZ - 0.3);
+          b.addBox('B2_HVAC', acpSilverMat, 4.5, H + 0.72, -1.5, 1.6, 0.80, 2.2);
+          b.addBox('B2_HVAC', acpSilverMat, 7.6, H + 0.72, 3.2, 1.4, 0.76, 1.8);
+
+          addWestWindow(b, xMin, 9.15, -4.4, 2.25, 1.35, 2);
+          addWestWindow(b, xMin, 9.15,  0.0, 1.25, 1.10, 1);
+          addWestWindow(b, xMin, 9.15,  4.4, 2.25, 1.35, 2);
+
+          b.addBox('B2_2FFrame', darkMetalMat, xMin - 0.04, 7.26, cz, 0.14, 0.10, wZ - 0.4);
+          b.addBox('B2_2FFrame', darkMetalMat, xMin - 0.04, 4.94, cz, 0.14, 0.10, wZ - 0.4);
+          for (let mz = zMin + 0.4; mz <= zMax - 0.3; mz += 2.3) {
+            b.addBox('B2_2FFrame', darkMetalMat, xMin - 0.05, 6.10, mz, 0.10, 2.32, 0.06);
+          }
+          b.addQuad('B2_2FGlass', curtainGlassMat, 'west', xMin - 0.01, 6.10, cz, wZ - 0.6, 2.24, 3, 1);
+
+          b.addBox('B2_ObongBox', whitePvcMat, xMin - 0.12, 7.82, 0.4, 0.22, 1.15, 8.20);
+          addSignPlane(g2, {
+            x: xMin - 0.24, y: 7.82, z: 0.4, w: 8.16, h: 1.12, cw: 1200, ch: 200,
+            name: 'B2_Obongjip_2FSign',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#F7F7F5'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#CBD5E1'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+              ctx.fillStyle = '#9A4856'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = `700 32px ${FONT_STACK}`; ctx.fillText('38년 어머니의 손맛', 240, 56);
+              ctx.fillStyle = '#576270'; ctx.font = `800 38px ${FONT_STACK}`; ctx.fillText('직화낙지 · 오봉보쌈', 240, 108);
+              ctx.font = '600 22px Arial, sans-serif'; ctx.fillText('010-4245-1144', 240, 154);
+              const g = ctx.createRadialGradient(545, 96, 10, 545, 96, 58);
+              g.addColorStop(0, '#F9C6CE'); g.addColorStop(1, '#F29CA8');
+              ctx.fillStyle = g; ctx.beginPath(); ctx.arc(545, 98, 54, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#9D4858'; ctx.font = '800 36px Georgia, serif';
+              ctx.fillText('五', 654, 72); ctx.fillText('福', 654, 128);
+              ctx.fillStyle = '#53587A'; ctx.textAlign = 'left';
+              ctx.font = `900 112px Georgia, ${FONT_STACK}`;
+              ctx.fillText('오봉집', 710, 106);
+            }
+          });
+
+          b.addBox('B2_Blade1', whitePvcMat, xMin - 0.44, 8.90, zMin + 0.16, 0.84, 2.35, 0.18);
+          const drawObongVert = (ctx, w, h) => {
+            ctx.fillStyle = '#F7F7F5'; ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+            ctx.fillStyle = '#9D4858'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = '800 36px serif'; ctx.fillText('五 福', w / 2, 54);
+            ctx.fillStyle = '#53587A'; ctx.font = `900 72px ${FONT_STACK}`;
+            ['오','봉','집'].forEach((cS, i) => ctx.fillText(cS, w / 2, 138 + i * 86));
+            ctx.fillStyle = '#B94A5A'; ctx.font = '900 44px Arial, sans-serif'; ctx.fillText('2F', w / 2, 420);
+          };
+          addSignPlane(g2, { x: xMin - 0.44, y: 8.90, z: zMin + 0.05, w: 0.82, h: 2.30, cw: 180, ch: 480, rotY: Math.PI, drawFn: drawObongVert, name: 'B2_ObongVert_N' });
+          addSignPlane(g2, { x: xMin - 0.44, y: 8.90, z: zMin + 0.27, w: 0.82, h: 2.30, cw: 180, ch: 480, rotY: 0,       drawFn: drawObongVert, name: 'B2_ObongVert_S' });
+
+          b.addBox('B2_Blade2', creamStuccoMat, xMin - 0.44, 6.20, zMin + 0.16, 0.84, 2.65, 0.18);
+          const drawNoraeVert = (ctx, w, h) => {
+            ctx.fillStyle = '#ECECE8'; ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#64748B'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+            ctx.fillStyle = '#1E3A8A'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `900 42px ${FONT_STACK}`; ctx.fillText('신금호', w / 2, 54);
+            ctx.fillStyle = '#334155'; ctx.font = `900 72px ${FONT_STACK}`;
+            ['노','래','연','습','장'].forEach((cS, i) => ctx.fillText(cS, w / 2, 140 + i * 82));
+          };
+          addSignPlane(g2, { x: xMin - 0.44, y: 6.20, z: zMin + 0.05, w: 0.82, h: 2.60, cw: 180, ch: 560, rotY: Math.PI, drawFn: drawNoraeVert, name: 'B2_NoraeVert_N' });
+          addSignPlane(g2, { x: xMin - 0.44, y: 6.20, z: zMin + 0.27, w: 0.82, h: 2.60, cw: 180, ch: 560, rotY: 0,       drawFn: drawNoraeVert, name: 'B2_NoraeVert_S' });
+
+          addSignPlane(g2, {
+            x: xMin - 0.06, y: 3.98, z: cz, w: 15.80, h: 0.92, cw: 1800, ch: 130,
+            transparent: true, name: 'B2_1F_MultiShopFascia',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+              ctx.font = `900 66px ${FONT_STACK}`;
+              ctx.lineWidth = 6; ctx.strokeStyle = '#FFFFFF'; ctx.strokeText('신 금 호', 155, 64);
+              ctx.fillStyle = '#1D4ED8'; ctx.fillText('신 금 호', 155, 64);
+
+              ctx.font = `900 72px ${FONT_STACK}`;
+              ctx.strokeText('강정의', 465, 64); ctx.fillStyle = '#2563EB'; ctx.fillText('강정의', 465, 64);
+              ctx.strokeText('달인',   605, 64); ctx.fillStyle = '#DC2626'; ctx.fillText('달인',   605, 64);
+              ctx.fillStyle = '#1E293B'; ctx.fillRect(674, 30, 146, 68);
+              ctx.fillStyle = '#FFFFFF'; ctx.font = '900 34px Arial, sans-serif'; ctx.fillText('469-1085', 747, 65);
+
+              ctx.font = `900 76px ${FONT_STACK}`;
+              ctx.strokeText('착한', 965, 64); ctx.fillStyle = '#2563EB'; ctx.fillText('착한', 965, 64);
+              ctx.strokeText('한우', 1105, 64); ctx.fillStyle = '#DC2626'; ctx.fillText('한우', 1105, 64);
+              ctx.fillStyle = '#FACC15'; ctx.fillRect(1188, 32, 134, 64);
+              ctx.fillStyle = '#18181B'; ctx.font = `900 40px ${FONT_STACK}`; ctx.fillText('직판장', 1255, 65);
+
+              ctx.font = `900 64px ${FONT_STACK}`;
+              ctx.strokeText('든든한', 1460, 64); ctx.fillStyle = '#1D4ED8'; ctx.fillText('든든한', 1460, 64);
+              ctx.strokeText('떡집',   1585, 64); ctx.fillStyle = '#DC2626'; ctx.fillText('떡집',   1585, 64);
+              ctx.fillStyle = '#DC2626'; ctx.fillRect(1646, 38, 92, 52);
+              ctx.fillStyle = '#FFFFFF'; ctx.font = '800 22px Arial, sans-serif'; ctx.fillText('2237-7879', 1692, 65);
+              ctx.fillStyle = '#2563EB'; ctx.font = `900 42px ${FONT_STACK}`; ctx.fillText('청수', 1766, 65);
+            }
+          });
+
+          // Bay 1: 노래연습장 입구 + 94 주소판
+          b.addBox('B2_Bay1Dark', darkInteriorMat, 1.35, 1.45, -6.55, 0.30, 2.90, 2.40);
+          addSignPlane(g2, {
+            x: xMin - 0.05, y: 3.16, z: -6.55, w: 2.50, h: 0.62, cw: 380, ch: 100, transparent: true,
+            name: 'B2_Bay1_NoraeSubSign',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = `900 66px ${FONT_STACK}`;
+              ctx.lineWidth = 6; ctx.strokeStyle = '#FFFFFF'; ctx.strokeText('노래연습장', w / 2, h / 2 + 2);
+              ctx.fillStyle = '#9F1239'; ctx.fillText('노래연습장', w / 2, h / 2 + 2);
+            }
+          });
+          addBlueAddressPlaque(g2, xMin - 0.06, 2.15, zMin + 0.35, '94');
+
+          // Bay 2: 강정의 달인
+          addWestAwning(b, 'Awning_Blue', awningBlueMat, xMin, 3.32, -2.85, 4.20, 1.55, 0.46, 0.24);
+          b.addBox('B2_Bay2Dark', darkInteriorMat, 1.35, 1.45, -2.85, 0.25, 2.90, 4.00);
+          addSignPlane(g2, {
+            x: 1.18, y: 1.50, z: -1.60, w: 1.25, h: 2.40, cw: 220, ch: 460,
+            name: 'B2_Bay2_ImportDoor',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#E5E7EB'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#64748B'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+              ctx.fillStyle = '#1E293B'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = `800 38px ${FONT_STACK}`; ctx.fillText('수입브랜드', w / 2, 145);
+            }
+          });
+
+          // Bay 3: 착한한우 직판장
+          addWestAwning(b, 'Awning_Crimson', awningCrimsonMat, xMin, 3.30, 1.80, 4.70, 1.60, 0.46, 0.30);
+          addSignPlane(g2, {
+            x: xMin - 1.63, y: 2.69, z: 1.80, w: 4.66, h: 0.28, cw: 820, ch: 64,
+            name: 'B2_Hanwoo_Valance',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#B82535'; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#FFFFFF'; ctx.textBaseline = 'middle';
+              ctx.textAlign = 'left'; ctx.font = `800 32px ${FONT_STACK}`; ctx.fillText('착한한우(직판장)', 26, h / 2 + 2);
+              [420, 490, 560].forEach((cx) => {
+                ctx.fillRect(cx - 18, 22, 34, 20); ctx.fillRect(cx + 14, 18, 12, 12);
+                ctx.fillRect(cx - 16, 42, 6, 14); ctx.fillRect(cx + 8, 42, 6, 14);
+              });
+              ctx.textAlign = 'right'; ctx.font = '800 30px Arial, sans-serif'; ctx.fillText('2233-2307', w - 24, h / 2 + 2);
+            }
+          });
+          b.addBox('B2_HanwooBack', darkInteriorMat, 1.35, 1.45, 1.80, 0.25, 2.90, 4.40);
+          b.addQuad('B2_HanwooGlass', windowGlassMat, 'west', 1.15, 1.45, 1.80, 4.10, 2.65);
+          b.addBox('Showcase_Base', darkMetalMat,   xMin - 0.65, 0.38, 0.80, 1.05, 0.76, 1.95);
+          b.addBox('Showcase_Meat', meatRedMat,     xMin - 0.60, 0.84, 0.80, 0.78, 0.16, 1.72);
+          b.addBox('Showcase_Trim', stainlessMat,   xMin - 0.65, 0.78, 0.80, 1.08, 0.06, 1.98);
+          b.addBox('Showcase_Glass', showcaseGlassMat, xMin - 0.65, 1.18, 0.80, 0.96, 0.72, 1.92, 0, 0, 0.24);
+          b.addBox('B2_HanwooBlade', awningCrimsonMat, xMin - 0.55, 2.15, 3.85, 0.72, 0.68, 0.16);
+          addSignPlane(g2, {
+            x: xMin - 0.55, y: 2.15, z: 3.95, w: 0.68, h: 0.64, cw: 180, ch: 170, rotY: 0,
+            name: 'B2_HanwooCubeSign',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#B91C1C'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = `900 52px ${FONT_STACK}`; ctx.fillText('착한', w / 2, 56); ctx.fillText('한우', w / 2, 114);
+            }
+          });
+
+          // Bay 4: 든든한 떡집
+          addWestAwning(b, 'Awning_SkyBlue', awningSkyBlueMat, xMin, 3.30, 6.15, 3.70, 1.55, 0.46, 0.24);
+          b.addBox('B2_RiceCakeBack', darkInteriorMat, 1.35, 1.45, 6.15, 0.25, 2.90, 3.50);
+          b.addBox('Showcase_Base',   darkMetalMat,    xMin - 0.62, 0.36, 5.85, 0.98, 0.72, 1.75);
+          b.addBox('Showcase_Trim',   styrofoamWhiteMat, xMin - 0.60, 0.78, 5.85, 0.84, 0.12, 1.58);
+          b.addBox('Showcase_Glass',  showcaseGlassMat, xMin - 0.62, 1.06, 5.85, 0.92, 0.56, 1.72, 0, 0, 0.26);
+          b.addBox('B2_TteokBlade', whitePvcMat, xMin - 0.54, 2.45, 7.65, 0.68, 0.68, 0.16);
+          const drawTteok = (ctx, w, h) => {
+            ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#94A3B8'; ctx.lineWidth = 6; ctx.strokeRect(4, 4, w - 8, h - 8);
+            ctx.fillStyle = '#B91C1C'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `900 112px ${FONT_STACK}`; ctx.fillText('떡', w / 2, h / 2 + 4);
+          };
+          addSignPlane(g2, { x: xMin - 0.54, y: 2.45, z: 7.75, w: 0.64, h: 0.64, cw: 180, ch: 180, rotY: 0, drawFn: drawTteok, name: 'B2_TteokSign_S' });
+          addSignPlane(g2, { x: xMin - 0.54, y: 2.45, z: 7.55, w: 0.64, h: 0.64, cw: 180, ch: 180, rotY: Math.PI, drawFn: drawTteok, name: 'B2_TteokSign_N' });
+
+          b.buildAll(g2);
+          b.disposeBases();
+        }
+
+        // ---------------------------------------------------------------------
+        // BUILDING 3: 정은빌딩 (92번지 — 미소김밥 · 아빠올때 아이스크림, V1->V8 구간 t = 31.2..43.2m, W = 12.0m, D = 10.6m)
+        // ---------------------------------------------------------------------
+        {
+          const g3 = mountAlongSegment(heroWestShopsGroup, V1, V8, 37.20, 'HeroB3_Jeongeun_92');
+          const b = new GeometryBatcher();
+          const xMin = 0.0, xMax = 10.6, zMin = -6.0, zMax = 6.0;
+          const cx = 5.3, cz = 0.0, dX = 10.6, wZ = 12.0, H = 10.6;
+
+          // 지하 1층 (Y = -3.60 ~ 0.00m): 1층 외벽과 동일한 연회색 화강석 + 전면 미소김밥 화이트 기단 & 아이스크림 크림벽
+          b.addBox('B3_Basement_Granite', granite92Mat, cx, b1MidY, cz, dX, b1H, wZ, 0, 0, 0, 0.25);
+          b.addBox('B3_Basement_MisoPlinth', whitePvcMat, xMin - 0.10, b1MidY, -3.55, 0.34, b1H, 3.80);
+          b.addBox('B3_Basement_IceCreamWall', creamStuccoMat, 0.65, b1MidY, 2.55, 1.30, b1H, 5.20);
+
+          b.addBox('B3_Granite', granite92Mat, cx, 3.2 + (H - 3.2) * 0.5, cz, dX, H - 3.2, wZ, 0, 0, 0, 0.25);
+          b.addBox('B3_Granite', granite92Mat, 5.8, 1.60, cz, 9.6, 3.20, wZ, 0, 0, 0, 0.25);
+          b.addBox('B3_Granite', granite92Mat, 0.40, 1.60, -0.25, 0.82, 3.20, 0.46, 0, 0, 0, 0.25);
+          b.addBox('B3_Granite', granite92Mat, 0.40, 1.60,  5.25, 0.82, 3.20, 0.44, 0, 0, 0, 0.25);
+
+          b.addBox('B3_Parapet', copingGreyMat, cx, H + 0.16, cz, dX + 0.12, 0.32, wZ + 0.12);
+          b.addQuad('B3_Roof', roofLightGreyMat, 'top', cx, H + 0.33, cz, dX - 0.3, wZ - 0.3);
+          b.addBox('B3_Granite', granite92Mat, 7.6, H + 1.15, 2.6, 3.8, 2.30, 4.0, 0, 0, 0, 0.25);
+          b.addBox('B3_RoofRail', stainlessMat, xMin + 0.16, H + 1.12, cz, 0.05, 0.05, wZ - 0.4);
+          for (let rz = zMin + 0.4; rz <= zMax - 0.3; rz += 1.2) {
+            b.addBox('B3_RoofRail', stainlessMat, xMin + 0.16, H + 0.72, rz, 0.04, 0.84, 0.04);
+          }
+
+          const winSpecs = [
+            { z: -4.25, w: 1.55, h: 1.55, panes: 1, hasRail: true  },
+            { z: -1.65, w: 2.15, h: 1.55, panes: 2, hasRail: true  },
+            { z:  0.35, w: 0.76, h: 0.65, panes: 1, hasRail: false },
+            { z:  3.05, w: 2.75, h: 1.60, panes: 2, hasRail: true  }
+          ];
+          [5.45, 8.65].forEach((wy) => {
+            winSpecs.forEach((ws) => {
+              addWestWindow(b, xMin, wy, ws.z, ws.w, ws.h, ws.panes, whitePvcMat, 'Win_WhitePVC');
+              if (ws.hasRail) {
+                b.addBox('B3_BrownLintel', brownLintelMat, xMin - 0.14, wy + ws.h * 0.5 + 0.08, ws.z, 0.28, 0.15, ws.w + 0.34);
+                const rTop = wy + 0.04, rBot = wy - ws.h * 0.5 + 0.04, rMid = (rTop + rBot) * 0.5, rH = rTop - rBot;
+                const rX = xMin - 0.22;
+                b.addBox('B3_StainlessRail', stainlessMat, rX, rTop, ws.z, 0.045, 0.045, ws.w + 0.26);
+                b.addBox('B3_StainlessRail', stainlessMat, rX, rBot, ws.z, 0.040, 0.040, ws.w + 0.26);
+                [-ws.w * 0.5 - 0.10, ws.w * 0.5 + 0.10].forEach((oz) => {
+                  b.addBox('B3_StainlessRail', stainlessMat, xMin - 0.11, rTop, ws.z + oz, 0.22, 0.035, 0.035);
+                  b.addBox('B3_StainlessRail', stainlessMat, xMin - 0.11, rBot, ws.z + oz, 0.22, 0.035, 0.035);
+                });
+                const bars = Math.max(5, Math.round((ws.w + 0.2) / 0.18));
+                for (let i = 0; i <= bars; i++) {
+                  const bz = ws.z - (ws.w + 0.20) * 0.5 + ((ws.w + 0.20) / bars) * i;
+                  b.addBox('B3_StainlessRail', stainlessMat, rX, rMid, bz, 0.022, rH, 0.022);
+                }
+              }
+            });
+          });
+
+          // 좌측 베이: 미소김밥
+          b.addBox('B3_MisoSignBox', darkMetalMat, xMin - 0.10, 3.82, -3.15, 0.18, 0.52, 5.20);
+          addSignPlane(g3, {
+            x: xMin - 0.20, y: 3.82, z: -3.15, w: 5.14, h: 0.48, cw: 960, ch: 120,
+            name: 'B3_MisoGimbap_Sign',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#1B1E22'; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#E2E8F0'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.font = '700 22px Georgia, serif'; ctx.fillText('Dried Seaweed Rolls', 18, h / 2 + 2);
+              ctx.fillStyle = '#F97316'; ctx.beginPath(); ctx.arc(255, h / 2, 32, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(255, h / 2, 16, 0, Math.PI * 2); ctx.fill();
+              ctx.font = `900 76px ${FONT_STACK}`;
+              ctx.fillStyle = '#F97316'; ctx.fillText('미소', 306, h / 2 + 4);
+              ctx.fillStyle = '#FEF08A'; ctx.fillText('김밥', 466, h / 2 + 4);
+              ctx.fillStyle = '#F8FAFC'; ctx.textAlign = 'right';
+              ctx.font = '800 34px Arial, sans-serif'; ctx.fillText('T. 2232-3561', w - 24, h / 2 + 2);
+            }
+          });
+          addWestAwning(b, 'Awning_Orange', awningOrangeMat, xMin, 3.42, -3.15, 5.40, 1.50, 0.45, 0.22);
+          b.addBox('B3_MisoPlinth', whitePvcMat, xMin - 0.10, 0.56, -3.85, 0.34, 1.12, 3.80);
+          b.addBox('B3_MisoFrame',  darkMetalMat, xMin - 0.14, 1.85, -3.85, 0.24, 1.50, 3.76);
+          b.addQuad('B3_MisoGlass', windowGlassMat, 'west', xMin - 0.27, 1.85, -3.85, 3.56, 1.32);
+          b.addBox('B3_MisoDoor',   darkInteriorMat, 0.60, 1.45, -1.15, 0.22, 2.85, 1.35);
+
+          // 우측 베이: 아빠올때 아이스크림
+          b.addBox('B3_IceCreamWall', creamStuccoMat, 0.65, 1.55, 2.55, 1.30, 3.10, 5.20);
+          b.addBox('B3_IceSignBack',  whitePvcMat,    xMin - 0.14, 3.50, 2.55, 0.22, 1.18, 5.36);
+          addSignPlane(g3, {
+            x: xMin - 0.26, y: 3.50, z: 2.55, w: 5.30, h: 1.14, cw: 960, ch: 240,
+            name: 'B3_IceCream_Sign',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#ECE6F0'; ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#D8CEE0'; ctx.lineWidth = 6; ctx.strokeRect(3, 3, w - 6, h - 6);
+              ctx.strokeStyle = '#DB2777'; ctx.lineWidth = 6;
+              ctx.beginPath(); ctx.arc(165, 108, 66, 0, Math.PI * 2); ctx.stroke();
+              ctx.fillStyle = '#F472B6';
+              drawRoundRect(ctx, 134, 68, 28, 52, 12); ctx.fill();
+              drawRoundRect(ctx, 168, 68, 28, 52, 12); ctx.fill();
+              ctx.fillStyle = '#DB2777'; ctx.fillRect(145, 120, 6, 20); ctx.fillRect(179, 120, 6, 20);
+              ctx.fillStyle = '#DB2777'; ctx.fillRect(114, 146, 102, 24);
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = '900 18px Arial, sans-serif'; ctx.fillText('ICE CREAM', 165, 158);
+              ctx.fillStyle = '#2B2438'; ctx.textAlign = 'left';
+              ctx.font = `700 44px ${FONT_STACK}`; ctx.fillText('아빠올때', 284, 64);
+              ctx.font = `900 94px ${FONT_STACK}`; ctx.fillText('아이스크림', 280, 144);
+              ctx.fillStyle = '#16A34A'; ctx.fillRect(284, 198, 24, 24);
+              ctx.fillStyle = '#FFFFFF'; ctx.font = '900 18px Arial, sans-serif'; ctx.fillText('N', 290, 211);
+              ctx.fillStyle = '#475569'; ctx.font = `700 24px ${FONT_STACK}`; ctx.fillText('아빠올때 아이스크림  |  창업문의 070-8835-7277', 318, 210);
+            }
+          });
+          b.addBox('B3_WoodDoor', darkWoodDoorMat, xMin - 0.04, 1.25, 1.35, 0.14, 2.45, 1.15);
+          b.addQuad('B3_DoorGlass', windowGlassMat, 'west', xMin - 0.12, 1.48, 1.35, 0.88, 1.30);
+          b.addBox('B3_FreezerGlow', warmShopGlowMat, 0.40, 1.38, 3.55, 0.35, 1.92, 2.65);
+          b.addQuad('B3_ShopGlass', showcaseGlassMat, 'west', xMin - 0.05, 1.38, 3.55, 2.65, 1.92);
+
+          b.addBox('B3_LobbyDoor', darkInteriorMat, 0.60, 1.32, 5.65, 0.25, 2.64, 0.90);
+          b.addBox('B3_LobbyLintel', brownLintelMat, xMin - 0.10, 2.82, 5.65, 0.24, 0.28, 1.15);
+
+          // 남측 카포트 담장 & 적벽돌 기둥 (지하 1층까지 동일 연장)
+          b.addBox('Carport_B1_LowWall', granite92Mat, 5.0, b1MidY, 6.12, 9.60, b1H, 0.22, 0, 0, 0, 0.25);
+          b.addBox('Carport_LowWall', granite92Mat, 5.0, 0.48, 6.12, 9.60, 0.96, 0.22);
+          [0.8, 4.0, 7.2].forEach((px) => {
+            b.addCylinder('Carport_Posts', darkBrownFrameMat, px, 1.30, 6.25, 0.08, 2.60);
+            b.addCylinder('Carport_Posts', darkBrownFrameMat, px, 1.22, 8.25, 0.08, 2.44);
+            b.addBox('Carport_Frame', darkBrownFrameMat, px, 2.52, 7.25, 0.08, 0.09, 2.25, 0.07, 0, 0);
+          });
+          b.addBox('Carport_Frame', darkBrownFrameMat, 4.0, 2.58, 6.25, 6.8, 0.10, 0.08);
+          b.addBox('Carport_Frame', darkBrownFrameMat, 4.0, 2.42, 8.25, 6.8, 0.10, 0.08);
+          const carportSheet = new THREE.Mesh(new THREE.PlaneGeometry(6.8, 2.28), carportPolyMat);
+          carportSheet.name = 'B3_Carport_PolycarbonateRoof';
+          carportSheet.position.set(4.0, 2.52, 7.25);
+          carportSheet.rotation.x = -Math.PI / 2 + 0.07;
+          g3.add(carportSheet);
+
+          b.addBox('Driveway_B1_BrickPier', redFlutedBrickMat, 0.75, b1MidY, 8.35, 0.56, b1H, 0.56, 0, 0, 0, 0.35);
+          b.addBox('Driveway_BrickPier', redFlutedBrickMat, 0.75, 1.20, 8.35, 0.56, 2.40, 0.56, 0, 0, 0, 0.35);
+          addBlueAddressPlaque(g3, 0.45, 1.75, 8.35, '92-1');
+          addSignPlane(g3, {
+            x: 0.65, y: 2.58, z: 7.45, w: 1.80, h: 0.56, cw: 380, ch: 120, transparent: true,
+            name: 'Driveway_SamsungGongup_Sign',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = `900 76px ${FONT_STACK}`;
+              ctx.lineWidth = 8; ctx.strokeStyle = '#FFFFFF'; ctx.strokeText('삼성공업', w / 2, h / 2 + 2);
+              ctx.fillStyle = '#1D4ED8'; ctx.fillText('삼성공업', w / 2, h / 2 + 2);
+            }
+          });
+
+          b.buildAll(g3);
+          b.disposeBases();
+        }
+
+        // ---------------------------------------------------------------------
+        // BUILDING 4: 누리헤어 · 멋진날포차 (90번지, V1->V8 구간 t = 45.6..53.6m, W = 8.0m, D = 9.6m, V8 코너 배치)
+        // ---------------------------------------------------------------------
+        {
+          const g4 = mountAlongSegment(heroWestShopsGroup, V1, V8, 49.60, 'HeroB4_Nuri_Meotjinnal_90');
+          const b = new GeometryBatcher();
+          const xMin = 0.0, xMax = 9.6, zMin = -4.0, zMax = 4.0;
+          const cx = 4.8, cz = 0.0, dX = 9.6, wZ = 8.0, H = 10.0;
+
+          // 지하 1층 (Y = -3.60 ~ 0.00m): 1층 외벽과 동일한 적갈색 세로홈 적벽돌 + 1층 화강석 기둥
+          b.addBox('B4_Basement_Brick', redFlutedBrickMat, cx, b1MidY, cz, dX, b1H, wZ, 0, 0, 0, 0.30);
+          [zMin + 0.30, -0.20, zMax - 0.30].forEach((pz) => {
+            b.addBox('B4_Basement_Piers', granite94Mat, 0.35, b1MidY, pz, 0.72, b1H, 0.56, 0, 0, 0, 0.25);
+          });
+
+          b.addBox('B4_RedFlutedBrick', redFlutedBrickMat, cx, 3.1 + (H - 3.1) * 0.5, cz, dX, H - 3.1, wZ, 0, 0, 0, 0.30);
+          b.addBox('B4_RedFlutedBrick', redFlutedBrickMat, 5.2, 1.55, cz, 8.8, 3.10, wZ, 0, 0, 0, 0.30);
+          [zMin + 0.30, -0.20, zMax - 0.30].forEach((pz) => {
+            b.addBox('B4_1FPiers', granite94Mat, 0.35, 1.55, pz, 0.72, 3.10, 0.56, 0, 0, 0, 0.25);
+          });
+          b.addBox('B4_Parapet', redFlutedBrickMat, cx, H + 0.18, cz, dX + 0.10, 0.36, wZ + 0.10, 0, 0, 0, 0.30);
+          b.addQuad('B4_Roof', roofDarkGreenMat, 'top', cx, H + 0.37, cz, dX - 0.3, wZ - 0.3);
+
+          const bayCols = [
+            { z: -2.05, w: 2.15 },
+            { z:  1.55, w: 3.10 }
+          ];
+          [5.10, 8.20].forEach((wy) => {
+            bayCols.forEach((bc) => {
+              const bProj = 0.42, bH = 1.62;
+              b.addBox('B4_RedFlutedBrick', redFlutedBrickMat, xMin - bProj * 0.5, wy + bH * 0.5 + 0.11, bc.z, bProj + 0.14, 0.22, bc.w + 0.24, 0, 0, 0, 0.32);
+              b.addBox('B4_RedFlutedBrick', redFlutedBrickMat, xMin - bProj * 0.5, wy - bH * 0.5 - 0.11, bc.z, bProj + 0.14, 0.22, bc.w + 0.24, 0, 0, 0, 0.32);
+              b.addBox('B4_BayFrame', darkBrownFrameMat, xMin - bProj * 0.5, wy, bc.z - bc.w * 0.5, bProj, bH, 0.08);
+              b.addBox('B4_BayFrame', darkBrownFrameMat, xMin - bProj * 0.5, wy, bc.z + bc.w * 0.5, bProj, bH, 0.08);
+              addWestWindow(b, xMin - bProj, wy, bc.z, bc.w, bH, bc.w > 2.5 ? 3 : 2, darkBrownFrameMat, 'B4_BayFrame');
+            });
+          });
+
+          addWestAwning(b, 'Awning_Beige', awningBeigeMat, xMin, 3.08, -2.10, 3.65, 1.38, 0.42, 0.20);
+          addBlueAddressPlaque(g4, xMin - 0.06, 2.05, zMin + 0.30, '90');
+          b.addBox('B4_SalonBack', warmShopGlowMat, 0.60, 1.35, -1.90, 0.30, 2.50, 3.00);
+          b.addQuad('B4_SalonGlass', windowGlassMat, 'west', 0.25, 1.35, -1.90, 2.90, 2.40);
+
+          b.addCylinder('B4_BarberPost', whitePvcMat, xMin - 0.34, 3.88, zMin + 0.22, 0.26, 0.85);
+          b.addBox('B4_BarberStripeR', barberRedMat,  xMin - 0.46, 3.88, zMin + 0.22, 0.04, 0.65, 0.14, 0.42, 0, 0);
+          b.addBox('B4_BarberStripeB', barberBlueMat, xMin - 0.46, 3.88, zMin + 0.22, 0.04, 0.65, 0.10, -0.42, 0, 0);
+          b.addCylinder('B4_SalonDisc', whitePvcMat, xMin - 0.44, 2.65, zMin + 0.20, 0.68, 0.18, Math.PI / 2, 0, 0);
+          const drawSalonRound = (ctx, w, h) => {
+            ctx.clearRect(0, 0, w, h);
+            ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(w / 2, h / 2, 92, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 10; ctx.stroke();
+            ctx.fillStyle = '#E11D48'; ctx.beginPath(); ctx.arc(w / 2, h / 2, 76, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `900 54px ${FONT_STACK}`; ctx.fillText('미용실', w / 2, h / 2 + 2);
+          };
+          addSignPlane(g4, { x: xMin - 0.44, y: 2.65, z: zMin + 0.30, w: 0.66, h: 0.66, cw: 200, ch: 200, rotY: 0, transparent: true, drawFn: drawSalonRound, name: 'B4_SalonDisc_S' });
+          addSignPlane(g4, { x: xMin - 0.44, y: 2.65, z: zMin + 0.10, w: 0.66, h: 0.66, cw: 200, ch: 200, rotY: Math.PI, transparent: true, drawFn: drawSalonRound, name: 'B4_SalonDisc_N' });
+
+          addSignPlane(g4, {
+            x: xMin - 0.08, y: 3.55, z: cz, w: 7.75, h: 0.88, cw: 1280, ch: 160,
+            transparent: true, name: 'B4_NuriAndMeotjinnal_Fascia',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.textBaseline = 'middle';
+              ctx.textAlign = 'center'; ctx.font = `900 72px ${FONT_STACK}`;
+              ctx.lineWidth = 8; ctx.strokeStyle = '#FDE68A'; ctx.strokeText('누리헤어', 260, h / 2 + 4);
+              ctx.fillStyle = '#B91C1C'; ctx.fillText('누리헤어', 260, h / 2 + 4);
+              ctx.font = `900 94px ${FONT_STACK}`;
+              ctx.lineWidth = 10; ctx.strokeStyle = '#FFFFFF';
+              ctx.strokeText('멋진', 680, h / 2 + 4); ctx.fillStyle = '#2563EB'; ctx.fillText('멋진', 680, h / 2 + 4);
+              ctx.strokeText('날',   825, h / 2 + 4); ctx.fillStyle = '#16A34A'; ctx.fillText('날',   825, h / 2 + 4);
+              ctx.save(); ctx.translate(955, h / 2); ctx.rotate(Math.PI / 4);
+              ctx.fillStyle = '#B91C1C'; ctx.fillRect(-46, -46, 92, 92);
+              ctx.strokeStyle = '#FDE68A'; ctx.lineWidth = 8; ctx.strokeRect(-44, -44, 88, 88);
+              ctx.restore();
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'left';
+              ctx.font = '900 38px Arial, sans-serif';
+              ctx.fillText('T.2234', 1055, 56); ctx.fillText('-9928', 1055, 108);
+            }
+          });
+          addWestAwning(b, 'Awning_CoralRed', awningCoralRedMat, xMin, 3.08, 1.90, 4.10, 1.50, 0.48, 0.24);
+          addSignPlane(g4, {
+            x: 0.28, y: 1.32, z: 1.90, w: 3.60, h: 2.40, cw: 560, ch: 380,
+            name: 'B4_Meotjinnal_WindowDecals',
+            drawFn: (ctx, w, h) => {
+              ctx.fillStyle = '#4A636A'; ctx.fillRect(0, 0, w, h);
+              ctx.fillStyle = '#1E293B'; ctx.fillRect(w * 0.48, 0, 14, h);
+              ctx.fillStyle = '#C94032'; ctx.fillRect(18, 22, w - 36, 62);
+              ctx.fillStyle = '#FEF08A'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = `900 34px ${FONT_STACK}`;
+              ctx.fillText('동태찌개 · 멋진날 · 알탕 · 닭볶음', w / 2, 54);
+              ctx.fillStyle = 'rgba(215, 232, 236, 0.45)'; ctx.fillRect(24, 120, 225, 240); ctx.fillRect(306, 120, 230, 240);
+            }
+          });
+          b.addBox('B4_YellowAFrame', yellowSafetyMat, xMin - 0.55, 0.42, -0.15, 0.46, 0.84, 0.10, -0.18, 0.25, 0);
+          b.addBox('B4_YellowAFrame', yellowSafetyMat, xMin - 0.55, 0.42,  0.10, 0.46, 0.84, 0.10,  0.18, 0.25, 0);
+
+          b.buildAll(g4);
+          b.disposeBases();
+        }
+
+        // ---------------------------------------------------------------------
+        // BUILDING 5: 금이네 + 90-1 초록 철문 (88-1, V8->V7 하부 구간 s = 0.6..11.2m, W = 10.6m, D = 9.6m)
+        // ---------------------------------------------------------------------
+        {
+          const g5 = mountAlongSegment(heroWestShopsGroup, V8, V7, 5.90, 'HeroB5_Geumine_88_1');
+          const b = new GeometryBatcher();
+          const xMin = 0.0, xMax = 9.6, zMin = -3.0, zMax = 5.3;
+          const cx = 4.8, cz = 1.15, dX = 9.6, wZ = 8.3, H = 10.0;
+
+          // 90-1 초록색 골판 철문 (`z = -5.2..-3.0`, 지하 1층까지 동일 컬러)
+          b.addBox('B4_Basement_GreenGate', greenCorrugatedGateMat, 0.15, b1MidY, -4.10, 0.16, b1H, 2.20, 0, 0, 0, 0.45);
+          b.addBox('B4_GreenGate', greenCorrugatedGateMat, 0.15, 1.15, -4.10, 0.16, 2.30, 2.20, 0, 0, 0, 0.45);
+          b.addBox('B4_GateMailbox', darkMetalMat, xMin - 0.04, 1.65, -4.65, 0.22, 0.28, 0.36);
+          addBlueAddressPlaque(g5, xMin - 0.02, 1.48, -4.08, '90-1');
+          [-4.70, -3.40].forEach((sz) => {
+            b.addBox('B4_GateSticker', whitePvcMat, 0.04, 1.98, sz, 0.04, 0.26, 0.46);
+            b.addBox('B4_GateStickerR', barberRedMat, 0.03, 2.04, sz, 0.04, 0.09, 0.42);
+          });
+
+          // 지하 1층 (Y = -3.60 ~ 0.00m): 1층 외벽과 동일한 실버그레이 화강석 + 우측 갈색 대리석 계단실 포털
+          b.addBox('B5_Basement_Granite', granite88Mat, cx, b1MidY, cz, dX, b1H, wZ, 0, 0, 0, 0.26);
+          b.addBox('B5_Basement_BrownGranite', brownPolishedGraniteMat, 0.25, b1MidY, 4.20, 0.56, b1H, 2.20, 0, 0, 0, 0.30);
+
+          b.addBox('B5_Granite', granite88Mat, cx, 3.1 + (H - 3.1) * 0.5, cz, dX, H - 3.1, wZ, 0, 0, 0, 0.26);
+          b.addBox('B5_Granite', granite88Mat, 5.2, 1.55, cz, 8.8, 3.10, wZ, 0, 0, 0, 0.26);
+          b.addBox('B5_Parapet', copingGreyMat, cx, H + 0.16, cz, dX + 0.12, 0.32, wZ + 0.12);
+          b.addQuad('B5_Roof', roofGreenUreMat, 'top', cx, H + 0.33, cz, dX - 0.3, wZ - 0.3);
+
+          [
+            { z: -1.10, w: 1.75 },
+            { z:  2.85, w: 2.65 }
+          ].forEach((wc) => {
+            [5.20, 8.25].forEach((wy) => {
+              addWestWindow(b, xMin, wy, wc.z, wc.w, 1.48, 2, darkMetalMat, 'Win_DarkFrame');
+              b.addBox('B5_StoneMold', whitePvcMat, xMin - 0.10, wy + 0.80, wc.z, 0.22, 0.12, wc.w + 0.30);
+              b.addBox('B5_StoneMold', whitePvcMat, xMin - 0.10, wy - 0.80, wc.z, 0.22, 0.12, wc.w + 0.30);
+            });
+          });
+
+          b.addBox('B5_BlackCorrugated', blackCorrugatedMat, xMin - 0.28, 3.30, 0.05, 0.62, 1.18, 6.10, 0, 0, 0, 0.32);
+          addSignPlane(g5, {
+            x: xMin - 0.60, y: 3.32, z: 0.05, w: 5.60, h: 0.96, cw: 960, ch: 200,
+            transparent: true, name: 'B5_Geumine_BlackFasciaSign',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.fillStyle = '#F8FAFC'; ctx.beginPath(); ctx.arc(175, h / 2, 58, 0, Math.PI * 2); ctx.fill();
+              ctx.strokeStyle = '#DC2626'; ctx.lineWidth = 7; ctx.stroke();
+              ctx.fillStyle = '#B91C1C'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.font = `900 32px ${FONT_STACK}`; ctx.fillText('금이네', 175, h / 2 + 4);
+              ctx.textAlign = 'left'; ctx.font = `900 112px ${FONT_STACK}`;
+              ctx.lineWidth = 8; ctx.strokeStyle = '#18181B'; ctx.strokeText('금이네', 270, h / 2 + 6);
+              ctx.fillStyle = '#FDE68A'; ctx.fillText('금이네', 270, h / 2 + 6);
+              ctx.fillStyle = '#DC2626'; drawRoundRect(ctx, 625, 62, 46, 76, 8); ctx.fill();
+              ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.font = `900 24px ${FONT_STACK}`;
+              ctx.fillText('맛', 648, 86); ctx.fillText('집', 648, 114);
+            }
+          });
+          addSignPlane(g5, {
+            x: xMin - 0.30, y: 3.32, z: 3.11, w: 0.56, h: 0.64, cw: 140, ch: 160, rotY: 0, transparent: true,
+            name: 'B5_Geumine_SideEmblem',
+            drawFn: (ctx, w, h) => {
+              ctx.clearRect(0, 0, w, h);
+              ctx.fillStyle = '#DC2626'; ctx.beginPath(); ctx.arc(w / 2, h / 2, 54, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(w / 2, h / 2, 38, 0, Math.PI * 2); ctx.fill();
+            }
+          });
+
+          b.addBox('B5_WoodShopBack', warmShopGlowMat, 0.50, 1.35, 0.05, 0.25, 2.65, 5.60);
+          b.addBox('B5_WoodPillars',  darkWoodDoorMat, xMin - 0.04, 1.35, -2.75, 0.22, 2.70, 0.28);
+          b.addBox('B5_WoodPillars',  darkWoodDoorMat, xMin - 0.04, 1.35,  0.05, 0.22, 2.70, 0.28);
+          b.addBox('B5_WoodPillars',  darkWoodDoorMat, xMin - 0.04, 1.35,  2.85, 0.22, 2.70, 0.28);
+          b.addQuad('B5_ShopGlass',   windowGlassMat, 'west', xMin - 0.08, 1.35, 0.05, 5.40, 2.55);
+
+          b.addBox('B5_PlanterCurb', granite88Mat, xMin - 0.45, 0.28, 0.05, 0.86, 0.56, 5.85);
+          b.addBox('B5_BlackRail',   darkMetalMat, xMin - 0.84, 1.12, 0.05, 0.04, 0.04, 5.85);
+          [-2.8, -1.4, 0.05, 1.5, 2.9].forEach((rz) => {
+            b.addBox('B5_BlackRail', darkMetalMat, xMin - 0.84, 0.84, rz, 0.036, 0.62, 0.036);
+          });
+          [-2.2, -1.0, 0.2, 1.4, 2.4].forEach((pz, i) => {
+            const sc = 0.68 + (i % 3) * 0.24;
+            b.addDodecahedron(i % 2 === 0 ? 'B5_FoliageDark' : 'B5_FoliageBright', i % 2 === 0 ? plantGreenMat : plantBrightMat, xMin - 0.42, 0.85 + sc * 0.22, pz, sc, sc * 1.15, sc);
+          });
+
+          b.addBox('B5_BrownGranite', brownPolishedGraniteMat, 0.25, 1.55, 4.20, 0.56, 3.10, 2.20, 0, 0, 0, 0.30);
+          b.addBox('B5_PortalDark',   darkInteriorMat, 0.35, 1.25, 4.15, 0.65, 2.50, 1.36);
+          b.addQuad('B5_PortalGlass', showcaseGlassMat, 'west', xMin - 0.02, 1.25, 4.15, 1.28, 2.40);
+          addBlueAddressPlaque(g5, xMin - 0.06, 1.88, 5.05, '88-1');
+
+          b.buildAll(g5);
+          b.disposeBases();
+        }
+      }
+
+      // =======================================================================
+      // 9. SOUTH & EAST INNER BUILDINGS (`rearLightBuildingsGroup`)
+      //    - 파란구역(17130.png) 동측 돌출부(92-1, 90-1, 143-14, 143-8) 및 남측 88번지(조은부동산·신한국통닭)
+      //    - 가로세로 비율(56.80m × 74.70m = 1 : 1.315)에 맞춰 빈틈·중첩 없이 배치 + 지하 1층 동일 컬러
+      // =======================================================================
+      function buildRearLightweightBuildings() {
+        const b = new GeometryBatcher();
+        const b1MidY = -BASEMENT_1F_H * 0.5;
+        const b1H = BASEMENT_1F_H - 0.002;
+
+        // ---- Building 6: 신한국통닭 · 조은부동산 (88번지, 남측 코너 V8->V7 하단 & V7->V6 남동변 정렬) ----
+        // SW 변은 LOWER_ROT_Y(+35.89°) 평행, SE 변은 V7->V6(42.1° SW) 평행
+        const b6Pts = [
+          [ -2.4, 28.4 ],
+          [  6.4, 24.4 ],
+          [ 13.6, 30.6 ],
+          [  4.8, 38.4 ],
+          [ -1.8, 29.3 ]
+        ];
+        const b6Shape = new THREE.Shape();
+        b6Pts.forEach(([px, pz], idx) => {
+          if (idx === 0) b6Shape.moveTo(px, -pz);
+          else b6Shape.lineTo(px, -pz);
+        });
+        b6Shape.closePath();
+
+        // 지하 1층 (Y = -3.60 ~ 0.00m)
+        const b6B1Geo = new THREE.ExtrudeGeometry(b6Shape, { depth: b1H, bevelEnabled: false });
+        b6B1Geo.rotateX(-Math.PI / 2);
+        b6B1Geo.translate(0, -BASEMENT_1F_H, 0);
+        applyWorldPlanarUVs(b6B1Geo, 0.28, 0.32);
+        const b6B1Mesh = new THREE.Mesh(b6B1Geo, [basementBottomMat, b1Stone88Mat]);
+        b6B1Mesh.name = 'Light_B6_88_Basement_B1';
+        rearLightBuildingsGroup.add(b6B1Mesh);
+
+        // 지상 1~3층 (Y = 0.00 ~ 9.40m)
+        const b6Geo = new THREE.ExtrudeGeometry(b6Shape, { depth: 9.40, bevelEnabled: false });
+        b6Geo.rotateX(-Math.PI / 2);
+        applyWorldPlanarUVs(b6Geo, 0.28, 0.32);
+        const b6Mesh = new THREE.Mesh(b6Geo, [roofLightGreyMat, lightStone88Mat]);
+        b6Mesh.name = 'Light_B6_88_CornerCommercial';
+        rearLightBuildingsGroup.add(b6Mesh);
+
+        // SW면 (`(-2.4, 28.4) -> (4.8, 38.4)`): 신한국통닭 간판
+        const swMidX = (-2.4 + 4.8) * 0.5 - 0.06;
+        const swMidZ = (28.4 + 38.4) * 0.5 + 0.04;
+        addSignPlane(rearLightBuildingsGroup, {
+          x: swMidX, y: 2.95, z: swMidZ, w: 6.40, h: 0.92, cw: 720, ch: 130,
+          rotY: -Math.PI / 2 + LOWER_ROT_Y,
+          name: 'Light_B6_ShinhankookChicken_Sign',
+          drawFn: (ctx, w, h) => {
+            ctx.fillStyle = '#B91C1C'; ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FACC15'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+            ctx.fillStyle = '#FEF08A'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `900 68px ${FONT_STACK}`; ctx.fillText('신한국통닭', w / 2, h / 2 + 2);
+          }
+        });
+
+        // SE면 (`(13.6, 30.6) -> (4.8, 38.4)`): 조은공인중개사·부동산 간판
+        const seRotB6 = Math.atan2(7.8, 8.8);
+        addSignPlane(rearLightBuildingsGroup, {
+          x: (13.6 + 4.8) * 0.5 + 0.05, y: 2.95, z: (30.6 + 38.4) * 0.5 + 0.06,
+          w: 6.80, h: 0.92, cw: 720, ch: 130, rotY: seRotB6,
+          name: 'Light_B6_JoeunRealEstate_Sign',
+          drawFn: (ctx, w, h) => {
+            ctx.fillStyle = '#1E3A8A'; ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#93C5FD'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, h - 8);
+            ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `900 68px ${FONT_STACK}`; ctx.fillText('조은공인중개사 · 부동산', w / 2, h / 2 + 2);
+          }
+        });
+
+        // ---- Building 7: 92-1 다가구 (정은빌딩 92번지 동쪽, 파란구역 중앙) ----
+        b.addBox('Light_B7_B1', b1Brick921Mat, -2.0, b1MidY, 2.4, 9.2, b1H, 10.2, 0, UPPER_ROT_Y, 0, 0.32);
+        b.addFacadeShell('Light_B7_921', lightBrick921Mat, -2.0, 4.70, 2.4, 9.2, 9.40, 10.2, 3, UPPER_ROT_Y, 3.2);
+        b.addBox('Light_Parapet', copingGreyMat, -2.0, 9.56, 2.4, 9.34, 0.32, 10.34, 0, UPPER_ROT_Y, 0);
+        b.addBox('Light_GreenRoof', roofGreenUreMat, -2.0, 9.73, 2.4, 8.90, 0.04, 9.90, 0, UPPER_ROT_Y, 0);
+
+        // ---- Building 8: 90-1 후면 적벽돌 주택 (멋진날포차 90번지 동쪽) ----
+        b.addBox('Light_B8_B1', b1RedBrick901Mat, 3.8, b1MidY, 13.6, 8.4, b1H, 8.0, 0, LOWER_ROT_Y, 0, 0.32);
+        b.addFacadeShell('Light_B8_901', lightRedBrick901Mat, 3.8, 3.40, 13.6, 8.4, 6.80, 8.0, 2, LOWER_ROT_Y, 3.2);
+        b.addBox('Light_GreenRoof', roofGreenUreMat, 3.8, 6.82, 13.6, 8.0, 0.04, 7.6, 0, LOWER_ROT_Y, 0);
+        b.addBox('Light_B8_RedTileEave', redRoofTileMat, 1.4, 7.22, 15.2, 1.35, 0.24, 8.20, 0, LOWER_ROT_Y, 0.48);
+
+        // ---- Building 9: 143-14 근생/주택 (파란구역 남동측 변 정렬) ----
+        const rotSE = THREE.MathUtils.degToRad(42);
+        b.addBox('Light_B9_B1', b1Stone14314Mat, 12.6, b1MidY, 21.8, 9.6, b1H, 8.6, 0, rotSE, 0, 0.30);
+        b.addFacadeShell('Light_B9_14314', lightStone14314Mat, 12.6, 5.60, 21.8, 9.6, 11.20, 8.6, 3.5, rotSE, 3.0);
+        b.addBox('Light_Parapet', copingGreyMat, 12.6, 11.38, 21.8, 9.74, 0.36, 8.74, 0, rotSE, 0);
+        b.addBox('Light_GreyRoofBox', roofLightGreyMat, 12.6, 11.52, 21.8, 9.30, 0.08, 8.30, 0, rotSE, 0);
+
+        // ---- Building 10: 143-8 동남단 돌출부 건물 (파란구역 우측 끝 V4-V5-V6 노치 내부) ----
+        const rotEast = THREE.MathUtils.degToRad(44);
+        b.addBox('Light_B10_B1', b1Beige1438Mat, 21.8, b1MidY, 12.6, 9.8, b1H, 8.8, 0, rotEast, 0, 0.30);
+        b.addFacadeShell('Light_B10_1438', lightBeige1438Mat, 21.8, 5.70, 12.6, 9.8, 11.40, 8.8, 3.5, rotEast, 3.0);
+        b.addBox('Light_Parapet', copingGreyMat, 21.8, 11.58, 12.6, 9.94, 0.36, 8.94, 0, rotEast, 0);
+        b.addBox('Light_GreenRoofBox', roofGreenUreMat, 21.8, 11.72, 12.6, 9.50, 0.08, 8.50, 0, rotEast, 0);
+
+        b.buildAll(rearLightBuildingsGroup);
+        b.disposeBases();
+      }
+
+      // =======================================================================
+      // 10. 전체 빌드, 실시간 통계, 7개 카메라 프리셋 & 비파괴 GLB 추출
+      // =======================================================================
+      function buildAll() {
+        buildHeroWestShops();
+        buildRearLightweightBuildings();
+      }
+
+      function updateStats() {
+        let meshCount = 0;
+        let triCount = 0;
+        let batchedCount = 0;
+
+        [heroWestShopsGroup, rearLightBuildingsGroup].forEach((grp) => {
+          if (!grp.visible) return;
+          grp.traverse((obj) => {
+            if (obj.isMesh && obj.geometry) {
+              meshCount++;
+              if (obj.name.startsWith('Merged_')) batchedCount++;
+              const g = obj.geometry;
+              if (g.index) triCount += g.index.count / 3;
+              else if (g.attributes.position) triCount += g.attributes.position.count / 3;
+            }
+          });
+        });
+
+        document.getElementById('mesh-stats').innerHTML =
+          `병합 배치 메시: <strong>${batchedCount}</strong>개 / 전체 <strong>${meshCount}</strong>개<br/>` +
+          `총 삼각형 수: <strong>${Math.round(triCount).toLocaleString()}</strong> tris<br/>` +
+          `<span class="status-pill">✓ 비율 56.8m×74.7m (1:1.315) · B1</span>`;
+      }
+
+      const cameraPresets = {
+        top_plan:  { pos: new THREE.Vector3(  2.0, 112.0,   1.8), target: new THREE.Vector3(  2.0,  2.0,   1.5) },
+        sky:       { pos: new THREE.Vector3(-56.0,  54.0,  62.0), target: new THREE.Vector3(  2.0,  3.5,   2.0) },
+        west_all:  { pos: new THREE.Vector3(-52.0,  10.0,   6.0), target: new THREE.Vector3(-12.0,  4.2,   2.0) },
+        woori:     { pos: new THREE.Vector3(-39.0,   5.2, -31.0), target: new THREE.Vector3(-21.0,  4.0, -25.0) },
+        obong:     { pos: new THREE.Vector3(-36.0,   5.4, -16.5), target: new THREE.Vector3(-16.5,  4.2, -11.0) },
+        jeongeun:  { pos: new THREE.Vector3(-31.5,   5.2,  -1.5), target: new THREE.Vector3(-12.5,  4.0,   4.0) },
+        nuri_geum: { pos: new THREE.Vector3(-25.0,   5.2,  32.5), target: new THREE.Vector3( -6.0,  4.0,  22.0) }
+      };
+
+      let camAnim = null;
+
+      function setView(viewKey, instant = false) {
+        const preset = cameraPresets[viewKey];
+        if (!preset) return;
+
+        document.querySelectorAll('.cam-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.view === viewKey);
+        });
+
+        if (instant) {
+          camAnim = null;
+          camera.position.copy(preset.pos);
+          controls.target.copy(preset.target);
+          controls.update();
+          return;
+        }
+
+        camAnim = {
+          startPos: camera.position.clone(),
+          endPos: preset.pos.clone(),
+          startTarget: controls.target.clone(),
+          endTarget: preset.target.clone(),
+          progress: 0,
+          duration: 0.70
+        };
+      }
+
+      document.querySelectorAll('.cam-btn').forEach((btn) => {
+        btn.addEventListener('click', () => setView(btn.dataset.view, false));
+      });
+
+      controls.addEventListener('start', () => {
+        camAnim = null;
+      });
+
+      [
+        ['chk-hero', heroWestShopsGroup],
+        ['chk-rear', rearLightBuildingsGroup]
+      ].forEach(([id, grp]) => {
+        document.getElementById(id).addEventListener('change', (e) => {
+          grp.visible = e.target.checked;
+          updateStats();
+        });
+      });
+
+      const btnCollapse = document.getElementById('btn-collapse');
+      const optionsBody = document.getElementById('options-body');
+      btnCollapse.addEventListener('click', () => {
+        const collapsed = optionsBody.classList.toggle('collapsed');
+        btnCollapse.textContent = collapsed ? '펼치기' : '접기';
+      });
+
+      const exportBtn = document.getElementById('btn-export-glb');
+
+      function exportGLB() {
+        hideErrorBanner();
+
+        const hasBuildings = heroWestShopsGroup.visible || rearLightBuildingsGroup.visible;
+        if (!hasBuildings) {
+          showToast('추출할 건물 그룹을 1개 이상 선택해주세요.', 2800);
+          return;
+        }
+
+        exportBtn.disabled = true;
+        showToast('Geumho2ga_BlueZone_WooriMart_To_Geumine_v3.glb 파일을 생성하고 있습니다...', 4800);
+
+        let restoreSanitized = null;
+        try {
+          restoreSanitized = sanitizeSceneForGLB(exportRoot);
+
+          const exporter = new GLTFExporter();
+          exporter.parse(
+            exportRoot,
+            (result) => {
+              if (restoreSanitized) restoreSanitized();
+
+              const blob = new Blob([result], { type: 'model/gltf-binary' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = 'Geumho2ga_BlueZone_WooriMart_To_Geumine_v3.glb';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              setTimeout(() => URL.revokeObjectURL(url), 1200);
+
+              const sizeStr = blob.size >= 1024 * 1024
+                ? `${(blob.size / (1024 * 1024)).toFixed(2)} MB`
+                : `${(blob.size / 1024).toFixed(0)} KB`;
+              showToast(`추출 완료! Geumho2ga_BlueZone_WooriMart_To_Geumine_v3.glb (${sizeStr})`, 3800);
+              exportBtn.disabled = false;
+            },
+            (err) => {
+              if (restoreSanitized) restoreSanitized();
+              showErrorBanner(err);
+              exportBtn.disabled = false;
+            },
+            {
+              binary: true,
+              onlyVisible: true
+            }
+          );
+        } catch (err) {
+          if (restoreSanitized) restoreSanitized();
+          showErrorBanner(err);
+          exportBtn.disabled = false;
+        }
+      }
+
+      exportBtn.addEventListener('click', exportGLB);
+
+      window.addEventListener('resize', () => {
+        const w = container.clientWidth || window.innerWidth || 1280;
+        const h = container.clientHeight || window.innerHeight || 720;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      });
+
+      const clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.1);
+
+        if (camAnim) {
+          camAnim.progress += dt / camAnim.duration;
+          const t = Math.min(1, camAnim.progress);
+          const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+          camera.position.lerpVectors(camAnim.startPos, camAnim.endPos, ease);
+          controls.target.lerpVectors(camAnim.startTarget, camAnim.endTarget, ease);
+          if (t >= 1) camAnim = null;
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      buildAll();
+      updateStats();
+      setView('top_plan', true);
+      animate();
+    } catch (err) {
+      showErrorBanner(err);
+    }
+  </script>
+</body>
+</html>
