@@ -38,7 +38,7 @@
 // 믿을 만했다). 높이(세로 치수)가 15층 건물의 실제 높이(약 45~58m)와 맞아떨어지는 걸로 봐서
 // scaleRatio 보정은 필요 없었다(기본 1).
 export const PLACES = [
-  { id: 0, name: "우리집", floors: 15, type: "아파트", x: -0.2, z: 1.3, home: true, model: "models/place_금파힐113.glb", rotationDeg: 0, scaleRatio: 1.3 },
+  { id: 0, name: "우리집", floors: 20, type: "아파트", x: -0.2, z: 1.3, home: true },
   { id: 1, name: "금호파크힐스 101동", floors: 15, type: "아파트", x: -392.8, z: 75.6, model: "models/place_금파힐101.glb", rotationDeg: -7.3, scaleRatio: 1.3 },
   { id: 5, name: "금호파크힐스 105동·이마트24", floors: 15, type: "아파트", x: -121.1, z: -124.9, rotationDeg: 0 },
   { id: 17, name: "파리바게뜨", floors: 6, type: "카페", x: 38.6, z: -160.9, diagonal: true, model: "models/place_남광빌딩.glb", rotationDeg: -4, scaleRatio: 1.5 },
@@ -354,7 +354,7 @@ export const ROAD_SEGMENTS = [
   { a: [7.4, 301.6], b: [9.6, 218.1], width: 5, curve: [-11.4, 243.4], sidewalk: 5, lanes: 1 },
   { a: [7.4, 301.6], b: [32, 316.2], width: 30, curve: [20.3, 308.9], sidewalk: 10 },
   { a: [35, 224.9], b: [9.6, 218.1], width: 5, curve: [13.9, 215.7], sidewalk: 5, lanes: 1 },
-  { a: [-448.1, 105.5], b: [-400.5, 153.3], width: 30, sidewalk: 150 },
+  { a: [-448.1, 105.5], b: [-400.5, 153.3], width: 30, sidewalk: 15 },
   { a: [-563.3, -10.2], b: [-547.9, 5.2], width: 30, sidewalk: 15 },
   { a: [-436.1, 470.6], b: [-650.3, 456.6], width: 10, sidewalk: 5, kind: "school", signalA: false, signalB: false },
   { a: [-436.1, 470.6], b: [-406.9, 492.9], width: 15, curve: [-423.4, 483.6], sidewalk: 5 },
@@ -367,7 +367,6 @@ export const ROAD_SEGMENTS = [
   { a: [-597.9, 4], b: [-582, -29], width: 20, sidewalk: 10 },
   { a: [-547.9, 5.2], b: [-448.1, 105.5], width: 30, sidewalk: 15 },
   { a: [-565, 4.8], b: [-563.3, -10.2], width: 15, sidewalk: 15 },
-  { a: [-565, 4.8], b: [-597.9, 4], width: 6 },
   { a: [-565, 4.8], b: [-597.9, 4], width: 20, sidewalk: 10, lanes: 4 },
   { a: [-522.7, 170.3], b: [-545.1, 137], width: 10, curve: [-536.2, 154.1], sidewalk: 15 },
   { a: [-565, 4.8], b: [-558.8, 100.2], width: 10, curve: [-569.7, 59.8], sidewalk: 15, kind: "school" },
@@ -470,5 +469,5 @@ export const TERRAIN_SHAPES = [
 // 교차로 구역 — 신금호역 교차로처럼 도로 여러 개가 넓게 모이는 복잡한 다지 교차로를 하나의 구역으로 묶는다.
 // map_editor.html의 "⭕ 교차로 구역"으로 원형(8각형) 생성 후 꼭짓점을 끌어 원하는 모양으로 조절할 수 있다.
 export const INTERSECTION_ZONES = [
-  { name: "신금호역 교차로", pts: [[-537, -11], [-547.5, 9.5], [-573, 18], [-598.5, 9.5], [-609, -11], [-598.5, -31.5], [-573, -40], [-547.5, -31.5]] },
+  { name: "신금호역 교차로", sidewalk: 10, pts: [[-537, -11], [-547.5, 9.5], [-573, 18], [-598.5, 9.5], [-609, -11], [-598.5, -31.5], [-573, -40], [-547.5, -31.5]] },
 ];

@@ -110,6 +110,7 @@
   .shape-mid { fill: #fff; fill-opacity: 0.55; stroke: #333; stroke-width: 1; cursor: copy; touch-action: none; }
   .shape-txt { font: bold 13px sans-serif; fill: #111; paint-order: stroke; stroke: #fff; stroke-width: 3px; pointer-events: none; text-anchor: middle; }
   .shape-vtxt { font: bold 10px sans-serif; fill: #111; paint-order: stroke; stroke: #fff; stroke-width: 2.5px; pointer-events: none; text-anchor: middle; }
+  .izone-sw { fill: none; stroke: #c7c2b4; stroke-opacity: 0.78; stroke-linejoin: round; pointer-events: none; }
   .izone-poly { fill: #2f3a48; fill-opacity: 0.42; stroke: #38bdf8; stroke-width: 3; vector-effect: non-scaling-stroke; stroke-dasharray: 8 5; cursor: grab; touch-action: none; }
   .izone-poly:active { cursor: grabbing; }
   .izone-poly.selected { stroke: #fff; stroke-width: 4; stroke-dasharray: none; fill-opacity: 0.55; }
@@ -627,7 +628,14 @@
       if (!pm) continue;
       try {
         const pts = JSON.parse(pm[1]).filter((p) => Array.isArray(p) && p.length >= 2).map(([x, z]) => [+x, +z]);
-        if (pts.length >= 3) out.push({ name: grab(line, /name:\s*"([^"]*)"/, String) || "", pts });
+        if (pts.length >= 3) {
+          const z = { name: grab(line, /name:\s*"([^"]*)"/, String) || "", pts };
+          const sw = grab(line, /\bsidewalk:\s*([\d.]+)/, Number);
+          if (Number.isFinite(sw) && sw > 0) z.sidewalk = sw;
+          const swStyle = grab(line, /\bswStyle:\s*"([^"]*)"/, String);
+          if (swStyle) z.swStyle = swStyle;
+          out.push(z);
+        }
       } catch (err) { /* 깨진 줄은 건너뜀 */ }
     }
     return out;
@@ -1523,10 +1531,20 @@
     zone.pts.forEach(([x, z]) => { rSum += Math.hypot(x - cx, z - cz); });
     return { cx, cz, r: rSum / n };
   }
+  const IZONE_SW_COLOR = { gray: "#c7c2b4", red: "#c48474", beige: "#d8c9a8", twotone: "#c2a898" };
   function updateZoneVisual(node) {
     const zone = node.zone;
     const pxs = zone.pts.map(([x, z]) => rawToPx(x, z));
-    node.poly.setAttribute("points", pxs.map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join(" "));
+    const ptsAttr = pxs.map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join(" ");
+    node.poly.setAttribute("points", ptsAttr);
+    if (zone.sidewalk && zone.sidewalk > 0) {
+      node.sw.setAttribute("points", ptsAttr);
+      node.sw.setAttribute("stroke-width", ((zone.sidewalk * 2) / SCALE).toFixed(1));
+      node.sw.setAttribute("stroke", IZONE_SW_COLOR[zone.swStyle] || IZONE_SW_COLOR.gray);
+      node.sw.setAttribute("visibility", "visible");
+    } else {
+      node.sw.setAttribute("visibility", "hidden");
+    }
     const isSel = selected && selected.kind === "izone" && selected.ref === node;
     node.poly.classList.toggle("selected", !!isSel);
     let cx = 0, cy = 0;
@@ -1534,7 +1552,7 @@
     cx /= pxs.length; cy /= pxs.length;
     node.label.setAttribute("x", cx.toFixed(1));
     node.label.setAttribute("y", (cy + 4).toFixed(1));
-    node.label.textContent = zone.name || "교차로 구역";
+    node.label.textContent = (zone.name || "교차로 구역") + (zone.sidewalk > 0 ? ` (보도 ${zone.sidewalk}m)` : "");
     node.handles.innerHTML = "";
     if (!isSel) return;
     // 변 가운데 작은 점: 누르면 꼭짓점 추가
@@ -1595,14 +1613,16 @@
   }
   function addZoneNode(zone) {
     const g = el("g", {});
+    const sw = el("polygon", { class: "izone-sw" });
     const poly = el("polygon", { class: "izone-poly" });
     const label = el("text", { class: "izone-txt" });
     const handles = el("g", {});
+    g.appendChild(sw);
     g.appendChild(poly);
     g.appendChild(label);
     zoneLayer.appendChild(g);
     handleLayer.appendChild(handles);
-    const node = { zone, g, poly, label, handles };
+    const node = { zone, g, sw, poly, label, handles };
     izoneNodes.push(node);
     poly.addEventListener("pointerdown", (ev) => {
       if (mode !== "select") return;
@@ -2419,6 +2439,60 @@
         renderPanel();
       });
       panelBody.appendChild(circleBtn);
+      // 주변 보행도로(보도 폭) + 보도블록 무늬 설정
+      const swWrap = document.createElement("div");
+      swWrap.className = "field";
+      swWrap.style.marginTop = "10px";
+      const swLbl = document.createElement("label");
+      swLbl.textContent = "주변 보행도로 (보도 폭 m)";
+      swWrap.appendChild(swLbl);
+      const swBtns = document.createElement("div");
+      swBtns.className = "btn-group";
+      [[0, "없음"], [5, "5m"], [10, "10m"], [15, "15m"]].forEach(([val, txt]) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = txt;
+        if ((zone.sidewalk || 0) === val) b.classList.add("on");
+        b.addEventListener("click", () => {
+          checkpoint();
+          if (val > 0) zone.sidewalk = val; else { delete zone.sidewalk; delete zone.swStyle; }
+          updateZoneVisual(node);
+          renderPanel();
+        });
+        swBtns.appendChild(b);
+      });
+      swWrap.appendChild(swBtns);
+      panelBody.appendChild(swWrap);
+      panelBody.appendChild(fieldNum("보도 폭 직접 입력 (m, 0이면 없음)", zone.sidewalk || 0, (v) => {
+        if (!Number.isFinite(v) || v <= 0) { delete zone.sidewalk; delete zone.swStyle; }
+        else zone.sidewalk = Math.min(30, Math.round(v * 10) / 10);
+        updateZoneVisual(node);
+        renderPanel();
+      }, { step: "1", note: "교차로 구역 바깥 둘레에 보도블록·연석을 둘러줍니다(도로가 만나는 곳은 자동으로 비워집니다)." }));
+      if (zone.sidewalk > 0) {
+        const stWrap = document.createElement("div");
+        stWrap.className = "field";
+        const stLbl = document.createElement("label");
+        stLbl.textContent = "보도블록 무늬";
+        stWrap.appendChild(stLbl);
+        const stBtns = document.createElement("div");
+        stBtns.className = "btn-group";
+        [["gray", "회색"], ["red", "붉은 벽돌"], ["beige", "베이지"], ["twotone", "투톤"]].forEach(([key, txt]) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = txt;
+          if ((zone.swStyle || "gray") === key) b.classList.add("on");
+          b.addEventListener("click", () => {
+            checkpoint();
+            if (key === "gray") delete zone.swStyle; else zone.swStyle = key;
+            updateZoneVisual(node);
+            renderPanel();
+          });
+          stBtns.appendChild(b);
+        });
+        stWrap.appendChild(stBtns);
+        panelBody.appendChild(stWrap);
+      }
       const tbl = document.createElement("div");
       tbl.style.cssText = "display:grid; grid-template-columns: 26px 1fr 1fr 28px; gap:4px; align-items:center; margin:10px 0 8px; font-size:12px;";
       ["#", "x", "z", ""].forEach((t) => { const d = document.createElement("b"); d.textContent = t; tbl.appendChild(d); });
@@ -2843,6 +2917,7 @@
     if (mode === "add-zone") {
       const zone = {
         name: `교차로 구역 ${INTERSECTION_ZONES.length + 1}`,
+        sidewalk: 10,
         pts: makeCircleZonePts(Math.round(rx * 10) / 10, Math.round(rz * 10) / 10, 25, 8),
       };
       INTERSECTION_ZONES.push(zone);
@@ -3249,8 +3324,10 @@
     return `  { name: ${JSON.stringify(sh.name || "")}${sh.h != null ? ", h: " + r(sh.h) : ""}${sh.walls === false ? ", walls: false" : ""}, pts: [${pts}] },`;
   }
   function serializeIntersectionZone(z) {
+    const swPart = z.sidewalk && z.sidewalk > 0 ? `, sidewalk: ${fmtNum(z.sidewalk)}` : "";
+    const stylePart = z.sidewalk && z.sidewalk > 0 && z.swStyle && z.swStyle !== "gray" ? `, swStyle: ${JSON.stringify(z.swStyle)}` : "";
     const pts = z.pts.map(([x, zz]) => `[${fmtNum(x)}, ${fmtNum(zz)}]`).join(", ");
-    return `  { name: ${JSON.stringify(z.name || "")}, pts: [${pts}] },`;
+    return `  { name: ${JSON.stringify(z.name || "")}${swPart}${stylePart}, pts: [${pts}] },`;
   }
   function serializeTerrainPoint(t) {
     return `  { x: ${fmtNum(t.x)}, z: ${fmtNum(t.z)}, h: ${Math.round(t.h * 100) / 100}${t.name ? `, name: ${JSON.stringify(t.name)}` : ""} },`;
