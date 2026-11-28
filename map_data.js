@@ -135,7 +135,7 @@ export const PLACES = [
   { id: 115, name: "행당대림아파트 135동", floors: 15, type: "아파트", x: 692.3, z: -788.7, model: "models/place_행당대림135.glb", rotationDeg: 0 },
   { id: 200, name: "신금호역", floors: 1, type: "기타", x: -508.9, z: 18.3, model: "models/place_신금호역5.glb", rotationDeg: -45 },
   { id: 201, name: "금파힐후문", floors: 1, type: "기타", x: -54.9, z: -168.7, model: "models/place_금파힐후문.glb", scaleRatio: 1.5 },
-  { id: 202, name: "금파힐정문", floors: 1, type: "기타", x: -368.2, z: 133.4, model: "models/place_금파힐정문.glb", rotationDeg: -53.9, scaleRatio: 1.5 },
+  { id: 202, name: "금파힐정문", floors: 1, type: "기타", x: -368.2, z: 133.4, model: "models/asset_금파힐정문.glb", rotationDeg: -53.9, scaleRatio: 1.5 },
   { id: 203, name: "조형선외과동물병원", floors: 3, type: "기타", x: -446, z: 66.3, model: "models/place_조형선외과동물병원.glb", rotationDeg: -46.8, scaleRatio: 1.5 },
   { id: 204, name: "신금호역 인근 상가", floors: 3, type: "기타", x: -480.5, z: 31.5, model: "models/place_신금호역4번출구앞건물.glb", rotationDeg: 2, scaleRatio: 1.4 },
   { id: 205, name: "설내옥", floors: 3, type: "식당", x: -456.8, z: 152.3, model: "models/place_설내옥.glb", rotationDeg: -3.2, scaleRatio: 1.5 },
