@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import * as MAP_DATA from "./map_data.js?v=20261127k";
+import * as MAP_DATA from "./map_data.js?v=20261127m";
 import { computeRoadMarkings, markedRanges, slicePolyline, roadLook } from "./road_markings.js?v=20261124i";
 import { FENCE_TYPES, DEFAULT_FENCE_TYPE } from "./fence_types.js?v=20261125b";
 import { TERRAIN_ALIGN } from "./terrain_align.js?v=20261126a";
@@ -3810,8 +3810,17 @@ function buildParkHillsWalkIndex(model) {
   visit(model, 0);
   if (!tris.length) { parkHillsWalkIndices.delete(model); return; }
 
+  // 실제로 이름 붙은 보행면이 덮는 범위(minX~maxX)보다 모델 전체 테두리가 더 넓을 수 있다
+  // (건물 앞 안뜰처럼 이름 붙은 Walk_* 메쉬가 없는 빈틈) — 격자는 모델 전체 바운딩박스로
+  // 잡아야 그 빈틈도 격자 안에 들어와서 아래 채우기(flood fill) 대상이 된다.
+  const modelBox = new THREE.Box3().setFromObject(model);
+  minX = Math.min(minX, modelBox.min.x); maxX = Math.max(maxX, modelBox.max.x);
+  minZ = Math.min(minZ, modelBox.min.z); maxZ = Math.max(maxZ, modelBox.max.z);
+
   const triCount = tris.length / 10;
   const cellSize = 4.0 * WORLD_SCALE;
+  const nCols = Math.max(1, Math.ceil((maxX - minX) / cellSize) + 1);
+  const nRows = Math.max(1, Math.ceil((maxZ - minZ) / cellSize) + 1);
   const cells = new Map();
   for (let t = 0; t < triCount; t++) {
     const o = t * 10;
@@ -3830,10 +3839,60 @@ function buildParkHillsWalkIndex(model) {
       }
     }
   }
-  parkHillsWalkIndices.set(model, { tris: new Float64Array(tris), minX, maxX, minZ, maxZ, cellSize, cells });
-  console.info(`[금파힐] 1층/3층 보행 표면 색인 생성: 삼각형 ${triCount}개 (등록 모델 ${parkHillsWalkIndices.size}개)`);
+
+  // ── 빈틈 채우기(flood fill) ──
+  // 건물 앞 안뜰처럼 이름 붙은 Walk_* 메쉬가 없는 칸은 "실제 지형(바깥 언덕 높이)"으로 떨어지면
+  // 안 되고(단지 안인데 전혀 안 맞는 높이가 나온다) 가장 가까운 보행면 칸의 높이를 그대로
+  // 물려받아야 한다. 격자 전체(nCols×nRows)에 대해 보행면이 있는 칸들을 동시에 시작점으로 삼아
+  // BFS로 한 번만 번져나가며 채운다 — 모델 로드 때 한 번만 하는 계산이라 매 프레임 비용은 0이다.
+  const cellCount = nCols * nRows;
+  const fillY = new Float64Array(cellCount).fill(NaN);
+  const queue = new Int32Array(cellCount);
+  let qHead = 0, qTail = 0;
+  for (const [key, list] of cells) {
+    const cx = Math.floor(key / 100000), cz = key - cx * 100000;
+    if (cx < 0 || cx >= nCols || cz < 0 || cz >= nRows) continue;
+    const ci = cz * nCols + cx;
+    if (!Number.isNaN(fillY[ci])) continue;
+    let sumY = 0;
+    for (let i = 0; i < list.length; i++) sumY += tris[list[i] + 1];
+    fillY[ci] = sumY / list.length;
+    queue[qTail++] = ci;
+  }
+  const DX = [1, -1, 0, 0], DZ = [0, 0, 1, -1];
+  while (qHead < qTail) {
+    const ci = queue[qHead++];
+    const cx = ci % nCols, cz = (ci / nCols) | 0;
+    const y = fillY[ci];
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DX[d], nz = cz + DZ[d];
+      if (nx < 0 || nx >= nCols || nz < 0 || nz >= nRows) continue;
+      const ni = nz * nCols + nx;
+      if (!Number.isNaN(fillY[ni])) continue;
+      fillY[ni] = y;
+      queue[qTail++] = ni;
+    }
+  }
+
+  parkHillsWalkIndices.set(model, { tris: new Float64Array(tris), minX, maxX, minZ, maxZ, cellSize, cells, nCols, nRows, fillY });
+  console.info(`[금파힐] 1층/3층 보행 표면 색인 생성: 삼각형 ${triCount}개, 격자 ${nCols}x${nRows}칸 채움 (등록 모델 ${parkHillsWalkIndices.size}개)`);
 }
 
+// 그 자리를 정확히 덮는 보행면 삼각형이 없을 때(건물 앞 안뜰처럼 이름 붙은 Walk_* 메쉬가
+// 없는 빈틈) buildParkHillsWalkIndex가 모델 로드 때 미리 채워 둔 격자(fillY, 가장 가까운
+// 보행면 칸의 높이로 BFS 채움)에서 O(1)로 찾는다 — 단지 안에서는 끝까지 실제 지형(바깥
+// 언덕 높이라 전혀 안 맞는다)으로 떨어지지 않고 항상 금파힐통합.glb 자체의 높이를 쓴다.
+function parkHillsWalkNearestY(x, z) {
+  for (const idx of parkHillsWalkIndices.values()) {
+    if (!idx.fillY || x < idx.minX || x > idx.maxX || z < idx.minZ || z > idx.maxZ) continue;
+    const cx = Math.floor((x - idx.minX) / idx.cellSize);
+    const cz = Math.floor((z - idx.minZ) / idx.cellSize);
+    if (cx < 0 || cx >= idx.nCols || cz < 0 || cz >= idx.nRows) continue;
+    const y = idx.fillY[cz * idx.nCols + cx];
+    if (!Number.isNaN(y)) return y;
+  }
+  return null;
+}
 function parkHillsWalkHeightAt(x, z) {
   if (!parkHillsWalkIndices.size) return null;
   let bestPrio = -1;
@@ -3865,7 +3924,8 @@ function parkHillsWalkHeightAt(x, z) {
       }
     }
   }
-  return bestPrio >= 0 ? bestY : null;
+  if (bestPrio >= 0) return bestY;
+  return parkHillsWalkNearestY(x, z);
 }
 
 function groundHeightAt(x, z) {
