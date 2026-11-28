@@ -287,6 +287,14 @@
   "width": 64.25,
   "depth": 42.164
  },
+ "models/place_BBQ.glb": {
+  "file": "img/skyview/place_BBQ.webp",
+  "hash": "12305889f9",
+  "minX": -11.819,
+  "minZ": -15.576,
+  "width": 22.583,
+  "depth": 31.167
+ },
  "models/place_GS25.glb": {
   "file": "img/skyview/place_GS25.webp",
   "hash": "2dd4c4b0fe",
@@ -727,6 +735,14 @@
   "width": 47.5,
   "depth": 42.917
  },
+ "models/place_미소김밥.glb": {
+  "file": "img/skyview/place_미소김밥.webp",
+  "hash": "1a6adc1bb0",
+  "minX": -17.608,
+  "minZ": -5.988,
+  "width": 15.167,
+  "depth": 17.083
+ },
  "models/place_산마을돈타운.glb": {
   "file": "img/skyview/place_산마을돈타운.webp",
   "hash": "4bfef3e626",
@@ -831,6 +847,14 @@
   "width": 12.083,
   "depth": 12
  },
+ "models/place_오봉집.glb": {
+  "file": "img/skyview/place_오봉집.webp",
+  "hash": "cb9b13095e",
+  "minX": -22.368,
+  "minZ": -23.556,
+  "width": 16.417,
+  "depth": 19.25
+ },
  "models/place_왕십리풍림아이원114.glb": {
   "file": "img/skyview/place_왕십리풍림아이원114.webp",
   "hash": "ce812b72e4",
@@ -846,6 +870,14 @@
   "minZ": -35.11,
   "width": 55.515,
   "depth": 73.51
+ },
+ "models/place_우리농산물직판장1.glb": {
+  "file": "img/skyview/place_우리농산물직판장1.webp",
+  "hash": "096c57be7f",
+  "minX": -27.014,
+  "minZ": -35.11,
+  "width": 15.167,
+  "depth": 15
  },
  "models/place_제주수퍼.glb": {
   "file": "img/skyview/place_제주수퍼.webp",
@@ -886,6 +918,14 @@
   "minZ": -17.4,
   "width": 18.333,
   "depth": 33.333
+ },
+ "models/place_페리카나.glb": {
+  "file": "img/skyview/place_페리카나.webp",
+  "hash": "f56cbb7f4a",
+  "minX": -11.17,
+  "minZ": -11.747,
+  "width": 23.333,
+  "depth": 24.083
  },
  "models/place_할인마트.glb": {
   "file": "img/skyview/place_할인마트.webp",
