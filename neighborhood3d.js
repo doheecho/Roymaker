@@ -3856,19 +3856,8 @@ function buildStreetlights() {
   const poleInst = new THREE.InstancedMesh(poleGeo, poleMat, streetlightTransforms.length);
   const headGeo = new THREE.SphereGeometry(0.28 * WORLD_SCALE, 8, 6);
   const headMat = new THREE.MeshBasicMaterial({ color: 0xfff1c2 }); // 조명 없이도 켜진 것처럼 보이게 unlit 재질
-  streetlightHeadMat = headMat;
   const headInst = new THREE.InstancedMesh(headGeo, headMat, streetlightTransforms.length);
-  // 밤에 가로등 밑에 깔리는 불빛(진짜 조명 대신 둥근 빛 무늬를 더해 그리는 판 — 수백 개여도 드로우콜 1)
-  const poolGeo = new THREE.CircleGeometry(1, 28);
-  poolGeo.rotateX(-Math.PI / 2);
-  const poolMat = new THREE.MeshBasicMaterial({ map: getLightPoolTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 });
-  const poolInst = new THREE.InstancedMesh(poolGeo, poolMat, streetlightTransforms.length);
-  poolInst.frustumCulled = false;
-  poolInst.renderOrder = 2;
-  poolInst.visible = false;
-  streetlightPools = poolInst;
   const dummy = new THREE.Object3D();
-  const upV = new THREE.Vector3(0, 1, 0), nV = new THREE.Vector3();
   streetlightTransforms.forEach((t, i) => {
     const gy = getTerrainY(t.x, t.z); // 실제 지형 높이(없으면 0)
     dummy.position.set(t.x, gy + STREETLIGHT_POLE_HEIGHT / 2, t.z); // 기둥 밑동이 땅에 닿도록
@@ -3878,40 +3867,11 @@ function buildStreetlights() {
     dummy.position.y = gy + STREETLIGHT_POLE_HEIGHT + 0.15 * WORLD_SCALE; // 기둥 꼭대기 위에 등 얹기
     dummy.updateMatrix();
     headInst.setMatrixAt(i, dummy.matrix);
-    // 바닥 불빛 판은 그 자리 경사대로 기울인다
-    const e = STREETLIGHT_POOL_RADIUS * 0.7;
-    nV.set(-(getTerrainY(t.x + e, t.z) - getTerrainY(t.x - e, t.z)) / (2 * e), 1, -(getTerrainY(t.x, t.z + e) - getTerrainY(t.x, t.z - e)) / (2 * e)).normalize();
-    dummy.position.set(t.x, groundHeightAt(t.x, t.z) + 0.012, t.z);
-    dummy.quaternion.setFromUnitVectors(upV, nV);
-    dummy.scale.setScalar(STREETLIGHT_POOL_RADIUS);
-    dummy.updateMatrix();
-    poolInst.setMatrixAt(i, dummy.matrix);
-    dummy.scale.setScalar(1);
   });
   poleInst.instanceMatrix.needsUpdate = true;
   headInst.instanceMatrix.needsUpdate = true;
-  poolInst.instanceMatrix.needsUpdate = true;
   poleInst.castShadow = true;
-  scene.add(poleInst, headInst, poolInst);
-}
-const STREETLIGHT_POOL_RADIUS = 9 * WORLD_SCALE;
-let streetlightHeadMat = null;
-let streetlightPools = null;
-let lightPoolTexture = null;
-function getLightPoolTexture() {
-  if (lightPoolTexture) return lightPoolTexture;
-  const c = document.createElement("canvas");
-  c.width = c.height = 128;
-  const g = c.getContext("2d");
-  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  grd.addColorStop(0, "rgba(255,214,150,1)");
-  grd.addColorStop(0.45, "rgba(255,196,120,0.45)");
-  grd.addColorStop(1, "rgba(255,180,100,0)");
-  g.fillStyle = grd;
-  g.fillRect(0, 0, 128, 128);
-  lightPoolTexture = new THREE.CanvasTexture(c);
-  lightPoolTexture.colorSpace = THREE.SRGBColorSpace;
-  return lightPoolTexture;
+  scene.add(poleInst, headInst);
 }
 
 function buildRoadsideProps() {
@@ -6472,7 +6432,6 @@ function loadPlaceModelInto(entry) {
         }
       }
       entry.loadedModel = model;
-      registerBuildingGlass(entry, model); // 밤에 창문 불빛
       fitShopToModel(entry); // 입간판이 건물 안에 들어갔으면 옮기고, 문 닫은 시간엔 셔터
       if (entry.placeholder) entry.placeholder.visible = false;
     },
@@ -6575,7 +6534,6 @@ function updateModelStreaming(dt) {
       entry.group.remove(entry.loadedModel);
       disposeObject3D(entry.loadedModel);
       entry.loadedModel = null;
-      buildingGlass.delete(entry);
       removeShopShutter(entry);
       if (entry.placeholder) entry.placeholder.visible = true;
     }
@@ -6683,7 +6641,6 @@ function buildPlaces(preloadedParkHills = null) {
         eastParkingPortalAdded: usePreloaded ? preloadedParkHills.eastParkingPortalAdded : false,
       };
       modelStreamEntries.push(streamEntry);
-      if (usePreloaded) registerBuildingGlass(streamEntry, preloadedParkHills.model);
 
       // 교회는 지붕 위에 작은 첨탑 + 십자가를 얹는다
       if (place.church) {
@@ -7865,13 +7822,13 @@ function updateSky(dt) {
 
 // ════════════════════════════════════════════════════════════════════════════
 // ── 시간대(밤·낮): 거리 모험 화면 위 "시간" 버튼(전체화면 버튼 왼쪽)으로 고른다 ──
-// 시간에 따라 하늘색·햇빛(방향·색·세기)·주변광·안개·구름색이 바뀌고, 밤에는 별·달이 뜬다. 저녁부터는 가로등이
-// 밝아지며 바닥에 불빛이 깔리고, 건물 창문(텍스처 없는 어두운 유리 재질)에 불이 켜진다 — 진짜 조명(점광원)은
-// 하나도 늘리지 않고 재질 색만 바꿔서 성능 부담이 거의 없다. 고른 시간은 이 기기에만 저장된다.
+// 시간에 따라 하늘색·햇빛(방향·색·세기)·주변광·안개·구름색이 바뀌고, 밤에는 별·달이 뜬다 — 다만 가로등·창문
+// 불빛·차량 전조등처럼 시간에 맞춰 개별 조명을 켜고 끄는 연출은 전부 뺐다(과부하를 줄이기 위해). 고른 시간은
+// 이 기기에만 저장된다.
 // ════════════════════════════════════════════════════════════════════════════
 let hemiLight = null;
 let worldHour = 13; // 0~24시
-let nightLevel = 0; // 0 = 낮, 1 = 한밤 — 가로등·창문 불빛 세기
+let nightLevel = 0; // 0 = 낮, 1 = 한밤 — 하늘(별·달)에만 쓰인다
 const timeListeners = []; // 시간이 바뀌면 불릴 함수들(행인·가게·소리 등)
 const TIME_PRESETS = [
   { h: 7, icon: "🌅", label: "아침" },
@@ -7900,8 +7857,6 @@ function timeLabel(h) {
   const name = h >= 5 && h < 9 ? ["🌅", "아침"] : h >= 9 && h < 17 ? ["☀️", "낮"] : h >= 17 && h < 20 ? ["🌇", "저녁"] : h >= 20 || h < 1 ? ["🌙", "밤"] : ["🌌", "새벽"];
   return `${name[0]} ${name[1]} ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
-const _windowWarm = new THREE.Color(0xffcf73), _windowShop = new THREE.Color(0xfff0c8), _windowOther = new THREE.Color(0xffe2a6);
-const _headDay = new THREE.Color(0xe8e4d6), _headNight = new THREE.Color(0xfff0b8);
 function applyTimeOfDay() {
   const h = ((worldHour % 24) + 24) % 24;
   let i = 0;
@@ -7937,14 +7892,6 @@ function applyTimeOfDay() {
     mixHex(A.hg, B.hg, t, hemiLight.groundColor);
     hemiLight.intensity = A.hI + (B.hI - A.hI) * t;
   }
-  // 가로등: 해 질 녘부터 켜진다
-  const lamp = Math.max(0, Math.min(1, (nightLevel - 0.15) / 0.5));
-  if (streetlightHeadMat) streetlightHeadMat.color.copy(_headDay).lerp(_headNight, lamp);
-  if (streetlightPools) {
-    streetlightPools.visible = lamp > 0.01;
-    streetlightPools.material.opacity = 0.7 * lamp;
-  }
-  buildingGlass.forEach((_, entry) => applyGlassNight(entry));
   timeListeners.forEach((fn) => fn(h, nightLevel));
 }
 function setWorldHour(h, save = true) {
@@ -7969,122 +7916,6 @@ function placeIsOpen(place, h) {
   return h >= r[0] && h < r[1];
 }
 
-// ── 창문 불빛: 건물 모델이 불러와질 때 창유리 재질을 골라 두고, 밤 정도에 따라 발광 세기를 바꾼다 ──
-// 모델 재질 이름이 비어 있어서 색으로 고른다: 텍스처 없이 파르스름하고 어두우면서 매끈한 면(창유리), 반투명한 면,
-// 어두운 금속성 면 — 그리고 창이 그려진 벽 텍스처는 어둡고 파르스름한 픽셀(창유리 부분)만 빛나게 한다.
-// 셰이더를 살짝 고쳐서 건물 기준 "창 하나·층 하나" 크기 칸마다 켜짐/꺼짐·밝기를 무작위로 정하고,
-// 위·아래를 보는 면(지붕·바닥)은 빛나지 않게 한다 — 실제 아파트처럼 집집마다 불 켜진 창이 다르다.
-const buildingGlass = new Map(); // 불러온 건물(entry) → { place, list: [{ mat, k, off, origEmissive, origIntensity }] }
-const WIN_CELL = new THREE.Vector3(2.6, 2.9, 2.6); // 모델 좌표(대략 m)에서 창 하나 · 층 하나 크기
-function isGlassyMaterial(m) {
-  if (!m || !m.isMeshStandardMaterial || m.map) return false;
-  const c = m.color;
-  const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-  if (m.opacity < 0.9) return true; // 반투명 유리
-  if (c.b >= c.r && lum < 0.15 && m.roughness <= 0.55) return true; // 어둡고 파르스름한 유리
-  if (c.b >= c.r && m.roughness <= 0.15) return true; // 아주 매끈한(비치는) 유리
-  return m.metalness >= 0.3 && lum < 0.2; // 어두운 금속성 유리
-}
-// 재질별 면적(월드 기준) — 건물 겉면의 큰 몫을 덮는 재질은 유리가 아니라 벽이라고 본다
-function materialAreas(model) {
-  const areas = new Map();
-  let total = 0;
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-  model.traverse((o) => {
-    if (!o.isMesh || Array.isArray(o.material) || !o.geometry?.attributes?.position) return;
-    const pos = o.geometry.attributes.position, idx = o.geometry.index;
-    const n = idx ? idx.count : pos.count;
-    let area = 0;
-    for (let i = 0; i + 2 < n; i += 3) {
-      a.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(o.matrixWorld);
-      b.fromBufferAttribute(pos, idx ? idx.getX(i + 1) : i + 1).applyMatrix4(o.matrixWorld);
-      c.fromBufferAttribute(pos, idx ? idx.getX(i + 2) : i + 2).applyMatrix4(o.matrixWorld);
-      area += b.sub(a).cross(c.sub(a)).length() * 0.5;
-    }
-    areas.set(o.material, (areas.get(o.material) || 0) + area);
-    total += area;
-  });
-  return { areas, total: total || 1 };
-}
-// texMode: 0 = 창유리 재질(면 전체가 유리), 1 = 텍스처에 창이 그려진 벽(어둡고 파르스름한 픽셀만 빛난다)
-function patchWindowMaterial(mat, invModel, off, texMode) {
-  if (mat.userData.nbWindow) return;
-  mat.userData.nbWindow = true;
-  mat.customProgramCacheKey = () => "nb-window-glow";
-  mat.onBeforeCompile = (shader) => {
-    if (!shader.vertexShader.includes("#include <worldpos_vertex>") || !shader.fragmentShader.includes("#include <emissivemap_fragment>")) return;
-    shader.uniforms.uWinInv = { value: invModel };
-    shader.uniforms.uWinCell = { value: WIN_CELL };
-    shader.uniforms.uWinOff = off;
-    shader.uniforms.uWinTex = { value: texMode };
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nuniform mat4 uWinInv;\nvarying vec3 vWinPos;\nvarying vec3 vWinN;")
-      .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvWinPos = (uWinInv * modelMatrix * vec4(transformed, 1.0)).xyz;\nvWinN = normalize(mat3(modelMatrix) * objectNormal);");
-    shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform vec3 uWinCell;\nuniform float uWinOff;\nuniform float uWinTex;\nvarying vec3 vWinPos;\nvarying vec3 vWinN;")
-      .replace("#include <emissivemap_fragment>", [
-        "#include <emissivemap_fragment>",
-        "{",
-        "  vec3 wc = floor(vWinPos / uWinCell);",
-        "  float wr = fract(sin(dot(wc, vec3(12.9898, 78.233, 37.719))) * 43758.5453);",
-        "  float winLike = 1.0;",
-        "  if (uWinTex > 0.5) {",
-        "    float l = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));",
-        "    winLike = (1.0 - smoothstep(0.06, 0.2, l)) * step(diffuseColor.r, diffuseColor.b + 0.02);",
-        "  }",
-        "  totalEmissiveRadiance *= winLike * step(uWinOff, wr) * (0.7 + 0.6 * fract(wr * 7.13)) * (1.0 - smoothstep(0.4, 0.8, abs(vWinN.y)));",
-        "}",
-      ].join("\n"));
-  };
-  mat.needsUpdate = true;
-}
-function registerBuildingGlass(entry, model) {
-  const seen = new Set();
-  const list = [];
-  model.updateMatrixWorld(true);
-  const inv = model.matrixWorld.clone().invert();
-  const { areas, total } = materialAreas(model);
-  let seed = (Math.abs(hashSeed(entry.place.id, "glass")) % 2147483646) + 1;
-  model.traverse((o) => {
-    if (!o.isMesh) return;
-    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
-      if (seen.has(m) || !m || !m.isMeshStandardMaterial) return;
-      seen.add(m);
-      const glass = isGlassyMaterial(m) && (areas.get(m) || 0) / total <= 0.3;
-      if (!glass && !m.map) return; // 텍스처도 없고 유리도 아닌 벽·지붕은 그대로
-      seed = (seed * 16807) % 2147483647;
-      const off = { value: 0.4 }; // 꺼진 창 비율(시간·영업에 따라 바뀐다)
-      patchWindowMaterial(m, inv, off, glass ? 0 : 1);
-      list.push({ mat: m, k: 0.6 + (seed / 2147483647) * 0.4, off, origEmissive: m.emissive.clone(), origIntensity: m.emissiveIntensity });
-    });
-  });
-  if (!list.length) return;
-  buildingGlass.set(entry, { place: entry.place, list });
-  applyGlassNight(entry);
-}
-function applyGlassNight(entry) {
-  const info = buildingGlass.get(entry);
-  if (!info) return;
-  const place = info.place;
-  const open = placeIsOpen(place, worldHour);
-  const shop = SHOP_TYPES.has(place.type) || OPEN_HOURS[place.type];
-  const color = place.type === "아파트" ? _windowWarm : shop ? _windowShop : _windowOther;
-  const level = Math.max(0, (nightLevel - 0.2) / 0.8);
-  // 꺼진 창 비율: 아파트는 밤이 깊을수록(새벽엔 대부분 잠) 더 많이, 가게는 문 열면 거의 다 켜지고 닫으면 거의 다 꺼짐
-  const h = worldHour;
-  const lateNight = h >= 0.5 && h < 5 ? 0.88 : h >= 23 || h < 0.5 ? 0.7 : 0.52;
-  const offFrac = shop ? (open ? 0.15 : 0.92) : place.type === "아파트" ? lateNight : 0.6;
-  info.list.forEach((g) => {
-    g.off.value = offFrac;
-    if (level <= 0) {
-      g.mat.emissive.copy(g.origEmissive);
-      g.mat.emissiveIntensity = g.origIntensity;
-      return;
-    }
-    g.mat.emissive.copy(color);
-    g.mat.emissiveIntensity = level * g.k * 0.8;
-  });
-}
 // 거리 모험 화면 위 시간 버튼 + 고르는 창(미리 정한 시간 5개 + 30분 단위 막대)
 let timeBtnEl = null, timePopEl = null, timeRangeEl = null;
 function updateTimeUI() {
@@ -8670,14 +8501,6 @@ function buildCars() {
   const boxGeo = new THREE.BoxGeometry(0.12, 0.1, 0.11);
   boxGeo.translate(0, 0.225, -0.16);
   const deliveryBox = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ map: makeDeliveryBoxTexture(), roughness: 0.7 }), MOTO_COUNT);
-  // 밤에만: 전조등(흰빛)·미등(빨강) 작은 판, 차 앞 도로에 깔리는 불빛(가로등 불빛처럼 더해 그리는 판)
-  const lampGeo = new THREE.BoxGeometry(0.055, 0.026, 0.008);
-  const headLamps = new THREE.InstancedMesh(lampGeo, new THREE.MeshBasicMaterial({ color: 0xfff6d8 }), total * 2);
-  const tailLamps = new THREE.InstancedMesh(lampGeo, new THREE.MeshBasicMaterial({ color: 0xff2a1f }), total * 2);
-  const beamGeo = new THREE.CircleGeometry(1, 20);
-  beamGeo.rotateX(-Math.PI / 2);
-  const beams = new THREE.InstancedMesh(beamGeo, new THREE.MeshBasicMaterial({ map: getLightPoolTexture(), color: 0xfff4dc, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5 }), total);
-  beams.renderOrder = 2;
   for (let k = 0; k < nCarSlots; k++) {
     const isTaxi = Math.random() < TAXI_CHANCE;
     const carKey = isTaxi ? "taxi" : CAR_MODEL_TYPES[Math.floor(Math.random() * CAR_MODEL_TYPES.length)];
@@ -8690,14 +8513,14 @@ function buildCars() {
   for (let k = 0; k < MOTO_COUNT; k++) {
     cars.push({ active: false, index: k, type: "moto", len: MOTO_LEN, wid: MOTO_WID, lean: 0, latOff: 0.5 + Math.random() * 0.5 });
   }
-  const all = [wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams];
+  const all = [wheels, shadow, motoBody, rider, helmet, deliveryBox];
   all.forEach((m) => {
     m.frustumCulled = false; // 인스턴스가 계속 움직여서 미리 잡은 경계로 자르면 안 된다
     m.count = 0;
     scene.add(m);
   });
   [motoBody, rider, helmet].forEach((m) => m.setColorAt(0, new THREE.Color(0xffffff))); // instanceColor 버퍼를 미리 만든다
-  carMeshes = { wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams, all };
+  carMeshes = { wheels, shadow, motoBody, rider, helmet, deliveryBox, all };
 }
 
 function chooseNextRoad(car) {
@@ -8910,19 +8733,14 @@ function updateCars(dt) {
     }
   });
   // 그리기(종류별로 활성인 것만 앞쪽 칸에 모아서)
-  const { wheels, shadow, motoBody, rider, helmet, deliveryBox, headLamps, tailLamps, beams } = carMeshes;
+  const { wheels, shadow, motoBody, rider, helmet, deliveryBox } = carMeshes;
   const m = new THREE.Matrix4(), part = new THREE.Matrix4(), base = new THREE.Matrix4(), sc = new THREE.Matrix4();
   const _glbVehicleScratch = new THREE.Vector3(); // base.decompose() 스케일 받이용 — glb 차체의 scale(WORLD_SCALE)은 안 건드린다
   const y0 = ROAD_LAYER_BASE_Y + 0.006; // 도로 표면 바로 위(그림자 판 높이) — 실제 높이는 그 자리 지형을 더한다
   const pitchM = new THREE.Matrix4();
-  let nAll = 0, nW = 0, nMoto = 0, nHead = 0, nTail = 0;
+  let nAll = 0, nW = 0, nMoto = 0;
   busModels.forEach((bm) => { if (bm) bm.visible = false; }); // 이번 프레임에 active인 버스만 다시 켠다
   cars.forEach((c) => { if (c.model) c.model.visible = false; }); // 이번 프레임에 active인 승용차만 다시 켠다
-  // 밤엔 전조등·미등을 켜고 차 앞 도로를 비춘다(낮에는 아예 그리지 않는다)
-  const lampsOn = nightLevel > 0.3;
-  headLamps.visible = tailLamps.visible = beams.visible = lampsOn;
-  beams.material.opacity = 0.5 * Math.min(1, (nightLevel - 0.3) / 0.4);
-  const lamp = (mesh, idx, x, y, z) => { mesh.setMatrixAt(idx, m.multiplyMatrices(base, part.makeTranslation(x, y, z))); };
   cars.forEach((car) => {
     if (!car.active) return;
     if (car.type === "car") ensureCarVisual(car); // 처음 등장할 때 딱 한 번만 clone() — 이미 있으면 그냥 통과
@@ -8931,12 +8749,6 @@ function updateCars(dt) {
     const hF = getTerrainY(car.x + car.fx * hl, car.z + car.fz * hl), hB = getTerrainY(car.x - car.fx * hl, car.z - car.fz * hl);
     base.makeRotationY(Math.atan2(car.fx, car.fz)).multiply(pitchM.makeRotationX(-Math.atan2(hF - hB, car.len))).setPosition(car.x, y0 + (hF + hB) / 2, car.z);
     shadow.setMatrixAt(nAll, m.multiplyMatrices(base, part.makeScale(car.wid * 0.75, 1, car.len * 0.62)));
-    if (lampsOn) {
-      const ahead = car.type === "bus" ? BUS_LEN / 2 + 0.6 : car.type === "moto" ? 0.55 : CAR_LEN / 2 + 0.55;
-      const bw = car.type === "bus" ? 0.36 : car.type === "moto" ? 0.2 : 0.32;
-      const bl = car.type === "bus" ? 0.72 : car.type === "moto" ? 0.42 : 0.64;
-      beams.setMatrixAt(nAll, m.multiplyMatrices(base, part.makeTranslation(0, 0.017 - y0, ahead)).multiply(sc.makeScale(bw, 1, bl)));
-    }
     if (car.type === "bus") {
       // glb 자체에 바퀴·전조등 외형이 있으니 몸통용 박스 인스턴스·바퀴 인스턴스는 안 쓰고
       // base(위치+진행방향+지형 기울기)를 glb Object3D에 직접 옮긴다(스케일은 로드 때 고정값 그대로 둔다).
@@ -8944,10 +8756,6 @@ function updateCars(dt) {
       if (busModel) {
         busModel.visible = true;
         base.decompose(busModel.position, busModel.quaternion, _glbVehicleScratch);
-      }
-      if (lampsOn) for (const sx of [-1, 1]) {
-        lamp(headLamps, nHead++, sx * 0.13, 0.13, BUS_LEN / 2 + 0.004);
-        lamp(tailLamps, nTail++, sx * 0.15, 0.16, -BUS_LEN / 2 - 0.004);
       }
     } else if (car.type === "moto") {
       base.multiply(part.makeRotationZ(car.lean || 0)); // 기울기는 바퀴 닿는 땅을 축으로
@@ -8966,10 +8774,6 @@ function updateCars(dt) {
         m.multiplyMatrices(base, part.makeTranslation(0, 0.05, wz));
         wheels.setMatrixAt(nW++, m.multiply(sc.makeScale(0.6, 1.1, 1.1)));
       }
-      if (lampsOn) {
-        lamp(headLamps, nHead++, 0, 0.2, 0.142);
-        lamp(tailLamps, nTail++, 0, 0.2, -0.218);
-      }
       nMoto++;
     } else {
       // glb 자체에 바퀴 등 외형이 통째로 들어 있는 단일 메시라 절차적 몸통·바퀴 인스턴스는 안 쓰고
@@ -8978,19 +8782,12 @@ function updateCars(dt) {
         car.model.visible = true;
         base.decompose(car.model.position, car.model.quaternion, _glbVehicleScratch);
       }
-      if (lampsOn) for (const sx of [-1, 1]) {
-        lamp(headLamps, nHead++, sx * 0.11, 0.105, CAR_LEN / 2 + 0.004);
-        lamp(tailLamps, nTail++, sx * 0.12, 0.115, -CAR_LEN / 2 - 0.004);
-      }
     }
     nAll++;
   });
   shadow.count = nAll;
   wheels.count = nW;
   motoBody.count = rider.count = helmet.count = deliveryBox.count = nMoto;
-  headLamps.count = nHead;
-  tailLamps.count = nTail;
-  beams.count = lampsOn ? nAll : 0;
   carMeshes.all.forEach((mesh) => { mesh.instanceMatrix.needsUpdate = true; });
 }
 
@@ -9938,49 +9735,11 @@ function updateGeumbukCrowd(dt) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ── 가게 입간판: 편의점·카페·식당·마트·학원 앞 보도에 "영업 중 / 준비 중" ──
-// 가게 자리에서 가장 가까운 보도(행인이 걷는 보도 중앙선)를 찾아 가게 쪽 가장자리에 A자 입간판을 세운다.
-// 영업시간(OPEN_HOURS)에 맞춰 초록 "영업 중"(밤에도 환하게 빛남) / 회색 "준비 중"으로 바뀐다 — 모양은 하나라
-// 인스턴스 두 개(드로우콜 2)뿐이다.
+// ── 가게 앞 보도 자리 찾기: 셔터를 붙일 1층 벽을 찾을 때 기준으로 쓸 "가게 쪽 보도 가장자리" 위치만 계산한다 ──
+// (예전엔 여기 "영업 중/준비 중" 입간판도 같이 세웠지만 지금은 자리 계산만 남기고 간판은 없앴다)
 // ════════════════════════════════════════════════════════════════════════════
-const SHOP_SIGN_W = 0.15, SHOP_SIGN_H = 0.23, SHOP_SIGN_TILT = 0.2; // 월드 단위 / 라디안(A자로 벌어진 각)
-let shopSigns = null; // { open, closed, list: [{ place, matrix }] }
-let shopSignsListening = false;
+let shopSigns = null; // { list: [{ place, x, z, tx, tz, matrix, fitted }] }
 
-function makeShopSignTexture(open) {
-  const c = document.createElement("canvas");
-  c.width = 128;
-  c.height = 192;
-  const g = c.getContext("2d");
-  g.fillStyle = "#4a3b30"; // 나무 테두리
-  g.fillRect(0, 0, 128, 192);
-  g.fillStyle = open ? "#1f9d55" : "#7b828a";
-  g.fillRect(9, 9, 110, 174);
-  g.fillStyle = "#ffffff";
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  g.font = "bold 40px sans-serif";
-  g.fillText(open ? "영업" : "준비", 64, 56);
-  g.fillText("중", 64, 102);
-  g.fillRect(26, 130, 76, 3);
-  g.font = "bold 22px sans-serif";
-  g.fillText(open ? "OPEN" : "CLOSED", 64, 157);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
-}
-function shopSignGeometry() {
-  const parts = [];
-  [1, -1].forEach((side) => {
-    const g = new THREE.BoxGeometry(SHOP_SIGN_W, SHOP_SIGN_H, 0.008);
-    g.translate(0, SHOP_SIGN_H / 2, 0);
-    g.rotateX(-side * SHOP_SIGN_TILT); // 위끝이 가운데로 모여 A자가 되게
-    g.translate(0, 0, side * SHOP_SIGN_H * Math.sin(SHOP_SIGN_TILT));
-    parts.push(g);
-  });
-  return mergeGeometries(parts);
-}
 // 보도 중앙선(pedPaths) 위에서 (x, z)에 가장 가까운 점 — maxDist(월드)보다 멀면 null.
 // reject(x, z)가 참인 자리(예: 건물 바닥 안)는 건너뛰고 그 구간에서 가장 가까운 다른 자리를 고른다.
 function nearestPedPathPoint(x, z, maxDist, reject = null) {
@@ -10035,25 +9794,8 @@ function buildShopSigns() {
     list.push(sg);
   });
   if (!list.length) return;
-  const geo = shopSignGeometry();
-  const mk = (mat) => {
-    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
-    mesh.count = 0;
-    mesh.frustumCulled = false;
-    mesh.castShadow = true;
-    scene.add(mesh);
-    return mesh;
-  };
-  shopSigns = {
-    open: mk(new THREE.MeshBasicMaterial({ map: makeShopSignTexture(true) })), // 조명과 상관없이 환하게(밤에 켜진 간판처럼)
-    closed: mk(new THREE.MeshStandardMaterial({ map: makeShopSignTexture(false), roughness: 0.8 })),
-    list,
-  };
-  updateShopSigns(worldHour);
-  if (!shopSignsListening) {
-    shopSignsListening = true;
-    timeListeners.push((h) => updateShopSigns(h));
-  }
+  // 입간판 모양 자체는 더 이상 세우지 않고, 셔터 배치가 기준으로 쓰는 자리(list)만 계산해 둔다.
+  shopSigns = { list };
 }
 // ── 가게 셔터: 문 닫은 시간엔 가게 1층 앞면(입간판이 있는 쪽)에 셔터가 내려와 있다 ──
 // 건물 모델이 불러와질 때 입간판 자리에서 건물 쪽으로 광선을 쏴서 1층 벽(가게 앞면)을 찾고, 그 벽이 좌우로
@@ -10128,7 +9870,6 @@ function fitShopToModel(entry) {
         let off = c.w * 0.26;
         if (blocked(c.x + nx * off, c.z + nz * off)) off = 0;
         setSignPose(sg, c.x + nx * off, c.z + nz * off, c.tx, c.tz);
-        updateShopSigns(worldHour);
         break;
       }
     }
@@ -10199,18 +9940,6 @@ function removeShopShutter(entry) {
 function setSignPose(sg, x, z, tx, tz) {
   Object.assign(sg, { x, z, tx, tz });
   sg.matrix.makeRotationY(Math.atan2(tx, tz)).setPosition(x, groundHeightAt(x, z), z);
-}
-function updateShopSigns(h) {
-  if (!shopSigns) return;
-  let no = 0, nc = 0;
-  shopSigns.list.forEach((sg) => {
-    if (placeIsOpen(sg.place, h)) shopSigns.open.setMatrixAt(no++, sg.matrix);
-    else shopSigns.closed.setMatrixAt(nc++, sg.matrix);
-  });
-  shopSigns.open.count = no;
-  shopSigns.closed.count = nc;
-  shopSigns.open.instanceMatrix.needsUpdate = true;
-  shopSigns.closed.instanceMatrix.needsUpdate = true;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
