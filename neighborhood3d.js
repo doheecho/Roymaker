@@ -6317,11 +6317,35 @@ function conformParkHillsCommunityModel(entry, model) {
   entry.group.updateMatrixWorld(true);
 }
 
+// 지도 위 여러 자리에 똑같이 반복되는 모델(지금은 버스정류장 쉘터 하나뿐)은 자리마다 따로
+// 불러오면(파싱·GPU 업로드 중복) 낭비라, 맨 처음 한 번만 받아 둔 원본을 clone()해서 쓴다 —
+// 이후 지형 맞춤·메시 합치기 등은 각 clone마다 평소대로 그대로 거친다(자리·지형이 저마다 다르니까).
+const SHARED_PLACE_MODEL_PATHS = new Set(["models/asset_버스정류장.glb"]);
+const sharedPlaceModelCache = {}; // path → 원본 gltf.scene(절대 직접 쓰지 않고 clone()만 꺼내 쓴다)
+
 function loadPlaceModelInto(entry) {
   entry.loading = true;
+  const modelPath = entry.place.model;
+  const isShared = SHARED_PLACE_MODEL_PATHS.has(modelPath);
+  if (isShared && sharedPlaceModelCache[modelPath]) {
+    onPlaceModelReady(entry, { scene: sharedPlaceModelCache[modelPath].clone(true) });
+    return;
+  }
   gltfLoader.load(
-    `${entry.place.model}?v=${ASSET_VERSION}`,
+    `${modelPath}?v=${ASSET_VERSION}`,
     (gltf) => {
+      if (isShared && !sharedPlaceModelCache[modelPath]) sharedPlaceModelCache[modelPath] = gltf.scene.clone(true);
+      onPlaceModelReady(entry, gltf);
+    },
+    undefined,
+    (err) => {
+      entry.loading = false;
+      entry.failed = true; // 파일이 없거나 깨졌으면 다시 받으려고 계속 요청하지 않는다(임시 매싱이 그대로 보인다)
+      console.warn(`${entry.place.name} 모델을 못 불러왔다`, err);
+    }
+  );
+}
+function onPlaceModelReady(entry, gltf) {
       entry.loading = false;
       // 로딩하는 동안 캐릭터가 다시 멀어졌으면 받아 둔 모델을 바로 버린다
       const curDist = character ? Math.hypot(character.position.x - entry.px, character.position.z - entry.pz) : Infinity;
@@ -6434,14 +6458,6 @@ function loadPlaceModelInto(entry) {
       entry.loadedModel = model;
       fitShopToModel(entry); // 입간판이 건물 안에 들어갔으면 옮기고, 문 닫은 시간엔 셔터
       if (entry.placeholder) entry.placeholder.visible = false;
-    },
-    undefined,
-    (err) => {
-      entry.loading = false;
-      entry.failed = true; // 파일이 없거나 깨졌으면 다시 받으려고 계속 요청하지 않는다(임시 매싱이 그대로 보인다)
-      console.warn(`${entry.place.name} 모델을 못 불러왔다`, err);
-    }
-  );
 }
 
 // 게임 시작 시 도로·보도·지형 메시 정리보다 먼저 place_금파힐통합.glb를 불러와
