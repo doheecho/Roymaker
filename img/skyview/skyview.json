@@ -833,11 +833,11 @@
  },
  "models/place_롯데마트행당점.glb": {
   "file": "img/skyview/place_롯데마트행당점.webp",
-  "hash": "bd14f8790f",
-  "minX": -117.024,
-  "minZ": -112.89,
-  "width": 234.048,
-  "depth": 225.82
+  "hash": "cf1edd86d2",
+  "minX": -28.1,
+  "minZ": -14.055,
+  "width": 63.667,
+  "depth": 41.417
  },
  "models/place_마라순코우.glb": {
   "file": "img/skyview/place_마라순코우.webp",
